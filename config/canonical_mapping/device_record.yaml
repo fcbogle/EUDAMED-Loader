@@ -1,0 +1,428 @@
+entity_name: DeviceRecord
+entity_path: device_record
+qms_decision:
+  status: accepted
+  rationale: DeviceRecord is the primary canonical review object for the first MDR UDI-DI load.
+assumptions:
+  - Shared workbook templates are expected to be broadly EUDAMED-aligned.
+  - Mapping review should emphasize traceability and explicit assumptions rather than aggressive data cleansing.
+field_reviews:
+  - mapping:
+      canonical_path: device_record.basic_device_ref
+      business_label: Basic Device Reference
+      classification: derived
+      derivation_logic: Link the UDI-DI record to the previously loaded Basic UDI context using external reference resolution.
+      assumptions:
+        - Basic UDI linkage is required context even if the workbook does not populate the relationship directly.
+      schema_targets:
+        - schema_path: UDIDIType/basicUdiDiId
+          required: true
+          status: derived
+          notes: Preserve as explicit relationship context.
+    decision:
+      status: accepted_with_note
+      rationale: Required context, but not currently workbook-native.
+  - mapping:
+      canonical_path: device_record.primary_udi_di
+      business_label: Primary UDI-DI
+      classification: direct
+      source_columns:
+        - "UDI-DI code e.g. taken from ist page of DoC (Note: needs to be 14 digits long, add zero to front of code)"
+        - "UDI-DI code e.g. taken from 2nd page of DoC (Note: needs to be 14 digits long, add zero to front of code)"
+      assumptions:
+        - Column header variants represent the same business meaning.
+      schema_targets:
+        - schema_path: UDIDIType/udiDiCode
+          required: true
+          status: direct
+          notes: Primary identifier for first-load output.
+      example_source_values:
+        - "01234567890123"
+      example_canonical_value: "01234567890123"
+    decision:
+      status: accepted
+      rationale: Core template-aligned identifier field.
+  - mapping:
+      canonical_path: device_record.catalogue_number
+      business_label: Catalogue Number
+      classification: direct
+      source_columns:
+        - Reference/ Catalogue number e.g . Taken from Product code in second page of DoC
+        - Reference/ Catalogue number e.g . Taken from Product code on second page of DoC
+      assumptions:
+        - Minor header wording variants collapse into one canonical field.
+      schema_targets:
+        - schema_path: UDIDIType/catalogueNumber
+          required: true
+          status: direct
+          notes: Direct identifier-support field.
+      example_source_values:
+        - ABC-123
+      example_canonical_value: ABC-123
+    decision:
+      status: accepted
+      rationale: Direct template field with minor header variance only.
+  - mapping:
+      canonical_path: device_record.secondary_udi_di_applicable
+      business_label: Secondary UDI-DI Applicable
+      classification: direct
+      source_columns:
+        - UDI-DI from another entity (secondary) applicable e.g. No
+      schema_targets:
+        - schema_path: UDIDIType/secondaryUdiDiApplicableIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "No"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+      rationale: Direct workbook field.
+  - mapping:
+      canonical_path: device_record.trade_name
+      business_label: Trade Name
+      classification: direct
+      source_columns:
+        - Trade Name applicable e.g. YES (use Decription detail from second page of DoC
+      schema_targets:
+        - schema_path: UDIDIType/tradeName
+          required: true
+          status: direct
+          notes: Confirm exact workbook value semantics during row-level implementation.
+      example_source_values:
+        - Example Trade Name
+      example_canonical_value: Example Trade Name
+    decision:
+      status: accepted_with_note
+      rationale: Likely direct, but the workbook prompt wording should be revisited at execution time.
+  - mapping:
+      canonical_path: device_record.language
+      business_label: Language
+      classification: normalized
+      source_columns:
+        - Select the language e.g English
+      normalized_by:
+        - config/normalization/language.yaml
+      schema_targets:
+        - schema_path: UDIDIType/language
+          required: true
+          status: normalized
+          notes: Controlled value normalization layer already exists.
+      example_source_values:
+        - English
+      example_canonical_value: English
+    decision:
+      status: accepted
+      rationale: Template-aligned field with known normalization support.
+  - mapping:
+      canonical_path: device_record.quantity
+      business_label: Quantity Of Device
+      classification: direct
+      source_columns:
+        - Quantity of device e.g. 1
+      schema_targets:
+        - schema_path: UDIDIType/quantity
+          required: true
+          status: direct
+          notes: Numeric parsing will be handled later.
+      example_source_values:
+        - "1"
+      example_canonical_value: "1"
+    decision:
+      status: accepted
+      rationale: Direct numeric-style field.
+  - mapping:
+      canonical_path: device_record.direct_marking
+      business_label: Direct Marking
+      classification: direct
+      source_columns:
+        - Is the device directly marked? E.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/directMarkingIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+      rationale: Direct boolean-style field.
+  - mapping:
+      canonical_path: device_record.udi_pi_type
+      business_label: UDI-PI Type
+      classification: normalized
+      source_columns:
+        - Type of UDI-PI e.g. select Serial number and Manufacturing Date
+      assumptions:
+        - Current values appear template-aligned but may need a dedicated normalization file when variants are confirmed.
+      schema_targets:
+        - schema_path: UDIDIType/udiPiType
+          required: true
+          status: normalized
+          notes: Keep visible as normalized intent even though a dedicated rule file is not yet created.
+      example_source_values:
+        - Serial number and Manufacturing Date
+      example_canonical_value: Serial number and Manufacturing Date
+    decision:
+      status: accepted_with_note
+      rationale: Expected controlled vocabulary, but normalization rules are not yet formalized.
+  - mapping:
+      canonical_path: device_record.clinical_size_applicable
+      business_label: Clinical Size Applicable
+      classification: direct
+      source_columns:
+        - Clinical size applicable e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/clinicalSizeApplicableIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.single_use
+      business_label: Single Use
+      classification: direct
+      source_columns:
+        - Labelled as single use e.g.NO
+      schema_targets:
+        - schema_path: UDIDIType/singleUseIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.max_reuses_applicable
+      business_label: Maximum Reuses Applicable
+      classification: direct
+      source_columns:
+        - Maximum number of reuses applicable e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/maxReusesApplicableIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.sterilisation_before_use
+      business_label: Sterilisation Before Use
+      classification: direct
+      source_columns:
+        - Need for sterilsation before use e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/sterilisationBeforeUseIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.sterile
+      business_label: Sterile
+      classification: direct
+      source_columns:
+        - Device labelled as sterile e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/sterileIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.contains_latex
+      business_label: Contains Latex
+      classification: direct
+      source_columns:
+        - Containing latex e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/containsLatexIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.cmr_present
+      business_label: CMR Present
+      classification: direct
+      source_columns:
+        - Labelled for presence of Carcinogenic, Mutagenic and toxic to Reproduction (CMR) substances of category 1A or 1B e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/cmrSubstanceIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.endocrine_disruptor_present
+      business_label: Endocrine Disruptor Present
+      classification: direct
+      source_columns:
+        - Labelled for presence of substances with endocrine-disrupting properties e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/endocrineDisruptorIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.reprocessed_single_use
+      business_label: Reprocessed Single Use Device
+      classification: direct
+      source_columns:
+        - Reprocessed single use device e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/reprocessedSingleUseIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.human_tissue_present
+      business_label: Human Tissue Present
+      classification: direct
+      source_columns:
+        - Presence of human tissues or cells, or their derivatives e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/humanTissueIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.animal_tissue_present
+      business_label: Animal Tissue Present
+      classification: direct
+      source_columns:
+        - Presence of animal tissues or cells, or their derivatives e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/animalTissueIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.medicinal_substance_present
+      business_label: Medicinal Substance Present
+      classification: direct
+      source_columns:
+        - Presence of a substance which, if used separately, may be considered to be a medicinal product e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/medicinalSubstanceIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.blood_plasma_derivative_present
+      business_label: Blood Plasma Derivative Present
+      classification: direct
+      source_columns:
+        - Presence of a substance which, if used separately, may be considered to be a medicinal product derived from human blood or human plasma e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/bloodPlasmaDerivativeIndicator
+          required: true
+          status: direct
+          notes: Boolean-style field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+  - mapping:
+      canonical_path: device_record.storage_conditions
+      business_label: Storage Conditions
+      classification: repeated
+      source_columns:
+        - Storage/handling conditions, if applicable e.g. YES
+        - Storage /handling conditions type e.g. Lower limit of temp
+        - Description e.g. taken from IFU Technical Data page Storage Temp range e.g. -15C
+        - Add another Storage/handling condition e.g. Upper limit of temp
+      assumptions:
+        - Workbook slots should collapse into a repeating list structure rather than fixed positional fields.
+      schema_targets:
+        - schema_path: UDIDIType/storageHandlingConditionList
+          required: true
+          status: repeated
+          notes: Repeating structure to be assembled during later row-level execution.
+    decision:
+      status: accepted_with_note
+      rationale: Repeating pattern is clear, but row assembly is deferred.
+  - mapping:
+      canonical_path: device_record.warnings
+      business_label: Critical Warnings
+      classification: repeated
+      source_columns:
+        - Critical warnings or contra-indications, if applicable e.g. Yes
+        - Critical warning type e.g. Consult instructions for use
+      assumptions:
+        - Workbook expresses warning presence and type more clearly than rich narrative detail.
+      schema_targets:
+        - schema_path: UDIDIType/criticalWarningList
+          required: true
+          status: repeated
+          notes: Repeating structure to be assembled during later row-level execution.
+    decision:
+      status: accepted_with_note
+      rationale: Repeating pattern is clear, but final structure will be confirmed during execution.
+  - mapping:
+      canonical_path: device_record.market_availability
+      business_label: Market Availability
+      classification: repeated
+      assumptions:
+        - Market availability is reviewed as a nested object in a dedicated entity section because QMS confirmed it is in scope for first load.
+      schema_targets:
+        - schema_path: UDIDIType/marketInformation
+          required: true
+          status: repeated
+          notes: Nested object review is broken out separately for readability.
+    decision:
+      status: accepted
+      rationale: Explicit first-phase scope area.

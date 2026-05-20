@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import normalization, profiling, schemas
+from app.routers import canonical, normalization, profiling, schemas
 
 app = FastAPI(
     title="EUDAMED Profiling API",
@@ -21,6 +21,7 @@ app.add_middleware(
 
 app.include_router(profiling.router, prefix="/api")
 app.include_router(normalization.router, prefix="/api")
+app.include_router(canonical.router, prefix="/api")
 app.include_router(schemas.router, prefix="/api")
 
 

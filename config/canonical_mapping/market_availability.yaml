@@ -1,0 +1,47 @@
+entity_name: MarketAvailability
+entity_path: device_record.market_availability
+qms_decision:
+  status: accepted
+  rationale: QMS confirmed that market information is in scope for the first release.
+assumptions:
+  - Market information is part of the first upload payload baseline, not a later extension.
+field_reviews:
+  - mapping:
+      canonical_path: device_record.market_availability.market_status
+      business_label: UDI-DI Market Status
+      classification: normalized
+      source_columns:
+        - UDI-DI status e.g. On the EU market
+      normalized_by:
+        - config/normalization/udi_status.yaml
+      assumptions:
+        - Workbook values are template-aligned conceptually but may vary slightly in text casing and phrasing.
+      schema_targets:
+        - schema_path: UDIDIType/marketStatus
+          required: true
+          status: normalized
+          notes: Controlled value should normalize before later XML projection.
+      example_source_values:
+        - On the EU Market
+        - On the market
+      example_canonical_value: On the EU market
+    decision:
+      status: accepted
+      rationale: Direct concept with known normalization support.
+  - mapping:
+      canonical_path: device_record.market_availability.first_eu_market_country
+      business_label: First EU Market Country
+      classification: direct
+      source_columns:
+        - Member state where first placed on the EU market e.g. Germany
+      schema_targets:
+        - schema_path: UDIDIType/firstEuMarketCountry
+          required: true
+          status: direct
+          notes: Confirm final controlled-value representation during XML implementation.
+      example_source_values:
+        - Germany
+      example_canonical_value: Germany
+    decision:
+      status: accepted_with_note
+      rationale: Direct field, though target code representation may need confirmation later.

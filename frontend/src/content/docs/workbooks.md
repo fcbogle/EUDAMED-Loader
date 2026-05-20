@@ -8,8 +8,9 @@ The `Workbooks` area is the intake and preparation stage for the application. It
 
 - review workbook families and sheet variants
 - inspect sheet-level profiling results
-- identify parsing and normalization issues
-- accept recommended normalization fixes
+- identify normalization challenges when they exist
+- review how those challenges are already resolved through rules
+- accept recommended normalization fixes when additional handling is needed
 - confirm that the source Excel files remain unchanged
 
 ## Key Principle
@@ -36,6 +37,6 @@ The `Workbooks` area is responsible for producing a trustworthy preparation laye
 
 - workbook and sheet inventory
 - column profiling summaries
-- detected parsing issues
+- detected normalization challenges
 - YAML normalization rules
 - a cleaner preparation layer for canonical mapping

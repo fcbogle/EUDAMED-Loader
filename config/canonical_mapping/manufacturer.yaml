@@ -1,0 +1,59 @@
+entity_name: Manufacturer
+entity_path: manufacturer
+qms_decision:
+  status: accepted_with_note
+  rationale: Manufacturer context is retained for traceability and to support device-level UDI-DI interpretation.
+assumptions:
+  - Manufacturer data is supporting context for the first UDI-DI load rather than the primary payload focus.
+field_reviews:
+  - mapping:
+      canonical_path: manufacturer.issuing_entity
+      business_label: Issuing Entity
+      classification: direct
+      source_columns:
+        - Issuing Entity e.g. GS1
+      assumptions:
+        - The workbook template already uses the EUDAMED-facing issuing entity concept.
+      schema_targets:
+        - schema_path: UDIDIType/udiDiCode/issuingEntity
+          required: true
+          status: direct
+          notes: Confirm the final schema path during XML implementation.
+      example_source_values:
+        - GS1
+      example_canonical_value: GS1
+    decision:
+      status: accepted
+      rationale: Direct template-aligned field.
+  - mapping:
+      canonical_path: manufacturer.manufacturer_srn
+      business_label: Manufacturer SRN
+      classification: gap
+      assumptions:
+        - No confirmed workbook column has been identified yet.
+        - This may be managed outside the shared spreadsheets or through later operational context.
+      schema_targets:
+        - schema_path: UDIDIType/manufacturer/srn
+          required: false
+          status: gap
+          notes: Treat as a visible review gap until a confirmed source is identified.
+    decision:
+      status: needs_clarification
+      rationale: Source evidence has not yet been confirmed in the workbook set.
+  - mapping:
+      canonical_path: manufacturer.designed_by_another_legal_entity
+      business_label: Designed By Another Legal Entity
+      classification: direct
+      source_columns:
+        - Is the device designed and manufactured by another legal or natural person? E.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/designedManufacturedByAnotherPersonIndicator
+          required: true
+          status: direct
+          notes: Boolean indicator expected to map directly after workbook parsing.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+      rationale: Direct boolean-style workbook field.

@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+"""
+Canonical domain models for the EUDAMED preparation workspace.
+
+Current QMS-aligned first-phase scope:
+- MDR devices only
+- UDI-DI device details and market information only
+- Basic UDI records already exist outside this load and are treated as context
+- UDIDIType.xsd is the primary schema focus for the first upload phase
+"""
+
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -31,6 +41,8 @@ class NormalizationEvidence(BaseModel):
 
 
 class Manufacturer(BaseModel):
+    """Manufacturer and issuer context needed to support device-level UDI-DI records."""
+
     issuing_entity: str | None = None
     manufacturer_srn: str | None = None
     designed_by_another_legal_entity: bool | None = None
@@ -38,6 +50,8 @@ class Manufacturer(BaseModel):
 
 
 class BasicDevice(BaseModel):
+    """Basic UDI context retained for linkage and audit, not the primary first-phase upload object."""
+
     basic_udi_di: str | None = None
     regulation: str = "MDR"
     nomenclature_code: str | None = None
@@ -67,6 +81,8 @@ class MarketAvailability(BaseModel):
 
 
 class DeviceRecord(BaseModel):
+    """Primary first-phase canonical entity for MDR UDI-DI upload preparation."""
+
     basic_device_ref: str | None = None
     primary_udi_di: str | None = None
     catalogue_number: str | None = None
@@ -105,6 +121,8 @@ class ValidationIssue(BaseModel):
 
 
 class CanonicalDeviceBundle(BaseModel):
+    """Combined canonical view used for review before mapping and XML work proceeds."""
+
     manufacturer: Manufacturer
     basic_device: BasicDevice
     device_record: DeviceRecord
@@ -119,6 +137,8 @@ class SchemaAlignmentEntry(BaseModel):
 
 
 class CanonicalFieldMapping(BaseModel):
+    """Reviewable field-level mapping metadata, including assumptions and schema alignment."""
+
     canonical_path: str
     business_label: str
     classification: MappingClassification
@@ -153,5 +173,8 @@ class CanonicalEntityReview(BaseModel):
 
 
 class CanonicalReviewBundle(BaseModel):
+    """Top-level review bundle for canonical design and QMS decisions."""
+
+    phase_assumptions: list[str] = Field(default_factory=list)
     device_bundle: CanonicalDeviceBundle
     entity_reviews: list[CanonicalEntityReview] = Field(default_factory=list)

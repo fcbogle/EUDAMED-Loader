@@ -2,20 +2,27 @@
 
 ## Purpose
 
-The `Canonical` area is the regulatory modeling layer between the source workbooks and XML generation. It translates workbook fields into stable regulatory meaning that can later be projected into the EUDAMED Device schema.
+The `Canonical` area is the mapping-definition layer between the source workbooks and XML generation. It translates workbook fields into stable regulatory meaning and makes the `Excel -> Canonical -> Schema` path visible for first-phase review.
 
 ## Current Decisions
 
 - the canonical model is driven by the needs of the EUDAMED Device schema
-- the model must support both `BasicDevice` meaning and `DeviceRecord` meaning
+- the first release is focused on `UDI-DI` device details and market information
+- the current regulatory scope is `MDR` only
+- the first upload phase is aligned to `UDIDIType.xsd`
+- `Basic UDI` records are already loaded manually and are treated as contextual linkage rather than the primary first-phase upload object
+- the model must still preserve both `BasicDevice` meaning and `DeviceRecord` meaning
 - the canonical layer is schema-informed, not a direct copy of the XSD structure
 - the current phase uses non-persistent Pydantic domain models
 - no database is part of the current implementation design
 - workbook analysis is responsible for producing the normalized, traceable inputs needed by canonical mapping
+- every field currently present in the shared Excel workbooks is being treated as mandatory for first-load preparation unless QMS says otherwise
 
 ## Reference Implementation
 
 The first-pass canonical field model is defined in `backend/app/canonical_models.py`.
+
+The current read-only mapping review artifact is stored under `config/canonical_mapping/` and exposed through the backend `canonical-review` API.
 
 The current object set is:
 
@@ -36,9 +43,16 @@ The canonical layer should:
 
 - preserve workbook provenance
 - record normalization outcomes
-- separate `BasicDevice` concerns from `DeviceRecord` concerns
+- separate `BasicDevice` concerns from `DeviceRecord` concerns while making clear that `DeviceRecord` is the primary first-phase review object
 - make schema projection possible without embedding workbook-specific assumptions into XML generation
 - expose data gaps explicitly rather than hiding them
+- surface all first-phase mapping assumptions for human and QMS review
+
+The `Canonical` tab should present the mapping contract in a review-friendly way:
+
+- keep the main mapping path visible
+- hide secondary rationale behind drill-down detail
+- let the user inspect assumptions without overwhelming the first screen
 
 The canonical layer should not:
 
@@ -46,6 +60,26 @@ The canonical layer should not:
 - become a persistence model in the current phase
 - collapse basic-level and device-level meaning into one flat record
 - force a fake value where the source data does not support one
+- hide a first-phase assumption such as `MDR only`, `UDIDIType.xsd only`, or `Basic UDI already preloaded`
+
+## First-Phase Delivery Scope
+
+- target data:
+  - `UDI-DI` device details and market information
+- target legislation:
+  - `MDR`
+- target schema understanding:
+  - `UDIDIType.xsd`
+- current submission mode:
+  - manual XML handoff for human testing in the production environment if needed
+- current access constraint:
+  - no approved Playground actor is available yet
+
+## First-Phase Mandatory Rule
+
+- for the current design baseline, every field present in the shared Excel spreadsheets is treated as mandatory for first-load preparation
+- if a workbook field appears in scope but cannot be populated reliably, the canonical layer should flag that as a review issue rather than silently downgrade it
+- if a value is already managed outside this load, such as previously loaded `Basic UDI` records, the canonical layer should mark it as contextual rather than as an upload omission
 
 ## Mapping Principles
 
@@ -151,7 +185,7 @@ Holds manufacturer- or issuer-level information that should not be stored only a
 
 ### Purpose
 
-Represents the basic-level device meaning required by the Device schema and keeps it distinct from device-level UDI-DI record data.
+Represents the basic-level device meaning required by the Device schema and keeps it distinct from device-level UDI-DI record data. In the current first phase this object is mainly retained for context, linkage, and audit because the `Basic UDI` records have already been loaded separately.
 
 ### Fields
 
@@ -168,11 +202,11 @@ Represents the basic-level device meaning required by the Device schema and keep
 #### `basic_udi_di`
 
 - classification:
-  - gap
+  - derived
 - current source:
-  - no confirmed workbook field
+  - expected to come from previously loaded `Basic UDI` records or trusted reference context rather than from this first upload workbook set
 - discussion note:
-  - likely important for later Device schema projection and should remain explicit even while empty
+  - keep the field explicit for linkage and later schema projection, but do not treat it as a first-phase workbook gap by default
 
 #### `regulation`
 
@@ -180,10 +214,10 @@ Represents the basic-level device meaning required by the Device schema and keep
   - derived
 - current source:
   - not directly carried in the workbook template
-- current working assumption:
+- current confirmed project constraint:
   - `MDR`
 - discussion note:
-  - this should later be proven by schema selection or workbook family metadata rather than hard-coded forever
+  - this is now a confirmed first-phase scope rule from QMS, though the source of truth should still move to explicit configuration later
 
 #### `nomenclature_code`
 
@@ -267,7 +301,7 @@ Represents one warning or contraindication entry attached to a device record.
 
 ### Purpose
 
-Separates market-state information from the core device identity record.
+Separates market-state information from the core device identity record. QMS has confirmed that market information is in scope for the first release, so this object is part of the first-phase upload preparation baseline rather than an optional later extension.
 
 ### Fields
 
@@ -299,7 +333,7 @@ Separates market-state information from the core device identity record.
 
 ### Purpose
 
-Holds the device-level UDI-DI meaning that will later project into the device-specific side of the Device schema.
+Holds the device-level UDI-DI meaning that will later project into the device-specific side of the Device schema. This is the primary canonical review object for the first upload phase.
 
 ### Fields
 
@@ -338,9 +372,9 @@ Holds the device-level UDI-DI meaning that will later project into the device-sp
 - classification:
   - derived
 - current source:
-  - will eventually link the device record to the correct `BasicDevice`
+  - should link the device record to the correct previously loaded `Basic UDI` context
 - current status:
-  - relationship placeholder rather than populated field
+  - relationship placeholder that should be preserved even if the source workbook does not directly populate it
 
 #### `primary_udi_di`
 
@@ -675,7 +709,7 @@ This bundle is a useful working contract for previewing how one workbook row or 
 - no confirmed workbook field for manufacturer `SRN`
 - no confirmed dedicated intended-purpose narrative field
 - `DeviceRecord.basic_device_ref` is structurally planned but not yet populated by an implemented mapper
-- the workbook has placeholder fields such as `Column 36` and `Column 37` that currently have no canonical destination
+- the workbook has unlabeled fields such as `Unlabeled column (..., column 36)` and `Unlabeled column (..., column 37)` that currently have no canonical destination
 - row-level canonical preview generation is not implemented yet
 - source-to-canonical mapping is documented, but not yet executed by a mapping service
 

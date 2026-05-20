@@ -1,0 +1,105 @@
+entity_name: BasicDevice
+entity_path: basic_device
+qms_decision:
+  status: accepted_with_note
+  rationale: Basic UDI context remains in the canonical layer even though the first upload is UDI-DI only.
+assumptions:
+  - Basic UDI records already exist outside this first upload flow.
+  - Basic device fields are retained for linkage, audit, and future schema projection.
+field_reviews:
+  - mapping:
+      canonical_path: basic_device.basic_udi_di
+      business_label: Basic UDI-DI
+      classification: derived
+      derivation_logic: Resolve from previously loaded Basic UDI records or trusted external reference context instead of the current workbook rows.
+      assumptions:
+        - Absence from the current workbook set is not treated as a first-phase upload omission by default.
+      schema_targets:
+        - schema_path: UDIDIType/basicUdiDiId
+          required: true
+          status: derived
+          notes: Required relationship context for UDI-DI projection.
+    decision:
+      status: accepted_with_note
+      rationale: Needed for linkage, but not expected to originate from the first-load spreadsheet.
+  - mapping:
+      canonical_path: basic_device.regulation
+      business_label: Regulation
+      classification: derived
+      derivation_logic: Set from confirmed project scope configuration.
+      assumptions:
+        - QMS confirmed the first release is MDR only.
+      schema_targets:
+        - schema_path: UDIDIType/regulation
+          required: true
+          status: derived
+          notes: Source of truth should move to explicit configuration later.
+      example_canonical_value: MDR
+    decision:
+      status: accepted
+      rationale: Confirmed scope assumption from QMS.
+  - mapping:
+      canonical_path: basic_device.nomenclature_code
+      business_label: EMDN Code
+      classification: direct
+      source_columns:
+        - Enter a nomenclature code (EMDN code) e.g starts with Y06xxxx then click Find
+      schema_targets:
+        - schema_path: UDIDIType/emdnCode
+          required: true
+          status: direct
+          notes: Template-aligned nomenclature field.
+      example_source_values:
+        - Y061234
+      example_canonical_value: Y061234
+    decision:
+      status: accepted
+      rationale: Direct schema-facing workbook field.
+  - mapping:
+      canonical_path: basic_device.intended_purpose_summary
+      business_label: Intended Purpose Summary
+      classification: gap
+      assumptions:
+        - No dedicated narrative intended-purpose field has been confirmed in the workbook set.
+      schema_targets:
+        - schema_path: UDIDIType/intendedPurpose
+          required: false
+          status: gap
+          notes: Keep visible for future enrichment if XML projection needs narrative support.
+    decision:
+      status: accepted_with_note
+      rationale: Visible gap retained for audit even though not currently evidenced.
+  - mapping:
+      canonical_path: basic_device.annex_xvi_other_purpose
+      business_label: Annex XVI Other Purpose
+      classification: direct
+      source_columns:
+        - Intended purpose other than medical (Annex XVI) e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/annexXviOtherPurposeIndicator
+          required: true
+          status: direct
+          notes: Boolean-style workbook field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+      rationale: Direct template field.
+  - mapping:
+      canonical_path: basic_device.clinical_investigation
+      business_label: Clinical Investigation
+      classification: direct
+      source_columns:
+        - Clinical Investigation e.g. NO
+      schema_targets:
+        - schema_path: UDIDIType/clinicalInvestigationIndicator
+          required: true
+          status: direct
+          notes: Boolean-style workbook field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+      rationale: Direct template field.

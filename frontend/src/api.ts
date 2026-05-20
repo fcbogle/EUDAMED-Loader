@@ -1,5 +1,6 @@
 import type {
   ApplyNormalizationRulesResponse,
+  CanonicalReviewBundle,
   DistinctValueProfile,
   NormalizationRuleFile,
   SchemaInventory,
@@ -55,5 +56,6 @@ export const api = {
       column,
       rules,
     }),
+  canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
   schemas: () => getJson<SchemaInventory>("/schemas"),
 };

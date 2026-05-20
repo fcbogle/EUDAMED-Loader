@@ -55,7 +55,10 @@ class ExcelProfiler:
             return None
         ws = workbook[sheet_name]
         header_row_index, rows = self._extract_rows(ws)
-        headers = self._build_headers(rows[header_row_index - 1] if header_row_index else [])
+        headers = self._build_headers(
+            rows[header_row_index - 1] if header_row_index else [],
+            sheet_name=sheet_name,
+        )
         data_rows = rows[header_row_index:] if header_row_index else []
         columns: list[ColumnProfile] = []
         for idx, header in enumerate(headers, start=1):
@@ -119,7 +122,10 @@ class ExcelProfiler:
         summaries: list[SheetSummary] = []
         for ws in workbook.worksheets:
             header_row, rows = self._extract_rows(ws)
-            headers = self._build_headers(rows[header_row - 1] if header_row else [])
+            headers = self._build_headers(
+                rows[header_row - 1] if header_row else [],
+                sheet_name=ws.title,
+            )
             data_rows = rows[header_row:] if header_row else []
             populated_columns = sum(1 for header in headers if header)
             summaries.append(
@@ -142,15 +148,15 @@ class ExcelProfiler:
                 header_row, rows = self._extract_rows(ws)
                 if not header_row:
                     continue
-                headers = self._build_headers(rows[header_row - 1])
+                headers = self._build_headers(rows[header_row - 1], sheet_name=ws.title)
                 yield path.name, ws.title, headers, rows[header_row:]
 
     @staticmethod
-    def _build_headers(header_row: tuple) -> list[str]:
+    def _build_headers(header_row: tuple, *, sheet_name: str) -> list[str]:
         headers: list[str] = []
         for idx, value in enumerate(header_row, start=1):
             label = ExcelProfiler._stringify(value)
-            headers.append(label or f"Column {idx}")
+            headers.append(label or f"Unlabeled column ({sheet_name}, column {idx})")
         return headers
 
     @staticmethod

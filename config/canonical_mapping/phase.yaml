@@ -1,0 +1,7 @@
+phase_assumptions:
+  - First upload scope is limited to MDR UDI-DI device details and market information.
+  - UDIDIType.xsd is the primary first-phase schema focus.
+  - Basic UDI records have already been loaded manually and are treated as upstream context.
+  - Shared workbook templates are expected to be broadly aligned to EUDAMED concepts.
+  - All fields present in the shared spreadsheets are currently treated as mandatory for first-load preparation unless QMS says otherwise.
+  - No approved Playground actor is available yet, so first-phase XML handling should assume controlled manual submission paths.

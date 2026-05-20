@@ -241,6 +241,25 @@ input {
   margin-top: 18px;
 }
 
+.single-panel-grid {
+  grid-template-columns: 1fr;
+}
+
+.section-break {
+  margin-top: 28px;
+  position: relative;
+}
+
+.section-break::before {
+  content: "";
+  position: absolute;
+  top: -14px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(76, 111, 122, 0.28), transparent);
+}
+
 .panel {
   padding: 22px;
   border-radius: 20px;
@@ -296,6 +315,40 @@ table {
   border-collapse: collapse;
 }
 
+.mapping-col-excel {
+  width: 40%;
+}
+
+.mapping-col-canonical {
+  width: 20%;
+}
+
+.mapping-col-schema {
+  width: 20%;
+}
+
+.mapping-col-type {
+  width: 7%;
+}
+
+.mapping-col-status {
+  width: 7%;
+}
+
+.mapping-col-details {
+  width: 6%;
+}
+
+.mapping-contract-table {
+  table-layout: fixed;
+}
+
+.mapping-contract-table td,
+.mapping-contract-table th {
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
 th,
 td {
   padding: 12px 8px;
@@ -319,6 +372,17 @@ th {
   overflow: auto;
 }
 
+.horizontal-sheet-list {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(220px, 260px);
+  align-items: stretch;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+}
+
 .sheet-card {
   display: grid;
   gap: 2px;
@@ -329,6 +393,7 @@ th {
   background: rgba(255, 255, 255, 0.9);
   color: #002a3a;
   cursor: pointer;
+  font-size: 0.88rem;
   transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
@@ -349,6 +414,12 @@ th {
 
 .sheet-card small {
   color: #4c6f7a;
+  font-size: 0.76rem;
+}
+
+.single-panel-grid table th,
+.single-panel-grid table td {
+  font-size: 0.84rem;
 }
 
 .schema-groups {
@@ -507,6 +578,11 @@ th {
   color: #00445a;
 }
 
+.ghost-button.compact {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+}
+
 .draft-heading {
   margin-top: 28px;
 }
@@ -619,6 +695,58 @@ th {
 .roadmap-item p {
   margin: 0;
   color: #4c6f7a;
+}
+
+.inline-accordion,
+.group-accordion {
+  width: 100%;
+}
+
+.inline-accordion summary,
+.group-accordion summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #00445a;
+}
+
+.inline-accordion summary {
+  padding: 6px 0;
+}
+
+.group-accordion summary {
+  list-style: none;
+}
+
+.group-accordion summary::-webkit-details-marker,
+.inline-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.accordion-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(0, 42, 58, 0.05);
+}
+
+.accordion-body p {
+  margin: 0;
+  color: #355864;
+}
+
+.expanded-row td {
+  padding: 0 8px 14px;
+  border-bottom: 1px solid rgba(76, 111, 122, 0.12);
+}
+
+.full-row-detail {
+  margin-top: -4px;
 }
 
 .documentation-sidebar,

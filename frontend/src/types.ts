@@ -76,3 +76,56 @@ export type SchemaInventory = {
   device_files: SchemaFileSummary[];
   service_files: SchemaFileSummary[];
 };
+
+export type QmsDecision = {
+  status: string;
+  rationale: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+};
+
+export type SchemaAlignmentEntry = {
+  schema_path: string;
+  required: boolean;
+  status: string;
+  notes: string | null;
+};
+
+export type ValidationIssue = {
+  severity: string;
+  code: string;
+  message: string;
+  canonical_path: string;
+};
+
+export type CanonicalFieldMapping = {
+  canonical_path: string;
+  business_label: string;
+  classification: string;
+  source_columns: string[];
+  normalized_by: string[];
+  derivation_logic: string | null;
+  assumptions: string[];
+  schema_targets: SchemaAlignmentEntry[];
+  example_source_values: string[];
+  example_canonical_value: string | null;
+};
+
+export type CanonicalFieldReview = {
+  mapping: CanonicalFieldMapping;
+  decision: QmsDecision;
+  validation_issues: ValidationIssue[];
+};
+
+export type CanonicalEntityReview = {
+  entity_name: string;
+  entity_path: string;
+  qms_decision: QmsDecision;
+  field_reviews: CanonicalFieldReview[];
+  assumptions: string[];
+};
+
+export type CanonicalReviewBundle = {
+  phase_assumptions: string[];
+  entity_reviews: CanonicalEntityReview[];
+};

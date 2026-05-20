@@ -11,6 +11,7 @@ class Settings(BaseModel):
     excel_dir: Path
     schema_dir: Path
     normalization_dir: Path
+    canonical_mapping_dir: Path
     reports_dir: Path
 
 
@@ -31,5 +32,6 @@ def get_settings() -> Settings:
             )
         ),
         normalization_dir=project_root / "config" / "normalization",
+        canonical_mapping_dir=project_root / "config" / "canonical_mapping",
         reports_dir=project_root / "docs" / "reports",
     )
