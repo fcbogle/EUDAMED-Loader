@@ -1,0 +1,9 @@
+column: UDI-DI status e.g. On the EU market
+description: Normalize market status labels before canonical mapping.
+rules:
+  - raw: On the EU Market
+    normalized: On the EU market
+  - raw: On the market
+    normalized: On the EU market
+  - raw: On the EU
+    normalized: On the EU market

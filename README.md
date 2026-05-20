@@ -1,20 +1,40 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# EUDAMED Profiling App
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+Analysis-first scaffold for profiling source Excel workbooks, reviewing normalization issues, and inventorying EUDAMED schema files before canonical mapping or XML generation.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+## Structure
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+- `backend/`: FastAPI API for source profiling and normalization review
+- `frontend/`: React/Vite UI for browsing profiling results
+- `config/normalization/`: YAML normalization rules
+- `docs/reports/`: generated report target
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+## Source Directories
+
+The scaffold defaults to:
+
+- Excel input: `/Users/frankbogle/Documents/EUDAMED/InputExcel/EUDAMED_Excels`
+- Schema input: `/Users/frankbogle/Documents/EUDAMED/Schema/EUDAMED_Schemas`
+
+Override with:
+
+- `EUDAMED_EXCEL_DIR`
+- `EUDAMED_SCHEMA_DIR`
+
+## Run Backend
+
+```bash
+cd backend
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+## Run Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```

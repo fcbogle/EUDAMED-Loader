@@ -1,0 +1,5 @@
+column: Select the language e.g English
+description: Normalize language values across all source workbooks.
+rules:
+  - raw: English
+    normalized: English
