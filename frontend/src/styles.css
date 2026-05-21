@@ -845,6 +845,58 @@ th {
   font-weight: 700;
 }
 
+.scope-banner-panel {
+  background:
+    linear-gradient(135deg, rgba(0, 68, 90, 0.08), rgba(128, 202, 0, 0.05)),
+    rgba(255, 255, 255, 0.92);
+}
+
+.scope-note-secondary {
+  margin-top: 10px;
+}
+
+.validation-phase-grid {
+  margin-top: 0;
+}
+
+.validation-layout {
+  align-items: start;
+}
+
+.selected-table-row {
+  background: rgba(0, 68, 90, 0.05);
+}
+
+.table-select-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #00445a;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.validation-record-note {
+  margin-top: 16px;
+}
+
+.compact-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: #355864;
+}
+
+.compact-list li + li {
+  margin-top: 6px;
+}
+
+.field-source-note {
+  margin-top: 6px;
+  color: #4c6f7a;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
 .markdown-document {
   max-width: 980px;
   color: #274752;

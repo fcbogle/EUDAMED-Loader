@@ -10,6 +10,7 @@ from pydantic import BaseModel
 class Settings(BaseModel):
     excel_dir: Path
     schema_dir: Path
+    basic_udi_reference_dir: Path
     normalization_dir: Path
     canonical_mapping_dir: Path
     reports_dir: Path
@@ -22,13 +23,19 @@ def get_settings() -> Settings:
         excel_dir=Path(
             os.getenv(
                 "EUDAMED_EXCEL_DIR",
-                "/Users/frankbogle/Documents/EUDAMED/InputExcel/EUDAMED_Excels",
+                str(project_root / "data" / "source_excel"),
             )
         ),
         schema_dir=Path(
             os.getenv(
                 "EUDAMED_SCHEMA_DIR",
-                "/Users/frankbogle/Documents/EUDAMED/Schema/EUDAMED_Schemas",
+                str(project_root / "data" / "schemas"),
+            )
+        ),
+        basic_udi_reference_dir=Path(
+            os.getenv(
+                "EUDAMED_BASIC_UDI_REFERENCE_DIR",
+                str(project_root / "data" / "basic_udi_reference"),
             )
         ),
         normalization_dir=project_root / "config" / "normalization",

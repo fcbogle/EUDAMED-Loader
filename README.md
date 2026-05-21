@@ -14,6 +14,9 @@ Analysis-first scaffold for profiling source Excel workbooks, reviewing normaliz
 
 - `backend/`: FastAPI API for source profiling and normalization review
 - `frontend/`: React/Vite UI for browsing profiling results
+- `data/source_excel/`: project-local Excel workbook copies
+- `data/schemas/`: project-local EUDAMED schema/supporting files
+- `data/basic_udi_reference/`: project-local Basic UDI reference workbook copies
 - `config/normalization/`: YAML normalization rules
 - `config/canonical_mapping/`: read-only canonical mapping review artifacts
 - `docs/reports/`: generated report target
@@ -22,22 +25,21 @@ Analysis-first scaffold for profiling source Excel workbooks, reviewing normaliz
 
 The scaffold defaults to:
 
-- Excel input: `/Users/frankbogle/Documents/EUDAMED/InputExcel/EUDAMED_Excels`
-- Schema input: `/Users/frankbogle/Documents/EUDAMED/Schema/EUDAMED_Schemas`
+- Excel input: `data/source_excel`
+- Schema input: `data/schemas`
+- Basic UDI reference input: `data/basic_udi_reference`
 
 Override with:
 
 - `EUDAMED_EXCEL_DIR`
 - `EUDAMED_SCHEMA_DIR`
+- `EUDAMED_BASIC_UDI_REFERENCE_DIR`
 
 ## Run Backend
 
 ```bash
 cd backend
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+../.venv/bin/python -m uvicorn app.main:app --reload
 ```
 
 ## Run Frontend

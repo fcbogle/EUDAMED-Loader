@@ -2,6 +2,7 @@ import type {
   ApplyNormalizationRulesResponse,
   CanonicalReviewBundle,
   DistinctValueProfile,
+  EchelonValidationBundle,
   NormalizationRuleFile,
   SchemaInventory,
   SheetProfile,
@@ -57,5 +58,6 @@ export const api = {
       rules,
     }),
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
+  echelonCanonicalValidation: () => getJson<EchelonValidationBundle>("/canonical-validation/echelon"),
   schemas: () => getJson<SchemaInventory>("/schemas"),
 };

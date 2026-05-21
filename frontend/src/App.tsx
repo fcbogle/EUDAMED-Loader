@@ -9,6 +9,7 @@ import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import type {
   CanonicalReviewBundle,
   DistinctValueProfile,
+  EchelonValidationBundle,
   NormalizationRuleFile,
   SchemaInventory,
   SheetProfile,
@@ -245,7 +246,10 @@ export function App() {
   const [rules, setRules] = useState<NormalizationRuleFile[]>([]);
   const [schemas, setSchemas] = useState<SchemaInventory | null>(null);
   const [canonicalReview, setCanonicalReview] = useState<CanonicalReviewBundle | null>(null);
+  const [echelonValidation, setEchelonValidation] = useState<EchelonValidationBundle | null>(null);
+  const [mappingPreviewApplied, setMappingPreviewApplied] = useState<boolean>(false);
   const [expandedMappingPath, setExpandedMappingPath] = useState<string | null>(null);
+  const [selectedValidationRecordKey, setSelectedValidationRecordKey] = useState<string | null>(null);
   const [scopeMode, setScopeMode] = useState<ScopeMode>("all");
   const [showUnmappedOnly, setShowUnmappedOnly] = useState<boolean>(true);
   const [valueFilter, setValueFilter] = useState<string>("");
@@ -285,14 +289,17 @@ export function App() {
       api.sheets(),
       api.normalizationRules(),
       api.canonicalReview(),
+      api.echelonCanonicalValidation(),
       api.schemas(),
       api.distinctValues(selectedColumn),
     ])
-      .then(([workbookData, sheetData, ruleData, canonicalData, schemaData, distinctData]) => {
+      .then(([workbookData, sheetData, ruleData, canonicalData, echelonData, schemaData, distinctData]) => {
         setWorkbooks(workbookData);
         setSheets(sheetData);
         setRules(ruleData);
         setCanonicalReview(canonicalData);
+        setEchelonValidation(echelonData);
+        setSelectedValidationRecordKey(echelonData.records[0]?.catalogue_number ?? null);
         setSchemas(schemaData);
         setDistinctValues(distinctData);
         setSelectedSheet(sheetData[0] ?? null);
@@ -390,6 +397,24 @@ export function App() {
   const normalizedRows = canonicalMappingRows.filter((row) => row.classification === "normalized");
   const needsClarificationRows = canonicalMappingRows.filter((row) => row.decisionStatus === "needs_clarification");
   const assumptionRows = canonicalMappingRows.filter((row) => row.assumptions.length > 0);
+  const validationRecords = echelonValidation?.records ?? [];
+  const selectedValidationRecord =
+    validationRecords.find((record) => record.catalogue_number === selectedValidationRecordKey) ??
+    validationRecords[0] ??
+    null;
+  const activeCompleteness = mappingPreviewApplied
+    ? selectedValidationRecord?.after_completeness ?? null
+    : selectedValidationRecord?.before_completeness ?? null;
+  const activeBlockers = mappingPreviewApplied
+    ? selectedValidationRecord?.after_blockers ?? []
+    : selectedValidationRecord?.before_blockers ?? [];
+  const visibleValidationFields = selectedValidationRecord
+    ? selectedValidationRecord.fields.map((field) => ({
+        ...field,
+        currentValue: mappingPreviewApplied ? field.after_value : field.before_value,
+        currentSource: mappingPreviewApplied ? field.after_source : field.before_source,
+      }))
+    : [];
   const profileColumns = sheetProfile?.columns ?? [];
   const highNullColumns = profileColumns.filter((column) => {
     if (!sheetProfile?.data_rows) {
@@ -601,10 +626,10 @@ export function App() {
           {activeTab === "canonicalValidation" ? (
             <>
               <p className="eyebrow">Canonical Validation</p>
-              <h1>Review Mapping Assumptions</h1>
+              <h1>Validate The Echelon Mapping Subset</h1>
               <p className="hero-copy">
-                This stage isolates derived fields, gaps, normalization review, and clarification items
-                so mapping validation stays separate from the canonical definition view.
+                Review the `Echelon` subset that currently has Basic UDI-DI reference coverage, apply a
+                read-only enrichment preview, and compare completeness before and after the mapping step.
               </p>
             </>
           ) : null}
@@ -652,9 +677,11 @@ export function App() {
           {activeTab === "canonicalValidation" ? (
             <>
               <span className="status-label">Validation scope</span>
-              <span className="status-pill warn">Mapping review only</span>
+              <span className="status-pill warn">{echelonValidation?.family_scope ?? "Echelon only"}</span>
               <p className="status-detail">
-                {derivedRows.length + gapRows.length + needsClarificationRows.length} items currently need elevated review.
+                {echelonValidation
+                  ? `${echelonValidation.validation_subset_records} covered record${echelonValidation.validation_subset_records === 1 ? "" : "s"} and ${echelonValidation.excluded_records} excluded due to missing Basic UDI reference coverage.`
+                  : "Loading validation subset..."}
               </p>
             </>
           ) : null}
@@ -1327,88 +1354,318 @@ export function App() {
         <section className="tab-stack">
           <section className="summary-grid">
             <div className="summary-card">
-              <span className="summary-label">Derived fields</span>
-              <strong>{derivedRows.length}</strong>
-              <p>Mappings that depend on project scope or external reference context.</p>
+              <span className="summary-label">Total Echelon rows</span>
+              <strong>{echelonValidation?.total_source_records ?? 0}</strong>
+              <p>Source rows parsed from the Echelon family workbook across all family tabs.</p>
             </div>
             <div className="summary-card">
-              <span className="summary-label">Gap fields</span>
-              <strong>{gapRows.length}</strong>
-              <p>Mappings with no confirmed first-phase workbook source at the moment.</p>
+              <span className="summary-label">Validation subset</span>
+              <strong>{echelonValidation?.validation_subset_records ?? 0}</strong>
+              <p>Rows that currently have Basic UDI-DI reference coverage and can enter the mapping preview.</p>
             </div>
             <div className="summary-card">
-              <span className="summary-label">Needs clarification</span>
-              <strong>{needsClarificationRows.length}</strong>
-              <p>Mappings whose source evidence or interpretation still needs review.</p>
+              <span className="summary-label">Excluded rows</span>
+              <strong>{echelonValidation?.excluded_records ?? 0}</strong>
+              <p>Parsed Echelon rows that remain outside validation because matching Basic UDI context is missing.</p>
             </div>
             <div className="summary-card">
-              <span className="summary-label">Normalized review</span>
-              <strong>{normalizedRows.length}</strong>
-              <p>Mappings that rely on controlled-value normalization before later execution.</p>
+              <span className="summary-label">Tracked fields</span>
+              <strong>{echelonValidation?.tracked_required_fields ?? 0}</strong>
+              <p>Canonical fields currently included in the before/after completeness calculation.</p>
             </div>
           </section>
-          <section className="panel">
+
+          <section className="panel scope-banner-panel">
             <div className="section-heading">
               <div>
                 <span className="section-kicker">Validation Scope</span>
-                <h2>Mapping Review Checkpoint</h2>
+                <h2>Echelon-Only Mapping Preview</h2>
               </div>
+              <button
+                className="action-button"
+                type="button"
+                onClick={() => setMappingPreviewApplied((current) => !current)}
+                disabled={!selectedValidationRecord}
+              >
+                {mappingPreviewApplied ? "Show before mapping" : "Apply Basic UDI-DI mapping preview"}
+              </button>
             </div>
             <p className="panel-copy">
-              This tab validates the mapping definition itself. It surfaces fields that depend on
-              assumptions, derivation, normalization, or unresolved source evidence before any later
-              row-level canonical execution work begins.
+              {echelonValidation?.scope_note ??
+                "This view highlights the subset that can be enriched from the Basic UDI reference workbook."}
+            </p>
+            <p className="panel-copy scope-note-secondary">
+              {echelonValidation?.validation_note ??
+                "Completeness is measured against the tracked canonical fields in this validation preview."}
             </p>
             <div className="queue-summary">
               <div className="queue-chip">
-                <strong>{assumptionRows.length}</strong>
-                <span>fields with assumptions</span>
+                <strong>{echelonValidation?.matched_reference_records ?? 0}</strong>
+                <span>matched reference rows</span>
               </div>
               <div className="queue-chip">
-                <strong>{canonicalMappingRows.filter((row) => row.excelField === "Context / external reference").length}</strong>
-                <span>without workbook columns</span>
+                <strong>
+                  {mappingPreviewApplied
+                    ? echelonValidation?.after_complete_records ?? 0
+                    : echelonValidation?.before_complete_records ?? 0}
+                </strong>
+                <span>{mappingPreviewApplied ? "complete after preview" : "complete before preview"}</span>
               </div>
             </div>
           </section>
-          {[
-            { title: "Derived Fields", rows: derivedRows },
-            { title: "Gap Fields", rows: gapRows },
-            { title: "Needs Clarification", rows: needsClarificationRows },
-            { title: "Normalized Fields", rows: normalizedRows },
-          ].map((group) => (
-            <section className="panel roadmap-panel" key={group.title}>
-              <details className="group-accordion">
-                <summary>
-                  <span>{group.title}</span>
-                  <span className="status-pill warn compact">{group.rows.length}</span>
-                </summary>
-                <div className="roadmap-list">
-                  {group.rows.length ? (
-                    group.rows.map((row) => (
-                      <div className="roadmap-item" key={`${group.title}-${row.canonicalPath}`}>
-                        <strong>{row.businessLabel}</strong>
-                        <p>
-                          <code>{row.canonicalPath}</code>
-                        </p>
-                        <p>Excel field: {row.excelField}</p>
-                        <p>Schema target: {row.schemaTarget}</p>
-                        <p>
-                          Classification: <strong>{titleCaseToken(row.classification)}</strong> · Review status:{" "}
-                          <strong>{titleCaseToken(row.decisionStatus)}</strong>
-                        </p>
-                        {row.derivationLogic ? <p>Derivation: {row.derivationLogic}</p> : null}
-                        {row.assumptions.length ? <p>Assumptions: {row.assumptions.join(" ")}</p> : null}
-                        {row.normalizedBy.length ? <p>Normalization: {row.normalizedBy.join(", ")}</p> : null}
-                        {row.decisionRationale ? <p>Review note: {row.decisionRationale}</p> : null}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="panel-copy">No items currently fall into this validation group.</p>
-                  )}
+
+          <section className="summary-grid validation-phase-grid">
+            <div className="summary-card">
+              <span className="summary-label">Active view</span>
+              <strong>{mappingPreviewApplied ? "After" : "Before"}</strong>
+              <p>
+                {mappingPreviewApplied
+                  ? "Shows the read-only enrichment result after applying Basic UDI-DI mapping."
+                  : "Shows the workbook-only state before Basic UDI-DI enrichment is applied."}
+              </p>
+            </div>
+            <div className="summary-card">
+              <span className="summary-label">Mapped required fields</span>
+              <strong>{activeCompleteness?.mapped_required_fields ?? 0}</strong>
+              <p>Required fields currently populated in the selected validation view.</p>
+            </div>
+            <div className="summary-card">
+              <span className="summary-label">Missing required fields</span>
+              <strong>{activeCompleteness?.missing_required_fields ?? 0}</strong>
+              <p>Remaining blockers in the selected validation view for the tracked field set.</p>
+            </div>
+            <div className="summary-card">
+              <span className="summary-label">Completeness status</span>
+              <strong>{titleCaseToken(activeCompleteness?.status ?? "incomplete")}</strong>
+              <p>Measured against the tracked canonical fields in this preview bundle.</p>
+            </div>
+          </section>
+
+          <section className="content-grid validation-layout">
+            <div className="panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Subset Records</span>
+                  <h2>Covered Echelon Rows</h2>
                 </div>
-              </details>
-            </section>
-          ))}
+              </div>
+              <p className="panel-copy">
+                Only rows with Basic UDI reference coverage are listed here. The current dataset covers
+                a very small `Echelon` subset, so absence from this table is expected for most rows.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Source sheet</th>
+                    <th>Catalogue</th>
+                    <th>Trade name</th>
+                    <th>Before</th>
+                    <th>After</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {validationRecords.map((record) => {
+                    const isSelected = selectedValidationRecord?.catalogue_number === record.catalogue_number;
+                    return (
+                      <tr
+                        key={`${record.source_sheet}-${record.catalogue_number}`}
+                        className={isSelected ? "selected-table-row" : undefined}
+                      >
+                        <td>
+                          <button
+                            className="table-select-button"
+                            type="button"
+                            onClick={() => setSelectedValidationRecordKey(record.catalogue_number)}
+                          >
+                            {record.source_sheet}
+                          </button>
+                        </td>
+                        <td>{record.catalogue_number}</td>
+                        <td>{record.trade_name}</td>
+                        <td>
+                          {record.before_completeness.mapped_required_fields}/
+                          {record.before_completeness.total_required_fields}
+                        </td>
+                        <td>
+                          {record.after_completeness.mapped_required_fields}/
+                          {record.after_completeness.total_required_fields}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Excluded Population</span>
+                  <h2>Rows Outside Current Coverage</h2>
+                </div>
+              </div>
+              <p className="panel-copy">
+                These rows were parsed from the Echelon workbook but remain outside the mapping preview
+                because there is no matching Basic UDI reference coverage yet.
+              </p>
+              <div className="draft-list">
+                {(echelonValidation?.excluded_sheet_summaries ?? []).map((summary) => (
+                  <div className="draft-card" key={summary.sheet_name}>
+                    <div className="draft-card-head">
+                      <strong>{summary.sheet_name}</strong>
+                      <span className="status-pill warn compact">{summary.record_count} rows</span>
+                    </div>
+                    <p className="panel-copy">{summary.reason}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="content-grid validation-layout">
+            <div className="panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Selected Record</span>
+                  <h2>
+                    {selectedValidationRecord?.catalogue_number ?? "No covered record available"}
+                  </h2>
+                </div>
+                {selectedValidationRecord ? (
+                  <span className="status-pill ok compact">
+                    {selectedValidationRecord.reference_match_status === "matched"
+                      ? "Basic UDI match resolved"
+                      : "Reference missing"}
+                  </span>
+                ) : null}
+              </div>
+              {selectedValidationRecord ? (
+                <>
+                  <div className="queue-summary">
+                    <div className="queue-chip">
+                      <strong>{selectedValidationRecord.source_sheet}</strong>
+                      <span>source sheet</span>
+                    </div>
+                    <div className="queue-chip">
+                      <strong>{selectedValidationRecord.source_row_index}</strong>
+                      <span>source row</span>
+                    </div>
+                    <div className="queue-chip">
+                      <strong>{selectedValidationRecord.basic_reference_material_number ?? "None"}</strong>
+                      <span>basic reference key</span>
+                    </div>
+                    <div className="queue-chip">
+                      <strong>{selectedValidationRecord.basic_reference_name ?? "Unknown"}</strong>
+                      <span>basic model name</span>
+                    </div>
+                  </div>
+                  <div className="workflow-note validation-record-note">
+                    <strong>{selectedValidationRecord.trade_name}</strong>
+                    <span>
+                      UDI-DI {selectedValidationRecord.primary_udi_di} · Issuing entity{" "}
+                      {selectedValidationRecord.issuing_entity ?? "Unknown"}
+                    </span>
+                  </div>
+                  <div className="draft-list">
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>Before mapping blockers</strong>
+                        <span className="status-pill warn compact">
+                          {selectedValidationRecord.before_blockers.length}
+                        </span>
+                      </div>
+                      {selectedValidationRecord.before_blockers.length ? (
+                        <ul className="compact-list">
+                          {selectedValidationRecord.before_blockers.map((blocker) => (
+                            <li key={blocker}>{blocker}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="panel-copy">No blockers in the workbook-only view.</p>
+                      )}
+                    </div>
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>After mapping blockers</strong>
+                        <span
+                          className={
+                            selectedValidationRecord.after_blockers.length
+                              ? "status-pill warn compact"
+                              : "status-pill ok compact"
+                          }
+                        >
+                          {selectedValidationRecord.after_blockers.length}
+                        </span>
+                      </div>
+                      {selectedValidationRecord.after_blockers.length ? (
+                        <ul className="compact-list">
+                          {selectedValidationRecord.after_blockers.map((blocker) => (
+                            <li key={blocker}>{blocker}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="panel-copy">
+                          All tracked fields are populated after the Basic UDI-DI mapping preview.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="panel-copy">No Echelon rows currently have Basic UDI reference coverage.</p>
+              )}
+            </div>
+
+            <div className="panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Field Evidence</span>
+                  <h2>
+                    {mappingPreviewApplied ? "After Mapping Preview" : "Before Mapping Preview"}
+                  </h2>
+                </div>
+              </div>
+              {visibleValidationFields.length ? (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Canonical field</th>
+                      <th>Current value</th>
+                      <th>Source</th>
+                      <th>Update note</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleValidationFields.map((field) => (
+                      <tr key={field.canonical_path}>
+                        <td>
+                          <strong>{field.business_label}</strong>
+                          <br />
+                          <code>{field.canonical_path}</code>
+                        </td>
+                        <td>{field.currentValue ?? "Missing"}</td>
+                        <td>
+                          <span
+                            className={
+                              field.currentSource === "missing"
+                                ? "status-pill warn compact"
+                                : "status-pill ok compact"
+                            }
+                          >
+                            {titleCaseToken(field.currentSource)}
+                          </span>
+                          <div className="field-source-note">{field.source_detail}</div>
+                        </td>
+                        <td>{field.update_reason ?? "No change required for this field."}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="panel-copy">Select a covered record to inspect field-level evidence.</p>
+              )}
+            </div>
+          </section>
         </section>
       ) : null}
 

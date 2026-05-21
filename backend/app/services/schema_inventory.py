@@ -12,7 +12,7 @@ class SchemaInventoryService:
         device_files: list[SchemaFileSummary] = []
         service_files: list[SchemaFileSummary] = []
         for path in sorted(self.settings.schema_dir.rglob("*")):
-            if not path.is_file() or path.name == ".DS_Store":
+            if not path.is_file() or any(part.startswith(".") for part in path.parts):
                 continue
             relative_path = str(path.relative_to(self.settings.schema_dir))
             summary = SchemaFileSummary(
