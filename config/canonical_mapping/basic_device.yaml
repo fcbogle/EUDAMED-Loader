@@ -104,3 +104,215 @@ field_reviews:
     decision:
       status: accepted
       rationale: Direct template field.
+  - mapping:
+      canonical_path: basic_device.risk_class
+      business_label: Basic Risk Class
+      classification: derived
+      derivation_logic: Resolve from the Echelon Basic UDI reference workbook (`MDR-Basic!Risk Class`).
+      schema_targets:
+        - schema_path: BasicUDIType/riskClass
+          required: true
+          status: derived
+          notes: Required by `MDRBasicUDI`.
+      example_canonical_value: CLASS_I
+    decision:
+      status: accepted_with_note
+      rationale: Required for XML generation and currently sourced from the Basic UDI reference workbook.
+  - mapping:
+      canonical_path: basic_device.model
+      business_label: Basic Model
+      classification: derived
+      derivation_logic: Resolve from `MDR-Basic!Model` and project into the `modelName/model` structure for `MDRBasicUDI`.
+      schema_targets:
+        - schema_path: BasicUDIType/modelName/model
+          required: false
+          status: derived
+          notes: Included when the Basic UDI reference workbook provides the device model text.
+      example_canonical_value: tracekey Instruments Ir
+    decision:
+      status: accepted_with_note
+      rationale: The current Echelon XML path uses the Basic UDI reference workbook for this value.
+  - mapping:
+      canonical_path: basic_device.model_name
+      business_label: Basic Model Name
+      classification: derived
+      derivation_logic: Resolve from `MDR-Basic!Model Name`.
+      schema_targets:
+        - schema_path: BasicUDIType/modelName/name
+          required: true
+          status: derived
+          notes: Required by `MDRBasicUDI`.
+      example_canonical_value: Echelon
+    decision:
+      status: accepted_with_note
+      rationale: Required for XML generation and currently sourced from the Basic UDI reference workbook.
+  - mapping:
+      canonical_path: basic_device.identifier
+      business_label: Basic Identifier
+      classification: derived
+      derivation_logic: Compose a DI identifier from `Products!Product Code (Value)` and the workbook issuing entity.
+      assumptions:
+        - The shared Echelon family uses the same issuing entity for the Basic and UDI-DI identifiers.
+      schema_targets:
+        - schema_path: BasicUDIType/identifier
+          required: true
+          status: derived
+          notes: Rendered as a `DIIdentifierType` with `DICode` and `issuingEntityCode`.
+      example_canonical_value: GS1:5050649ECHELONMV
+    decision:
+      status: accepted_with_note
+      rationale: This is derived from the Basic UDI reference workbook plus issuing-entity context from the source template.
+  - mapping:
+      canonical_path: basic_device.authorised_representative_srn
+      business_label: Authorised Representative SRN
+      classification: derived
+      derivation_logic: Resolve from `MDR-Basic!Authorised Representative Actor Code`.
+      schema_targets:
+        - schema_path: DeviceBasicUDIType/ARActorCode
+          required: false
+          status: derived
+          notes: Present for Echelon and included in the first XML path.
+      example_canonical_value: DE-AR-000006292
+    decision:
+      status: accepted_with_note
+      rationale: The first XML path sources this from the Basic UDI reference workbook.
+  - mapping:
+      canonical_path: basic_device.animal_tissues_cells
+      business_label: Basic Animal Tissues Cells
+      classification: derived
+      derivation_logic: Use `MDR-Basic!Animal Tissues Cells` for the Basic UDI projection.
+      schema_targets:
+        - schema_path: DeviceBasicUDIType/animalTissuesCells
+          required: true
+          status: derived
+          notes: XML generation prefers the Basic UDI reference value over the workbook prompt.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: Current XML generation uses the Basic UDI reference workbook as the source of truth.
+  - mapping:
+      canonical_path: basic_device.human_tissues_cells
+      business_label: Basic Human Tissues Cells
+      classification: derived
+      derivation_logic: Use `MDR-Basic!Human Tissues Cells` for the Basic UDI projection.
+      schema_targets:
+        - schema_path: DeviceBasicUDIType/humanTissuesCells
+          required: true
+          status: derived
+          notes: XML generation prefers the Basic UDI reference value over the workbook prompt.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: Current XML generation uses the Basic UDI reference workbook as the source of truth.
+  - mapping:
+      canonical_path: basic_device.human_product_check
+      business_label: Human Product Check
+      classification: derived
+      derivation_logic: Resolve from `MDR-Basic!Human Product`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/humanProductCheck
+          required: true
+          status: derived
+          notes: Required by `MDRBasicUDI`.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: This first XML path uses the Basic UDI reference workbook for the MDR-specific value.
+  - mapping:
+      canonical_path: basic_device.medicinal_product_check
+      business_label: Medicinal Product Check
+      classification: derived
+      derivation_logic: Resolve from `MDR-Basic!Medicinal Product`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/medicinalProductCheck
+          required: true
+          status: derived
+          notes: Required by `MDRBasicUDI`.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: This first XML path uses the Basic UDI reference workbook for the MDR-specific value.
+  - mapping:
+      canonical_path: basic_device.type
+      business_label: Basic Device Type
+      classification: derived
+      derivation_logic: Resolve from `MDR-Basic!Type`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/type
+          required: true
+          status: derived
+          notes: Required by `MDRBasicUDI`.
+      example_canonical_value: DEVICE
+    decision:
+      status: accepted_with_note
+      rationale: The first XML path sources the value from the Basic UDI reference workbook.
+  - mapping:
+      canonical_path: basic_device.active
+      business_label: Active Device
+      classification: derived
+      derivation_logic: Resolve from `MDR-Basic!Active`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/active
+          required: true
+          status: derived
+          notes: Part of `MDApplicablePropertiesGroup`.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: Included in the wider XML-facing canonical review.
+  - mapping:
+      canonical_path: basic_device.administering_medicine
+      business_label: Administering Medicine
+      classification: derived
+      derivation_logic: Resolve from `MDR-Basic!Administers or/and Removes Medicine`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/administeringMedicine
+          required: true
+          status: derived
+          notes: Part of `MDApplicablePropertiesGroup`.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: Included in the wider XML-facing canonical review.
+  - mapping:
+      canonical_path: basic_device.implantable
+      business_label: Implantable
+      classification: derived
+      derivation_logic: Resolve from `MDR-Basic!Implantable`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/implantable
+          required: true
+          status: derived
+          notes: Part of `MDApplicablePropertiesGroup`.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: Included in the wider XML-facing canonical review.
+  - mapping:
+      canonical_path: basic_device.measuring_function
+      business_label: Measuring Function
+      classification: derived
+      derivation_logic: Resolve from `MDR-Basic!Measuring Function`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/measuringFunction
+          required: true
+          status: derived
+          notes: Part of `MDApplicablePropertiesGroup`.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: Included in the wider XML-facing canonical review.
+  - mapping:
+      canonical_path: basic_device.reusable
+      business_label: Reusable
+      classification: derived
+      derivation_logic: Resolve from `MDR-Basic!Reusable`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/reusable
+          required: true
+          status: derived
+          notes: Part of `MDApplicablePropertiesGroup`.
+      example_canonical_value: "true"
+    decision:
+      status: accepted_with_note
+      rationale: Included in the wider XML-facing canonical review.

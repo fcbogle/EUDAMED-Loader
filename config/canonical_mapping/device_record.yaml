@@ -427,3 +427,151 @@ field_reviews:
     decision:
       status: accepted
       rationale: Explicit first-phase scope area.
+  - mapping:
+      canonical_path: device_record.identifier
+      business_label: UDI-DI Identifier
+      classification: derived
+      derivation_logic: Compose a DI identifier from the primary UDI-DI code and issuing entity.
+      schema_targets:
+        - schema_path: UDIDIType/identifier
+          required: true
+          status: derived
+          notes: Rendered as a `DIIdentifierType` with `DICode` and `issuingEntityCode`.
+      example_canonical_value: GS1:05050649030109
+    decision:
+      status: accepted_with_note
+      rationale: The current XML path renders this explicitly from workbook fields rather than treating it as implicit context.
+  - mapping:
+      canonical_path: device_record.status
+      business_label: UDI-DI Status
+      classification: normalized
+      source_columns:
+        - UDI-DI status e.g. On the EU market
+      normalized_by:
+        - config/normalization/udi_status.yaml
+      schema_targets:
+        - schema_path: UDIDIType/status/code
+          required: true
+          status: normalized
+          notes: Rendered as `ON_THE_MARKET` in the current XML path.
+      example_source_values:
+        - On the EU market
+      example_canonical_value: ON_THE_MARKET
+    decision:
+      status: accepted
+      rationale: Explicit XML-facing status field for `UDIDIData`.
+  - mapping:
+      canonical_path: device_record.basic_udi_identifier
+      business_label: Basic UDI Identifier
+      classification: derived
+      derivation_logic: Compose a DI identifier from the shared Basic UDI code and issuing entity.
+      schema_targets:
+        - schema_path: UDIDIDataType/basicUDIIdentifier
+          required: true
+          status: derived
+          notes: Required for the UDI-DI to Basic UDI relationship inside `MDRUDIDIData`.
+      example_canonical_value: GS1:5050649ECHELONMV
+    decision:
+      status: accepted_with_note
+      rationale: This is derived from the shared Basic UDI reference context.
+  - mapping:
+      canonical_path: device_record.production_identifier
+      business_label: Production Identifier
+      classification: normalized
+      source_columns:
+        - Type of UDI-PI e.g. select Serial number and Manufacturing Date
+      assumptions:
+        - Current Echelon values normalize to `SERIALISATION_NUMBER`.
+      schema_targets:
+        - schema_path: UDIDIDataType/productionIdentifier
+          required: false
+          status: normalized
+          notes: Optional in the schema but currently populated for Echelon.
+      example_source_values:
+        - Serial number and Manufacturing Date
+      example_canonical_value: SERIALISATION_NUMBER
+    decision:
+      status: accepted_with_note
+      rationale: Included in the wider XML-facing canonical review because it is present in the source templates.
+  - mapping:
+      canonical_path: device_record.number_of_reuses
+      business_label: Number Of Reuses
+      classification: derived
+      derivation_logic: Derive from `Labelled as single use` and `Maximum number of reuses applicable`.
+      assumptions:
+        - Use `0` for single-use devices.
+        - Use `1` when the workbook says the maximum-number-of-reuses concept is not applicable.
+      schema_targets:
+        - schema_path: DeviceUDIDIDataType/numberOfReuses
+          required: true
+          status: derived
+          notes: Required by the device-side UDI-DI data structure.
+      example_canonical_value: "1"
+    decision:
+      status: accepted_with_note
+      rationale: This is a derived XML-facing field rather than a raw workbook column.
+  - mapping:
+      canonical_path: device_record.secondary_identifier
+      business_label: Secondary Identifier
+      classification: gap
+      assumptions:
+        - The Echelon workbook currently indicates whether a secondary UDI-DI applies, but does not populate the secondary identifier itself.
+      schema_targets:
+        - schema_path: UDIDIDataType/secondaryIdentifier
+          required: false
+          status: gap
+          notes: Optional in the current XML path and left empty unless the source supplies the actual identifier.
+    decision:
+      status: accepted_with_note
+      rationale: Visibility retained because the applicability prompt exists in the workbook, even though the actual identifier is not currently populated.
+  - mapping:
+      canonical_path: device_record.sterilization
+      business_label: Sterilization Before Use
+      classification: direct
+      source_columns:
+        - Need for sterilsation before use e.g. NO
+      schema_targets:
+        - schema_path: UDIDIDataType/sterilization
+          required: true
+          status: direct
+          notes: XML-facing boolean field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+      rationale: Direct field now reflected explicitly at the XML-facing canonical path.
+  - mapping:
+      canonical_path: device_record.reprocessed
+      business_label: Reprocessed
+      classification: direct
+      source_columns:
+        - Reprocessed single use device e.g. NO
+      schema_targets:
+        - schema_path: MDRUDIDIDataType/reprocessed
+          required: true
+          status: direct
+          notes: MDR-specific boolean field.
+      example_source_values:
+        - "NO"
+      example_canonical_value: "false"
+    decision:
+      status: accepted
+      rationale: Direct workbook field now reflected explicitly at the XML-facing canonical path.
+  - mapping:
+      canonical_path: device_record.base_quantity
+      business_label: Base Quantity
+      classification: direct
+      source_columns:
+        - Quantity of device e.g. 1
+      schema_targets:
+        - schema_path: DeviceUDIDIDataType/baseQuantity
+          required: false
+          status: direct
+          notes: Optional in the schema, but currently populated for Echelon.
+      example_source_values:
+        - "1"
+      example_canonical_value: "1"
+    decision:
+      status: accepted_with_note
+      rationale: Included in the wider XML-facing canonical review because it is used in the current single-record payload.

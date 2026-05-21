@@ -7,6 +7,7 @@ import type {
   SchemaInventory,
   SheetProfile,
   SheetSummary,
+  SingleRecordXmlPreview,
   WorkbookSummary,
 } from "./types";
 
@@ -34,6 +35,20 @@ async function sendJson<T>(path: string, method: string, body: unknown): Promise
   return response.json() as Promise<T>;
 }
 
+async function sendDownload(path: string, method: string, body: unknown): Promise<Blob> {
+  const response = await fetch(`${API_ROOT}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+  return response.blob();
+}
+
 export const api = {
   workbooks: () => getJson<WorkbookSummary[]>("/workbooks"),
   sheets: () => getJson<SheetSummary[]>("/sheets"),
@@ -59,5 +74,13 @@ export const api = {
     }),
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
   echelonCanonicalValidation: () => getJson<EchelonValidationBundle>("/canonical-validation/echelon"),
+  previewEchelonXmlRecord: (catalogueNumber: string) =>
+    sendJson<SingleRecordXmlPreview>("/xml/echelon/preview-record", "POST", {
+      catalogue_number: catalogueNumber,
+    }),
+  downloadEchelonXmlRecord: (catalogueNumber: string) =>
+    sendDownload("/xml/echelon/download-record", "POST", {
+      catalogue_number: catalogueNumber,
+    }),
   schemas: () => getJson<SchemaInventory>("/schemas"),
 };

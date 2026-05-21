@@ -24,6 +24,8 @@ The first-pass canonical field model is defined in `backend/app/canonical_models
 
 The current read-only mapping review artifact is stored under `config/canonical_mapping/` and exposed through the backend `canonical-review` API.
 
+The review artifact now reflects the wider XML-facing field set used by the `Echelon` validation and single-record XML generation path. In practice, that means the canonical review is no longer limited to a narrow workbook-to-canonical preview. It now also documents the derived and reference-backed fields needed to produce a schema-valid `Push` message for `MDR` `UDI-DI` upload preparation.
+
 The current object set is:
 
 - `SourceReference`

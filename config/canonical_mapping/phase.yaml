@@ -1,6 +1,7 @@
 phase_assumptions:
   - First upload scope is limited to MDR UDI-DI device details and market information.
   - UDIDIType.xsd is the primary first-phase schema focus.
+  - The canonical review now tracks the wider XML-facing field set needed for schema-valid single-record Push message generation.
   - Basic UDI records have already been loaded manually and are treated as upstream context.
   - Shared workbook templates are expected to be broadly aligned to EUDAMED concepts.
   - All fields present in the shared spreadsheets are currently treated as mandatory for first-load preparation unless QMS says otherwise.

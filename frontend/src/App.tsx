@@ -14,6 +14,7 @@ import type {
   SchemaInventory,
   SheetProfile,
   SheetSummary,
+  SingleRecordXmlPreview,
   WorkbookSummary,
 } from "./types";
 
@@ -24,6 +25,7 @@ const focusColumns = [
 
 type MainTab = "workbooks" | "canonical" | "canonicalValidation" | "xml" | "documentation";
 type ScopeMode = "all" | "sheet";
+type XmlGenerationMode = "single" | "batch";
 
 type DraftAction = {
   column: string;
@@ -250,6 +252,7 @@ export function App() {
   const [mappingPreviewApplied, setMappingPreviewApplied] = useState<boolean>(false);
   const [expandedMappingPath, setExpandedMappingPath] = useState<string | null>(null);
   const [selectedValidationRecordKey, setSelectedValidationRecordKey] = useState<string | null>(null);
+  const [xmlGenerationMode, setXmlGenerationMode] = useState<XmlGenerationMode>("single");
   const [scopeMode, setScopeMode] = useState<ScopeMode>("all");
   const [showUnmappedOnly, setShowUnmappedOnly] = useState<boolean>(true);
   const [valueFilter, setValueFilter] = useState<string>("");
@@ -257,6 +260,8 @@ export function App() {
   const [isApplyingRules, setIsApplyingRules] = useState<boolean>(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [xmlPreview, setXmlPreview] = useState<SingleRecordXmlPreview | null>(null);
+  const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
       id: "workbooks",
@@ -328,6 +333,10 @@ export function App() {
       .then(setDistinctValues)
       .catch((requestError: Error) => setError(requestError.message));
   }, [scopeMode, selectedColumn, selectedSheet]);
+
+  useEffect(() => {
+    setXmlPreview(null);
+  }, [selectedValidationRecordKey, xmlGenerationMode]);
 
   const selectedRuleFile = rules.find((item) => item.column === selectedColumn);
   const acceptedValues = Array.from(new Set(selectedRuleFile?.rules.map((rule) => rule.normalized) ?? []));
@@ -420,6 +429,20 @@ export function App() {
         currentSource: mappingPreviewApplied ? field.after_source : field.before_source,
       }))
     : [];
+  const xmlReadyRecords = validationRecords.filter((record) => record.after_completeness.status === "complete");
+  const xmlBlockedRecords = validationRecords.filter((record) => record.after_completeness.status !== "complete");
+  const selectedXmlRecord =
+    xmlReadyRecords.find((record) => record.catalogue_number === selectedValidationRecordKey) ??
+    xmlReadyRecords[0] ??
+    null;
+  const xmlPreviewLines = selectedXmlRecord
+    ? xmlPreview?.xml ??
+      [
+        "<!-- Generate XML to load the schema-valid Push message preview -->",
+        `<catalogue-number>${selectedXmlRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
+        `<udi-di>${selectedXmlRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
+      ].join("\n")
+    : "<!-- No XML-ready Echelon record is currently available -->";
   const profileColumns = sheetProfile?.columns ?? [];
   const highNullColumns = profileColumns.filter((column) => {
     if (!sheetProfile?.data_rows) {
@@ -552,6 +575,45 @@ export function App() {
       setError(requestError instanceof Error ? requestError.message : "Failed to apply normalization rules.");
     } finally {
       setIsApplyingRules(false);
+    }
+  }
+
+  async function generateXmlPreview(): Promise<void> {
+    if (!selectedXmlRecord?.catalogue_number) {
+      return;
+    }
+    setIsGeneratingXml(true);
+    setError(null);
+    try {
+      const preview = await api.previewEchelonXmlRecord(selectedXmlRecord.catalogue_number);
+      setXmlPreview(preview);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to generate XML preview.");
+    } finally {
+      setIsGeneratingXml(false);
+    }
+  }
+
+  async function downloadXmlRecord(): Promise<void> {
+    if (!selectedXmlRecord?.catalogue_number) {
+      return;
+    }
+    setIsGeneratingXml(true);
+    setError(null);
+    try {
+      const blob = await api.downloadEchelonXmlRecord(selectedXmlRecord.catalogue_number);
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = xmlPreview?.file_name ?? `echelon-${selectedXmlRecord.catalogue_number}.xml`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to download XML.");
+    } finally {
+      setIsGeneratingXml(false);
     }
   }
 
@@ -693,9 +755,13 @@ export function App() {
           {activeTab === "xml" ? (
             <>
               <span className="status-label">Current phase</span>
-              <span className="status-pill warn">Not generating yet</span>
+              <span className={xmlReadyRecords.length ? "status-pill ok" : "status-pill warn"}>
+                {xmlReadyRecords.length ? "Ready for XML" : "Blocked"}
+              </span>
               <p className="status-detail">
-                XML package generation remains downstream of canonical mapping and is currently scoped to MDR UDI-DI payload planning.
+                {xmlReadyRecords.length
+                  ? `${xmlReadyRecords.length} validated Echelon record${xmlReadyRecords.length === 1 ? "" : "s"} are currently eligible for XML generation.`
+                  : "XML generation remains downstream of canonical mapping and awaits validation-ready records."}
               </p>
             </>
           ) : null}
@@ -1714,35 +1780,342 @@ export function App() {
         <section className="tab-stack">
           <section className="summary-grid">
             <div className="summary-card">
-              <span className="summary-label">Current stage</span>
-              <strong>Deferred</strong>
-              <p>XML generation should remain downstream of canonical mapping, validation, and human review.</p>
+              <span className="summary-label">Validated rows</span>
+              <strong>{validationRecords.length}</strong>
+              <p>Rows available from the Echelon canonical validation workspace.</p>
             </div>
             <div className="summary-card">
-              <span className="summary-label">Schema readiness</span>
+              <span className="summary-label">XML-ready rows</span>
+              <strong>{xmlReadyRecords.length}</strong>
+              <p>Rows whose post-mapping completeness is currently suitable for XML projection.</p>
+            </div>
+            <div className="summary-card">
+              <span className="summary-label">Blocked rows</span>
+              <strong>{xmlBlockedRecords.length}</strong>
+              <p>Rows that would need canonical validation fixes before XML generation should include them.</p>
+            </div>
+            <div className="summary-card">
+              <span className="summary-label">Schema target</span>
               <strong>UDIDIType.xsd</strong>
-              <p>Schema inventory is available, but payload generation should wait until the MDR UDI-DI canonical review is stable.</p>
+              <p>The XML workspace is currently designed around the first-phase MDR UDI-DI schema target.</p>
             </div>
           </section>
-          <section className="panel roadmap-panel">
-            <span className="section-kicker">XML Generation</span>
-            <h2>QMS-Aligned XML Package Workspace</h2>
+
+          <section className="panel scope-banner-panel">
+            <div className="section-heading">
+              <div>
+                <span className="section-kicker">Dependency Gate</span>
+                <h2>XML Generation Depends On Canonical Validation</h2>
+              </div>
+              <span className={xmlReadyRecords.length ? "status-pill ok compact" : "status-pill warn compact"}>
+                {xmlReadyRecords.length ? "Validation-ready records available" : "Validation gate not yet met"}
+              </span>
+            </div>
             <p className="panel-copy">
-              This tab is reserved for schema-aware MDR UDI-DI payload creation, preview, and `UDIDIType.xsd`
-              validation after the canonical layer is approved.
+              This workspace consumes the validated Echelon mapping output. If a record is blocked in
+              canonical validation, it should not be included in XML generation.
             </p>
-            <div className="roadmap-list">
-              <div className="roadmap-item">
-                <strong>Payload preview</strong>
-                <p>Generate inspectable XML from validated first-phase canonical records.</p>
+            <div className="queue-summary">
+              <div className="queue-chip">
+                <strong>{echelonValidation?.family_scope ?? "Echelon only"}</strong>
+                <span>generation scope</span>
               </div>
-              <div className="roadmap-item">
-                <strong>XSD validation</strong>
-                <p>Validate generated documents against the inventoried EUDAMED schemas with first-phase focus on `UDIDIType.xsd`.</p>
+              <div className="queue-chip">
+                <strong>{echelonValidation?.matched_reference_records ?? 0}</strong>
+                <span>rows with shared Basic UDI context</span>
               </div>
-              <div className="roadmap-item">
-                <strong>Package preparation</strong>
-                <p>Prepare controlled manual submission artifacts before any future Playground approval, M2M, or eDelivery integration.</p>
+              <div className="queue-chip">
+                <strong>{xmlBlockedRecords.length}</strong>
+                <span>rows excluded until resolved</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="content-grid xml-mode-layout">
+            <div className="panel xml-mode-panel xml-equal-panel xml-top-panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Mode</span>
+                  <h2>Generation Mode</h2>
+                </div>
+              </div>
+              <div className="xml-mode-toggle">
+                <button
+                  className={xmlGenerationMode === "single" ? "nav-link active xml-mode-button" : "nav-link xml-mode-button"}
+                  type="button"
+                  onClick={() => setXmlGenerationMode("single")}
+                >
+                  Single record
+                </button>
+                <button
+                  className={xmlGenerationMode === "batch" ? "nav-link active xml-mode-button" : "nav-link xml-mode-button"}
+                  type="button"
+                  onClick={() => setXmlGenerationMode("batch")}
+                >
+                  Full family batch
+                </button>
+              </div>
+              <p className="panel-copy">
+                Start with a single validated record for schema testing, then move to a full-family batch
+                once the single-record payload shape is stable.
+              </p>
+            </div>
+
+            <div className="panel xml-readiness-panel xml-equal-panel xml-top-panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Readiness</span>
+                  <h2>Generation Summary</h2>
+                </div>
+              </div>
+              <div className="draft-list">
+                <div className="draft-card">
+                  <div className="draft-card-head">
+                    <strong>Included</strong>
+                    <span className="status-pill ok compact">{xmlReadyRecords.length}</span>
+                  </div>
+                  <p className="panel-copy">Records that would currently be eligible for XML generation.</p>
+                </div>
+                <div className="draft-card">
+                  <div className="draft-card-head">
+                    <strong>Excluded</strong>
+                    <span className="status-pill warn compact">{xmlBlockedRecords.length}</span>
+                  </div>
+                  <p className="panel-copy">
+                    Records blocked by canonical validation and therefore excluded from downstream XML scope.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="content-grid xml-mode-layout">
+            {xmlGenerationMode === "single" ? (
+              <>
+                <div className="panel xml-workspace-panel xml-equal-panel xml-middle-panel">
+                  <div className="section-heading">
+                    <div>
+                      <span className="section-kicker">Single Record</span>
+                      <h2>Record Selection</h2>
+                    </div>
+                  </div>
+                  <p className="panel-copy">
+                    Choose one validated Echelon record to use as the first XML generation and schema-validation target.
+                  </p>
+                  <div className="control-row xml-control-row">
+                    <select
+                      value={selectedXmlRecord?.catalogue_number ?? ""}
+                      onChange={(event) => setSelectedValidationRecordKey(event.target.value)}
+                    >
+                      {xmlReadyRecords.map((record) => (
+                        <option key={record.catalogue_number ?? record.primary_udi_di ?? record.source_row_index} value={record.catalogue_number ?? ""}>
+                          {record.catalogue_number} · {record.source_sheet}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {selectedXmlRecord ? (
+                    <div className="draft-list">
+                      <div className="draft-card">
+                        <div className="draft-card-head">
+                          <strong>{selectedXmlRecord.catalogue_number}</strong>
+                          <span className="status-pill ok compact">XML-ready</span>
+                        </div>
+                        <p className="draft-meta">{selectedXmlRecord.source_sheet} · row {selectedXmlRecord.source_row_index}</p>
+                        <p className="panel-copy">{selectedXmlRecord.trade_name}</p>
+                        <p className="panel-copy">
+                          UDI-DI {selectedXmlRecord.primary_udi_di} · Basic context {selectedXmlRecord.basic_reference_name}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="panel-copy">No XML-ready Echelon record is currently available.</p>
+                  )}
+                  <div className="draft-actions-bar">
+                    <button
+                      className="action-button"
+                      type="button"
+                      onClick={() => void generateXmlPreview()}
+                      disabled={!selectedXmlRecord || isGeneratingXml}
+                    >
+                      {isGeneratingXml ? "Generating..." : "Generate XML"}
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => void generateXmlPreview()}
+                      disabled={!selectedXmlRecord || isGeneratingXml}
+                    >
+                      Validate Against XSD
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => void downloadXmlRecord()}
+                      disabled={!selectedXmlRecord || isGeneratingXml}
+                    >
+                      Download XML
+                    </button>
+                  </div>
+                </div>
+
+                <div className="panel xml-preview-panel xml-equal-panel xml-middle-panel">
+                  <div className="section-heading">
+                    <div>
+                      <span className="section-kicker">Preview</span>
+                      <h2>Single Record XML Preview</h2>
+                    </div>
+                  </div>
+                  <pre className="xml-preview-block">
+                    <code>{xmlPreviewLines}</code>
+                  </pre>
+                  <div className="workflow-note">
+                    <strong>Preview status</strong>
+                    <span>
+                      {xmlPreview
+                        ? `Preview generated for ${xmlPreview.catalogue_number}.`
+                        : "No XML preview generated yet for the selected record."}
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="panel xml-workspace-panel xml-equal-panel xml-middle-panel">
+                  <div className="section-heading">
+                    <div>
+                      <span className="section-kicker">Batch</span>
+                      <h2>Full Family Batch Scope</h2>
+                    </div>
+                  </div>
+                  <p className="panel-copy">
+                    Batch generation will include all validation-ready Echelon rows and report any excluded rows separately.
+                  </p>
+                  <div className="draft-list">
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>Included rows</strong>
+                        <span className="status-pill ok compact">{xmlReadyRecords.length}</span>
+                      </div>
+                      <p className="panel-copy">Validation-ready rows that would enter the batch payload set.</p>
+                    </div>
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>Excluded rows</strong>
+                        <span className="status-pill warn compact">{xmlBlockedRecords.length}</span>
+                      </div>
+                      <p className="panel-copy">Rows still blocked by canonical validation and omitted from the batch.</p>
+                    </div>
+                  </div>
+                  <div className="draft-actions-bar">
+                    <button className="action-button" type="button" disabled>
+                      Generate Batch XML
+                    </button>
+                    <button className="ghost-button" type="button" disabled>
+                      Validate Batch
+                    </button>
+                    <span className="status-detail">Batch rendering and packaging follow the single-record generator.</span>
+                  </div>
+                </div>
+
+                <div className="panel xml-preview-panel xml-equal-panel xml-middle-panel">
+                  <div className="section-heading">
+                    <div>
+                      <span className="section-kicker">Batch Output</span>
+                      <h2>Family Batch Preview</h2>
+                    </div>
+                  </div>
+                  <div className="roadmap-list">
+                    <div className="roadmap-item">
+                      <strong>Generation set</strong>
+                      <p>{xmlReadyRecords.length} Echelon rows would be included in the first batch payload.</p>
+                    </div>
+                    <div className="roadmap-item">
+                      <strong>Validation gate</strong>
+                      <p>{xmlBlockedRecords.length} rows remain excluded until their canonical blockers are resolved.</p>
+                    </div>
+                    <div className="roadmap-item">
+                      <strong>Packaging intent</strong>
+                      <p>Batch output will be designed for controlled manual submission and audit-friendly review.</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+
+          <section className="content-grid xml-mode-layout">
+            <div className="panel xml-equal-panel xml-bottom-panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Validation</span>
+                  <h2>XSD Validation Workspace</h2>
+                </div>
+              </div>
+              <div className="draft-list">
+                <div className="draft-card">
+                  <div className="draft-card-head">
+                    <strong>Schema target</strong>
+                    <span className="status-pill ok compact">UDIDIType.xsd</span>
+                  </div>
+                  <p className="panel-copy">
+                    Generated XML is validated against the wrapped EUDAMED service-message schema set rooted at `Message.xsd`.
+                  </p>
+                </div>
+                <div className="draft-card">
+                  <div className="draft-card-head">
+                    <strong>Validation output</strong>
+                    <span className={xmlPreview?.validation.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                      {xmlPreview ? (xmlPreview.validation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
+                    </span>
+                  </div>
+                  {xmlPreview ? (
+                    <>
+                      <p className="panel-copy">{xmlPreview.validation.schema_path}</p>
+                      {xmlPreview.validation.errors.length ? (
+                        <div className="roadmap-list">
+                          {xmlPreview.validation.errors.slice(0, 5).map((issue, index) => (
+                            <div className="roadmap-item" key={`${issue.line ?? 0}-${issue.column ?? 0}-${index}`}>
+                              <strong>
+                                Line {issue.line ?? "?"}, column {issue.column ?? "?"}
+                              </strong>
+                              <p>{issue.message}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="panel-copy">The generated single-record Push message validates cleanly.</p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="panel-copy">
+                      Generate a single-record preview to inspect the schema validation outcome.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="panel xml-equal-panel xml-bottom-panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Handoff</span>
+                  <h2>Manual Submission Preparation</h2>
+                </div>
+              </div>
+              <div className="roadmap-list">
+                <div className="roadmap-item">
+                  <strong>Preview first</strong>
+                  <p>Single-record XML should be reviewed and schema-validated before any family batch is produced.</p>
+                </div>
+                <div className="roadmap-item">
+                  <strong>Manual test path</strong>
+                  <p>The current design assumes controlled manual submission because no approved Playground actor is available.</p>
+                </div>
+                <div className="roadmap-item">
+                  <strong>Next implementation step</strong>
+                  <p>Backend XML rendering and XSD validation services will activate the disabled controls in this workspace.</p>
+                </div>
               </div>
             </div>
           </section>

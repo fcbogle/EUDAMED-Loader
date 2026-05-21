@@ -28,18 +28,20 @@ field_reviews:
   - mapping:
       canonical_path: manufacturer.manufacturer_srn
       business_label: Manufacturer SRN
-      classification: gap
+      classification: derived
+      derivation_logic: Resolve from the Echelon Basic UDI reference workbook (`MDR-Basic!Manufacturer Code`) during canonical enrichment.
       assumptions:
-        - No confirmed workbook column has been identified yet.
-        - This may be managed outside the shared spreadsheets or through later operational context.
+        - The workbook rows do not carry the SRN directly.
+        - The current XML generation path sources it from the shared Echelon Basic UDI reference context.
       schema_targets:
-        - schema_path: UDIDIType/manufacturer/srn
-          required: false
-          status: gap
-          notes: Treat as a visible review gap until a confirmed source is identified.
+        - schema_path: BasicUDIType/MFActorCode
+          required: true
+          status: derived
+          notes: Required by `MDRBasicUDI` and currently sourced from the Basic UDI reference workbook.
+      example_canonical_value: UK-MF-000048777
     decision:
-      status: needs_clarification
-      rationale: Source evidence has not yet been confirmed in the workbook set.
+      status: accepted_with_note
+      rationale: The first XML path resolves this from the Echelon Basic UDI reference workbook rather than from the source templates.
   - mapping:
       canonical_path: manufacturer.designed_by_another_legal_entity
       business_label: Designed By Another Legal Entity

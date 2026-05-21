@@ -12,6 +12,7 @@ def test_echelon_validation_service_builds_subset_bundle() -> None:
     assert bundle.validation_subset_records == 2946
     assert bundle.excluded_records == 0
     assert bundle.matched_reference_records == 2946
+    assert bundle.tracked_required_fields == 52
     assert bundle.after_complete_records == 2946
     assert len(bundle.sheet_summaries) == 4
     assert bundle.sheet_summaries[0].record_count >= 1
@@ -21,7 +22,7 @@ def test_echelon_validation_service_builds_subset_bundle() -> None:
     record = bundle.records[0]
     assert record.catalogue_number == "EC22L1S"
     assert record.basic_reference_material_number == "5050649ECHELONMV"
-    assert record.before_completeness.missing_required_fields == 3
+    assert record.before_completeness.missing_required_fields == 16
     assert record.after_completeness.missing_required_fields == 0
     assert any(field.canonical_path == "basic_device.basic_udi_di" for field in record.fields)
 

@@ -207,3 +207,26 @@ export type EchelonValidationBundle = {
   excluded_sheet_summaries: ExcludedSheetSummary[];
   records: EchelonValidationRecord[];
 };
+
+export type XmlValidationIssue = {
+  level: "error" | "warning";
+  line: number | null;
+  column: number | null;
+  message: string;
+};
+
+export type XmlValidationResult = {
+  valid: boolean;
+  schema_path: string;
+  errors: XmlValidationIssue[];
+};
+
+export type SingleRecordXmlPreview = {
+  mode: "single";
+  catalogue_number: string;
+  trade_name: string | null;
+  primary_udi_di: string;
+  file_name: string;
+  xml: string;
+  validation: XmlValidationResult;
+};
