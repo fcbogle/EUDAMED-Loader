@@ -34,6 +34,22 @@ class ExcludedSheetSummary(BaseModel):
     reason: str
 
 
+class BlockerSummary(BaseModel):
+    canonical_path: str
+    business_label: str
+    before_missing_count: int
+    after_missing_count: int
+
+
+class SheetValidationSummary(BaseModel):
+    sheet_name: str
+    record_count: int
+    before_complete_records: int
+    after_complete_records: int
+    before_missing_field_total: int
+    after_missing_field_total: int
+
+
 class EchelonValidationRecord(BaseModel):
     source_workbook: str
     source_sheet: str
@@ -64,5 +80,8 @@ class EchelonValidationBundle(BaseModel):
     tracked_required_fields: int
     before_complete_records: int
     after_complete_records: int
+    blocker_summaries: list[BlockerSummary] = Field(default_factory=list)
+    sheet_summaries: list[SheetValidationSummary] = Field(default_factory=list)
+    sample_records: list[EchelonValidationRecord] = Field(default_factory=list)
     excluded_sheet_summaries: list[ExcludedSheetSummary] = Field(default_factory=list)
     records: list[EchelonValidationRecord] = Field(default_factory=list)

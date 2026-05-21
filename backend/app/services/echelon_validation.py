@@ -9,11 +9,13 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from app.config import get_settings
 from app.validation_models import (
+    BlockerSummary,
     CompletenessSnapshot,
     EchelonValidationBundle,
     EchelonValidationRecord,
     ExcludedSheetSummary,
     MatchStatus,
+    SheetValidationSummary,
     ValidationFieldValue,
     ValueSourceType,
 )
@@ -39,11 +41,9 @@ STERILE_HEADER = "Device labelled as sterile e.g. NO"
 LATEX_HEADER = "Containing latex e.g. NO"
 
 PRODUCT_TEMPLATE_HEADER = "Product Template"
-PRODUCT_MASTER_HEADER = "Product Master"
 PRODUCT_CODE_VALUE_HEADER = "Product Code (Value)"
 PRODUCT_NAME_HEADER = "Name"
 MATERIAL_NUMBER_HEADER = "Material Number"
-REFERENCE_NUMBER_HEADER = "Reference Number"
 MANUFACTURER_CODE_HEADER = "Manufacturer Code"
 
 
@@ -63,18 +63,16 @@ class EchelonValidationService:
         reference_workbook = self.settings.basic_udi_reference_dir / REFERENCE_WORKBOOK_NAME
 
         source_rows = self._load_source_rows(source_workbook)
-        reference_context = self._load_reference_context(reference_workbook)
+        family_reference_context = self._load_family_reference_context(reference_workbook)
 
         included_records: list[EchelonValidationRecord] = []
         excluded_by_sheet: dict[str, int] = {}
 
         for row in source_rows:
-            catalogue_number = self._catalogue_number(row.values)
-            reference_match = reference_context.get(catalogue_number) if catalogue_number else None
-            if not reference_match:
+            if not family_reference_context:
                 excluded_by_sheet[row.sheet_name] = excluded_by_sheet.get(row.sheet_name, 0) + 1
                 continue
-            included_records.append(self._build_record(source_workbook.name, row, reference_match))
+            included_records.append(self._build_record(source_workbook.name, row, family_reference_context))
 
         excluded_records = sum(excluded_by_sheet.values())
         tracked_required_fields = len(included_records[0].fields) if included_records else 0
@@ -82,8 +80,9 @@ class EchelonValidationService:
         return EchelonValidationBundle(
             family_scope="Echelon only",
             scope_note=(
-                "Only Echelon source rows with matching Basic UDI reference coverage are included in "
-                "this validation subset. Other Echelon rows remain parsed but excluded from mapping preview."
+                "All rows from the Echelon family workbook inherit the same Echelon Basic UDI-DI context. "
+                "The validation subset therefore covers the full Echelon workbook population when that family-level "
+                "Basic UDI reference is available."
             ),
             validation_note=(
                 "Completeness is measured against the tracked canonical fields currently modeled for this "
@@ -101,11 +100,14 @@ class EchelonValidationService:
             after_complete_records=sum(
                 1 for record in included_records if record.after_completeness.status == "complete"
             ),
+            blocker_summaries=self._build_blocker_summaries(included_records),
+            sheet_summaries=self._build_sheet_summaries(included_records),
+            sample_records=self._build_sample_records(included_records),
             excluded_sheet_summaries=[
                 ExcludedSheetSummary(
                     sheet_name=sheet_name,
                     record_count=record_count,
-                    reason="No Basic UDI-DI reference coverage is currently available for these rows.",
+                    reason="No family-level Basic UDI-DI reference coverage is currently available for Echelon.",
                 )
                 for sheet_name, record_count in sorted(excluded_by_sheet.items())
             ],
@@ -121,7 +123,6 @@ class EchelonValidationService:
         source_values = row.values
         basic_product = reference_match["basic_product"]
         basic_details = reference_match["basic_details"]
-        udi_details = reference_match["udi_details"]
         match_status: MatchStatus = "matched"
 
         fields = [
@@ -180,7 +181,7 @@ class EchelonValidationService:
                 before_source="missing",
                 after_source="basic_udi_reference",
                 source_detail="Products!Product Code (Value)",
-                update_reason="Linked by matching source catalogue number to the reference workbook UDI row.",
+                update_reason="Linked by inheriting the shared Echelon Basic UDI-DI family context.",
             ),
             self._field(
                 canonical_path="device_record.primary_udi_di",
@@ -267,11 +268,10 @@ class EchelonValidationService:
                 canonical_path="device_record.market_availability.market_status",
                 business_label="Market Status",
                 before_value=self._string_value(source_values.get(STATUS_HEADER)),
-                after_value=self._string_value(source_values.get(STATUS_HEADER))
-                or self._string_value(udi_details.get("Device Status")),
+                after_value=self._string_value(source_values.get(STATUS_HEADER)),
                 before_source="workbook",
-                after_source="workbook" if source_values.get(STATUS_HEADER) else "basic_udi_reference",
-                source_detail=f"{row.sheet_name}!{STATUS_HEADER} / MDR-UDI!Device Status",
+                after_source="workbook",
+                source_detail=f"{row.sheet_name}!{STATUS_HEADER}",
             ),
         ]
 
@@ -331,49 +331,44 @@ class EchelonValidationService:
                 rows.append(SourceRow(sheet_name=sheet_name, row_index=row_index, values=mapped_values))
         return rows
 
-    def _load_reference_context(
+    def _load_family_reference_context(
         self, workbook_path: Path
-    ) -> dict[str, dict[str, dict[str, object | None]]]:
+    ) -> dict[str, dict[str, object | None]] | None:
         workbook = load_workbook(workbook_path, read_only=True, data_only=True)
         product_rows = self._sheet_rows(workbook["Products"])
         basic_rows = self._sheet_rows(workbook["MDR-Basic"])
-        udi_rows = self._sheet_rows(workbook["MDR-UDI"])
 
-        basic_products = {
-            self._string_value(row.get(MATERIAL_NUMBER_HEADER)): row
-            for row in product_rows
-            if row.get(PRODUCT_TEMPLATE_HEADER) == "EUDAMED Basic UDI-DI"
-        }
-        udi_products = {
-            self._string_value(row.get(MATERIAL_NUMBER_HEADER)): row
-            for row in product_rows
-            if row.get(PRODUCT_TEMPLATE_HEADER) == "EUDAMED UDI-DI"
-        }
-        basic_details = {
-            self._string_value(row.get(MATERIAL_NUMBER_HEADER)): row for row in basic_rows
-        }
-        udi_details = {
-            self._string_value(row.get(REFERENCE_NUMBER_HEADER)): row for row in udi_rows
-        }
+        basic_product = next(
+            (
+                row
+                for row in product_rows
+                if row.get(PRODUCT_TEMPLATE_HEADER) == "EUDAMED Basic UDI-DI"
+                and self._string_value(row.get(PRODUCT_NAME_HEADER)) == "Echelon"
+            ),
+            None,
+        )
+        if not basic_product:
+            return None
 
-        context: dict[str, dict[str, dict[str, object | None]]] = {}
-        for reference_number, udi_row in udi_details.items():
-            if not reference_number:
-                continue
-            udi_product = udi_products.get(reference_number)
-            if not udi_product:
-                continue
-            basic_material_number = self._string_value(udi_product.get(PRODUCT_MASTER_HEADER))
-            basic_product = basic_products.get(basic_material_number)
-            basic_detail_row = basic_details.get(basic_material_number)
-            if not basic_product or not basic_detail_row:
-                continue
-            context[reference_number] = {
-                "basic_product": basic_product,
-                "basic_details": basic_detail_row,
-                "udi_details": udi_row,
-            }
-        return context
+        basic_material_number = self._string_value(basic_product.get(MATERIAL_NUMBER_HEADER))
+        if not basic_material_number:
+            return None
+
+        basic_detail_row = next(
+            (
+                row
+                for row in basic_rows
+                if self._string_value(row.get(MATERIAL_NUMBER_HEADER)) == basic_material_number
+            ),
+            None,
+        )
+        if not basic_detail_row:
+            return None
+
+        return {
+            "basic_product": basic_product,
+            "basic_details": basic_detail_row,
+        }
 
     @staticmethod
     def _sheet_rows(worksheet: Worksheet) -> list[dict[str, object | None]]:
@@ -393,6 +388,77 @@ class EchelonValidationService:
                 }
             )
         return output
+
+    @staticmethod
+    def _build_blocker_summaries(
+        records: list[EchelonValidationRecord],
+    ) -> list[BlockerSummary]:
+        if not records:
+            return []
+
+        ordered_fields = records[0].fields
+        summaries: list[BlockerSummary] = []
+        for template_field in ordered_fields:
+            before_missing_count = sum(
+                1
+                for record in records
+                for field in record.fields
+                if field.canonical_path == template_field.canonical_path and field.before_value is None
+            )
+            after_missing_count = sum(
+                1
+                for record in records
+                for field in record.fields
+                if field.canonical_path == template_field.canonical_path and field.after_value is None
+            )
+            summaries.append(
+                BlockerSummary(
+                    canonical_path=template_field.canonical_path,
+                    business_label=template_field.business_label,
+                    before_missing_count=before_missing_count,
+                    after_missing_count=after_missing_count,
+                )
+            )
+        return summaries
+
+    @staticmethod
+    def _build_sheet_summaries(
+        records: list[EchelonValidationRecord],
+    ) -> list[SheetValidationSummary]:
+        grouped: dict[str, list[EchelonValidationRecord]] = {}
+        for record in records:
+            grouped.setdefault(record.source_sheet, []).append(record)
+
+        summaries: list[SheetValidationSummary] = []
+        for sheet_name, sheet_records in sorted(grouped.items()):
+            summaries.append(
+                SheetValidationSummary(
+                    sheet_name=sheet_name,
+                    record_count=len(sheet_records),
+                    before_complete_records=sum(
+                        1 for record in sheet_records if record.before_completeness.status == "complete"
+                    ),
+                    after_complete_records=sum(
+                        1 for record in sheet_records if record.after_completeness.status == "complete"
+                    ),
+                    before_missing_field_total=sum(
+                        record.before_completeness.missing_required_fields for record in sheet_records
+                    ),
+                    after_missing_field_total=sum(
+                        record.after_completeness.missing_required_fields for record in sheet_records
+                    ),
+                )
+            )
+        return summaries
+
+    @staticmethod
+    def _build_sample_records(
+        records: list[EchelonValidationRecord],
+    ) -> list[EchelonValidationRecord]:
+        grouped: dict[str, EchelonValidationRecord] = {}
+        for record in records:
+            grouped.setdefault(record.source_sheet, record)
+        return [grouped[sheet_name] for sheet_name in sorted(grouped)]
 
     @staticmethod
     def _field(

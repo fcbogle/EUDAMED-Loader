@@ -155,6 +155,22 @@ export type ExcludedSheetSummary = {
   reason: string;
 };
 
+export type BlockerSummary = {
+  canonical_path: string;
+  business_label: string;
+  before_missing_count: number;
+  after_missing_count: number;
+};
+
+export type SheetValidationSummary = {
+  sheet_name: string;
+  record_count: number;
+  before_complete_records: number;
+  after_complete_records: number;
+  before_missing_field_total: number;
+  after_missing_field_total: number;
+};
+
 export type EchelonValidationRecord = {
   source_workbook: string;
   source_sheet: string;
@@ -185,6 +201,9 @@ export type EchelonValidationBundle = {
   tracked_required_fields: number;
   before_complete_records: number;
   after_complete_records: number;
+  blocker_summaries: BlockerSummary[];
+  sheet_summaries: SheetValidationSummary[];
+  sample_records: EchelonValidationRecord[];
   excluded_sheet_summaries: ExcludedSheetSummary[];
   records: EchelonValidationRecord[];
 };

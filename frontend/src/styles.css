@@ -863,6 +863,19 @@ th {
   align-items: start;
 }
 
+.validation-equal-panel {
+  height: 36rem;
+}
+
+.validation-summary-panel,
+.validation-selected-panel {
+  overflow: auto;
+}
+
+.validation-samples-panel {
+  overflow: visible;
+}
+
 .selected-table-row {
   background: rgba(0, 68, 90, 0.05);
 }
@@ -895,6 +908,21 @@ th {
   color: #4c6f7a;
   font-size: 0.76rem;
   line-height: 1.35;
+}
+
+.validation-sample-card {
+  width: 100%;
+}
+
+.validation-blockers-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.validation-blockers-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
 }
 
 .markdown-document {
