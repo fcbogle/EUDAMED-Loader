@@ -581,7 +581,7 @@ export function App() {
           {activeTab === "workbooks" ? (
             <>
               <p className="eyebrow">Workbook Analysis</p>
-              <h1>Profile workbook structure and configure normalization without changing source files.</h1>
+              <h1>Review Excel Workbook Data</h1>
               <p className="hero-copy">
                 Review workbook evidence, identify normalization challenges when they exist, and see
                 how the application addresses them without changing the source Excel files.
@@ -591,7 +591,7 @@ export function App() {
           {activeTab === "canonical" ? (
             <>
               <p className="eyebrow">Canonical Preparation</p>
-              <h1>Review the Excel to canonical to schema contract for the first MDR UDI-DI load.</h1>
+              <h1>Review Canonical Model Contract</h1>
               <p className="hero-copy">
                 This stage defines how workbook fields map into canonical meaning and onward to
                 `UDIDIType.xsd`, with accordion detail for assumptions and transformation notes.
@@ -601,7 +601,7 @@ export function App() {
           {activeTab === "canonicalValidation" ? (
             <>
               <p className="eyebrow">Canonical Validation</p>
-              <h1>Review the mappings that still depend on assumptions, context, or clarification.</h1>
+              <h1>Review Mapping Assumptions</h1>
               <p className="hero-copy">
                 This stage isolates derived fields, gaps, normalization review, and clarification items
                 so mapping validation stays separate from the canonical definition view.
@@ -611,7 +611,7 @@ export function App() {
           {activeTab === "xml" ? (
             <>
               <p className="eyebrow">XML Generation</p>
-              <h1>Stage the MDR UDI-DI XML package flow after workbook data and canonical mapping are stable.</h1>
+              <h1>Generate EUDAMED XML</h1>
               <p className="hero-copy">
                 This stage will produce previewable payloads, validate against `UDIDIType.xsd`, and
                 prepare controlled manual submission packages without introducing M2M transport yet.
@@ -960,7 +960,7 @@ export function App() {
                   ? "Some values for this field still need normalization attention or manual review."
                   : "Normalization needs for this field are currently addressed by the existing ruleset."}
               </p>
-              <details className="group-accordion" open={detectedIssues.length > 0}>
+              <details className="group-accordion">
                 <summary>
                   <span>Normalization Detail</span>
                   <span className="status-pill warn compact">{detectedIssues.length}</span>
@@ -1036,7 +1036,7 @@ export function App() {
                   </table>
                 </div>
               </details>
-              <details className="group-accordion" open={selectedColumnDrafts.length > 0}>
+              <details className="group-accordion">
                 <summary>
                   <span>Queued Changes</span>
                   <span className="status-pill warn compact">{selectedColumnDrafts.length}</span>
@@ -1136,27 +1136,85 @@ export function App() {
 
       {activeTab === "canonical" ? (
         <section className="tab-stack">
-          <section className="summary-grid">
-            <div className="summary-card">
-              <span className="summary-label">Reviewed entities</span>
-              <strong>{canonicalEntityCount}</strong>
-              <p>Canonical entities currently represented in the first-phase mapping contract.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">Mapped fields</span>
-              <strong>{canonicalFieldCount}</strong>
-              <p>Field-level mappings currently visible in the compact review table.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">Direct mappings</span>
-              <strong>{directCount}</strong>
-              <p>Mappings that come straight from the workbook meaning without inferred context.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">Context-heavy</span>
-              <strong>{derivedRows.length + normalizedRows.length}</strong>
-              <p>Mappings that depend on derivation logic or controlled-value normalization.</p>
-            </div>
+          <section className="metric-accordion-stack">
+            <details className="panel metric-panel-accordion">
+              <summary>
+                <div>
+                  <span className="section-kicker">Reviewed Entities</span>
+                  <h2>{canonicalEntityCount}</h2>
+                </div>
+                <span className="status-pill ok compact">Groups in scope</span>
+              </summary>
+              <div className="accordion-body metric-detail-grid">
+                {(canonicalReview?.entity_reviews ?? []).map((entity) => (
+                  <div className="metric-detail-item" key={entity.entity_path}>
+                    <strong>{entity.entity_name}</strong> · <code>{entity.entity_path}</code>
+                  </div>
+                ))}
+              </div>
+            </details>
+            <details className="panel metric-panel-accordion">
+              <summary>
+                <div>
+                  <span className="section-kicker">Mapped Fields</span>
+                  <h2>{canonicalFieldCount}</h2>
+                </div>
+                <span className="status-pill ok compact">Visible in table</span>
+              </summary>
+              <div className="accordion-body metric-detail-grid">
+                {canonicalMappingRows.slice(0, 16).map((row) => (
+                  <div className="metric-detail-item" key={row.canonicalPath}>
+                    <strong>{row.businessLabel}</strong> · <code>{row.canonicalPath}</code>
+                  </div>
+                ))}
+                {canonicalMappingRows.length > 16 ? (
+                  <div className="metric-detail-item">Showing 16 of {canonicalMappingRows.length} mapped fields.</div>
+                ) : null}
+              </div>
+            </details>
+            <details className="panel metric-panel-accordion">
+              <summary>
+                <div>
+                  <span className="section-kicker">Direct Mappings</span>
+                  <h2>{directCount}</h2>
+                </div>
+                <span className="status-pill ok compact">Workbook-aligned</span>
+              </summary>
+              <div className="accordion-body metric-detail-grid">
+                {canonicalMappingRows
+                  .filter((row) => row.classification === "direct")
+                  .slice(0, 16)
+                  .map((row) => (
+                    <div className="metric-detail-item" key={row.canonicalPath}>
+                      <strong>{row.businessLabel}</strong> · {row.excelField}
+                    </div>
+                  ))}
+                {directCount > 16 ? (
+                  <div className="metric-detail-item">Showing 16 of {directCount} direct mappings.</div>
+                ) : null}
+              </div>
+            </details>
+            <details className="panel metric-panel-accordion">
+              <summary>
+                <div>
+                  <span className="section-kicker">Context-Heavy</span>
+                  <h2>{derivedRows.length + normalizedRows.length}</h2>
+                </div>
+                <span className="status-pill warn compact">Derived or normalized</span>
+              </summary>
+              <div className="accordion-body metric-detail-grid">
+                {[...derivedRows, ...normalizedRows].slice(0, 16).map((row) => (
+                  <div className="metric-detail-item" key={row.canonicalPath}>
+                    <strong>{row.businessLabel}</strong> · {titleCaseToken(row.classification)}
+                  </div>
+                ))}
+                {derivedRows.length + normalizedRows.length > 16 ? (
+                  <div className="metric-detail-item">
+                    Showing 16 of {derivedRows.length + normalizedRows.length} context-heavy mappings.
+                  </div>
+                ) : null}
+              </div>
+            </details>
           </section>
           <section className="panel">
             <div className="section-heading">
@@ -1319,7 +1377,7 @@ export function App() {
             { title: "Normalized Fields", rows: normalizedRows },
           ].map((group) => (
             <section className="panel roadmap-panel" key={group.title}>
-              <details className="group-accordion" open>
+              <details className="group-accordion">
                 <summary>
                   <span>{group.title}</span>
                   <span className="status-pill warn compact">{group.rows.length}</span>

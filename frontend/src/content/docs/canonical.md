@@ -204,9 +204,10 @@ Represents the basic-level device meaning required by the Device schema and keep
 - classification:
   - derived
 - current source:
-  - expected to come from previously loaded `Basic UDI` records or trusted reference context rather than from this first upload workbook set
+  - expected to come from the previously registered `Basic UDI` reference list rather than from this first upload workbook set
 - discussion note:
   - keep the field explicit for linkage and later schema projection, but do not treat it as a first-phase workbook gap by default
+  - this value is required for UDI-DI upload even though it is not expected to be carried in the workbook itself
 
 #### `regulation`
 

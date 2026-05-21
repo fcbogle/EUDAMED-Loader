@@ -11,9 +11,10 @@ field_reviews:
       canonical_path: basic_device.basic_udi_di
       business_label: Basic UDI-DI
       classification: derived
-      derivation_logic: Resolve from previously loaded Basic UDI records or trusted external reference context instead of the current workbook rows.
+      derivation_logic: Resolve from the previously registered Basic UDI reference list instead of the current workbook rows.
       assumptions:
         - Absence from the current workbook set is not treated as a first-phase upload omission by default.
+        - The required value should already exist in the prior Basic UDI registration dataset used for lookup.
       schema_targets:
         - schema_path: UDIDIType/basicUdiDiId
           required: true
@@ -21,7 +22,7 @@ field_reviews:
           notes: Required relationship context for UDI-DI projection.
     decision:
       status: accepted_with_note
-      rationale: Needed for linkage, but not expected to originate from the first-load spreadsheet.
+      rationale: Needed for linkage and upload, but expected to come from the previously registered Basic UDI reference list rather than the first-load spreadsheet.
   - mapping:
       canonical_path: basic_device.regulation
       business_label: Regulation

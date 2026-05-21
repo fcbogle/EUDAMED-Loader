@@ -113,7 +113,7 @@ input {
 }
 
 .hero-copy-block {
-  max-width: 1040px;
+  max-width: 1200px;
 }
 
 .eyebrow {
@@ -129,7 +129,8 @@ input {
   font-family: "IBM Plex Serif", Georgia, serif;
   font-size: clamp(2rem, 3vw, 3.4rem);
   line-height: 1.02;
-  max-width: 18ch;
+  max-width: 32ch;
+  text-align: left;
 }
 
 .hero-copy {
@@ -227,6 +228,7 @@ input {
   margin-bottom: 6px;
   font-family: "IBM Plex Serif", Georgia, serif;
   font-size: 2rem;
+  letter-spacing: 0.01em;
   color: #002a3a;
 }
 
@@ -623,6 +625,7 @@ th {
 
 .queue-chip strong {
   font-size: 0.94rem;
+  letter-spacing: 0.01em;
 }
 
 .queue-chip span {
@@ -690,6 +693,7 @@ th {
 .roadmap-item strong {
   display: block;
   margin-bottom: 6px;
+  letter-spacing: 0.01em;
 }
 
 .roadmap-item p {
@@ -738,6 +742,63 @@ th {
 .accordion-body p {
   margin: 0;
   color: #355864;
+}
+
+.metric-accordion {
+  margin-top: 12px;
+}
+
+.metric-accordion summary {
+  font-size: 0.8rem;
+}
+
+.metric-accordion-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.metric-panel-accordion {
+  padding: 18px 20px;
+}
+
+.metric-panel-accordion summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.metric-panel-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.metric-panel-accordion summary h2 {
+  margin: 4px 0 0;
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: 1.65rem;
+  color: #002a3a;
+}
+
+.metric-detail-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.metric-detail-item {
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #355864;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.metric-detail-item strong {
+  margin-right: 4px;
 }
 
 .expanded-row td {

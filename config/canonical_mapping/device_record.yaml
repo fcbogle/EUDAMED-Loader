@@ -11,9 +11,10 @@ field_reviews:
       canonical_path: device_record.basic_device_ref
       business_label: Basic Device Reference
       classification: derived
-      derivation_logic: Link the UDI-DI record to the previously loaded Basic UDI context using external reference resolution.
+      derivation_logic: Link the UDI-DI record to the previously registered Basic UDI reference list using deterministic lookup.
       assumptions:
-        - Basic UDI linkage is required context even if the workbook does not populate the relationship directly.
+        - Basic UDI linkage is required for UDI-DI upload even if the workbook does not populate the relationship directly.
+        - The lookup source is the previously registered Basic UDI reference list.
       schema_targets:
         - schema_path: UDIDIType/basicUdiDiId
           required: true
@@ -21,7 +22,7 @@ field_reviews:
           notes: Preserve as explicit relationship context.
     decision:
       status: accepted_with_note
-      rationale: Required context, but not currently workbook-native.
+      rationale: Required for upload, but expected to be resolved from the previously registered Basic UDI reference list rather than from the workbook.
   - mapping:
       canonical_path: device_record.primary_udi_di
       business_label: Primary UDI-DI
