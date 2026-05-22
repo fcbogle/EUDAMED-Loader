@@ -258,3 +258,27 @@ export type SingleRecordXmlPreview = {
   xml: string;
   validation: XmlValidationResult;
 };
+
+export type BatchXmlChunkSummary = {
+  sequence: number;
+  file_name: string;
+  record_count: number;
+  first_catalogue_number: string | null;
+  last_catalogue_number: string | null;
+  validation: XmlValidationResult;
+};
+
+export type BatchXmlPreview = {
+  mode: "batch";
+  package_file_name: string;
+  total_ready_records: number;
+  excluded_records: number;
+  max_records_per_file: number;
+  chunk_count: number;
+  selected_chunk_sequence: number;
+  selected_chunk_file_name: string;
+  selected_chunk_record_count: number;
+  selected_chunk_xml: string;
+  selected_chunk_validation: XmlValidationResult;
+  chunks: BatchXmlChunkSummary[];
+};

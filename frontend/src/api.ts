@@ -1,5 +1,6 @@
 import type {
   ApplyNormalizationRulesResponse,
+  BatchXmlPreview,
   CanonicalReviewBundle,
   DistinctValueProfile,
   EchelonValidationBundle,
@@ -35,18 +36,27 @@ async function sendJson<T>(path: string, method: string, body: unknown): Promise
   return response.json() as Promise<T>;
 }
 
-async function sendDownload(path: string, method: string, body: unknown): Promise<Blob> {
+function parseFileName(contentDisposition: string | null): string | null {
+  if (!contentDisposition) {
+    return null;
+  }
+  const match = contentDisposition.match(/filename="?([^"]+)"?/i);
+  return match?.[1] ?? null;
+}
+
+async function sendDownload(path: string, method: string, body?: unknown): Promise<{ blob: Blob; fileName: string | null }> {
   const response = await fetch(`${API_ROOT}${path}`, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
-  return response.blob();
+  return {
+    blob: await response.blob(),
+    fileName: parseFileName(response.headers.get("Content-Disposition")),
+  };
 }
 
 export const api = {
@@ -78,9 +88,14 @@ export const api = {
     sendJson<SingleRecordXmlPreview>("/xml/echelon/preview-record", "POST", {
       catalogue_number: catalogueNumber,
     }),
+  previewEchelonXmlBatch: (chunkSequence = 1) =>
+    sendJson<BatchXmlPreview>("/xml/echelon/preview-batch", "POST", {
+      chunk_sequence: chunkSequence,
+    }),
   downloadEchelonXmlRecord: (catalogueNumber: string) =>
     sendDownload("/xml/echelon/download-record", "POST", {
       catalogue_number: catalogueNumber,
     }),
+  downloadEchelonXmlBatch: () => sendDownload("/xml/echelon/download-batch", "POST"),
   schemas: () => getJson<SchemaInventory>("/schemas"),
 };

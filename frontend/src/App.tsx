@@ -6,6 +6,7 @@ import canonicalValidationDocumentation from "./content/docs/canonical-validatio
 import workbooksDocumentation from "./content/docs/workbooks.md?raw";
 import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import type {
+  BatchXmlPreview,
   CanonicalReviewBundle,
   DistinctValueProfile,
   EchelonValidationBundle,
@@ -183,6 +184,15 @@ function titleCaseToken(value: string): string {
     .join(" ");
 }
 
+function formatSchemaPathForInlineNote(schemaPath: string): string {
+  const normalizedPath = schemaPath.replace(/\\/g, "/");
+  const dataIndex = normalizedPath.indexOf("data/");
+  const projectRelativePath = dataIndex >= 0 ? normalizedPath.slice(dataIndex) : normalizedPath;
+  const fileName = projectRelativePath.split("/").pop() ?? projectRelativePath;
+  const directory = projectRelativePath.replace(`/${fileName}`, "");
+  return `${fileName} in ${directory}`;
+}
+
 function suggestAction(
   rawValue: string,
   acceptedValues: string[],
@@ -254,6 +264,8 @@ export function App() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [xmlPreview, setXmlPreview] = useState<SingleRecordXmlPreview | null>(null);
+  const [batchXmlPreview, setBatchXmlPreview] = useState<BatchXmlPreview | null>(null);
+  const [selectedBatchChunkSequence, setSelectedBatchChunkSequence] = useState<number>(1);
   const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
@@ -330,6 +342,10 @@ export function App() {
   useEffect(() => {
     setXmlPreview(null);
   }, [selectedValidationRecordKey, xmlGenerationMode]);
+
+  useEffect(() => {
+    setBatchXmlPreview(null);
+  }, [selectedBatchChunkSequence]);
 
   const selectedRuleFile = rules.find((item) => item.column === selectedColumn);
   const acceptedValues = Array.from(new Set(selectedRuleFile?.rules.map((rule) => rule.normalized) ?? []));
@@ -502,6 +518,23 @@ export function App() {
         `<udi-di>${selectedXmlRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
       ].join("\n")
     : "<!-- No XML-ready Echelon record is currently available -->";
+  const batchChunkOptions = batchXmlPreview?.chunks ?? [];
+  const selectedBatchValidation =
+    xmlGenerationMode === "batch" ? batchXmlPreview?.selected_chunk_validation ?? null : xmlPreview?.validation ?? null;
+  const validationStatusLabel = selectedBatchValidation
+    ? selectedBatchValidation.valid
+      ? "Schema valid"
+      : "Schema invalid"
+    : "Awaiting validation";
+  const selectedSchemaLabel = selectedBatchValidation
+    ? formatSchemaPathForInlineNote(selectedBatchValidation.schema_path)
+    : null;
+  const batchPreviewLines = batchXmlPreview?.selected_chunk_xml ??
+    [
+      "<!-- Generate batch XML to preview one chunked Push message -->",
+      `<eligible-records>${xmlReadyRecords.length}</eligible-records>`,
+      `<max-records-per-file>300</max-records-per-file>`,
+    ].join("\n");
   const profileColumns = sheetProfile?.columns ?? [];
   const highNullColumns = profileColumns.filter((column) => {
     if (!sheetProfile?.data_rows) {
@@ -660,17 +693,51 @@ export function App() {
     setIsGeneratingXml(true);
     setError(null);
     try {
-      const blob = await api.downloadEchelonXmlRecord(selectedXmlRecord.catalogue_number);
+      const { blob, fileName } = await api.downloadEchelonXmlRecord(selectedXmlRecord.catalogue_number);
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
-      anchor.download = xmlPreview?.file_name ?? `echelon-${selectedXmlRecord.catalogue_number}.xml`;
+      anchor.download = fileName ?? xmlPreview?.file_name ?? `echelon-${selectedXmlRecord.catalogue_number}.xml`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(objectUrl);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Failed to download XML.");
+    } finally {
+      setIsGeneratingXml(false);
+    }
+  }
+
+  async function generateBatchXmlPreview(chunkSequence = selectedBatchChunkSequence): Promise<void> {
+    setIsGeneratingXml(true);
+    setError(null);
+    try {
+      const preview = await api.previewEchelonXmlBatch(chunkSequence);
+      setBatchXmlPreview(preview);
+      setSelectedBatchChunkSequence(preview.selected_chunk_sequence);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to generate batch XML preview.");
+    } finally {
+      setIsGeneratingXml(false);
+    }
+  }
+
+  async function downloadBatchXml(): Promise<void> {
+    setIsGeneratingXml(true);
+    setError(null);
+    try {
+      const { blob, fileName } = await api.downloadEchelonXmlBatch();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = fileName ?? batchXmlPreview?.package_file_name ?? "echelon-batch-package.zip";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to download batch XML package.");
     } finally {
       setIsGeneratingXml(false);
     }
@@ -763,7 +830,7 @@ export function App() {
           {activeTab === "xml" ? (
             <>
               <p className="eyebrow">XML Generation</p>
-              <h1>Generate EUDAMED XML</h1>
+              <h1>Generate Echelon-Only EUDAMED XML</h1>
               <p className="hero-copy">
                 This stage will produce previewable payloads, validate against `UDIDIType.xsd`, and
                 prepare controlled manual submission packages without introducing M2M transport yet.
@@ -2191,6 +2258,14 @@ export function App() {
                       Download XML
                     </button>
                   </div>
+                  <div className="workflow-note">
+                    <strong>Validation result</strong>
+                    <span>
+                      {selectedBatchValidation
+                        ? `${validationStatusLabel} against ${selectedSchemaLabel}${selectedBatchValidation.errors.length ? ` · ${selectedBatchValidation.errors.length} issue${selectedBatchValidation.errors.length === 1 ? "" : "s"}` : ""}.`
+                        : "Use Generate XML or Validate Against XSD to populate the validation result."}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="panel xml-preview-panel xml-equal-panel xml-middle-panel">
@@ -2240,15 +2315,45 @@ export function App() {
                       </div>
                       <p className="panel-copy">Rows still blocked by canonical validation and omitted from the batch.</p>
                     </div>
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>Chunk limit</strong>
+                        <span className="status-pill ok compact">300</span>
+                      </div>
+                      <p className="panel-copy">Each wrapped Push message may contain at most 300 device entries.</p>
+                    </div>
+                  </div>
+                  <div className="control-row xml-control-row">
+                    <select
+                      value={selectedBatchChunkSequence}
+                      onChange={(event) => setSelectedBatchChunkSequence(Number(event.target.value))}
+                      disabled={!batchChunkOptions.length}
+                    >
+                      {(batchChunkOptions.length ? batchChunkOptions : [{ sequence: 1, file_name: "Chunk 1" }]).map((chunk) => (
+                        <option key={chunk.sequence} value={chunk.sequence}>
+                          {`Chunk ${chunk.sequence}${"record_count" in chunk ? ` · ${chunk.record_count} rows` : ""}`}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="draft-actions-bar">
-                    <button className="action-button" type="button" disabled>
-                      Generate Batch XML
+                    <button className="action-button" type="button" onClick={() => void generateBatchXmlPreview()} disabled={!xmlReadyRecords.length || isGeneratingXml}>
+                      {isGeneratingXml ? "Generating..." : "Generate Batch XML"}
                     </button>
-                    <button className="ghost-button" type="button" disabled>
+                    <button className="ghost-button" type="button" onClick={() => void generateBatchXmlPreview()} disabled={!xmlReadyRecords.length || isGeneratingXml}>
                       Validate Batch
                     </button>
-                    <span className="status-detail">Batch rendering and packaging follow the single-record generator.</span>
+                    <button className="ghost-button" type="button" onClick={() => void downloadBatchXml()} disabled={!xmlReadyRecords.length || isGeneratingXml}>
+                      Download Batch Package
+                    </button>
+                  </div>
+                  <div className="workflow-note">
+                    <strong>Validation result</strong>
+                    <span>
+                      {selectedBatchValidation
+                        ? `Selected chunk is ${selectedBatchValidation.valid ? "schema valid" : "schema invalid"} against ${selectedSchemaLabel}${selectedBatchValidation.errors.length ? ` · ${selectedBatchValidation.errors.length === 1 ? "" : "s"}` : ""}.`
+                        : "Generate Batch XML or Validate Batch to populate the chunk validation result."}
+                    </span>
                   </div>
                 </div>
 
@@ -2259,27 +2364,37 @@ export function App() {
                       <h2>Family Batch Preview</h2>
                     </div>
                   </div>
-                  <div className="roadmap-list">
-                    <div className="roadmap-item">
-                      <strong>Generation set</strong>
-                      <p>{xmlReadyRecords.length} Echelon rows would be included in the first batch payload.</p>
-                    </div>
-                    <div className="roadmap-item">
-                      <strong>Validation gate</strong>
-                      <p>{xmlBlockedRecords.length} rows remain excluded until their canonical blockers are resolved.</p>
-                    </div>
-                    <div className="roadmap-item">
-                      <strong>Packaging intent</strong>
-                      <p>Batch output will be designed for controlled manual submission and audit-friendly review.</p>
-                    </div>
+                  <pre className="xml-preview-block">
+                    <code>{batchPreviewLines}</code>
+                  </pre>
+                  <div className="workflow-note">
+                    <strong>Preview status</strong>
+                    <span>
+                      {batchXmlPreview
+                        ? `Chunk ${batchXmlPreview.selected_chunk_sequence} preview generated for ${batchXmlPreview.selected_chunk_record_count} record${batchXmlPreview.selected_chunk_record_count === 1 ? "" : "s"}.`
+                        : "No batch preview generated yet."}
+                    </span>
                   </div>
+                  {batchXmlPreview ? (
+                    <div className="roadmap-list compact-structured-list">
+                      {batchXmlPreview.chunks.map((chunk) => (
+                        <div className="roadmap-item compact-structured-item" key={chunk.sequence}>
+                          <strong>{chunk.file_name}</strong>
+                          <p>
+                            {chunk.record_count} rows · {chunk.first_catalogue_number ?? "Unknown"} to{" "}
+                            {chunk.last_catalogue_number ?? "Unknown"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </>
             )}
           </section>
 
           <section className="content-grid xml-mode-layout">
-            <div className="panel xml-equal-panel xml-bottom-panel">
+            <div className="panel xml-equal-panel xml-bottom-panel xml-validation-bottom-panel">
               <div className="section-heading">
                 <div>
                   <span className="section-kicker">Validation</span>
@@ -2299,16 +2414,20 @@ export function App() {
                 <div className="draft-card">
                   <div className="draft-card-head">
                     <strong>Validation output</strong>
-                    <span className={xmlPreview?.validation.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                      {xmlPreview ? (xmlPreview.validation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
+                    <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                      {selectedBatchValidation
+                        ? selectedBatchValidation.valid
+                          ? "Schema valid"
+                          : "Schema invalid"
+                        : "Awaiting preview"}
                     </span>
                   </div>
-                  {xmlPreview ? (
+                  {selectedBatchValidation ? (
                     <>
-                      <p className="panel-copy">{xmlPreview.validation.schema_path}</p>
-                      {xmlPreview.validation.errors.length ? (
+                      <p className="panel-copy">{selectedBatchValidation.schema_path}</p>
+                      {selectedBatchValidation.errors.length ? (
                         <div className="roadmap-list">
-                          {xmlPreview.validation.errors.slice(0, 5).map((issue, index) => (
+                          {selectedBatchValidation.errors.slice(0, 5).map((issue, index) => (
                             <div className="roadmap-item" key={`${issue.line ?? 0}-${issue.column ?? 0}-${index}`}>
                               <strong>
                                 Line {issue.line ?? "?"}, column {issue.column ?? "?"}
@@ -2318,37 +2437,59 @@ export function App() {
                           ))}
                         </div>
                       ) : (
-                        <p className="panel-copy">The generated single-record Push message validates cleanly.</p>
+                        <p className="panel-copy">
+                          {xmlGenerationMode === "batch"
+                            ? "The selected batch chunk validates cleanly against the service-message schema set."
+                            : "The generated single-record Push message validates cleanly."}
+                        </p>
                       )}
                     </>
                   ) : (
                     <p className="panel-copy">
-                      Generate a single-record preview to inspect the schema validation outcome.
+                      {xmlGenerationMode === "batch"
+                        ? "Generate a batch preview to inspect the chunk-level schema validation outcome."
+                        : "Generate a single-record preview to inspect the schema validation outcome."}
                     </p>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="panel xml-equal-panel xml-bottom-panel">
+            <div className="panel xml-equal-panel xml-bottom-panel xml-handoff-bottom-panel">
               <div className="section-heading">
                 <div>
-                  <span className="section-kicker">Handoff</span>
-                  <h2>Manual Submission Preparation</h2>
+                  <span className="section-kicker">Guide</span>
+                  <h2>Recommended XML Workflow</h2>
                 </div>
               </div>
               <div className="roadmap-list">
                 <div className="roadmap-item">
-                  <strong>Preview first</strong>
-                  <p>Single-record XML should be reviewed and schema-validated before any family batch is produced.</p>
+                  <strong>1. Validate Canonical</strong>
+                  <p>Confirm the selected Echelon records are complete before entering XML generation.</p>
                 </div>
                 <div className="roadmap-item">
-                  <strong>Manual test path</strong>
-                  <p>The current design assumes controlled manual submission because no approved Playground actor is available.</p>
+                  <strong>2. Generate Single XML</strong>
+                  <p>Start with one XML-ready record to confirm payload shape and mapped values.</p>
                 </div>
                 <div className="roadmap-item">
-                  <strong>Next implementation step</strong>
-                  <p>Backend XML rendering and XSD validation services will activate the disabled controls in this workspace.</p>
+                  <strong>3. Validate Against Schema</strong>
+                  <p>Validate the wrapped Push message before any download or batch run.</p>
+                </div>
+                <div className="roadmap-item">
+                  <strong>4. Download Single XML</strong>
+                  <p>Download the reviewed single-record file for controlled inspection.</p>
+                </div>
+                <div className="roadmap-item">
+                  <strong>5. Generate Batch XML</strong>
+                  <p>Generate the Echelon batch package in chunks of up to 300 devices.</p>
+                </div>
+                <div className="roadmap-item">
+                  <strong>6. Validate Batch Against Schema</strong>
+                  <p>Review a batch chunk preview and confirm the package validates cleanly.</p>
+                </div>
+                <div className="roadmap-item">
+                  <strong>7. Download Batch Package</strong>
+                  <p>Download the zip package containing the XML chunk files and manifest.</p>
                 </div>
               </div>
             </div>

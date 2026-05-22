@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from app.routers.xml_generation import download_echelon_record, preview_echelon_record
+from io import BytesIO
+from zipfile import ZipFile
+
+from app.routers.xml_generation import (
+    download_echelon_batch,
+    download_echelon_record,
+    preview_echelon_batch,
+    preview_echelon_record,
+)
 from app.services.echelon_xml_generation import EchelonXmlGenerationService
 
 
@@ -35,3 +43,42 @@ def test_download_route_returns_xml_file() -> None:
     assert response.media_type == "application/xml"
     assert 'filename="echelon-EC22L1S.xml"' in response.headers["Content-Disposition"]
     assert b"<m:Push" in response.body
+
+
+def test_batch_preview_generates_chunked_schema_valid_xml() -> None:
+    preview = EchelonXmlGenerationService().preview_batch()
+
+    assert preview.package_file_name == "echelon-batch-package.zip"
+    assert preview.total_ready_records == 2946
+    assert preview.max_records_per_file == 300
+    assert preview.chunk_count == 10
+    assert preview.selected_chunk_sequence == 1
+    assert preview.selected_chunk_record_count == 300
+    assert preview.selected_chunk_validation.valid is True
+    assert len(preview.chunks) == 10
+    assert preview.chunks[0].record_count == 300
+    assert preview.chunks[-1].record_count == 246
+    assert "<m:Push" in preview.selected_chunk_xml
+
+
+def test_batch_preview_route_returns_batch_payload() -> None:
+    payload = preview_echelon_batch({"chunk_sequence": 2})
+
+    assert payload["mode"] == "batch"
+    assert payload["chunk_count"] == 10
+    assert payload["selected_chunk_sequence"] == 2
+    assert payload["selected_chunk_record_count"] == 300
+    assert payload["selected_chunk_validation"]["valid"] is True
+
+
+def test_batch_download_route_returns_zip_package() -> None:
+    response = download_echelon_batch()
+
+    assert response.media_type == "application/zip"
+    assert 'filename="echelon-batch-package.zip"' in response.headers["Content-Disposition"]
+
+    with ZipFile(BytesIO(response.body)) as archive:
+        names = archive.namelist()
+        assert "manifest.json" in names
+        assert "echelon-batch-01-of-10.xml" in names
+        assert "echelon-batch-10-of-10.xml" in names

@@ -42,7 +42,11 @@ For the current phase, XML work should be designed around a controlled first-loa
   - validates the message against the local EUDAMED XSD set
   - allows XML download from the UI
   - includes normalized `Storage Conditions` and `Critical Warnings` when present for the selected `Echelon` row
-- batch generation is not implemented yet
+- batch preview and download are implemented for validation-ready `Echelon` rows
+- batch output is chunked into wrapped `Push` messages with a maximum of `300` `device:Device` entries per file
+- batch download is packaged as a `.zip` containing:
+  - one XML file per generated chunk
+  - a `manifest.json` summary of included rows, excluded rows, chunk counts, and file names
 
 ## Push Message Design
 
@@ -78,6 +82,21 @@ So when the documentation says the current `Echelon` path includes the wider XML
 
 Without that wider field set, the app could still describe mappings conceptually, but it could not produce a schema-valid wrapped `Push` message for real review and download.
 
+## Batch Generation Design
+
+Batch generation follows the same wrapped `Push` message design as single-record generation.
+
+The local EUDAMED message schema allows up to `300` `device:Device` entries in one `payload`.
+
+For the current implementation this means:
+
+- the app first filters to validation-ready `Echelon` rows only
+- blocked rows are excluded from the batch package
+- eligible rows are chunked into groups of at most `300`
+- each chunk becomes its own schema-validated wrapped `Push` message
+- the UI previews one selected chunk at a time instead of rendering every batch file inline
+- download produces a `.zip` package rather than a single oversized XML file
+
 ## Enum Strategy
 
 The XML generator does not invent enum values on the fly. It consumes explicit normalization rules already reviewed in the canonical/validation layers.
@@ -104,14 +123,15 @@ When these sections are emitted:
 
 - the current enum coverage is intentionally narrow and dataset-specific
 - if future workbook phrases appear outside the current three reviewed values, new normalization rules will be needed before those phrases should be emitted into XML
-- future batch generation should build on the same validated single-record payload design rather than inventing a separate path
+- batch preview validates one selected chunk in the UI at a time, even though the downloaded package may contain multiple XML files
+- future packaging may still expand to include richer audit artifacts, but the current implementation focuses on XML files plus a simple manifest
 
 ## Expected Outputs
 
 - previewable single-record XML payloads
+- previewable batch-chunk XML payloads
 - XSD validation results
 - downloadable `.xml` output for controlled manual submission/testing
+- downloadable batch `.zip` packages for controlled manual submission/testing
 - later:
-  - chunked batch message generation
-  - zip packaging
   - richer optional structure handling where the canonical model is complete enough

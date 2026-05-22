@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from io import BytesIO
+import json
 from datetime import UTC, datetime
 from uuid import uuid4
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from lxml import etree
 
@@ -9,6 +12,8 @@ from app.services.echelon_validation import EchelonValidationService
 from app.services.xml_validation import XmlValidationService
 from app.validation_models import EchelonValidationRecord
 from app.xml_models import (
+    BatchXmlChunkSummary,
+    BatchXmlPreview,
     CriticalWarningXmlItem,
     EchelonXmlRecord,
     SingleRecordXmlPreview,
@@ -36,6 +41,8 @@ NSMAP = {
     "marketinfo": MARKET_INFO_NS,
     "xsi": XSI_NS,
 }
+
+MAX_BATCH_RECORDS = 300
 
 LANGUAGE_CODE_MAP = {
     "english": "EN",
@@ -102,14 +109,111 @@ class EchelonXmlGenerationService:
         preview = self.preview_single_record(catalogue_number)
         return preview.file_name, preview.xml.encode("utf-8")
 
+    def preview_batch(self, chunk_sequence: int = 1) -> BatchXmlPreview:
+        bundle = self.validation_service.build_validation_bundle()
+        records = self._xml_ready_records(bundle.records)
+        if not records:
+            raise ValueError("No XML-ready Echelon records are currently available for batch generation.")
+
+        record_chunks = self._chunk_records(records)
+        chunk_payloads: list[tuple[int, list[EchelonValidationRecord], bytes, object]] = []
+        for sequence, chunk_records in enumerate(record_chunks, start=1):
+            xml_records = [self._to_xml_record(record) for record in chunk_records]
+            xml_bytes = self._render_push_message_records(xml_records)
+            validation = self.xml_validation_service.validate_message(xml_bytes)
+            chunk_payloads.append((sequence, chunk_records, xml_bytes, validation))
+
+        if chunk_sequence < 1 or chunk_sequence > len(chunk_payloads):
+            raise ValueError(
+                f"Batch chunk {chunk_sequence} is out of range. Valid chunks are 1 to {len(chunk_payloads)}."
+            )
+
+        selected_sequence, selected_records, selected_xml_bytes, selected_validation = chunk_payloads[
+            chunk_sequence - 1
+        ]
+        return BatchXmlPreview(
+            package_file_name=self._batch_package_file_name(),
+            total_ready_records=len(records),
+            excluded_records=max(bundle.matched_reference_records - len(records), 0),
+            max_records_per_file=MAX_BATCH_RECORDS,
+            chunk_count=len(chunk_payloads),
+            selected_chunk_sequence=selected_sequence,
+            selected_chunk_file_name=self._batch_file_name(selected_sequence, len(chunk_payloads)),
+            selected_chunk_record_count=len(selected_records),
+            selected_chunk_xml=selected_xml_bytes.decode("utf-8"),
+            selected_chunk_validation=selected_validation,
+            chunks=[
+                BatchXmlChunkSummary(
+                    sequence=sequence,
+                    file_name=self._batch_file_name(sequence, len(chunk_payloads)),
+                    record_count=len(chunk_records),
+                    first_catalogue_number=chunk_records[0].catalogue_number if chunk_records else None,
+                    last_catalogue_number=chunk_records[-1].catalogue_number if chunk_records else None,
+                    validation=validation,
+                )
+                for sequence, chunk_records, _, validation in chunk_payloads
+            ],
+        )
+
+    def download_batch(self) -> tuple[str, bytes]:
+        bundle = self.validation_service.build_validation_bundle()
+        records = self._xml_ready_records(bundle.records)
+        if not records:
+            raise ValueError("No XML-ready Echelon records are currently available for batch generation.")
+
+        record_chunks = self._chunk_records(records)
+        buffer = BytesIO()
+        with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
+            manifest_chunks = []
+            for sequence, chunk_records in enumerate(record_chunks, start=1):
+                file_name = self._batch_file_name(sequence, len(record_chunks))
+                xml_records = [self._to_xml_record(record) for record in chunk_records]
+                xml_bytes = self._render_push_message_records(xml_records)
+                validation = self.xml_validation_service.validate_message(xml_bytes)
+                archive.writestr(file_name, xml_bytes)
+                manifest_chunks.append(
+                    {
+                        "sequence": sequence,
+                        "file_name": file_name,
+                        "record_count": len(chunk_records),
+                        "first_catalogue_number": chunk_records[0].catalogue_number if chunk_records else None,
+                        "last_catalogue_number": chunk_records[-1].catalogue_number if chunk_records else None,
+                        "valid": validation.valid,
+                        "error_count": len(validation.errors),
+                    }
+                )
+
+            manifest = {
+                "package_file_name": self._batch_package_file_name(),
+                "total_ready_records": len(records),
+                "excluded_records": max(bundle.matched_reference_records - len(records), 0),
+                "max_records_per_file": MAX_BATCH_RECORDS,
+                "chunk_count": len(record_chunks),
+                "chunks": manifest_chunks,
+            }
+            archive.writestr("manifest.json", json.dumps(manifest, indent=2))
+
+        return self._batch_package_file_name(), buffer.getvalue()
+
     def _find_validation_record(self, catalogue_number: str) -> EchelonValidationRecord:
         bundle = self.validation_service.build_validation_bundle()
-        for record in bundle.records:
+        for record in self._xml_ready_records(bundle.records):
             if record.catalogue_number == catalogue_number:
-                if record.after_completeness.status != "complete":
-                    raise ValueError(f"Record {catalogue_number} is not XML-ready.")
                 return record
         raise ValueError(f"Catalogue number {catalogue_number} was not found in the Echelon validation bundle.")
+
+    @staticmethod
+    def _xml_ready_records(records: list[EchelonValidationRecord]) -> list[EchelonValidationRecord]:
+        return [record for record in records if record.after_completeness.status == "complete"]
+
+    @staticmethod
+    def _chunk_records(
+        records: list[EchelonValidationRecord], max_records_per_file: int = MAX_BATCH_RECORDS
+    ) -> list[list[EchelonValidationRecord]]:
+        return [
+            records[index : index + max_records_per_file]
+            for index in range(0, len(records), max_records_per_file)
+        ]
 
     def _to_xml_record(self, record: EchelonValidationRecord) -> EchelonXmlRecord:
         field_map = {field.canonical_path: field.after_value for field in record.fields}
@@ -170,6 +274,9 @@ class EchelonXmlGenerationService:
         )
 
     def _render_push_message(self, record: EchelonXmlRecord) -> bytes:
+        return self._render_push_message_records([record])
+
+    def _render_push_message_records(self, records: list[EchelonXmlRecord]) -> bytes:
         root = etree.Element(self._q(MESSAGE_NS, "Push"), nsmap=NSMAP)
         root.set("version", "3.0.28")
 
@@ -179,9 +286,10 @@ class EchelonXmlGenerationService:
         root.append(self._endpoint_element(tag_name="recipient", node_actor_code="EUDAMED"))
 
         payload = etree.SubElement(root, self._q(MESSAGE_NS, "payload"))
-        payload.append(self._device_payload(record))
+        for record in records:
+            payload.append(self._device_payload(record))
 
-        root.append(self._endpoint_element(tag_name="sender", node_actor_code=record.manufacturer_srn))
+        root.append(self._endpoint_element(tag_name="sender", node_actor_code=records[0].manufacturer_srn))
 
         return etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True)
 
@@ -426,6 +534,14 @@ class EchelonXmlGenerationService:
     def _file_name(catalogue_number: str) -> str:
         safe_catalogue = "".join(char if char.isalnum() or char in {"-", "_"} else "-" for char in catalogue_number)
         return f"echelon-{safe_catalogue}.xml"
+
+    @staticmethod
+    def _batch_file_name(sequence: int, total_chunks: int) -> str:
+        return f"echelon-batch-{sequence:02d}-of-{total_chunks:02d}.xml"
+
+    @staticmethod
+    def _batch_package_file_name() -> str:
+        return "echelon-batch-package.zip"
 
     @staticmethod
     def _language_code(value: str) -> str:

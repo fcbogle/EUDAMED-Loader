@@ -13,6 +13,7 @@ class XmlValidationService:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.schema_path = self.settings.schema_dir / "service" / "Message.xsd"
+        self.project_root = Path(__file__).resolve().parents[3]
 
     def validate_message(self, xml_bytes: bytes) -> XmlValidationResult:
         document = etree.fromstring(xml_bytes)
@@ -28,9 +29,15 @@ class XmlValidationService:
         ]
         return XmlValidationResult(
             valid=valid,
-            schema_path=str(self.schema_path),
+            schema_path=self._display_schema_path(self.schema_path),
             errors=errors,
         )
+
+    def _display_schema_path(self, schema_path: Path) -> str:
+        try:
+            return str(schema_path.relative_to(self.project_root))
+        except ValueError:
+            return str(schema_path)
 
     @staticmethod
     @lru_cache(maxsize=1)

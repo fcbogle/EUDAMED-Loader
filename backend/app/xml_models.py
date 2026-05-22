@@ -79,3 +79,27 @@ class SingleRecordXmlPreview(BaseModel):
     file_name: str
     xml: str
     validation: XmlValidationResult
+
+
+class BatchXmlChunkSummary(BaseModel):
+    sequence: int
+    file_name: str
+    record_count: int
+    first_catalogue_number: str | None = None
+    last_catalogue_number: str | None = None
+    validation: XmlValidationResult
+
+
+class BatchXmlPreview(BaseModel):
+    mode: Literal["batch"] = "batch"
+    package_file_name: str
+    total_ready_records: int
+    excluded_records: int
+    max_records_per_file: int
+    chunk_count: int
+    selected_chunk_sequence: int
+    selected_chunk_file_name: str
+    selected_chunk_record_count: int
+    selected_chunk_xml: str
+    selected_chunk_validation: XmlValidationResult
+    chunks: list[BatchXmlChunkSummary] = Field(default_factory=list)
