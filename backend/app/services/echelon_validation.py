@@ -816,7 +816,7 @@ class EchelonValidationService:
 
     def _load_source_headers(self, workbook_path: Path) -> list[SourceHeaderProfile]:
         workbook = load_workbook(workbook_path, read_only=True, data_only=True)
-        headers_by_name: dict[str, dict[str, object]] = {}
+        headers_by_name: dict[str, SourceHeaderProfile] = {}
         for sheet_name in workbook.sheetnames:
             worksheet = workbook[sheet_name]
             for row in worksheet.iter_rows(values_only=True):
@@ -827,20 +827,23 @@ class EchelonValidationService:
                     if not value:
                         continue
                     normalized = self._normalize_header(value)
-                    entry = headers_by_name.setdefault(
-                        normalized,
-                        {"display_name": value, "sheets": set()},
+                    entry = headers_by_name.get(normalized)
+                    if entry is None:
+                        headers_by_name[normalized] = SourceHeaderProfile(
+                            display_name=value,
+                            normalized_name=normalized,
+                            sheets=(sheet_name,),
+                        )
+                        continue
+                    if sheet_name in entry.sheets:
+                        continue
+                    headers_by_name[normalized] = SourceHeaderProfile(
+                        display_name=entry.display_name,
+                        normalized_name=entry.normalized_name,
+                        sheets=tuple(sorted((*entry.sheets, sheet_name))),
                     )
-                    entry["sheets"].add(sheet_name)
                 break
-        return [
-            SourceHeaderProfile(
-                display_name=str(entry["display_name"]),
-                normalized_name=normalized_name,
-                sheets=tuple(sorted(entry["sheets"])),
-            )
-            for normalized_name, entry in sorted(headers_by_name.items())
-        ]
+        return [entry for _, entry in sorted(headers_by_name.items())]
 
     def _load_family_reference_context(
         self, workbook_path: Path
