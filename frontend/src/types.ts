@@ -171,6 +171,21 @@ export type SheetValidationSummary = {
   after_missing_field_total: number;
 };
 
+export type SourceFieldCoverageSummary = {
+  status: string;
+  label: string;
+  field_count: number;
+};
+
+export type SourceFieldCoverageEntry = {
+  source_field: string;
+  source_sheets: string[];
+  coverage_status: string;
+  canonical_targets: string[];
+  schema_targets: string[];
+  notes: string;
+};
+
 export type EchelonValidationRecord = {
   source_workbook: string;
   source_sheet: string;
@@ -203,6 +218,9 @@ export type EchelonValidationBundle = {
   after_complete_records: number;
   blocker_summaries: BlockerSummary[];
   sheet_summaries: SheetValidationSummary[];
+  source_field_total: number;
+  source_field_coverage_summaries: SourceFieldCoverageSummary[];
+  source_field_coverage: SourceFieldCoverageEntry[];
   sample_records: EchelonValidationRecord[];
   excluded_sheet_summaries: ExcludedSheetSummary[];
   records: EchelonValidationRecord[];

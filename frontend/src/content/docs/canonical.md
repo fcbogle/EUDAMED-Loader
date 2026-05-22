@@ -17,6 +17,8 @@ The `Canonical` area is the mapping-definition layer between the source workbook
 - no database is part of the current implementation design
 - workbook analysis is responsible for producing the normalized, traceable inputs needed by canonical mapping
 - every field currently present in the shared Excel workbooks is being treated as mandatory for first-load preparation unless QMS says otherwise
+- the current `Echelon` path includes the wider XML-facing field set needed to generate a schema-valid single-record `Push` message
+- some workbook areas remain intentionally incomplete at the canonical-structure level where the template implies richer repeated structures than the current implementation safely formalizes
 
 ## Reference Implementation
 
@@ -82,6 +84,26 @@ The canonical layer should not:
 - for the current design baseline, every field present in the shared Excel spreadsheets is treated as mandatory for first-load preparation
 - if a workbook field appears in scope but cannot be populated reliably, the canonical layer should flag that as a review issue rather than silently downgrade it
 - if a value is already managed outside this load, such as previously loaded `Basic UDI` records, the canonical layer should mark it as contextual rather than as an upload omission
+
+## Current State
+
+- the canonical review now documents the fields actively used by the `Echelon` validation and single-record XML path
+- `Basic UDI` context is resolved from the imported Basic UDI reference workbook rather than from the source family workbook rows
+- `Manufacturer SRN`, `Authorised Representative SRN`, `Basic risk class`, `Basic model`, and other `MDRBasicUDI` fields are now represented in the review artifact as derived/reference-backed mappings
+- `UDI-DI identifier`, `Basic UDI identifier`, `number of reuses`, `base quantity`, and other XML-facing `UDIDIData` fields are now represented explicitly rather than remaining implicit in the review
+- the remaining meaningful partials are the genuinely structured repeat areas:
+  - storage conditions
+  - critical warnings
+
+## What Partial Still Means
+
+- `partially represented` no longer means the field is unknown or ignored
+- it means the business area is recognized, but the workbook columns imply a richer repeated or enum-coded structure than the current canonical execution path fully assembles
+- for current `Echelon` scope, indicator fields such as:
+  - `clinical_size_applicable`
+  - `cmr_present`
+  - `endocrine_disruptor_present`
+  are treated as represented because the source data is consistently `No` across the family and does not require richer downstream detail for this dataset
 
 ## Mapping Principles
 

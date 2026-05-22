@@ -7,6 +7,12 @@ from pydantic import BaseModel, Field
 CompletenessStatus = Literal["complete", "incomplete"]
 MatchStatus = Literal["matched", "excluded"]
 ValueSourceType = Literal["workbook", "basic_udi_reference", "derived", "missing"]
+SourceFieldCoverageStatus = Literal[
+    "represented",
+    "partially_represented",
+    "not_yet_represented",
+    "deferred_by_design",
+]
 
 
 class CompletenessSnapshot(BaseModel):
@@ -50,6 +56,21 @@ class SheetValidationSummary(BaseModel):
     after_missing_field_total: int
 
 
+class SourceFieldCoverageSummary(BaseModel):
+    status: SourceFieldCoverageStatus
+    label: str
+    field_count: int
+
+
+class SourceFieldCoverageEntry(BaseModel):
+    source_field: str
+    source_sheets: list[str] = Field(default_factory=list)
+    coverage_status: SourceFieldCoverageStatus
+    canonical_targets: list[str] = Field(default_factory=list)
+    schema_targets: list[str] = Field(default_factory=list)
+    notes: str
+
+
 class EchelonValidationRecord(BaseModel):
     source_workbook: str
     source_sheet: str
@@ -82,6 +103,9 @@ class EchelonValidationBundle(BaseModel):
     after_complete_records: int
     blocker_summaries: list[BlockerSummary] = Field(default_factory=list)
     sheet_summaries: list[SheetValidationSummary] = Field(default_factory=list)
+    source_field_total: int = 0
+    source_field_coverage_summaries: list[SourceFieldCoverageSummary] = Field(default_factory=list)
+    source_field_coverage: list[SourceFieldCoverageEntry] = Field(default_factory=list)
     sample_records: list[EchelonValidationRecord] = Field(default_factory=list)
     excluded_sheet_summaries: list[ExcludedSheetSummary] = Field(default_factory=list)
     records: list[EchelonValidationRecord] = Field(default_factory=list)

@@ -8,6 +8,7 @@ from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.config import get_settings
+from app.services.canonical_review import CanonicalReviewService
 from app.validation_models import (
     BlockerSummary,
     CompletenessSnapshot,
@@ -16,6 +17,9 @@ from app.validation_models import (
     ExcludedSheetSummary,
     MatchStatus,
     SheetValidationSummary,
+    SourceFieldCoverageEntry,
+    SourceFieldCoverageStatus,
+    SourceFieldCoverageSummary,
     ValidationFieldValue,
     ValueSourceType,
 )
@@ -85,6 +89,49 @@ BASE_QUANTITY_HEADER = "Base Quantity"
 LATEX_REFERENCE_HEADER = "Latex"
 REPROCESSED_REFERENCE_HEADER = "Reprocessed"
 
+PARTIAL_SOURCE_HEADERS = {
+    "storage/handling conditions, if applicable e.g. yes": (
+        "Storage conditions are recognized, but the repeating list structure is still only partially modeled."
+    ),
+    "storage /handling conditions type e.g. lower limit of temp": (
+        "Storage conditions are recognized, but the repeating list structure is still only partially modeled."
+    ),
+    "description e.g. taken from ifu technical data page storage temp range e.g. -15c": (
+        "Storage condition descriptions are recognized, but the repeating list structure is still only partially modeled."
+    ),
+    "add another storage/handling condition e.g. upper limit of temp": (
+        "Storage conditions are recognized, but the repeating list structure is still only partially modeled."
+    ),
+    "description e.g. taken from ifu technical data page storage temp range e.g. +50c": (
+        "Storage condition descriptions are recognized, but the repeating list structure is still only partially modeled."
+    ),
+    "critical warnings or contra-indications, if applicable e.g. yes": (
+        "Critical warnings are recognized, but the repeating warning structure is still only partially modeled."
+    ),
+    "critical warning type e.g. consult instructions for use": (
+        "Critical warnings are recognized, but the repeating warning structure is still only partially modeled."
+    ),
+}
+
+REPRESENTED_SCOPE_NOTES = {
+    "clinical size applicable e.g. no": (
+        "Represented for current Echelon scope because all reviewed rows indicate clinical size is not applicable."
+    ),
+    "labelled for presence of carcinogenic, mutagenic and toxic to reproduction (cmr) substances of category 1a or 1b e.g. no": (
+        "Represented for current Echelon scope because all reviewed rows indicate CMR substance presence is not applicable."
+    ),
+    "labelled for presence of substances with endocrine-disrupting properties e.g. no": (
+        "Represented for current Echelon scope because all reviewed rows indicate endocrine-disrupting substance presence is not applicable."
+    ),
+}
+
+
+@dataclass(frozen=True)
+class SourceHeaderProfile:
+    display_name: str
+    normalized_name: str
+    sheets: tuple[str, ...]
+
 
 @dataclass(frozen=True)
 class SourceRow:
@@ -102,6 +149,8 @@ class EchelonValidationService:
         reference_workbook = self.settings.basic_udi_reference_dir / REFERENCE_WORKBOOK_NAME
 
         source_rows = self._load_source_rows(source_workbook)
+        source_headers = self._load_source_headers(source_workbook)
+        source_field_coverage = self._build_source_field_coverage(source_headers)
         family_reference_context = self._load_family_reference_context(reference_workbook)
 
         included_records: list[EchelonValidationRecord] = []
@@ -143,6 +192,9 @@ class EchelonValidationService:
             ),
             blocker_summaries=self._build_blocker_summaries(included_records),
             sheet_summaries=self._build_sheet_summaries(included_records),
+            source_field_total=len(source_headers),
+            source_field_coverage_summaries=self._build_source_field_coverage_summaries(source_field_coverage),
+            source_field_coverage=source_field_coverage,
             sample_records=self._build_sample_records(included_records),
             excluded_sheet_summaries=[
                 ExcludedSheetSummary(
@@ -762,6 +814,34 @@ class EchelonValidationService:
                 rows.append(SourceRow(sheet_name=sheet_name, row_index=row_index, values=mapped_values))
         return rows
 
+    def _load_source_headers(self, workbook_path: Path) -> list[SourceHeaderProfile]:
+        workbook = load_workbook(workbook_path, read_only=True, data_only=True)
+        headers_by_name: dict[str, dict[str, object]] = {}
+        for sheet_name in workbook.sheetnames:
+            worksheet = workbook[sheet_name]
+            for row in worksheet.iter_rows(values_only=True):
+                values = [str(value).strip() if value is not None else "" for value in row]
+                if not any(HEADER_SENTINEL in value for value in values if value):
+                    continue
+                for value in values:
+                    if not value:
+                        continue
+                    normalized = self._normalize_header(value)
+                    entry = headers_by_name.setdefault(
+                        normalized,
+                        {"display_name": value, "sheets": set()},
+                    )
+                    entry["sheets"].add(sheet_name)
+                break
+        return [
+            SourceHeaderProfile(
+                display_name=str(entry["display_name"]),
+                normalized_name=normalized_name,
+                sheets=tuple(sorted(entry["sheets"])),
+            )
+            for normalized_name, entry in sorted(headers_by_name.items())
+        ]
+
     def _load_family_reference_context(
         self, workbook_path: Path
     ) -> dict[str, dict[str, object | None]] | None:
@@ -881,6 +961,74 @@ class EchelonValidationService:
                 )
             )
         return summaries
+
+    def _build_source_field_coverage(
+        self,
+        headers: list[SourceHeaderProfile],
+    ) -> list[SourceFieldCoverageEntry]:
+        review_bundle = CanonicalReviewService().load_review_bundle()
+        source_mappings: dict[str, list[tuple[str, list[str]]]] = {}
+        for entity in review_bundle.entity_reviews:
+            for field_review in entity.field_reviews:
+                mapping = field_review.mapping
+                schema_targets = [target.schema_path for target in mapping.schema_targets]
+                for source_column in mapping.source_columns:
+                    normalized = self._normalize_header(source_column)
+                    source_mappings.setdefault(normalized, []).append((mapping.canonical_path, schema_targets))
+
+        coverage_entries: list[SourceFieldCoverageEntry] = []
+        for header in headers:
+            mappings = source_mappings.get(header.normalized_name, [])
+            canonical_targets = sorted({canonical_path for canonical_path, _ in mappings})
+            schema_targets = sorted({target for _, targets in mappings for target in targets})
+            if header.normalized_name in PARTIAL_SOURCE_HEADERS:
+                status: SourceFieldCoverageStatus = "partially_represented"
+                notes = PARTIAL_SOURCE_HEADERS[header.normalized_name]
+            elif mappings:
+                status = "represented"
+                notes = REPRESENTED_SCOPE_NOTES.get(
+                    header.normalized_name,
+                    "This source field is mapped into the current Echelon canonical/XML-facing review path.",
+                )
+            else:
+                status = "not_yet_represented"
+                notes = "This source field does not yet have a documented canonical target in the current review artifact."
+            coverage_entries.append(
+                SourceFieldCoverageEntry(
+                    source_field=header.display_name,
+                    source_sheets=list(header.sheets),
+                    coverage_status=status,
+                    canonical_targets=canonical_targets,
+                    schema_targets=schema_targets,
+                    notes=notes,
+                )
+            )
+        return coverage_entries
+
+    @staticmethod
+    def _build_source_field_coverage_summaries(
+        entries: list[SourceFieldCoverageEntry],
+    ) -> list[SourceFieldCoverageSummary]:
+        labels = {
+            "represented": "Represented",
+            "partially_represented": "Partially represented",
+            "not_yet_represented": "Not yet represented",
+            "deferred_by_design": "Deferred by design",
+        }
+        ordered_statuses: tuple[SourceFieldCoverageStatus, ...] = (
+            "represented",
+            "partially_represented",
+            "not_yet_represented",
+            "deferred_by_design",
+        )
+        return [
+            SourceFieldCoverageSummary(
+                status=status,
+                label=labels[status],
+                field_count=sum(1 for entry in entries if entry.coverage_status == status),
+            )
+            for status in ordered_statuses
+        ]
 
     @staticmethod
     def _build_sample_records(
@@ -1018,3 +1166,7 @@ class EchelonValidationService:
         if token in {"no", "false"}:
             return "No"
         return str(value).strip()
+
+    @staticmethod
+    def _normalize_header(value: str) -> str:
+        return " ".join(value.split()).strip().lower()

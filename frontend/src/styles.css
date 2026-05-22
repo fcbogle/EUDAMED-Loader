@@ -925,6 +925,36 @@ th {
   min-height: 0;
 }
 
+.coverage-table {
+  table-layout: fixed;
+}
+
+.coverage-table th,
+.coverage-table td {
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.coverage-col-source {
+  width: 27%;
+}
+
+.coverage-col-status {
+  width: 12%;
+}
+
+.coverage-col-canonical {
+  width: 19%;
+}
+
+.coverage-col-schema {
+  width: 19%;
+}
+
+.coverage-col-notes {
+  width: 23%;
+}
+
 .xml-mode-layout {
   align-items: start;
 }

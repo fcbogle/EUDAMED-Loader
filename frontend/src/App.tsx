@@ -431,6 +431,14 @@ export function App() {
     : [];
   const xmlReadyRecords = validationRecords.filter((record) => record.after_completeness.status === "complete");
   const xmlBlockedRecords = validationRecords.filter((record) => record.after_completeness.status !== "complete");
+  const sourceFieldCoverageEntries = echelonValidation?.source_field_coverage ?? [];
+  const coverageSummaryLookup = new Map(
+    (echelonValidation?.source_field_coverage_summaries ?? []).map((summary) => [summary.status, summary]),
+  );
+  const representedFieldCount = coverageSummaryLookup.get("represented")?.field_count ?? 0;
+  const partialFieldCount = coverageSummaryLookup.get("partially_represented")?.field_count ?? 0;
+  const notRepresentedFieldCount = coverageSummaryLookup.get("not_yet_represented")?.field_count ?? 0;
+  const deferredFieldCount = coverageSummaryLookup.get("deferred_by_design")?.field_count ?? 0;
   const selectedXmlRecord =
     xmlReadyRecords.find((record) => record.catalogue_number === selectedValidationRecordKey) ??
     xmlReadyRecords[0] ??
@@ -1724,6 +1732,97 @@ export function App() {
                 <p className="panel-copy">No Echelon rows currently have Basic UDI reference coverage.</p>
               )}
             </div>
+          </section>
+
+          <section className="panel">
+            <div className="section-heading">
+              <div>
+                <span className="section-kicker">Source Field Coverage</span>
+                <h2>Echelon Header Coverage</h2>
+              </div>
+            </div>
+            <p className="panel-copy">
+              This view compares the unique source headers in the Echelon workbook against the current
+              canonical/XML-facing review path. It is header coverage only, not row-population completeness.
+            </p>
+            <section className="summary-grid coverage-summary-grid">
+              <div className="summary-card">
+                <span className="summary-label">Headers reviewed</span>
+                <strong>{echelonValidation?.source_field_total ?? 0}</strong>
+                <p>Unique source headers across the Echelon workbook family tabs.</p>
+              </div>
+              <div className="summary-card">
+                <span className="summary-label">Represented</span>
+                <strong>{representedFieldCount}</strong>
+                <p>Headers with a documented place in the current canonical/XML-facing path.</p>
+              </div>
+              <div className="summary-card">
+                <span className="summary-label">Partially represented</span>
+                <strong>{partialFieldCount}</strong>
+                <p>Headers recognized in the model, but only partially covered because the structure is richer than the current implementation.</p>
+              </div>
+              <div className="summary-card">
+                <span className="summary-label">Not represented</span>
+                <strong>{notRepresentedFieldCount + deferredFieldCount}</strong>
+                <p>Headers without current documented coverage in the active canonical review path.</p>
+              </div>
+            </section>
+            <table className="coverage-table">
+              <colgroup>
+                <col className="coverage-col-source" />
+                <col className="coverage-col-status" />
+                <col className="coverage-col-canonical" />
+                <col className="coverage-col-schema" />
+                <col className="coverage-col-notes" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Source field</th>
+                  <th>Status</th>
+                  <th>Canonical target</th>
+                  <th>Schema target</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sourceFieldCoverageEntries.map((entry) => (
+                  <tr key={entry.source_field}>
+                    <td>
+                      <strong>{entry.source_field}</strong>
+                      <div className="field-source-note">{entry.source_sheets.join(", ")}</div>
+                    </td>
+                    <td>
+                      <span
+                        className={
+                          entry.coverage_status === "represented"
+                            ? "status-pill ok compact"
+                            : entry.coverage_status === "partially_represented"
+                              ? "status-pill warn compact"
+                              : "status-pill compact"
+                        }
+                      >
+                        {titleCaseToken(entry.coverage_status)}
+                      </span>
+                    </td>
+                    <td>
+                      {entry.canonical_targets.length ? (
+                        entry.canonical_targets.map((target) => <div key={target}><code>{target}</code></div>)
+                      ) : (
+                        "None yet"
+                      )}
+                    </td>
+                    <td>
+                      {entry.schema_targets.length ? (
+                        entry.schema_targets.map((target) => <div key={target}><code>{target}</code></div>)
+                      ) : (
+                        "None yet"
+                      )}
+                    </td>
+                    <td>{entry.notes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </section>
 
           <section className="panel">
