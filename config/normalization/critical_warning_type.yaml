@@ -1,0 +1,5 @@
+column: Critical warning type e.g.  Consult instructions for use
+description: Normalize Echelon critical warning labels to EUDAMED enum codes.
+rules:
+  - raw: Consult instructions for use
+    normalized: CW010

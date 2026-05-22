@@ -18,6 +18,16 @@ class XmlValidationResult(BaseModel):
     errors: list[XmlValidationIssue] = Field(default_factory=list)
 
 
+class StorageConditionXmlItem(BaseModel):
+    code: str
+    comment: str | None = None
+
+
+class CriticalWarningXmlItem(BaseModel):
+    code: str
+    comment: str | None = None
+
+
 class EchelonXmlRecord(BaseModel):
     catalogue_number: str
     trade_name: str | None = None
@@ -57,6 +67,8 @@ class EchelonXmlRecord(BaseModel):
     reprocessed: bool
     first_eu_market_country: str | None = None
     base_quantity: int | None = None
+    storage_conditions: list[StorageConditionXmlItem] = Field(default_factory=list)
+    critical_warnings: list[CriticalWarningXmlItem] = Field(default_factory=list)
 
 
 class SingleRecordXmlPreview(BaseModel):

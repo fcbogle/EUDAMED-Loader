@@ -41,6 +41,7 @@ For the current phase, XML work should be designed around a controlled first-loa
   - renders a wrapped `Push` message
   - validates the message against the local EUDAMED XSD set
   - allows XML download from the UI
+  - includes normalized `Storage Conditions` and `Critical Warnings` when present for the selected `Echelon` row
 - batch generation is not implemented yet
 
 ## Push Message Design
@@ -77,11 +78,32 @@ So when the documentation says the current `Echelon` path includes the wider XML
 
 Without that wider field set, the app could still describe mappings conceptually, but it could not produce a schema-valid wrapped `Push` message for real review and download.
 
+## Enum Strategy
+
+The XML generator does not invent enum values on the fly. It consumes explicit normalization rules already reviewed in the canonical/validation layers.
+
+Current `Echelon` mappings:
+
+- `Lower limit of temp` -> `SHC006`
+- `Upper limit of temp` -> `SHC007`
+- `Consult instructions for use` -> `CW010`
+
+Those rules are stored in:
+
+- `config/normalization/storage_handling_condition_primary.yaml`
+- `config/normalization/storage_handling_condition_secondary.yaml`
+- `config/normalization/critical_warning_type.yaml`
+
+When these sections are emitted:
+
+- the enum code is written into the schema field
+- free-text workbook descriptions are carried as comments
+- for non-`OTHER` enum values, comment language is set to `ANY` as required by the XSD notes
+
 ## Current Constraints
 
-- `Storage Conditions` and `Critical Warnings` remain only partially represented
-- those areas are optional in the schema, but if included they require enum-coded values and proper repeated structures
-- the current single-record XML path therefore focuses on the schema-valid core payload and does not pretend those repeated optional structures are finalized
+- the current enum coverage is intentionally narrow and dataset-specific
+- if future workbook phrases appear outside the current three reviewed values, new normalization rules will be needed before those phrases should be emitted into XML
 - future batch generation should build on the same validated single-record payload design rather than inventing a separate path
 
 ## Expected Outputs

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Fragment } from "react";
 
 import { api } from "./api";
 import canonicalDocumentation from "./content/docs/canonical.md?raw";
@@ -65,11 +64,6 @@ type CanonicalMappingRow = {
   businessLabel: string;
   schemaTarget: string;
   classification: string;
-  decisionStatus: string;
-  decisionRationale: string | null;
-  normalizedBy: string[];
-  derivationLogic: string | null;
-  assumptions: string[];
   exampleSourceValues: string[];
   exampleCanonicalValue: string | null;
 };
@@ -250,7 +244,6 @@ export function App() {
   const [canonicalReview, setCanonicalReview] = useState<CanonicalReviewBundle | null>(null);
   const [echelonValidation, setEchelonValidation] = useState<EchelonValidationBundle | null>(null);
   const [mappingPreviewApplied, setMappingPreviewApplied] = useState<boolean>(false);
-  const [expandedMappingPath, setExpandedMappingPath] = useState<string | null>(null);
   const [selectedValidationRecordKey, setSelectedValidationRecordKey] = useState<string | null>(null);
   const [xmlGenerationMode, setXmlGenerationMode] = useState<XmlGenerationMode>("single");
   const [scopeMode, setScopeMode] = useState<ScopeMode>("all");
@@ -379,6 +372,7 @@ export function App() {
   const canonicalEntityCount = canonicalReview?.entity_reviews.length ?? 0;
   const canonicalFieldCount =
     canonicalReview?.entity_reviews.reduce((total, entity) => total + entity.field_reviews.length, 0) ?? 0;
+  const canonicalEntityNames = (canonicalReview?.entity_reviews ?? []).map((entity) => entity.entity_name);
   const canonicalMappingRows: CanonicalMappingRow[] = (canonicalReview?.entity_reviews ?? []).flatMap((entity) =>
     entity.field_reviews.map((fieldReview) => ({
       entityName: entity.entity_name,
@@ -389,11 +383,6 @@ export function App() {
       schemaTarget:
         fieldReview.mapping.schema_targets.map((target) => target.schema_path).join(" | ") || "Not yet aligned",
       classification: fieldReview.mapping.classification,
-      decisionStatus: fieldReview.decision.status,
-      decisionRationale: fieldReview.decision.rationale,
-      normalizedBy: fieldReview.mapping.normalized_by,
-      derivationLogic: fieldReview.mapping.derivation_logic,
-      assumptions: fieldReview.mapping.assumptions,
       exampleSourceValues: fieldReview.mapping.example_source_values,
       exampleCanonicalValue: fieldReview.mapping.example_canonical_value,
     })),
@@ -403,11 +392,10 @@ export function App() {
     return counts;
   }, {});
   const directCount = classificationCounts.direct ?? 0;
+  const repeatedCount = classificationCounts.repeated ?? 0;
   const derivedRows = canonicalMappingRows.filter((row) => row.classification === "derived");
-  const gapRows = canonicalMappingRows.filter((row) => row.classification === "gap");
   const normalizedRows = canonicalMappingRows.filter((row) => row.classification === "normalized");
-  const needsClarificationRows = canonicalMappingRows.filter((row) => row.decisionStatus === "needs_clarification");
-  const assumptionRows = canonicalMappingRows.filter((row) => row.assumptions.length > 0);
+  const contextHeavyCount = derivedRows.length + normalizedRows.length;
   const validationRecords = echelonValidation?.records ?? [];
   const sampleValidationRecords = echelonValidation?.sample_records ?? [];
   const selectedValidationRecord =
@@ -419,18 +407,74 @@ export function App() {
   const activeCompleteness = mappingPreviewApplied
     ? selectedValidationRecord?.after_completeness ?? null
     : selectedValidationRecord?.before_completeness ?? null;
-  const activeBlockers = mappingPreviewApplied
-    ? selectedValidationRecord?.after_blockers ?? []
-    : selectedValidationRecord?.before_blockers ?? [];
+  const blockerSummaries = echelonValidation?.blocker_summaries ?? [];
+  const resolvedBlockerHighlights = [...blockerSummaries]
+    .filter((summary) => summary.before_missing_count > 0 && summary.after_missing_count === 0)
+    .sort((left, right) => right.before_missing_count - left.before_missing_count)
+    .slice(0, 3);
+  const persistentBlockerHighlights = [...blockerSummaries]
+    .filter((summary) => summary.after_missing_count > 0)
+    .sort((left, right) => right.after_missing_count - left.after_missing_count)
+    .slice(0, 3);
+  const resolvedBlockerFieldCount = blockerSummaries.filter(
+    (summary) => summary.before_missing_count > 0 && summary.after_missing_count === 0,
+  ).length;
+  const persistentBlockerFieldCount = blockerSummaries.filter(
+    (summary) => summary.after_missing_count > 0,
+  ).length;
   const visibleValidationFields = selectedValidationRecord
-    ? selectedValidationRecord.fields.map((field) => ({
-        ...field,
-        currentValue: mappingPreviewApplied ? field.after_value : field.before_value,
-        currentSource: mappingPreviewApplied ? field.after_source : field.before_source,
-      }))
+    ? [
+        ...selectedValidationRecord.fields.map((field) => ({
+          ...field,
+          currentValue: mappingPreviewApplied ? field.after_value : field.before_value,
+          currentSource: mappingPreviewApplied ? field.after_source : field.before_source,
+        })),
+        {
+          canonical_path: "device_record.storage_conditions",
+          business_label: "Storage Conditions",
+          required: false,
+          before_value: null,
+          after_value: null,
+          before_source: "derived" as const,
+          after_source: "derived" as const,
+          source_detail: selectedValidationRecord.storage_condition_items.length
+            ? selectedValidationRecord.storage_condition_items.map((item) => item.source_fields.join(" + ")).join(" | ")
+            : "No storage condition source fields are populated for this row.",
+          update_reason: "Repeated structure. Review the structured items in the Selected Sample panel.",
+          currentValue: selectedValidationRecord.storage_condition_items.length
+            ? `${selectedValidationRecord.storage_condition_items.length} assembled item${selectedValidationRecord.storage_condition_items.length === 1 ? "" : "s"}`
+            : "No assembled items",
+          currentSource: "derived" as const,
+        },
+        {
+          canonical_path: "device_record.warnings",
+          business_label: "Critical Warnings",
+          required: false,
+          before_value: null,
+          after_value: null,
+          before_source: "derived" as const,
+          after_source: "derived" as const,
+          source_detail: selectedValidationRecord.critical_warning_items.length
+            ? selectedValidationRecord.critical_warning_items.map((item) => item.source_fields.join(" + ")).join(" | ")
+            : "No critical warning source fields are populated for this row.",
+          update_reason: "Repeated structure. Review the structured items in the Selected Sample panel.",
+          currentValue: selectedValidationRecord.critical_warning_items.length
+            ? `${selectedValidationRecord.critical_warning_items.length} assembled item${selectedValidationRecord.critical_warning_items.length === 1 ? "" : "s"}`
+            : "No assembled items",
+          currentSource: "derived" as const,
+        },
+      ]
     : [];
   const xmlReadyRecords = validationRecords.filter((record) => record.after_completeness.status === "complete");
   const xmlBlockedRecords = validationRecords.filter((record) => record.after_completeness.status !== "complete");
+  const selectedStorageExample = selectedValidationRecord?.storage_condition_items[0] ?? null;
+  const selectedWarningExample = selectedValidationRecord?.critical_warning_items[0] ?? null;
+  const selectedOpenBlockerPreview = selectedValidationRecord?.after_blockers.slice(0, 2) ?? [];
+  const trackedValidationFieldCount = validationRecords[0]?.fields.length ?? sampleValidationRecords[0]?.fields.length ?? 0;
+  const optionalValidationFieldCount = Math.max(
+    trackedValidationFieldCount - (echelonValidation?.tracked_required_fields ?? 0),
+    0,
+  );
   const sourceFieldCoverageEntries = echelonValidation?.source_field_coverage ?? [];
   const coverageSummaryLookup = new Map(
     (echelonValidation?.source_field_coverage_summaries ?? []).map((summary) => [summary.status, summary]),
@@ -439,6 +483,13 @@ export function App() {
   const partialFieldCount = coverageSummaryLookup.get("partially_represented")?.field_count ?? 0;
   const notRepresentedFieldCount = coverageSummaryLookup.get("not_yet_represented")?.field_count ?? 0;
   const deferredFieldCount = coverageSummaryLookup.get("deferred_by_design")?.field_count ?? 0;
+  const totalWorkbookRows = workbooks.reduce((sum, workbook) => sum + workbook.total_rows, 0);
+  const selectedWorkbookName = selectedSheet?.workbook ?? workbooks[0]?.workbook ?? null;
+  const selectedWorkbookSummary =
+    workbooks.find((workbook) => workbook.workbook === selectedWorkbookName) ?? workbooks[0] ?? null;
+  const workbookSheets = selectedWorkbookName
+    ? sheets.filter((sheet) => sheet.workbook === selectedWorkbookName)
+    : [];
   const selectedXmlRecord =
     xmlReadyRecords.find((record) => record.catalogue_number === selectedValidationRecordKey) ??
     xmlReadyRecords[0] ??
@@ -683,8 +734,8 @@ export function App() {
               <p className="eyebrow">Workbook Analysis</p>
               <h1>Review Excel Workbook Data</h1>
               <p className="hero-copy">
-                Review workbook evidence, identify normalization challenges when they exist, and see
-                how the application addresses them without changing the source Excel files.
+                Review imported workbook evidence, understand sheet structure, and identify data-quality
+                or normalization issues without changing the source Excel files.
               </p>
             </>
           ) : null}
@@ -693,8 +744,9 @@ export function App() {
               <p className="eyebrow">Canonical Preparation</p>
               <h1>Review Canonical Model Contract</h1>
               <p className="hero-copy">
-                This stage defines how workbook fields map into canonical meaning and onward to
-                `UDIDIType.xsd`, with accordion detail for assumptions and transformation notes.
+                The canonical model is an intermediary business layer. It preserves regulatory meaning in
+                stable business terms before those meanings are mapped from workbook fields and projected
+                into schema-specific XML targets.
               </p>
             </>
           ) : null}
@@ -745,7 +797,8 @@ export function App() {
               <span className="status-label">Current phase</span>
               <span className="status-pill warn">MDR UDI-DI first load</span>
               <p className="status-detail">
-                {canonicalFieldCount} mappings are available in the definition view.
+                <span className="inline-stat-pill">{canonicalFieldCount} review-model definitions</span>
+                are available in the canonical mapping view.
               </p>
             </>
           ) : null}
@@ -754,8 +807,8 @@ export function App() {
               <span className="status-label">Validation scope</span>
               <span className="status-pill warn">{echelonValidation?.family_scope ?? "Echelon only"}</span>
               <p className="status-detail">
-                {echelonValidation
-                  ? `${echelonValidation.validation_subset_records} covered record${echelonValidation.validation_subset_records === 1 ? "" : "s"} and ${echelonValidation.excluded_records} excluded due to missing Basic UDI reference coverage.`
+                {trackedValidationFieldCount
+                  ? `${trackedValidationFieldCount} validation-subset fields are currently under review.`
                   : "Loading validation subset..."}
               </p>
             </>
@@ -790,19 +843,19 @@ export function App() {
         <>
           <section className="summary-grid">
             <div className="summary-card">
-              <span className="summary-label">Workbook families</span>
+              <span className="summary-label">Workbook files</span>
               <strong>{workbooks.length}</strong>
-              <p>Source workbook containers discovered in the configured Excel directory.</p>
+              <p>Imported Excel workbooks currently available for source review.</p>
             </div>
             <div className="summary-card">
-              <span className="summary-label">Sheet variants</span>
+              <span className="summary-label">Workbook tabs</span>
               <strong>{sheets.length}</strong>
-              <p>Individual product-family tabs available for profiling and normalization review.</p>
+              <p>Individual sheets available for structure, completeness, and value review.</p>
             </div>
             <div className="summary-card">
-              <span className="summary-label">Normalization sets</span>
-              <strong>{rules.length}</strong>
-              <p>Rule files currently applied as a non-destructive normalization layer.</p>
+              <span className="summary-label">Total source rows</span>
+              <strong>{totalWorkbookRows}</strong>
+              <p>Total rows reported across the imported workbook inventory.</p>
             </div>
             <div className="summary-card">
               <span className="summary-label">Schema inventory</span>
@@ -812,123 +865,154 @@ export function App() {
           </section>
 
           <section className="content-grid">
-            <div className="panel validation-blockers-panel">
+            <div className="panel">
               <div className="section-heading">
                 <div>
                   <span className="section-kicker">Inventory</span>
                   <h2>Workbook Inventory</h2>
                 </div>
               </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Workbook</th>
-                    <th>Sheets</th>
-                    <th>Rows</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {workbooks.map((workbook) => (
-                    <tr key={workbook.workbook}>
-                      <td>{workbook.workbook}</td>
-                      <td>{workbook.sheet_count}</td>
-                      <td>{workbook.total_rows}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="panel validation-equal-panel validation-summary-panel">
-              <div className="section-heading">
-                <div>
-                  <span className="section-kicker">Schemas</span>
-                  <h2>Schema Inventory</h2>
-                </div>
-              </div>
               <p className="panel-copy">
-                {schemas ? `${schemas.total_files} schema files indexed from the configured directory.` : "Loading..."}
+                Start here to see which source files are in scope. Select a workbook to inspect its sheets and data signals.
               </p>
-              <div className="schema-groups">
-                <div className="schema-card">
-                  <strong>Device schemas</strong>
-                  <p>{schemas?.device_files.length ?? 0} files</p>
-                </div>
-                <div className="schema-card">
-                  <strong>Service schemas</strong>
-                  <p>{schemas?.service_files.length ?? 0} files</p>
-                </div>
+              <div className="draft-list">
+                {workbooks.map((workbook) => {
+                  const isActive = selectedWorkbookName === workbook.workbook;
+                  const firstWorkbookSheet = sheets.find((sheet) => sheet.workbook === workbook.workbook);
+                  return (
+                    <button
+                      key={workbook.workbook}
+                      className={isActive ? "sheet-card active" : "sheet-card"}
+                      type="button"
+                      onClick={() => {
+                        if (firstWorkbookSheet) {
+                          setSelectedSheet(firstWorkbookSheet);
+                        }
+                      }}
+                    >
+                      <span className="sheet-title">{workbook.workbook}</span>
+                      <small>{workbook.sheet_count} sheet{workbook.sheet_count === 1 ? "" : "s"}</small>
+                      <small>{workbook.total_rows} rows</small>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          </section>
 
-          <section className="panel section-break">
-            <div className="section-heading">
-              <div>
-                <span className="section-kicker">Sheets</span>
-                <h2>Workbook Tabs</h2>
-              </div>
-            </div>
-            <div className="sheet-list horizontal-sheet-list">
-              {sheets.map((sheet) => {
-                const active =
-                  selectedSheet?.workbook === sheet.workbook && selectedSheet?.sheet === sheet.sheet;
-                return (
-                  <button
-                    key={`${sheet.workbook}-${sheet.sheet}`}
-                    className={active ? "sheet-card active" : "sheet-card"}
-                    onClick={() => setSelectedSheet(sheet)}
-                  >
-                    <span className="sheet-title">{sheet.sheet}</span>
-                    <small>{sheet.workbook}</small>
-                    <small>{sheet.data_rows} rows</small>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="content-grid single-panel-grid">
             <div className="panel">
               <div className="section-heading">
                 <div>
-                  <span className="section-kicker">Profile</span>
-                  <h2>Sheet Profile</h2>
+                  <span className="section-kicker">Selected Workbook</span>
+                  <h2>{selectedWorkbookSummary?.workbook ?? "No workbook selected"}</h2>
                 </div>
               </div>
-              {sheetProfile ? (
+              {selectedWorkbookSummary ? (
                 <>
                   <p className="panel-copy">
-                    {sheetProfile.workbook} / {sheetProfile.sheet} with {sheetProfile.data_rows} data rows.
+                    Read-only workbook detail for the currently selected source file. Use this view to understand sheet structure before looking at lower-level column and normalization detail.
                   </p>
+                  <p className="panel-copy workbook-note-followup">
+                    In the sheet list below, <strong>Default</strong> marks the sheet currently shown first for this workbook, while <strong>Present</strong> means the sheet exists in the workbook but is not the default sheet shown at startup.
+                  </p>
+                  <div className="queue-summary">
+                    <div className="queue-chip">
+                      <strong>{selectedWorkbookSummary.sheet_count}</strong>
+                      <span>sheets</span>
+                    </div>
+                    <div className="queue-chip">
+                      <strong>{selectedWorkbookSummary.total_rows}</strong>
+                      <span>rows</span>
+                    </div>
+                    <div className="queue-chip">
+                      <strong>{selectedWorkbookSummary.total_columns}</strong>
+                      <span>tracked columns</span>
+                    </div>
+                  </div>
                   <table>
                     <thead>
                       <tr>
-                        <th>Column</th>
-                        <th>Distinct</th>
-                        <th>Nulls</th>
-                        <th>Samples</th>
+                        <th>Sheet</th>
+                        <th>Rows</th>
+                        <th>Populated columns</th>
+                        <th>Inspect</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {sheetProfile.columns.slice(0, 12).map((column) => (
-                        <tr key={column.index}>
-                          <td>{column.header}</td>
-                          <td>{column.distinct_count}</td>
-                          <td>{column.null_count}</td>
-                          <td>{column.sample_values.join(", ")}</td>
-                        </tr>
-                      ))}
+                      {workbookSheets.map((sheet) => {
+                        const isActive = selectedSheet?.workbook === sheet.workbook && selectedSheet?.sheet === sheet.sheet;
+                        return (
+                          <tr key={`${sheet.workbook}-${sheet.sheet}`}>
+                            <td>
+                              <strong>{sheet.sheet}</strong>
+                            </td>
+                            <td>{sheet.data_rows}</td>
+                            <td>{sheet.populated_columns}</td>
+                            <td>
+                              <button
+                                className="table-select-button"
+                                type="button"
+                                onClick={() => setSelectedSheet(sheet)}
+                                disabled={isActive}
+                              >
+                                {isActive ? "Default" : "Present"}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </>
               ) : (
-                <p className="panel-copy">Select a sheet.</p>
+                <p className="panel-copy">No workbook is currently selected.</p>
               )}
             </div>
           </section>
 
-          <section className="summary-grid">
+          <section className="panel selected-sheet-panel workbook-stack-gap">
+            <div className="section-heading">
+              <div>
+                <span className="section-kicker">Selected Sheet</span>
+                <h2>{selectedSheet ? `${selectedSheet.workbook} / ${selectedSheet.sheet}` : "No sheet selected"}</h2>
+              </div>
+            </div>
+            {sheetProfile ? (
+                <>
+                  <p className="panel-copy">
+                    This is the active sheet detail view. It provides a quick structure summary before deeper column or value-level review.
+                  </p>
+                  <ul className="supporting-bullets">
+                    <li>
+                      <strong>Data Rows:</strong> the number of populated source rows currently profiled in this sheet.
+                    </li>
+                    <li>
+                      <strong>Profiled Columns:</strong> the number of columns with headers that the profiler is currently tracking for structure and value review.
+                    </li>
+                    <li>
+                      <strong>Header Row:</strong> the worksheet row identified as the effective header row for profiling this sheet.
+                    </li>
+                  </ul>
+                  <div className="queue-summary">
+                    <div className="queue-chip">
+                      <strong>{sheetProfile.data_rows}</strong>
+                      <span>data rows</span>
+                    </div>
+                  <div className="queue-chip">
+                    <strong>{sheetProfile.columns.length}</strong>
+                    <span>profiled columns</span>
+                  </div>
+                  <div className="queue-chip">
+                    <strong>{selectedSheet?.header_row ?? "Unknown"}</strong>
+                      <span>header row</span>
+                    </div>
+                  </div>
+                </>
+            ) : (
+              <p className="panel-copy">Select a sheet.</p>
+            )}
+          </section>
+
+          <section className="summary-grid workbook-stack-gap">
             <div className="summary-card">
               <span className="summary-label">Selected sheet rows</span>
               <strong>{sheetProfile?.data_rows ?? 0}</strong>
@@ -955,7 +1039,7 @@ export function App() {
             <div className="panel">
               <div className="section-heading">
                 <div>
-                  <span className="section-kicker">Completeness</span>
+                  <span className="section-kicker">Review Signals</span>
                   <h2>Missing Data Highlights</h2>
                 </div>
               </div>
@@ -1066,6 +1150,38 @@ export function App() {
                   ? "Some values for this field still need normalization attention or manual review."
                   : "Normalization needs for this field are currently addressed by the existing ruleset."}
               </p>
+              <details className="group-accordion">
+                <summary>
+                  <span>Sheet Profile Detail</span>
+                  <span className="status-pill ok compact">{sheetProfile?.columns.length ?? 0} columns</span>
+                </summary>
+                <div className="accordion-body">
+                  {sheetProfile ? (
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Column</th>
+                          <th>Distinct</th>
+                          <th>Nulls</th>
+                          <th>Samples</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sheetProfile.columns.slice(0, 12).map((column) => (
+                          <tr key={column.index}>
+                            <td>{column.header}</td>
+                            <td>{column.distinct_count}</td>
+                            <td>{column.null_count}</td>
+                            <td>{column.sample_values.join(", ")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="panel-copy">Select a sheet to inspect column profile detail.</p>
+                  )}
+                </div>
+              </details>
               <details className="group-accordion">
                 <summary>
                   <span>Normalization Detail</span>
@@ -1242,103 +1358,65 @@ export function App() {
 
       {activeTab === "canonical" ? (
         <section className="tab-stack">
-          <section className="metric-accordion-stack">
-            <details className="panel metric-panel-accordion">
-              <summary>
-                <div>
-                  <span className="section-kicker">Reviewed Entities</span>
-                  <h2>{canonicalEntityCount}</h2>
-                </div>
-                <span className="status-pill ok compact">Groups in scope</span>
-              </summary>
-              <div className="accordion-body metric-detail-grid">
-                {(canonicalReview?.entity_reviews ?? []).map((entity) => (
-                  <div className="metric-detail-item" key={entity.entity_path}>
-                    <strong>{entity.entity_name}</strong> · <code>{entity.entity_path}</code>
-                  </div>
-                ))}
-              </div>
-            </details>
-            <details className="panel metric-panel-accordion">
-              <summary>
-                <div>
-                  <span className="section-kicker">Mapped Fields</span>
-                  <h2>{canonicalFieldCount}</h2>
-                </div>
-                <span className="status-pill ok compact">Visible in table</span>
-              </summary>
-              <div className="accordion-body metric-detail-grid">
-                {canonicalMappingRows.slice(0, 16).map((row) => (
-                  <div className="metric-detail-item" key={row.canonicalPath}>
-                    <strong>{row.businessLabel}</strong> · <code>{row.canonicalPath}</code>
-                  </div>
-                ))}
-                {canonicalMappingRows.length > 16 ? (
-                  <div className="metric-detail-item">Showing 16 of {canonicalMappingRows.length} mapped fields.</div>
-                ) : null}
-              </div>
-            </details>
-            <details className="panel metric-panel-accordion">
-              <summary>
-                <div>
-                  <span className="section-kicker">Direct Mappings</span>
-                  <h2>{directCount}</h2>
-                </div>
-                <span className="status-pill ok compact">Workbook-aligned</span>
-              </summary>
-              <div className="accordion-body metric-detail-grid">
-                {canonicalMappingRows
-                  .filter((row) => row.classification === "direct")
-                  .slice(0, 16)
-                  .map((row) => (
-                    <div className="metric-detail-item" key={row.canonicalPath}>
-                      <strong>{row.businessLabel}</strong> · {row.excelField}
-                    </div>
-                  ))}
-                {directCount > 16 ? (
-                  <div className="metric-detail-item">Showing 16 of {directCount} direct mappings.</div>
-                ) : null}
-              </div>
-            </details>
-            <details className="panel metric-panel-accordion">
-              <summary>
-                <div>
-                  <span className="section-kicker">Context-Heavy</span>
-                  <h2>{derivedRows.length + normalizedRows.length}</h2>
-                </div>
-                <span className="status-pill warn compact">Derived or normalized</span>
-              </summary>
-              <div className="accordion-body metric-detail-grid">
-                {[...derivedRows, ...normalizedRows].slice(0, 16).map((row) => (
-                  <div className="metric-detail-item" key={row.canonicalPath}>
-                    <strong>{row.businessLabel}</strong> · {titleCaseToken(row.classification)}
-                  </div>
-                ))}
-                {derivedRows.length + normalizedRows.length > 16 ? (
-                  <div className="metric-detail-item">
-                    Showing 16 of {derivedRows.length + normalizedRows.length} context-heavy mappings.
-                  </div>
-                ) : null}
-              </div>
-            </details>
-          </section>
           <section className="panel">
             <div className="section-heading">
               <div>
-                <span className="section-kicker">Phase Baseline</span>
-                <h2>First-Phase Assumptions</h2>
+                <span className="section-kicker">Business Layer</span>
+                <h2>Canonical Intermediary Model</h2>
               </div>
             </div>
             <p className="panel-copy">
-              The canonical definition view shows the expected path from source workbook field to canonical
-              meaning and onward to the first-phase schema target. Use the accordion rows for secondary
-              detail rather than reading every mapping note at once.
+              The canonical model sits between the source workbook and the target schema. It captures
+              business and regulatory meaning in stable business terms so the application can retain the
+              same semantics even when source headers vary, normalization is needed, or the final schema
+              structure looks different from the source template.
             </p>
-            <ul>
-              {(canonicalReview?.phase_assumptions ?? []).map((assumption) => (
-                <li key={assumption}>{assumption}</li>
-              ))}
-            </ul>
+            <div className="canonical-summary-block">
+              <div className="canonical-summary-item">
+                <span className="summary-label">Scope in review</span>
+                <p className="canonical-summary-inline">
+                  {canonicalEntityCount} entity groups are currently defined for the first MDR UDI-DI load.
+                  <span className="canonical-inline-pill-row">
+                    <span className="canonical-entity-pill">{canonicalFieldCount} review-model definitions</span>
+                  </span>
+                  {canonicalEntityNames.length ? (
+                    <span className="canonical-entity-pill-row" aria-label="Canonical entity groups">
+                      {" "}
+                      {canonicalEntityNames.map((entityName) => (
+                        <span className="canonical-entity-pill" key={entityName}>
+                          {entityName}
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+              <div className="canonical-summary-item">
+                <span className="summary-label">Workbook-aligned fields</span>
+                <p>
+                  {directCount} fields map directly from workbook meaning into the canonical layer without
+                  extra transformation logic.
+                </p>
+              </div>
+              <div className="canonical-summary-item">
+                <span className="summary-label">Normalization and derivation</span>
+                <p>
+                  {contextHeavyCount} fields need normalization or derivation so business meaning stays
+                  stable before schema-specific codes or combined values are applied.
+                </p>
+              </div>
+              <div className="canonical-summary-item">
+                <span className="summary-label">Repeated structures</span>
+                <p className="canonical-summary-inline">
+                  {repeatedCount} fields are modeled as repeated business structures, including
+                  <span className="canonical-inline-pill-row">
+                    <span className="canonical-entity-pill">Storage Conditions</span>
+                    <span className="canonical-entity-pill">Critical Warnings</span>
+                  </span>,
+                  before projection into nested schema elements.
+                </p>
+              </div>
+            </div>
           </section>
           <section className="panel">
             <div className="section-heading">
@@ -1353,8 +1431,6 @@ export function App() {
                 <col className="mapping-col-canonical" />
                 <col className="mapping-col-schema" />
                 <col className="mapping-col-type" />
-                <col className="mapping-col-status" />
-                <col className="mapping-col-details" />
               </colgroup>
               <thead>
                 <tr>
@@ -1362,67 +1438,23 @@ export function App() {
                   <th>Canonical field</th>
                   <th>Schema target</th>
                   <th>Type</th>
-                  <th>Status</th>
-                  <th>Details</th>
                 </tr>
               </thead>
               <tbody>
-                {canonicalMappingRows.map((row) => {
-                  const isExpanded = expandedMappingPath === row.canonicalPath;
-                  return (
-                    <Fragment key={row.canonicalPath}>
-                      <tr>
-                        <td>{row.excelField}</td>
-                        <td>
-                          <strong>{row.businessLabel}</strong>
-                          <br />
-                          <code>{row.canonicalPath}</code>
-                        </td>
-                        <td>{row.schemaTarget}</td>
-                        <td>
-                          <span className="status-pill ok compact">{titleCaseToken(row.classification)}</span>
-                        </td>
-                        <td>
-                          <span className="status-pill warn compact">{titleCaseToken(row.decisionStatus)}</span>
-                        </td>
-                        <td>
-                          <button
-                            className="ghost-button compact"
-                            type="button"
-                            onClick={() =>
-                              setExpandedMappingPath(isExpanded ? null : row.canonicalPath)
-                            }
-                          >
-                            {isExpanded ? "Hide" : "Details"}
-                          </button>
-                        </td>
-                      </tr>
-                      {isExpanded ? (
-                        <tr className="expanded-row">
-                          <td colSpan={6}>
-                            <div className="accordion-body full-row-detail">
-                              <p>
-                                Entity: <strong>{row.entityName}</strong>
-                              </p>
-                              {row.normalizedBy.length ? (
-                                <p>Normalization: {row.normalizedBy.join(", ")}</p>
-                              ) : null}
-                              {row.derivationLogic ? <p>Derivation: {row.derivationLogic}</p> : null}
-                              {row.assumptions.length ? <p>Assumptions: {row.assumptions.join(" ")}</p> : null}
-                              {row.exampleSourceValues.length ? (
-                                <p>Example source values: {row.exampleSourceValues.join(" | ")}</p>
-                              ) : null}
-                              {row.exampleCanonicalValue ? (
-                                <p>Example canonical value: {row.exampleCanonicalValue}</p>
-                              ) : null}
-                              {row.decisionRationale ? <p>Review note: {row.decisionRationale}</p> : null}
-                            </div>
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
+                {canonicalMappingRows.map((row) => (
+                  <tr key={row.canonicalPath}>
+                    <td>{row.excelField}</td>
+                    <td>
+                      <strong>{row.businessLabel}</strong>
+                      <br />
+                      <code>{row.canonicalPath}</code>
+                    </td>
+                    <td>{row.schemaTarget}</td>
+                    <td>
+                      <span className="status-pill ok compact">{titleCaseToken(row.classification)}</span>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </section>
@@ -1460,33 +1492,41 @@ export function App() {
                 <span className="section-kicker">Validation Scope</span>
                 <h2>Echelon-Only Mapping Preview</h2>
               </div>
-              <button
-                className="action-button"
-                type="button"
-                onClick={() => setMappingPreviewApplied((current) => !current)}
-                disabled={!selectedValidationRecord}
-              >
-                {mappingPreviewApplied ? "Show before mapping" : "Apply Basic UDI-DI mapping preview"}
-              </button>
             </div>
             <p className="panel-copy">
-              {echelonValidation?.scope_note ??
-                "This view highlights the subset that can be enriched from the Basic UDI reference workbook."}
+              This `Echelon`-only preview tracks the XML-facing validation subset that can be enriched
+              from the shared Basic UDI reference context.
             </p>
             <p className="panel-copy scope-note-secondary">
-              {echelonValidation?.validation_note ??
-                "Completeness is measured against the tracked canonical fields in this validation preview."}
+              Validation currently tracks {trackedValidationFieldCount} flat subset fields.{" "}
+              {echelonValidation?.tracked_required_fields ?? 0} are required for completeness scoring and{" "}
+              {optionalValidationFieldCount} are optional.
+            </p>
+            <p className="panel-copy scope-note-secondary">
+              `Workbook Coverage Summary` is a different measure: it counts represented source headers, not
+              validation fields. One header can feed multiple validation fields, and some validation fields
+              come from shared Basic UDI reference data or derived logic.
             </p>
             <div className="queue-summary">
+              <div className="queue-chip">
+                <strong>{representedFieldCount}</strong>
+                <span>represented source headers</span>
+              </div>
               <div className="queue-chip">
                 <strong>{echelonValidation?.matched_reference_records ?? 0}</strong>
                 <span>rows inheriting family context</span>
               </div>
               <div className="queue-chip">
-                <strong>
-                  {echelonValidation?.tracked_required_fields ?? 0}
-                </strong>
-                <span>tracked canonical fields</span>
+                <strong>{trackedValidationFieldCount}</strong>
+                <span>tracked subset fields</span>
+              </div>
+              <div className="queue-chip">
+                <strong>{echelonValidation?.tracked_required_fields ?? 0}</strong>
+                <span>required for completeness</span>
+              </div>
+              <div className="queue-chip">
+                <strong>{optionalValidationFieldCount}</strong>
+                <span>optional fields</span>
               </div>
             </div>
           </section>
@@ -1529,6 +1569,10 @@ export function App() {
               <p className="panel-copy">
                 The default view summarizes the full Echelon population by sheet so users can review
                 completeness without scanning thousands of near-identical rows.
+              </p>
+              <p className="panel-copy scope-note-secondary">
+                <span className="inline-stat-pill">{representedFieldCount} represented source headers</span>
+                in `Workbook Coverage Summary` is a separate header-level measure, not a row-completeness count.
               </p>
               <table>
                 <thead>
@@ -1585,29 +1629,67 @@ export function App() {
                 This summary shows which tracked canonical fields were missing before enrichment and
                 whether they remain missing after the shared Basic UDI-DI context is applied.
               </p>
-              <div className="validation-blockers-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Field</th>
-                      <th>Before missing</th>
-                      <th>After missing</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(echelonValidation?.blocker_summaries ?? []).map((summary) => (
-                      <tr key={summary.canonical_path}>
-                        <td>
+              <div className="queue-summary">
+                <div className="queue-chip">
+                  <strong>{blockerSummaries.length}</strong>
+                  <span>tracked blocker fields</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{resolvedBlockerFieldCount}</strong>
+                  <span>fully resolved after mapping</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{persistentBlockerFieldCount}</strong>
+                  <span>still missing after mapping</span>
+                </div>
+              </div>
+              <div className="draft-list">
+                <div className="draft-card">
+                  <div className="draft-card-head">
+                    <strong>Most improved</strong>
+                    <span className="status-pill ok compact">{resolvedBlockerHighlights.length}</span>
+                  </div>
+                  {resolvedBlockerHighlights.length ? (
+                    <ul className="compact-list validation-highlight-list">
+                      {resolvedBlockerHighlights.map((summary) => (
+                        <li key={summary.canonical_path}>
                           <strong>{summary.business_label}</strong>
-                          <br />
-                          <code>{summary.canonical_path}</code>
-                        </td>
-                        <td>{summary.before_missing_count}</td>
-                        <td>{summary.after_missing_count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <span>
+                            {summary.before_missing_count} before, 0 after
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="panel-copy">No blocker fields are fully resolved by the shared mapping step.</p>
+                  )}
+                </div>
+                <div className="draft-card">
+                  <div className="draft-card-head">
+                    <strong>Still open</strong>
+                    <span
+                      className={
+                        persistentBlockerHighlights.length ? "status-pill warn compact" : "status-pill ok compact"
+                      }
+                    >
+                      {persistentBlockerHighlights.length}
+                    </span>
+                  </div>
+                  {persistentBlockerHighlights.length ? (
+                    <ul className="compact-list validation-highlight-list">
+                      {persistentBlockerHighlights.map((summary) => (
+                        <li key={summary.canonical_path}>
+                          <strong>{summary.business_label}</strong>
+                          <span>
+                            {summary.after_missing_count} rows still missing after mapping
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="panel-copy">No blocker fields remain open after the shared mapping preview.</p>
+                  )}
+                </div>
               </div>
             </div>
           </section>
@@ -1660,20 +1742,14 @@ export function App() {
                 <>
                   <div className="queue-summary">
                     <div className="queue-chip">
-                      <strong>{selectedValidationRecord.source_sheet}</strong>
-                      <span>source sheet</span>
-                    </div>
-                    <div className="queue-chip">
-                      <strong>{selectedValidationRecord.source_row_index}</strong>
-                      <span>source row</span>
-                    </div>
-                    <div className="queue-chip">
-                      <strong>{selectedValidationRecord.basic_reference_material_number ?? "None"}</strong>
-                      <span>basic reference key</span>
+                      <strong>
+                        {selectedValidationRecord.source_sheet} · row {selectedValidationRecord.source_row_index}
+                      </strong>
+                      <span>source position</span>
                     </div>
                     <div className="queue-chip">
                       <strong>{selectedValidationRecord.basic_reference_name ?? "Unknown"}</strong>
-                      <span>basic model name</span>
+                      <span>basic model</span>
                     </div>
                   </div>
                   <div className="workflow-note validation-record-note">
@@ -1686,24 +1762,7 @@ export function App() {
                   <div className="draft-list">
                     <div className="draft-card">
                       <div className="draft-card-head">
-                        <strong>Before mapping blockers</strong>
-                        <span className="status-pill warn compact">
-                          {selectedValidationRecord.before_blockers.length}
-                        </span>
-                      </div>
-                      {selectedValidationRecord.before_blockers.length ? (
-                        <ul className="compact-list">
-                          {selectedValidationRecord.before_blockers.map((blocker) => (
-                            <li key={blocker}>{blocker}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="panel-copy">No blockers in the workbook-only view.</p>
-                      )}
-                    </div>
-                    <div className="draft-card">
-                      <div className="draft-card-head">
-                        <strong>After mapping blockers</strong>
+                        <strong>Mapping snapshot</strong>
                         <span
                           className={
                             selectedValidationRecord.after_blockers.length
@@ -1711,12 +1770,23 @@ export function App() {
                               : "status-pill ok compact"
                           }
                         >
+                          {selectedValidationRecord.before_blockers.length} to{" "}
                           {selectedValidationRecord.after_blockers.length}
                         </span>
                       </div>
+                      <div className="queue-summary">
+                        <div className="queue-chip">
+                          <strong>{selectedValidationRecord.before_blockers.length}</strong>
+                          <span>before mapping</span>
+                        </div>
+                        <div className="queue-chip">
+                          <strong>{selectedValidationRecord.after_blockers.length}</strong>
+                          <span>after mapping</span>
+                        </div>
+                      </div>
                       {selectedValidationRecord.after_blockers.length ? (
-                        <ul className="compact-list">
-                          {selectedValidationRecord.after_blockers.map((blocker) => (
+                        <ul className="compact-list validation-highlight-list">
+                          {selectedOpenBlockerPreview.map((blocker) => (
                             <li key={blocker}>{blocker}</li>
                           ))}
                         </ul>
@@ -1727,6 +1797,43 @@ export function App() {
                       )}
                     </div>
                   </div>
+                  <div className="draft-list">
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>Repeated structures</strong>
+                        <span className="status-pill ok compact">
+                          {selectedValidationRecord.storage_condition_items.length +
+                            selectedValidationRecord.critical_warning_items.length}
+                        </span>
+                      </div>
+                      <div className="queue-summary">
+                        <div className="queue-chip">
+                          <strong>{selectedValidationRecord.storage_condition_items.length}</strong>
+                          <span>storage items</span>
+                        </div>
+                        <div className="queue-chip">
+                          <strong>{selectedValidationRecord.critical_warning_items.length}</strong>
+                          <span>warning items</span>
+                        </div>
+                      </div>
+                      {selectedStorageExample ? (
+                        <div className="field-source-note validation-example-note">
+                          Storage example: {selectedStorageExample.item_type ?? "Unspecified type"}
+                          {selectedStorageExample.normalized_code
+                            ? ` -> ${selectedStorageExample.normalized_code}`
+                            : " -> schema code pending"}
+                        </div>
+                      ) : null}
+                      {selectedWarningExample ? (
+                        <div className="field-source-note validation-example-note">
+                          Warning example: {selectedWarningExample.item_type ?? "Unspecified warning"}
+                          {selectedWarningExample.normalized_code
+                            ? ` -> ${selectedWarningExample.normalized_code}`
+                            : " -> schema code pending"}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
                 </>
               ) : (
                 <p className="panel-copy">No Echelon rows currently have Basic UDI reference coverage.</p>
@@ -1734,144 +1841,172 @@ export function App() {
             </div>
           </section>
 
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <span className="section-kicker">Source Field Coverage</span>
-                <h2>Echelon Header Coverage</h2>
+          <details className="panel group-accordion" open={false}>
+            <summary>
+              <span>Selected Row Evidence</span>
+              <span className={mappingPreviewApplied ? "status-pill ok compact" : "status-pill warn compact"}>
+                {mappingPreviewApplied ? "After mapping" : "Before mapping"}
+              </span>
+            </summary>
+            <div className="accordion-body">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Single-Value Field Evidence</span>
+                  <h2>{mappingPreviewApplied ? "After Mapping Preview" : "Before Mapping Preview"}</h2>
+                </div>
+                <button
+                  className="action-button"
+                  type="button"
+                  onClick={() => setMappingPreviewApplied((current) => !current)}
+                  disabled={!selectedValidationRecord}
+                >
+                  {mappingPreviewApplied ? "Show before mapping" : "Apply Basic UDI-DI mapping preview"}
+                </button>
               </div>
+              <p className="panel-copy">
+                This table shows the flat canonical fields for the selected sample row only. It does not include
+                repeated structures such as storage conditions or critical warnings; those are shown above as
+                assembled item lists because one row can contain multiple items.
+              </p>
+              {visibleValidationFields.length ? (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Canonical field</th>
+                      <th>Current value</th>
+                      <th>Source</th>
+                      <th>Update note</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleValidationFields.map((field) => (
+                      <tr key={field.canonical_path}>
+                        <td>
+                          <strong>{field.business_label}</strong>
+                          <br />
+                          <code>{field.canonical_path}</code>
+                        </td>
+                        <td>{field.currentValue ?? "Missing"}</td>
+                        <td>
+                          <span
+                            className={
+                              field.currentSource === "missing"
+                                ? "status-pill warn compact"
+                                : "status-pill ok compact"
+                            }
+                          >
+                            {titleCaseToken(field.currentSource)}
+                          </span>
+                          <div className="field-source-note">{field.source_detail}</div>
+                        </td>
+                        <td>{field.update_reason ?? "No change required for this field."}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="panel-copy">Select a sample record to inspect field-level evidence.</p>
+              )}
             </div>
-            <p className="panel-copy">
-              This view compares the unique source headers in the Echelon workbook against the current
-              canonical/XML-facing review path. It is header coverage only, not row-population completeness.
-            </p>
-            <section className="summary-grid coverage-summary-grid">
-              <div className="summary-card">
-                <span className="summary-label">Headers reviewed</span>
-                <strong>{echelonValidation?.source_field_total ?? 0}</strong>
-                <p>Unique source headers across the Echelon workbook family tabs.</p>
-              </div>
-              <div className="summary-card">
-                <span className="summary-label">Represented</span>
-                <strong>{representedFieldCount}</strong>
-                <p>Headers with a documented place in the current canonical/XML-facing path.</p>
-              </div>
-              <div className="summary-card">
-                <span className="summary-label">Partially represented</span>
-                <strong>{partialFieldCount}</strong>
-                <p>Headers recognized in the model, but only partially covered because the structure is richer than the current implementation.</p>
-              </div>
-              <div className="summary-card">
-                <span className="summary-label">Not represented</span>
-                <strong>{notRepresentedFieldCount + deferredFieldCount}</strong>
-                <p>Headers without current documented coverage in the active canonical review path.</p>
-              </div>
-            </section>
-            <table className="coverage-table">
-              <colgroup>
-                <col className="coverage-col-source" />
-                <col className="coverage-col-status" />
-                <col className="coverage-col-canonical" />
-                <col className="coverage-col-schema" />
-                <col className="coverage-col-notes" />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>Source field</th>
-                  <th>Status</th>
-                  <th>Canonical target</th>
-                  <th>Schema target</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sourceFieldCoverageEntries.map((entry) => (
-                  <tr key={entry.source_field}>
-                    <td>
-                      <strong>{entry.source_field}</strong>
-                      <div className="field-source-note">{entry.source_sheets.join(", ")}</div>
-                    </td>
-                    <td>
-                      <span
-                        className={
-                          entry.coverage_status === "represented"
-                            ? "status-pill ok compact"
-                            : entry.coverage_status === "partially_represented"
-                              ? "status-pill warn compact"
-                              : "status-pill compact"
-                        }
-                      >
-                        {titleCaseToken(entry.coverage_status)}
-                      </span>
-                    </td>
-                    <td>
-                      {entry.canonical_targets.length ? (
-                        entry.canonical_targets.map((target) => <div key={target}><code>{target}</code></div>)
-                      ) : (
-                        "None yet"
-                      )}
-                    </td>
-                    <td>
-                      {entry.schema_targets.length ? (
-                        entry.schema_targets.map((target) => <div key={target}><code>{target}</code></div>)
-                      ) : (
-                        "None yet"
-                      )}
-                    </td>
-                    <td>{entry.notes}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+          </details>
 
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <span className="section-kicker">Field Evidence</span>
-                <h2>{mappingPreviewApplied ? "After Mapping Preview" : "Before Mapping Preview"}</h2>
+          <details className="panel group-accordion" open={false}>
+            <summary>
+              <span>Workbook Coverage Summary</span>
+              <span className="status-pill ok compact">{echelonValidation?.source_field_total ?? 0} headers</span>
+            </summary>
+            <div className="accordion-body">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Source Field Coverage</span>
+                  <h2>Echelon Header Coverage</h2>
+                </div>
               </div>
-            </div>
-            {visibleValidationFields.length ? (
-              <table>
+              <p className="panel-copy">
+                This summary compares the unique source headers in the Echelon workbook against the current
+                canonical/XML-facing review path. It is header coverage only, not row-population completeness, and
+                acts as a readiness summary before moving into XML generation.
+              </p>
+              <section className="summary-grid coverage-summary-grid">
+                <div className="summary-card">
+                  <span className="summary-label">Headers reviewed</span>
+                  <strong>{echelonValidation?.source_field_total ?? 0}</strong>
+                  <p>Unique source headers across the Echelon workbook family tabs.</p>
+                </div>
+                <div className="summary-card">
+                  <span className="summary-label">Represented</span>
+                  <strong>{representedFieldCount}</strong>
+                  <p>Headers with a documented place in the current canonical/XML-facing path.</p>
+                </div>
+                <div className="summary-card">
+                  <span className="summary-label">Partially represented</span>
+                  <strong>{partialFieldCount}</strong>
+                  <p>Headers recognized in the model, but only partially covered because the structure is richer than the current implementation.</p>
+                </div>
+                <div className="summary-card">
+                  <span className="summary-label">Not represented</span>
+                  <strong>{notRepresentedFieldCount + deferredFieldCount}</strong>
+                  <p>Headers without current documented coverage in the active canonical review path.</p>
+                </div>
+              </section>
+              <table className="coverage-table">
+                <colgroup>
+                  <col className="coverage-col-source" />
+                  <col className="coverage-col-status" />
+                  <col className="coverage-col-canonical" />
+                  <col className="coverage-col-schema" />
+                  <col className="coverage-col-notes" />
+                </colgroup>
                 <thead>
                   <tr>
-                    <th>Canonical field</th>
-                    <th>Current value</th>
-                    <th>Source</th>
-                    <th>Update note</th>
+                    <th>Source field</th>
+                    <th>Status</th>
+                    <th>Canonical target</th>
+                    <th>Schema target</th>
+                    <th>Notes</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleValidationFields.map((field) => (
-                    <tr key={field.canonical_path}>
+                  {sourceFieldCoverageEntries.map((entry) => (
+                    <tr key={entry.source_field}>
                       <td>
-                        <strong>{field.business_label}</strong>
-                        <br />
-                        <code>{field.canonical_path}</code>
+                        <strong>{entry.source_field}</strong>
+                        <div className="field-source-note">{entry.source_sheets.join(", ")}</div>
                       </td>
-                      <td>{field.currentValue ?? "Missing"}</td>
                       <td>
                         <span
                           className={
-                            field.currentSource === "missing"
-                              ? "status-pill warn compact"
-                              : "status-pill ok compact"
+                            entry.coverage_status === "represented"
+                              ? "status-pill ok compact"
+                              : entry.coverage_status === "partially_represented"
+                                ? "status-pill warn compact"
+                                : "status-pill compact"
                           }
                         >
-                          {titleCaseToken(field.currentSource)}
+                          {titleCaseToken(entry.coverage_status)}
                         </span>
-                        <div className="field-source-note">{field.source_detail}</div>
                       </td>
-                      <td>{field.update_reason ?? "No change required for this field."}</td>
+                      <td>
+                        {entry.canonical_targets.length ? (
+                          entry.canonical_targets.map((target) => <div key={target}><code>{target}</code></div>)
+                        ) : (
+                          "None yet"
+                        )}
+                      </td>
+                      <td>
+                        {entry.schema_targets.length ? (
+                          entry.schema_targets.map((target) => <div key={target}><code>{target}</code></div>)
+                        ) : (
+                          "None yet"
+                        )}
+                      </td>
+                      <td>{entry.notes}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            ) : (
-              <p className="panel-copy">Select a sample record to inspect field-level evidence.</p>
-            )}
-          </section>
+            </div>
+          </details>
         </section>
       ) : null}
 

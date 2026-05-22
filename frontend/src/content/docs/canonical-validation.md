@@ -35,7 +35,6 @@ The `Canonical Validation` area is the mapping-review checkpoint for the first-p
 
 - full batch XML generation
 - submission workflow execution
-- enum normalization for every repeated or optional schema structure
 - pretending that repeated workbook template areas are fully modeled when the current implementation still treats them conservatively
 
 ## Design Intent
@@ -61,6 +60,27 @@ It answers:
 For the current `Echelon` family:
 
 - indicator-only areas such as clinical size applicability, CMR presence, and endocrine-disrupting presence are treated as represented because all rows currently indicate `No`
-- the remaining partials are the genuinely structured repeat areas:
-  - storage conditions
-  - critical warnings
+- `Storage Conditions` and `Critical Warnings` are now also represented for the current dataset because:
+  - the workbook groups are assembled into repeated item structures
+  - the observed Echelon phrases have explicit schema enum mappings
+
+## Enum Strategy In Validation
+
+The validation view now uses a two-layer representation for repeated structures:
+
+- raw workbook phrase:
+  - what the source row actually says
+- normalized schema code:
+  - the enum value the XML generator will emit
+
+For the current `Echelon` data, the normalized mappings are:
+
+- `Lower limit of temp` -> `SHC006`
+- `Upper limit of temp` -> `SHC007`
+- `Consult instructions for use` -> `CW010`
+
+This is why the selected-sample cards now show both the assembled item and the schema code. The purpose is to let a reviewer confirm:
+
+- what the workbook said
+- how the app interpreted it
+- what code will be used in the XML

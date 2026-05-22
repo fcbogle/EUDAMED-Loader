@@ -386,16 +386,21 @@ field_reviews:
         - Storage /handling conditions type e.g. Lower limit of temp
         - Description e.g. taken from IFU Technical Data page Storage Temp range e.g. -15C
         - Add another Storage/handling condition e.g. Upper limit of temp
+        - Description e.g. taken from IFU Technical Data page Storage Temp range e.g. +50C
       assumptions:
-        - Workbook slots should collapse into a repeating list structure rather than fixed positional fields.
+        - Workbook slots collapse into repeated storage-condition items rather than fixed positional fields.
+        - Type labels are normalized to EUDAMED schema enum codes via dedicated normalization files.
       schema_targets:
         - schema_path: UDIDIType/storageHandlingConditionList
           required: true
           status: repeated
-          notes: Repeating structure to be assembled during later row-level execution.
+          notes: Repeating structure assembled during row-level execution with enum-backed condition values and optional comments.
+      supporting_rules:
+        - config/normalization/storage_handling_condition_primary.yaml
+        - config/normalization/storage_handling_condition_secondary.yaml
     decision:
-      status: accepted_with_note
-      rationale: Repeating pattern is clear, but row assembly is deferred.
+      status: accepted
+      rationale: Repeating pattern is assembled and enum-normalized for the current Echelon workbook values.
   - mapping:
       canonical_path: device_record.warnings
       business_label: Critical Warnings
@@ -405,14 +410,17 @@ field_reviews:
         - Critical warning type e.g. Consult instructions for use
       assumptions:
         - Workbook expresses warning presence and type more clearly than rich narrative detail.
+        - Warning type labels are normalized to EUDAMED schema enum codes via a dedicated normalization file.
       schema_targets:
         - schema_path: UDIDIType/criticalWarningList
           required: true
           status: repeated
-          notes: Repeating structure to be assembled during later row-level execution.
+          notes: Repeating structure assembled during row-level execution with enum-backed warning values.
+      supporting_rules:
+        - config/normalization/critical_warning_type.yaml
     decision:
-      status: accepted_with_note
-      rationale: Repeating pattern is clear, but final structure will be confirmed during execution.
+      status: accepted
+      rationale: Repeating pattern is assembled and enum-normalized for the current Echelon workbook values.
   - mapping:
       canonical_path: device_record.market_availability
       business_label: Market Availability

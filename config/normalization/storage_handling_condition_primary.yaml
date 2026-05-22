@@ -1,0 +1,5 @@
+column: Storage /handling conditions type e.g. Lower limit of temp
+description: Normalize Echelon storage and handling condition labels to EUDAMED enum codes.
+rules:
+  - raw: Lower limit of temp
+    normalized: SHC006

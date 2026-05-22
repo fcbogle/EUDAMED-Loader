@@ -71,6 +71,14 @@ class SourceFieldCoverageEntry(BaseModel):
     notes: str
 
 
+class StructuredListItemPreview(BaseModel):
+    sequence: int
+    item_type: str | None = None
+    normalized_code: str | None = None
+    description: str | None = None
+    source_fields: list[str] = Field(default_factory=list)
+
+
 class EchelonValidationRecord(BaseModel):
     source_workbook: str
     source_sheet: str
@@ -86,6 +94,8 @@ class EchelonValidationRecord(BaseModel):
     after_completeness: CompletenessSnapshot
     before_blockers: list[str] = Field(default_factory=list)
     after_blockers: list[str] = Field(default_factory=list)
+    storage_condition_items: list[StructuredListItemPreview] = Field(default_factory=list)
+    critical_warning_items: list[StructuredListItemPreview] = Field(default_factory=list)
     fields: list[ValidationFieldValue] = Field(default_factory=list)
 
 

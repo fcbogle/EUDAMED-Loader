@@ -8,7 +8,12 @@ from lxml import etree
 from app.services.echelon_validation import EchelonValidationService
 from app.services.xml_validation import XmlValidationService
 from app.validation_models import EchelonValidationRecord
-from app.xml_models import EchelonXmlRecord, SingleRecordXmlPreview
+from app.xml_models import (
+    CriticalWarningXmlItem,
+    EchelonXmlRecord,
+    SingleRecordXmlPreview,
+    StorageConditionXmlItem,
+)
 
 MESSAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1"
 SERVICE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1"
@@ -160,6 +165,8 @@ class EchelonXmlGenerationService:
             reprocessed=self._bool(self._required(field_map, "device_record.reprocessed")),
             first_eu_market_country=self._country_code(field_map.get("device_record.market_availability.first_eu_market_country")),
             base_quantity=self._optional_int(field_map.get("device_record.base_quantity")),
+            storage_conditions=self._storage_condition_items(record),
+            critical_warnings=self._critical_warning_items(record),
         )
 
     def _render_push_message(self, record: EchelonXmlRecord) -> bytes:
@@ -293,6 +300,10 @@ class EchelonXmlGenerationService:
             trade_name = etree.SubElement(trade_names, self._q(LANGUAGE_NS, "name"))
             self._append_text(trade_name, LANGUAGE_NS, "language", record.language_code)
             self._append_text(trade_name, LANGUAGE_NS, "textValue", record.trade_name)
+        if record.storage_conditions:
+            udidi.append(self._storage_conditions_element(record.storage_conditions))
+        if record.critical_warnings:
+            udidi.append(self._critical_warnings_element(record.critical_warnings))
         self._append_text(udidi, UDIDI_NS, "numberOfReuses", str(record.number_of_reuses))
         if record.first_eu_market_country:
             udidi.append(self._market_infos_element(record.first_eu_market_country))
@@ -308,6 +319,24 @@ class EchelonXmlGenerationService:
         self._append_text(market_info, MARKET_INFO_NS, "country", country_code)
         self._append_text(market_info, MARKET_INFO_NS, "originalPlacedOnTheMarket", "true")
         return market_infos
+
+    def _storage_conditions_element(self, items: list[StorageConditionXmlItem]) -> etree._Element:
+        storage_conditions = etree.Element(self._q(UDIDI_NS, "storageHandlingConditions"))
+        for item in items:
+            condition = etree.SubElement(storage_conditions, self._q(COMMON_DEVICE_NS, "condition"))
+            if item.comment:
+                condition.append(self._language_optional_texts(item.comment, language="ANY"))
+            self._append_text(condition, COMMON_DEVICE_NS, "storageHandlingConditionValue", item.code)
+        return storage_conditions
+
+    def _critical_warnings_element(self, items: list[CriticalWarningXmlItem]) -> etree._Element:
+        critical_warnings = etree.Element(self._q(UDIDI_NS, "criticalWarnings"))
+        for item in items:
+            warning = etree.SubElement(critical_warnings, self._q(COMMON_DEVICE_NS, "warning"))
+            if item.comment:
+                warning.append(self._language_optional_texts(item.comment, language="ANY"))
+            self._append_text(warning, COMMON_DEVICE_NS, "warningValue", item.code)
+        return critical_warnings
 
     def _di_identifier_element(
         self,
@@ -327,6 +356,13 @@ class EchelonXmlGenerationService:
         element = etree.SubElement(parent, etree.QName(namespace, tag_name))
         element.text = value
         return element
+
+    def _language_optional_texts(self, text: str, *, language: str) -> etree._Element:
+        comments = etree.Element(self._q(COMMON_DEVICE_NS, "comments"))
+        name = etree.SubElement(comments, self._q(LANGUAGE_NS, "name"))
+        self._append_text(name, LANGUAGE_NS, "language", language)
+        self._append_text(name, LANGUAGE_NS, "textValue", text)
+        return comments
 
     @staticmethod
     def _required(values: dict[str, str | None], key: str) -> str:
@@ -359,6 +395,28 @@ class EchelonXmlGenerationService:
     @staticmethod
     def _split_codes(value: str) -> list[str]:
         return [token for token in value.replace(",", " ").split() if token]
+
+    @staticmethod
+    def _storage_condition_items(record: EchelonValidationRecord) -> list[StorageConditionXmlItem]:
+        items: list[StorageConditionXmlItem] = []
+        for item in record.storage_condition_items:
+            if item.normalized_code is None:
+                raise ValueError(
+                    f"Storage condition item {item.sequence} for {record.catalogue_number} is missing a schema enum mapping."
+                )
+            items.append(StorageConditionXmlItem(code=item.normalized_code, comment=item.description))
+        return items
+
+    @staticmethod
+    def _critical_warning_items(record: EchelonValidationRecord) -> list[CriticalWarningXmlItem]:
+        items: list[CriticalWarningXmlItem] = []
+        for item in record.critical_warning_items:
+            if item.normalized_code is None:
+                raise ValueError(
+                    f"Critical warning item {item.sequence} for {record.catalogue_number} is missing a schema enum mapping."
+                )
+            items.append(CriticalWarningXmlItem(code=item.normalized_code, comment=item.description))
+        return items
 
     @staticmethod
     def _q(namespace: str, tag_name: str) -> etree.QName:

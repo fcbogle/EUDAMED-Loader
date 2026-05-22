@@ -186,6 +186,14 @@ export type SourceFieldCoverageEntry = {
   notes: string;
 };
 
+export type StructuredListItemPreview = {
+  sequence: number;
+  item_type: string | null;
+  normalized_code: string | null;
+  description: string | null;
+  source_fields: string[];
+};
+
 export type EchelonValidationRecord = {
   source_workbook: string;
   source_sheet: string;
@@ -201,6 +209,8 @@ export type EchelonValidationRecord = {
   after_completeness: CompletenessSnapshot;
   before_blockers: string[];
   after_blockers: string[];
+  storage_condition_items: StructuredListItemPreview[];
+  critical_warning_items: StructuredListItemPreview[];
   fields: ValidationFieldValue[];
 };
 

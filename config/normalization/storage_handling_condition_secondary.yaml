@@ -1,0 +1,5 @@
+column: Add another Storage/handling condition e.g. Upper limit of temp
+description: Normalize secondary Echelon storage and handling condition labels to EUDAMED enum codes.
+rules:
+  - raw: Upper limit of temp
+    normalized: SHC007

@@ -22,6 +22,11 @@ def test_echelon_validation_service_builds_subset_bundle() -> None:
         and entry.source_field == "Clinical size applicable e.g. NO"
         for entry in bundle.source_field_coverage
     )
+    assert any(
+        entry.coverage_status == "represented"
+        and entry.source_field == "Storage /handling conditions type e.g. Lower limit of temp"
+        for entry in bundle.source_field_coverage
+    )
     assert bundle.sheet_summaries[0].record_count >= 1
     assert any(summary.business_label == "Basic UDI-DI" for summary in bundle.blocker_summaries)
     assert len(bundle.sample_records) == 4
@@ -31,6 +36,12 @@ def test_echelon_validation_service_builds_subset_bundle() -> None:
     assert record.basic_reference_material_number == "5050649ECHELONMV"
     assert record.before_completeness.missing_required_fields == 16
     assert record.after_completeness.missing_required_fields == 0
+    assert len(record.storage_condition_items) == 2
+    assert record.storage_condition_items[0].item_type == "Lower limit of temp"
+    assert record.storage_condition_items[0].normalized_code == "SHC006"
+    assert len(record.critical_warning_items) == 1
+    assert record.critical_warning_items[0].item_type == "Consult instructions for use"
+    assert record.critical_warning_items[0].normalized_code == "CW010"
     assert any(field.canonical_path == "basic_device.basic_udi_di" for field in record.fields)
 
 

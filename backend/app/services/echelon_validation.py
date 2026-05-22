@@ -9,6 +9,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from app.config import get_settings
 from app.services.canonical_review import CanonicalReviewService
+from app.services.normalization import NormalizationRepository
 from app.validation_models import (
     BlockerSummary,
     CompletenessSnapshot,
@@ -20,6 +21,7 @@ from app.validation_models import (
     SourceFieldCoverageEntry,
     SourceFieldCoverageStatus,
     SourceFieldCoverageSummary,
+    StructuredListItemPreview,
     ValidationFieldValue,
     ValueSourceType,
 )
@@ -56,6 +58,13 @@ ANIMAL_TISSUE_HEADER = "Presence of animal tissues or cells, or their derivative
 MEDICINAL_SUBSTANCE_HEADER = "Presence of a substance which, if used separately, may be considered to be a medicinal product e.g. NO"
 HUMAN_BLOOD_SUBSTANCE_HEADER = "Presence of a substance which, if used separately, may be considered to be a medicinal product derived from human blood or human plasma e.g. NO"
 FIRST_EU_MARKET_HEADER = "Member state where first placed on the EU market e.g. Germany"
+STORAGE_APPLICABLE_HEADER = "Storage/handling conditions, if applicable e.g. YES"
+STORAGE_TYPE_HEADER = "Storage /handling conditions type e.g. Lower limit of temp"
+STORAGE_DESCRIPTION_ONE_HEADER = "Description e.g. taken from  IFU Technical Data page Storage Temp range e.g. -15C"
+STORAGE_TYPE_TWO_HEADER = "Add another Storage/handling condition e.g. Upper limit of temp"
+STORAGE_DESCRIPTION_TWO_HEADER = "Description e.g. taken from  IFU Technical Data page Storage Temp range e.g. +50C"
+WARNING_APPLICABLE_HEADER = "Critical warnings or contra-indications, if applicable e.g. Yes"
+WARNING_TYPE_HEADER = "Critical warning type e.g.  Consult instructions for use"
 
 PRODUCT_TEMPLATE_HEADER = "Product Template"
 PRODUCT_CODE_VALUE_HEADER = "Product Code (Value)"
@@ -89,30 +98,6 @@ BASE_QUANTITY_HEADER = "Base Quantity"
 LATEX_REFERENCE_HEADER = "Latex"
 REPROCESSED_REFERENCE_HEADER = "Reprocessed"
 
-PARTIAL_SOURCE_HEADERS = {
-    "storage/handling conditions, if applicable e.g. yes": (
-        "Storage conditions are recognized, but the repeating list structure is still only partially modeled."
-    ),
-    "storage /handling conditions type e.g. lower limit of temp": (
-        "Storage conditions are recognized, but the repeating list structure is still only partially modeled."
-    ),
-    "description e.g. taken from ifu technical data page storage temp range e.g. -15c": (
-        "Storage condition descriptions are recognized, but the repeating list structure is still only partially modeled."
-    ),
-    "add another storage/handling condition e.g. upper limit of temp": (
-        "Storage conditions are recognized, but the repeating list structure is still only partially modeled."
-    ),
-    "description e.g. taken from ifu technical data page storage temp range e.g. +50c": (
-        "Storage condition descriptions are recognized, but the repeating list structure is still only partially modeled."
-    ),
-    "critical warnings or contra-indications, if applicable e.g. yes": (
-        "Critical warnings are recognized, but the repeating warning structure is still only partially modeled."
-    ),
-    "critical warning type e.g. consult instructions for use": (
-        "Critical warnings are recognized, but the repeating warning structure is still only partially modeled."
-    ),
-}
-
 REPRESENTED_SCOPE_NOTES = {
     "clinical size applicable e.g. no": (
         "Represented for current Echelon scope because all reviewed rows indicate clinical size is not applicable."
@@ -122,6 +107,27 @@ REPRESENTED_SCOPE_NOTES = {
     ),
     "labelled for presence of substances with endocrine-disrupting properties e.g. no": (
         "Represented for current Echelon scope because all reviewed rows indicate endocrine-disrupting substance presence is not applicable."
+    ),
+    "storage/handling conditions, if applicable e.g. yes": (
+        "Represented as a repeated storage-condition structure gated by the workbook applicability flag."
+    ),
+    "storage /handling conditions type e.g. lower limit of temp": (
+        "Represented as a repeated storage-condition item with schema enum normalization via config/normalization/storage_handling_condition_primary.yaml."
+    ),
+    "description e.g. taken from ifu technical data page storage temp range e.g. -15c": (
+        "Represented as the optional comment text attached to the first normalized storage-condition item."
+    ),
+    "add another storage/handling condition e.g. upper limit of temp": (
+        "Represented as the second repeated storage-condition item with schema enum normalization via config/normalization/storage_handling_condition_secondary.yaml."
+    ),
+    "description e.g. taken from ifu technical data page storage temp range e.g. +50c": (
+        "Represented as the optional comment text attached to the second normalized storage-condition item."
+    ),
+    "critical warnings or contra-indications, if applicable e.g. yes": (
+        "Represented as a repeated critical-warning structure gated by the workbook applicability flag."
+    ),
+    "critical warning type e.g. consult instructions for use": (
+        "Represented as a repeated critical-warning item with schema enum normalization via config/normalization/critical_warning_type.yaml."
     ),
 }
 
@@ -143,6 +149,7 @@ class SourceRow:
 class EchelonValidationService:
     def __init__(self) -> None:
         self.settings = get_settings()
+        self.normalization_repository = NormalizationRepository()
 
     def build_validation_bundle(self) -> EchelonValidationBundle:
         source_workbook = self.settings.excel_dir / SOURCE_WORKBOOK_NAME
@@ -232,6 +239,8 @@ class EchelonValidationService:
             di_code=self._string_value(source_values.get(SECONDARY_IDENTIFIER_CODE_HEADER)),
         )
         number_of_reuses = self._number_of_reuses(source_values)
+        storage_condition_items = self._assemble_storage_condition_items(source_values)
+        critical_warning_items = self._assemble_critical_warning_items(source_values)
 
         fields = [
             self._field(
@@ -784,6 +793,8 @@ class EchelonValidationService:
             after_completeness=self._completeness_snapshot(fields, state="after"),
             before_blockers=before_blockers,
             after_blockers=after_blockers,
+            storage_condition_items=storage_condition_items,
+            critical_warning_items=critical_warning_items,
             fields=fields,
         )
 
@@ -984,10 +995,7 @@ class EchelonValidationService:
             mappings = source_mappings.get(header.normalized_name, [])
             canonical_targets = sorted({canonical_path for canonical_path, _ in mappings})
             schema_targets = sorted({target for _, targets in mappings for target in targets})
-            if header.normalized_name in PARTIAL_SOURCE_HEADERS:
-                status: SourceFieldCoverageStatus = "partially_represented"
-                notes = PARTIAL_SOURCE_HEADERS[header.normalized_name]
-            elif mappings:
+            if mappings:
                 status = "represented"
                 notes = REPRESENTED_SCOPE_NOTES.get(
                     header.normalized_name,
@@ -1007,6 +1015,70 @@ class EchelonValidationService:
                 )
             )
         return coverage_entries
+
+    def _assemble_storage_condition_items(
+        self,
+        values: dict[str, object | None],
+    ) -> list[StructuredListItemPreview]:
+        applicable = self._normalized_yes_no(values.get(STORAGE_APPLICABLE_HEADER))
+        if applicable != "Yes":
+            return []
+
+        candidates = (
+            (
+                1,
+                STORAGE_TYPE_HEADER,
+                STORAGE_DESCRIPTION_ONE_HEADER,
+            ),
+            (
+                2,
+                STORAGE_TYPE_TWO_HEADER,
+                STORAGE_DESCRIPTION_TWO_HEADER,
+            ),
+        )
+        items: list[StructuredListItemPreview] = []
+        for sequence, type_header, description_header in candidates:
+            item_type = self._string_value(values.get(type_header))
+            description = self._string_value(values.get(description_header))
+            if item_type is None and description is None:
+                continue
+            normalized_code = self._normalized_rule_value(type_header, item_type)
+            items.append(
+                StructuredListItemPreview(
+                    sequence=sequence,
+                    item_type=item_type,
+                    normalized_code=normalized_code,
+                    description=description,
+                    source_fields=[type_header, description_header],
+                )
+            )
+        return items
+
+    def _assemble_critical_warning_items(
+        self,
+        values: dict[str, object | None],
+    ) -> list[StructuredListItemPreview]:
+        applicable = self._normalized_yes_no(values.get(WARNING_APPLICABLE_HEADER))
+        if applicable != "Yes":
+            return []
+
+        warning_type = self._string_value(values.get(WARNING_TYPE_HEADER))
+        if warning_type is None:
+            return []
+        return [
+            StructuredListItemPreview(
+                sequence=1,
+                item_type=warning_type,
+                normalized_code=self._normalized_rule_value(WARNING_TYPE_HEADER, warning_type),
+                description=None,
+                source_fields=[WARNING_TYPE_HEADER],
+            )
+        ]
+
+    def _normalized_rule_value(self, column: str, raw_value: str | None) -> str | None:
+        if raw_value in (None, ""):
+            return None
+        return self.normalization_repository.rules_for_column(column).get(raw_value)
 
     @staticmethod
     def _build_source_field_coverage_summaries(

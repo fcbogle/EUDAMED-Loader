@@ -18,7 +18,7 @@ The `Canonical` area is the mapping-definition layer between the source workbook
 - workbook analysis is responsible for producing the normalized, traceable inputs needed by canonical mapping
 - every field currently present in the shared Excel workbooks is being treated as mandatory for first-load preparation unless QMS says otherwise
 - the current `Echelon` path includes the wider XML-facing field set needed to generate a schema-valid single-record `Push` message
-- some workbook areas remain intentionally incomplete at the canonical-structure level where the template implies richer repeated structures than the current implementation safely formalizes
+- repeated workbook areas should be assembled first as canonical list items and then normalized to schema enum codes through explicit rule files
 
 ## Reference Implementation
 
@@ -91,19 +91,37 @@ The canonical layer should not:
 - `Basic UDI` context is resolved from the imported Basic UDI reference workbook rather than from the source family workbook rows
 - `Manufacturer SRN`, `Authorised Representative SRN`, `Basic risk class`, `Basic model`, and other `MDRBasicUDI` fields are now represented in the review artifact as derived/reference-backed mappings
 - `UDI-DI identifier`, `Basic UDI identifier`, `number of reuses`, `base quantity`, and other XML-facing `UDIDIData` fields are now represented explicitly rather than remaining implicit in the review
-- the remaining meaningful partials are the genuinely structured repeat areas:
-  - storage conditions
-  - critical warnings
+- `Storage Conditions` and `Critical Warnings` are now represented as repeated canonical structures with explicit enum normalization rules for the current `Echelon` values
 
-## What Partial Still Means
+## Enum Strategy
 
-- `partially represented` no longer means the field is unknown or ignored
-- it means the business area is recognized, but the workbook columns imply a richer repeated or enum-coded structure than the current canonical execution path fully assembles
-- for current `Echelon` scope, indicator fields such as:
-  - `clinical_size_applicable`
-  - `cmr_present`
-  - `endocrine_disruptor_present`
-  are treated as represented because the source data is consistently `No` across the family and does not require richer downstream detail for this dataset
+The current enum strategy is deliberately explicit and reviewable.
+
+- workbook phrases are preserved as source evidence
+- canonical repeated items carry both:
+  - the raw workbook phrase
+  - the normalized schema code
+- normalization rules live in `config/normalization/` rather than being hidden in the XML renderer
+- comments and free text remain separate from enum codes
+
+For current `Echelon` scope, the implemented mappings are:
+
+- `Lower limit of temp` -> `SHC006`
+- `Upper limit of temp` -> `SHC007`
+- `Consult instructions for use` -> `CW010`
+
+The supporting rule files are:
+
+- `config/normalization/storage_handling_condition_primary.yaml`
+- `config/normalization/storage_handling_condition_secondary.yaml`
+- `config/normalization/critical_warning_type.yaml`
+
+This keeps the mapping contract auditable:
+
+- source phrase
+- normalization rule
+- canonical repeated item
+- schema enum value
 
 ## Mapping Principles
 

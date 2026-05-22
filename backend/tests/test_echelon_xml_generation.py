@@ -14,6 +14,11 @@ def test_single_record_preview_generates_schema_valid_xml() -> None:
     assert 'xsi:type="device:MDRDeviceType"' in preview.xml
     assert "<device:MDRBasicUDI>" in preview.xml
     assert "<device:MDRUDIDIData>" in preview.xml
+    assert "<udidi:storageHandlingConditions>" in preview.xml
+    assert "<commondi:storageHandlingConditionValue>SHC006</commondi:storageHandlingConditionValue>" in preview.xml
+    assert "<commondi:storageHandlingConditionValue>SHC007</commondi:storageHandlingConditionValue>" in preview.xml
+    assert "<udidi:criticalWarnings>" in preview.xml
+    assert "<commondi:warningValue>CW010</commondi:warningValue>" in preview.xml
 
 
 def test_preview_route_returns_single_record_payload() -> None:
