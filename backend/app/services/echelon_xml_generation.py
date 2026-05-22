@@ -3,10 +3,11 @@ from __future__ import annotations
 from io import BytesIO
 import json
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from lxml import etree
+import lxml.etree as etree
 
 from app.services.echelon_validation import EchelonValidationService
 from app.services.xml_validation import XmlValidationService
@@ -18,6 +19,7 @@ from app.xml_models import (
     EchelonXmlRecord,
     SingleRecordXmlPreview,
     StorageConditionXmlItem,
+    XmlValidationResult,
 )
 
 MESSAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1"
@@ -43,6 +45,7 @@ NSMAP = {
 }
 
 MAX_BATCH_RECORDS = 300
+XmlElement = Any
 
 LANGUAGE_CODE_MAP = {
     "english": "EN",
@@ -116,7 +119,7 @@ class EchelonXmlGenerationService:
             raise ValueError("No XML-ready Echelon records are currently available for batch generation.")
 
         record_chunks = self._chunk_records(records)
-        chunk_payloads: list[tuple[int, list[EchelonValidationRecord], bytes, object]] = []
+        chunk_payloads: list[tuple[int, list[EchelonValidationRecord], bytes, XmlValidationResult]] = []
         for sequence, chunk_records in enumerate(record_chunks, start=1):
             xml_records = [self._to_xml_record(record) for record in chunk_records]
             xml_bytes = self._render_push_message_records(xml_records)
@@ -293,7 +296,7 @@ class EchelonXmlGenerationService:
 
         return etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True)
 
-    def _endpoint_element(self, *, tag_name: str, node_actor_code: str) -> etree._Element:
+    def _endpoint_element(self, *, tag_name: str, node_actor_code: str) -> XmlElement:
         endpoint = etree.Element(self._q(MESSAGE_NS, tag_name))
         node = etree.SubElement(endpoint, self._q(MESSAGE_NS, "node"))
         self._append_text(node, SERVICE_NS, "nodeActorCode", node_actor_code)
@@ -302,14 +305,14 @@ class EchelonXmlGenerationService:
         self._append_text(service, SERVICE_NS, "serviceOperation", "POST")
         return endpoint
 
-    def _device_payload(self, record: EchelonXmlRecord) -> etree._Element:
+    def _device_payload(self, record: EchelonXmlRecord) -> XmlElement:
         device = etree.Element(self._q(DEVICE_NS, "Device"))
         device.set(self._q(XSI_NS, "type"), "device:MDRDeviceType")
         device.append(self._basic_udi_element(record))
         device.append(self._udidi_data_element(record))
         return device
 
-    def _basic_udi_element(self, record: EchelonXmlRecord) -> etree._Element:
+    def _basic_udi_element(self, record: EchelonXmlRecord) -> XmlElement:
         basic_udi = etree.Element(self._q(DEVICE_NS, "MDRBasicUDI"))
         self._append_text(basic_udi, BASIC_UDI_NS, "riskClass", record.risk_class)
 
@@ -369,7 +372,7 @@ class EchelonXmlGenerationService:
         self._append_text(basic_udi, COMMON_DEVICE_NS, "reusable", self._bool_text(record.reusable))
         return basic_udi
 
-    def _udidi_data_element(self, record: EchelonXmlRecord) -> etree._Element:
+    def _udidi_data_element(self, record: EchelonXmlRecord) -> XmlElement:
         udidi = etree.Element(self._q(DEVICE_NS, "MDRUDIDIData"))
         udidi.append(
             self._di_identifier_element(
@@ -421,14 +424,14 @@ class EchelonXmlGenerationService:
         self._append_text(udidi, UDIDI_NS, "reprocessed", self._bool_text(record.reprocessed))
         return udidi
 
-    def _market_infos_element(self, country_code: str) -> etree._Element:
+    def _market_infos_element(self, country_code: str) -> XmlElement:
         market_infos = etree.Element(self._q(UDIDI_NS, "marketInfos"))
         market_info = etree.SubElement(market_infos, self._q(MARKET_INFO_NS, "marketInfo"))
         self._append_text(market_info, MARKET_INFO_NS, "country", country_code)
         self._append_text(market_info, MARKET_INFO_NS, "originalPlacedOnTheMarket", "true")
         return market_infos
 
-    def _storage_conditions_element(self, items: list[StorageConditionXmlItem]) -> etree._Element:
+    def _storage_conditions_element(self, items: list[StorageConditionXmlItem]) -> XmlElement:
         storage_conditions = etree.Element(self._q(UDIDI_NS, "storageHandlingConditions"))
         for item in items:
             condition = etree.SubElement(storage_conditions, self._q(COMMON_DEVICE_NS, "condition"))
@@ -437,7 +440,7 @@ class EchelonXmlGenerationService:
             self._append_text(condition, COMMON_DEVICE_NS, "storageHandlingConditionValue", item.code)
         return storage_conditions
 
-    def _critical_warnings_element(self, items: list[CriticalWarningXmlItem]) -> etree._Element:
+    def _critical_warnings_element(self, items: list[CriticalWarningXmlItem]) -> XmlElement:
         critical_warnings = etree.Element(self._q(UDIDI_NS, "criticalWarnings"))
         for item in items:
             warning = etree.SubElement(critical_warnings, self._q(COMMON_DEVICE_NS, "warning"))
@@ -453,19 +456,19 @@ class EchelonXmlGenerationService:
         issuing_entity_code: str,
         tag_name: str = "identifier",
         namespace: str = BASIC_UDI_NS,
-    ) -> etree._Element:
+    ) -> XmlElement:
         identifier = etree.Element(self._q(namespace, tag_name))
         self._append_text(identifier, COMMON_DEVICE_NS, "DICode", di_code)
         self._append_text(identifier, COMMON_DEVICE_NS, "issuingEntityCode", issuing_entity_code)
         return identifier
 
     @staticmethod
-    def _append_text(parent: etree._Element, namespace: str, tag_name: str, value: str) -> etree._Element:
+    def _append_text(parent: XmlElement, namespace: str, tag_name: str, value: str) -> XmlElement:
         element = etree.SubElement(parent, etree.QName(namespace, tag_name))
         element.text = value
         return element
 
-    def _language_optional_texts(self, text: str, *, language: str) -> etree._Element:
+    def _language_optional_texts(self, text: str, *, language: str) -> XmlElement:
         comments = etree.Element(self._q(COMMON_DEVICE_NS, "comments"))
         name = etree.SubElement(comments, self._q(LANGUAGE_NS, "name"))
         self._append_text(name, LANGUAGE_NS, "language", language)
