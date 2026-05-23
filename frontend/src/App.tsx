@@ -799,7 +799,7 @@ export function App() {
           {activeTab === "workbooks" ? (
             <>
               <p className="eyebrow">Workbook Analysis</p>
-              <h1>Review Excel Workbook Data</h1>
+              <h1>Review EUDAMED Excel Input</h1>
               <p className="hero-copy">
                 Review imported workbook evidence, understand sheet structure, and identify data-quality
                 or normalization issues without changing the source Excel files.
@@ -820,7 +820,7 @@ export function App() {
           {activeTab === "canonicalValidation" ? (
             <>
               <p className="eyebrow">Canonical Validation</p>
-              <h1>Validate The Echelon Mapping Subset</h1>
+              <h1>Validate Echelon Mapping</h1>
               <p className="hero-copy">
                 Review the `Echelon` subset that currently has Basic UDI-DI reference coverage, apply a
                 read-only enrichment preview, and compare completeness before and after the mapping step.
@@ -830,7 +830,7 @@ export function App() {
           {activeTab === "xml" ? (
             <>
               <p className="eyebrow">XML Generation</p>
-              <h1>Generate Echelon-Only EUDAMED XML</h1>
+              <h1>Generate Echelon EUDAMED XML</h1>
               <p className="hero-copy">
                 This stage will produce previewable payloads, validate against `UDIDIType.xsd`, and
                 prepare controlled manual submission packages without introducing M2M transport yet.
@@ -1561,18 +1561,16 @@ export function App() {
               </div>
             </div>
             <p className="panel-copy">
-              This `Echelon`-only preview tracks the XML-facing validation subset that can be enriched
-              from the shared Basic UDI reference context.
+              This Echelon-only preview tracks the current XML-facing validation subset for MDR
+              UDI-DI generation. The workbook provides row-level device data, while a separate
+              shared Basic UDI reference provides family-level context that is required to complete
+              the XML-facing field set.
             </p>
             <p className="panel-copy scope-note-secondary">
-              Validation currently tracks {trackedValidationFieldCount} flat subset fields.{" "}
-              {echelonValidation?.tracked_required_fields ?? 0} are required for completeness scoring and{" "}
-              {optionalValidationFieldCount} are optional.
-            </p>
-            <p className="panel-copy scope-note-secondary">
-              `Workbook Coverage Summary` is a different measure: it counts represented source headers, not
-              validation fields. One header can feed multiple validation fields, and some validation fields
-              come from shared Basic UDI reference data or derived logic.
+              The pill counts summarize the tracked subset, required fields, optional fields, and
+              represented source headers. Apply Basic UDI-DI mapping preview to show how that shared
+              reference context enriches each row and resolves fields that are not present in the
+              workbook alone.
             </p>
             <div className="queue-summary">
               <div className="queue-chip">
@@ -1911,8 +1909,11 @@ export function App() {
           <details className="panel group-accordion" open={false}>
             <summary>
               <span>Selected Row Evidence</span>
-              <span className={mappingPreviewApplied ? "status-pill ok compact" : "status-pill warn compact"}>
-                {mappingPreviewApplied ? "After mapping" : "Before mapping"}
+              <span className="accordion-summary-pills">
+                <span className="status-pill ok compact">{trackedValidationFieldCount} tracked fields</span>
+                <span className={mappingPreviewApplied ? "status-pill ok compact" : "status-pill warn compact"}>
+                  {mappingPreviewApplied ? "After mapping" : "Before mapping"}
+                </span>
               </span>
             </summary>
             <div className="accordion-body">

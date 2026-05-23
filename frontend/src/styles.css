@@ -774,6 +774,14 @@ th {
   list-style: none;
 }
 
+.accordion-summary-pills {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .group-accordion summary::-webkit-details-marker,
 .inline-accordion summary::-webkit-details-marker {
   display: none;
