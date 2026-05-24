@@ -9,7 +9,7 @@ The `Canonical` area is the mapping-definition layer between the source workbook
 - the canonical model is driven by the needs of the EUDAMED Device schema
 - the first release is focused on `UDI-DI` device details and market information
 - the current regulatory scope is `MDR` only
-- the first upload phase is aligned to `UDIDIType.xsd`
+- the first upload phase is focused on `UDI-DI` business content, but the generated XML artifact is a wrapped service `Push` message rooted at `Message.xsd`
 - `Basic UDI` records are already loaded manually and are treated as contextual linkage rather than the primary first-phase upload object
 - the model must still preserve both `BasicDevice` meaning and `DeviceRecord` meaning
 - the canonical layer is schema-informed, not a direct copy of the XSD structure
@@ -55,8 +55,8 @@ The canonical layer should:
 The `Canonical` tab should present the mapping contract in a review-friendly way:
 
 - keep the main mapping path visible
-- hide secondary rationale behind drill-down detail
-- let the user inspect assumptions without overwhelming the first screen
+- use a summary-first explanation of the business layer before the mapping contract
+- show the `Excel -> Canonical -> Schema` path as a flat review table without overloading the main screen
 
 The canonical layer should not:
 
@@ -64,7 +64,7 @@ The canonical layer should not:
 - become a persistence model in the current phase
 - collapse basic-level and device-level meaning into one flat record
 - force a fake value where the source data does not support one
-- hide a first-phase assumption such as `MDR only`, `UDIDIType.xsd only`, or `Basic UDI already preloaded`
+- hide a first-phase assumption such as `MDR only`, wrapped `Push` message output, or `Basic UDI` already preloaded
 
 ## First-Phase Delivery Scope
 
@@ -73,7 +73,7 @@ The canonical layer should not:
 - target legislation:
   - `MDR`
 - target schema understanding:
-  - `UDIDIType.xsd`
+  - wrapped `Message.xsd` service-message output carrying `MDRBasicUDI` and `MDRUDIDIData` content
 - current submission mode:
   - manual XML handoff for human testing in the production environment if needed
 - current access constraint:
@@ -92,6 +92,7 @@ The canonical layer should not:
 - `Manufacturer SRN`, `Authorised Representative SRN`, `Basic risk class`, `Basic model`, and other `MDRBasicUDI` fields are now represented in the review artifact as derived/reference-backed mappings
 - `UDI-DI identifier`, `Basic UDI identifier`, `number of reuses`, `base quantity`, and other XML-facing `UDIDIData` fields are now represented explicitly rather than remaining implicit in the review
 - `Storage Conditions` and `Critical Warnings` are now represented as repeated canonical structures with explicit enum normalization rules for the current `Echelon` values
+- the main UI now presents entity-group and field-count summary pills ahead of the flat mapping contract
 
 ## Enum Strategy
 

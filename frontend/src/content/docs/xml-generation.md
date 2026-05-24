@@ -8,7 +8,7 @@ The `XML Generation` area is where approved canonical data is transformed into s
 
 - XML generation remains downstream of workbook analysis and canonical review
 - the current first upload scope is `MDR` `UDI-DI` device details plus market information
-- the current schema focus is `UDIDIType.xsd`
+- the current business content focus is `UDI-DI`, but the generated artifact is a wrapped service `Push` message rooted at `data/schemas/service/Message.xsd`
 - `Basic UDI` records have already been loaded manually and should be treated as upstream reference context in this phase
 - XML generation should project from canonical domain models rather than directly from workbook fields
 - the current implemented backend path generates a single-record wrapped `Push` message for `Echelon`
@@ -16,13 +16,15 @@ The `XML Generation` area is where approved canonical data is transformed into s
 - database persistence is not required for the current XML design phase
 - no approved Playground actor is available yet, so first-phase XML handling should assume manual review and controlled test submission paths
 
-## What This Section Should Hold
+## What The User Does Here
 
-- XML preview and download
-- XSD validation status
-- payload packaging details
-- generation audit information
-- explicit first-phase assumptions such as `MDR only`, `UDIDIType.xsd`, and manual submission constraints
+- generate a single-record XML preview for one validation-ready `Echelon` row
+- validate that preview against the local schema set
+- download a reviewed single-record XML file
+- generate a batch preview for validation-ready `Echelon` rows
+- inspect one selected batch chunk at a time
+- validate the selected batch chunk against the local schema set
+- download a batch `.zip` package containing XML files and a manifest
 
 ## Design Intent
 
@@ -47,6 +49,14 @@ For the current phase, XML work should be designed around a controlled first-loa
 - batch download is packaged as a `.zip` containing:
   - one XML file per generated chunk
   - a `manifest.json` summary of included rows, excluded rows, chunk counts, and file names
+- the current UI presents this flow as a step-by-step guide:
+  - validate canonical
+  - generate single XML
+  - validate against schema
+  - download single XML
+  - generate batch XML
+  - validate batch against schema
+  - download batch package
 
 ## Push Message Design
 

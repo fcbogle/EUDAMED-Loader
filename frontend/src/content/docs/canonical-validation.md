@@ -11,6 +11,7 @@ The `Canonical Validation` area is the mapping-review checkpoint for the first-p
 - the tab should show the effect of applying shared Basic UDI context before XML generation
 - the tab should make review risk visible without overwhelming the user with all row-level detail at once
 - header coverage and record completeness are both now part of the review story
+- tracked validation fields and represented source headers are intentionally shown as different measures
 
 ## What The User Does Here
 
@@ -24,6 +25,9 @@ The `Canonical Validation` area is the mapping-review checkpoint for the first-p
 
 - all `Echelon` workbook rows inherit the same `Basic UDI-DI` family context
 - completeness is measured against the wider XML-facing field set now tracked by the backend validation service
+- the `Before Mapping Preview` shows the workbook-only row state
+- the `After Mapping Preview` shows the same row after shared Basic UDI-DI enrichment is applied
+- `Workbook Coverage Summary` is a separate header-level measure and should not be read as a row-completeness count
 - the current bundle includes:
   - record completeness before and after enrichment
   - common missing-field summaries
@@ -33,7 +37,7 @@ The `Canonical Validation` area is the mapping-review checkpoint for the first-p
 
 ## Out Of Scope For This Tab
 
-- full batch XML generation
+- running XML generation workflows from within this review tab
 - submission workflow execution
 - pretending that repeated workbook template areas are fully modeled when the current implementation still treats them conservatively
 
@@ -45,7 +49,7 @@ The `Canonical Validation` tab should help a reviewer answer:
 - which rows are complete enough to enter XML generation?
 - how much of the source workbook is represented by the current canonical/XML-facing path?
 - which workbook areas are still only partially modeled?
-- what should be resolved before expanding the XML package scope beyond the current single-record path?
+- what should be resolved before widening the current XML-facing scope further?
 
 ## Source Field Coverage
 
@@ -56,6 +60,15 @@ It answers:
 - which Echelon workbook headers are represented in the current canonical/XML-facing path
 - which headers are only partially represented because they imply richer repeated structures
 - which headers are not yet represented or intentionally deferred
+
+This is why the pill counts in `Validation Scope` are intentionally split:
+
+- tracked fields:
+  - flat validation targets in the XML-facing subset
+- required fields:
+  - the tracked targets used for completeness scoring
+- represented source headers:
+  - workbook headers that currently have documented coverage somewhere in the canonical/XML-facing path
 
 For the current `Echelon` family:
 

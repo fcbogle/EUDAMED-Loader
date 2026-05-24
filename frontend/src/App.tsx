@@ -69,6 +69,11 @@ type CanonicalMappingRow = {
   exampleCanonicalValue: string | null;
 };
 
+type MarkdownListItem = {
+  text: string;
+  children: MarkdownListItem[];
+};
+
 function renderInlineMarkdown(text: string): (string | JSX.Element)[] {
   const parts: (string | JSX.Element)[] = [];
   const pattern = /`([^`]+)`|\*\*([^*]+)\*\*/g;
@@ -93,6 +98,53 @@ function renderInlineMarkdown(text: string): (string | JSX.Element)[] {
   }
 
   return parts;
+}
+
+function parseMarkdownList(lines: string[], startIndex: number, baseIndent: number): [MarkdownListItem[], number] {
+  const items: MarkdownListItem[] = [];
+  let index = startIndex;
+
+  while (index < lines.length) {
+    const match = lines[index].match(/^(\s*)- (.*)$/);
+    if (!match) {
+      break;
+    }
+
+    const indent = match[1].length;
+    const text = match[2];
+
+    if (indent < baseIndent) {
+      break;
+    }
+
+    if (indent > baseIndent) {
+      if (!items.length) {
+        break;
+      }
+      const [children, nextIndex] = parseMarkdownList(lines, index, indent);
+      items[items.length - 1].children = children;
+      index = nextIndex;
+      continue;
+    }
+
+    items.push({ text, children: [] });
+    index += 1;
+  }
+
+  return [items, index];
+}
+
+function renderMarkdownList(items: MarkdownListItem[], keyPrefix: string): JSX.Element {
+  return (
+    <ul key={keyPrefix}>
+      {items.map((item, itemIndex) => (
+        <li key={`${keyPrefix}-item-${itemIndex}`}>
+          {renderInlineMarkdown(item.text)}
+          {item.children.length ? renderMarkdownList(item.children, `${keyPrefix}-nested-${itemIndex}`) : null}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function renderMarkdownDocument(content: string): JSX.Element[] {
@@ -140,19 +192,11 @@ function renderMarkdownDocument(content: string): JSX.Element[] {
       continue;
     }
 
-    if (trimmed.startsWith("- ")) {
-      const items: string[] = [];
-      while (index < lines.length && lines[index].trim().startsWith("- ")) {
-        items.push(lines[index].trim().slice(2));
-        index += 1;
-      }
-      blocks.push(
-        <ul key={`block-${key++}`}>
-          {items.map((item, itemIndex) => (
-            <li key={`item-${itemIndex}`}>{renderInlineMarkdown(item)}</li>
-          ))}
-        </ul>,
-      );
+    if (/^\s*- /.test(line)) {
+      const baseIndent = line.match(/^(\s*)- /)?.[1].length ?? 0;
+      const [items, nextIndex] = parseMarkdownList(lines, index, baseIndent);
+      blocks.push(renderMarkdownList(items, `block-${key++}`));
+      index = nextIndex;
       continue;
     }
 
@@ -2500,18 +2544,6 @@ export function App() {
 
       {activeTab === "documentation" ? (
         <section className="tab-stack">
-          <section className="summary-grid">
-            <div className="summary-card">
-              <span className="summary-label">Documentation sections</span>
-              <strong>{documentationSections.length}</strong>
-              <p>Markdown-backed guidance aligned to the major workflow areas in the UI.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">Current structure</span>
-              <strong>Aligned</strong>
-              <p>The documentation sections currently match `Workbooks`, `Canonical`, `Canonical Validation`, and `XML Generation`.</p>
-            </div>
-          </section>
           <section className="documentation-layout">
             <aside className="panel documentation-sidebar">
               <div className="section-heading">

@@ -178,6 +178,7 @@ input {
   border-radius: 999px;
   font-size: 0.84rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .status-pill.ok {
@@ -687,6 +688,15 @@ th {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+}
+
+.draft-card-head strong {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.draft-card-head .status-pill {
+  flex: 0 0 auto;
 }
 
 .draft-meta {
