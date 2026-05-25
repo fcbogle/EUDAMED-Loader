@@ -79,7 +79,14 @@ type CanonicalMappingRow = {
 
 type MarkdownListItem = {
   text: string;
-  children: MarkdownListItem[];
+  children: MarkdownListBlock[];
+};
+
+type MarkdownListKind = "unordered" | "ordered";
+
+type MarkdownListBlock = {
+  kind: MarkdownListKind;
+  items: MarkdownListItem[];
 };
 
 function renderInlineMarkdown(text: string): (string | JSX.Element)[] {
@@ -114,12 +121,18 @@ function renderInlineMarkdown(text: string): (string | JSX.Element)[] {
   return parts;
 }
 
-function parseMarkdownList(lines: string[], startIndex: number, baseIndent: number): [MarkdownListItem[], number] {
+function parseMarkdownList(
+  lines: string[],
+  startIndex: number,
+  baseIndent: number,
+  kind: MarkdownListKind,
+): [MarkdownListItem[], number] {
   const items: MarkdownListItem[] = [];
   let index = startIndex;
+  const pattern = kind === "ordered" ? /^(\s*)\d+\. (.*)$/ : /^(\s*)- (.*)$/;
 
   while (index < lines.length) {
-    const match = lines[index].match(/^(\s*)- (.*)$/);
+    const match = lines[index].match(pattern);
     if (!match) {
       break;
     }
@@ -135,8 +148,9 @@ function parseMarkdownList(lines: string[], startIndex: number, baseIndent: numb
       if (!items.length) {
         break;
       }
-      const [children, nextIndex] = parseMarkdownList(lines, index, indent);
-      items[items.length - 1].children = children;
+      const childKind: MarkdownListKind = /^\s*\d+\. /.test(lines[index]) ? "ordered" : "unordered";
+      const [children, nextIndex] = parseMarkdownList(lines, index, indent, childKind);
+      items[items.length - 1].children = [{ kind: childKind, items: children }];
       index = nextIndex;
       continue;
     }
@@ -148,16 +162,23 @@ function parseMarkdownList(lines: string[], startIndex: number, baseIndent: numb
   return [items, index];
 }
 
-function renderMarkdownList(items: MarkdownListItem[], keyPrefix: string): JSX.Element {
+function renderMarkdownList(items: MarkdownListItem[], keyPrefix: string, kind: MarkdownListKind): JSX.Element {
+  const Tag = kind === "ordered" ? "ol" : "ul";
   return (
-    <ul key={keyPrefix}>
+    <Tag key={keyPrefix}>
       {items.map((item, itemIndex) => (
         <li key={`${keyPrefix}-item-${itemIndex}`}>
           {renderInlineMarkdown(item.text)}
-          {item.children.length ? renderMarkdownList(item.children, `${keyPrefix}-nested-${itemIndex}`) : null}
+          {item.children.map((childBlock, childIndex) =>
+            renderMarkdownList(
+              childBlock.items,
+              `${keyPrefix}-nested-${itemIndex}-${childIndex}`,
+              childBlock.kind,
+            ),
+          )}
         </li>
       ))}
-    </ul>
+    </Tag>
   );
 }
 
@@ -206,10 +227,12 @@ function renderMarkdownDocument(content: string): JSX.Element[] {
       continue;
     }
 
-    if (/^\s*- /.test(line)) {
-      const baseIndent = line.match(/^(\s*)- /)?.[1].length ?? 0;
-      const [items, nextIndex] = parseMarkdownList(lines, index, baseIndent);
-      blocks.push(renderMarkdownList(items, `block-${key++}`));
+    if (/^\s*(- |\d+\. )/.test(line)) {
+      const kind: MarkdownListKind = /^\s*\d+\. /.test(line) ? "ordered" : "unordered";
+      const baseIndent =
+        (kind === "ordered" ? line.match(/^(\s*)\d+\. /) : line.match(/^(\s*)- /))?.[1].length ?? 0;
+      const [items, nextIndex] = parseMarkdownList(lines, index, baseIndent, kind);
+      blocks.push(renderMarkdownList(items, `block-${key++}`, kind));
       index = nextIndex;
       continue;
     }
@@ -220,6 +243,7 @@ function renderMarkdownDocument(content: string): JSX.Element[] {
       lines[index].trim() &&
       !lines[index].trim().startsWith("#") &&
       !lines[index].trim().startsWith("- ") &&
+      !/^\d+\. /.test(lines[index].trim()) &&
       !lines[index].trim().startsWith("```")
     ) {
       paragraphLines.push(lines[index].trim());
@@ -2576,7 +2600,8 @@ export function App() {
                 </div>
               </div>
               <p className="panel-copy">
-                Jump between the major application stages. Each document aligns with a primary UI tab.
+                Jump between the primary workflow stages and the new cross-cutting reference docs that explain how the
+                application is structured.
               </p>
               <div className="documentation-toc">
                 {documentationSections.map((section) => (

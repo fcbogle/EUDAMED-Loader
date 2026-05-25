@@ -42,6 +42,8 @@ cd backend
 ../.venv/bin/python -m uvicorn app.main:app --reload
 ```
 
+In VS Code, the workspace is configured to use `${workspaceFolder}/.venv/bin/python` and to auto-activate that environment in new integrated terminals.
+
 ## Run Frontend
 
 ```bash
