@@ -1330,6 +1330,21 @@ th {
   color: #002a3a;
 }
 
+.markdown-pill {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 8px 6px 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 68, 90, 0.08);
+  border: 1px solid rgba(0, 68, 90, 0.12);
+  color: #274752;
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .markdown-code-block {
   overflow: auto;
   padding: 14px 16px;

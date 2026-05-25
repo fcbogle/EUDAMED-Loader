@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import canonicalDocumentation from "./content/docs/canonical.md?raw";
 import canonicalValidationDocumentation from "./content/docs/canonical-validation.md?raw";
+import projectStructureDocumentation from "./content/docs/project-structure.md?raw";
+import softwareEngineeringPatternsDocumentation from "./content/docs/software-engineering-patterns.md?raw";
 import workbooksDocumentation from "./content/docs/workbooks.md?raw";
 import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import type {
@@ -52,7 +54,13 @@ type ParsingIssue = {
 };
 
 type DocumentationSection = {
-  id: "workbooks" | "canonical" | "canonicalValidation" | "xml";
+  id:
+    | "workbooks"
+    | "canonical"
+    | "canonicalValidation"
+    | "xml"
+    | "projectStructure"
+    | "softwareEngineeringPatterns";
   title: string;
   markdown: string;
 };
@@ -76,7 +84,7 @@ type MarkdownListItem = {
 
 function renderInlineMarkdown(text: string): (string | JSX.Element)[] {
   const parts: (string | JSX.Element)[] = [];
-  const pattern = /`([^`]+)`|\*\*([^*]+)\*\*/g;
+  const pattern = /\[\[pill:([^\]]+)\]\]|`([^`]+)`|\*\*([^*]+)\*\*/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
@@ -86,9 +94,15 @@ function renderInlineMarkdown(text: string): (string | JSX.Element)[] {
       parts.push(text.slice(lastIndex, match.index));
     }
     if (match[1] !== undefined) {
-      parts.push(<code key={`code-${key++}`}>{match[1]}</code>);
+      parts.push(
+        <span className="markdown-pill" key={`pill-${key++}`}>
+          {match[1]}
+        </span>,
+      );
     } else if (match[2] !== undefined) {
-      parts.push(<strong key={`strong-${key++}`}>{match[2]}</strong>);
+      parts.push(<code key={`code-${key++}`}>{match[2]}</code>);
+    } else if (match[3] !== undefined) {
+      parts.push(<strong key={`strong-${key++}`}>{match[3]}</strong>);
     }
     lastIndex = pattern.lastIndex;
   }
@@ -331,6 +345,16 @@ export function App() {
       id: "xml",
       title: "XML Generation",
       markdown: xmlGenerationDocumentation,
+    },
+    {
+      id: "projectStructure",
+      title: "Project Structure",
+      markdown: projectStructureDocumentation,
+    },
+    {
+      id: "softwareEngineeringPatterns",
+      title: "Software Engineering Patterns",
+      markdown: softwareEngineeringPatternsDocumentation,
     },
   ];
   const selectedDocumentationSection =
@@ -855,9 +879,8 @@ export function App() {
               <p className="eyebrow">Canonical Preparation</p>
               <h1>Review Canonical Model Contract</h1>
               <p className="hero-copy">
-                The canonical model is an intermediary business layer. It preserves regulatory meaning in
-                stable business terms before those meanings are mapped from workbook fields and projected
-                into schema-specific XML targets.
+                An intermediary layer that preserves stable regulatory meaning before workbook values are
+                projected into schema-specific XML.
               </p>
             </>
           ) : null}
@@ -866,8 +889,8 @@ export function App() {
               <p className="eyebrow">Canonical Validation</p>
               <h1>Validate Echelon Mapping</h1>
               <p className="hero-copy">
-                Review the `Echelon` subset that currently has Basic UDI-DI reference coverage, apply a
-                read-only enrichment preview, and compare completeness before and after the mapping step.
+                Review the Echelon subset and compare completeness before and after read-only Basic
+                UDI-DI enrichment.
               </p>
             </>
           ) : null}
@@ -876,8 +899,8 @@ export function App() {
               <p className="eyebrow">XML Generation</p>
               <h1>Generate Echelon EUDAMED XML</h1>
               <p className="hero-copy">
-                This stage will produce previewable payloads, validate against `UDIDIType.xsd`, and
-                prepare controlled manual submission packages without introducing M2M transport yet.
+                Produce previewable payloads for the Echelon product family, validate them against the
+                local schema set, and prepare controlled manual submission packages.
               </p>
             </>
           ) : null}
