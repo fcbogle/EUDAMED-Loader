@@ -938,10 +938,10 @@ export function App() {
           {activeTab === "documentation" ? (
             <>
               <p className="eyebrow">Documentation</p>
-              <h1>Read the workflow guidance for each major stage of the application in one place.</h1>
+              <h1>Application Architecture Documentation</h1>
               <p className="hero-copy">
-                Documentation is organized to match the main UI areas so the user can move between
-                workbook analysis, canonical definition, canonical validation, and XML generation with aligned guidance.
+                Documentation outlines the software engineering thought process, guiding principles,
+                design realization, and future roadmap for the application.
               </p>
             </>
           ) : null}
