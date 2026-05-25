@@ -8,7 +8,7 @@ This application is being developed under the direction of Frank C Bogle, Head o
 
 ## Purpose
 
-The `Project Structure` section explains how the application is organized technically. Its purpose is to show how source Excel review, canonical interpretation, validation, and XML generation are separated so the project can grow into a broader EUDAMED preparation platform rather than a one-off Excel-to-XML script.
+The `Project Structure` section explains how the application is organized technically. Its purpose is to show how source Excel review, canonical interpretation, validation, submission preparation, and future delivery concerns are separated so the project can grow into a broader EUDAMED preparation platform rather than a one-off Excel-to-XML script.
 
 ## Main Directories
 
@@ -35,6 +35,19 @@ The `Project Structure` section explains how the application is organized techni
 - `docs/`
   - holds human-readable project reports and supporting documentation
 
+## Architectural Position
+
+The current implementation is best understood as part of a larger four-layer direction:
+
+1. `Preparation Layer`
+2. `Submission Layer`
+3. `Delivery Layer`
+4. `History Layer`
+
+At present, the codebase is strongest in the `Preparation Layer` and in the first operational slice of the `Submission Layer`, where validated records are turned into XML-ready batches and package previews.
+
+The current end-to-end proof remains constrained to the `Echelon` family because that is the only family for which the required `Basic UDI-DI` support data is currently available.
+
 ## Backend Layers
 
 The backend is organized into layers with different responsibilities.
@@ -48,7 +61,7 @@ The backend is organized into layers with different responsibilities.
   - inspect workbooks and schemas
   - assemble canonical meaning
   - validate completeness
-  - generate XML
+  - generate XML and current batch package previews
 - `canonical models`
   - represent stable business and regulatory meaning
   - separate workbook structure from XML structure
@@ -57,7 +70,7 @@ The backend is organized into layers with different responsibilities.
 - `xml models`
   - represent XML previews, validation results, and batch packaging outputs
 
-## Application Flow
+## Current Application Flow
 
 The current application flow is:
 
@@ -71,6 +84,10 @@ In practical terms:
 - the canonical validation layer checks readiness for the current XML-facing subset
 - schema-aware EUDAMED XML is generated only after those earlier steps are complete
 
+This is a valid first operational slice, but it should be viewed as part of a broader target flow:
+
+`Preparation -> Submission -> Delivery -> History`
+
 ## Separation of Concerns
 
 The project is intentionally designed so each part of the application has a narrow responsibility.
@@ -78,15 +95,24 @@ The project is intentionally designed so each part of the application has a narr
 - the `Workbooks` area reviews source structure and quality
 - the `Canonical` area defines intermediary regulatory meaning
 - the `Canonical Validation` area checks readiness and highlights missing fields
-- the `XML Generation` area produces schema-valid output from validated data
+- the `XML Generation` area produces schema-valid output from validated data and current batch package previews
 - `routers` handle API traffic, while `services` handle business logic
 - normalization rules live in configuration files rather than being hidden inside UI code or XML rendering code
 
-This separation matters because it allows the application to evolve safely. XML generation can change without redesigning workbook review, and future submission features can be added downstream without rewriting the canonical or validation layers.
+This separation matters because it allows the application to evolve safely. XML generation can change without redesigning workbook review, and future submission and delivery features can be added downstream without rewriting the canonical or validation layers.
 
 ## Future Extension Points
 
-The current project ends at validated XML generation and manual handoff. The next major extension points are operational rather than analytical.
+The current project does not end conceptually at XML generation. Rather, the present implementation currently stops after validated XML generation and package preparation. The next major extension points are operational rather than analytical.
+
+### Submission Layer Refinement
+
+A future refinement of the `Submission Layer` should make explicit:
+
+- what a `SubmissionUnit` is
+- how `SubmissionBatch` objects are assembled
+- where the `300 records per batch` rule is enforced
+- how `SubmissionArtifact` and manifest outputs are represented independently of delivery mode
 
 ### Submission History
 
@@ -100,6 +126,16 @@ A future `Submission History` layer could record:
 
 This would add auditability and support controlled manual submission workflows.
 
+### Delivery Modes
+
+A future `Delivery Layer` could support more than one downstream handling mode for the same prepared submission artifact:
+
+- Playground-oriented dry-run or controlled review flows
+- manual package export and upload support
+- later M2M / AS4 delivery
+
+The preferred direction is that configuration selects the delivery mode while the underlying batch and artifact models remain stable.
+
 ### M2M Integration
 
 A future `M2M Integration` layer could add:
@@ -110,4 +146,14 @@ A future `M2M Integration` layer could add:
 - business response handling
 - retry and reconciliation logic
 
-This should sit downstream of the existing XML generation layer. The current canonical and XML-generation design is intended to support that future step without requiring a rewrite of the preparation pipeline.
+This should sit downstream of the existing preparation and submission flow. The target is to add this as an extension of the delivery architecture rather than as a rewrite of the preparation pipeline.
+
+## Near-Term Architectural Check
+
+Before over-refining the future delivery architecture, the likely next structural check is to prove the current pipeline end to end with additional product family data when supporting `Basic UDI-DI` context becomes available.
+
+That is important because it will show whether current assumptions are:
+
+- safely reusable across families
+- too dependent on Echelon-specific enrichment patterns
+- ready to support more general submission assembly

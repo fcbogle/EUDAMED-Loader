@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { api } from "./api";
+import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
 import canonicalDocumentation from "./content/docs/canonical.md?raw";
 import canonicalValidationDocumentation from "./content/docs/canonical-validation.md?raw";
 import projectStructureDocumentation from "./content/docs/project-structure.md?raw";
@@ -55,6 +56,7 @@ type ParsingIssue = {
 
 type DocumentationSection = {
   id:
+    | "architecturePosition"
     | "workbooks"
     | "canonical"
     | "canonicalValidation"
@@ -351,6 +353,16 @@ export function App() {
   const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
+      id: "projectStructure",
+      title: "Project Structure",
+      markdown: projectStructureDocumentation,
+    },
+    {
+      id: "architecturePosition",
+      title: "Architecture Position",
+      markdown: architecturePositionDocumentation,
+    },
+    {
       id: "workbooks",
       title: "Workbooks",
       markdown: workbooksDocumentation,
@@ -369,11 +381,6 @@ export function App() {
       id: "xml",
       title: "XML Generation",
       markdown: xmlGenerationDocumentation,
-    },
-    {
-      id: "projectStructure",
-      title: "Project Structure",
-      markdown: projectStructureDocumentation,
     },
     {
       id: "softwareEngineeringPatterns",
