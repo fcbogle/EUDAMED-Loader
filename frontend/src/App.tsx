@@ -326,7 +326,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("workbooks");
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
     DocumentationSection["id"]
-  >("workbooks");
+  >("projectStructure");
   const [workbooks, setWorkbooks] = useState<WorkbookSummary[]>([]);
   const [sheets, setSheets] = useState<SheetSummary[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<SheetSummary | null>(null);
