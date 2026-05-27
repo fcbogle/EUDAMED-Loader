@@ -8,12 +8,13 @@ This note records the current architectural position for the EUDAMED preparation
 
 The current pipeline already proves an important point: the application can inspect workbook data, normalize values, enrich records with `Basic UDI-DI` context, validate canonical readiness, and generate schema-valid XML batch packages.
 
-However, the current working path is still heavily shaped by the fact that only the `Echelon` family has the required `Basic UDI-DI` reference data available today.
+However, the next implementation pass changes one important source assumption: `Basic UDI-DI` context is no longer modeled as one shared family-level lookup bundle. The authoritative `BasicUDIs.xlsx` workbook provides explicit variant-level Basic UDI rows across the in-scope product families.
 
 That means:
 
 - the present end-to-end implementation is a valid first operational slice
-- the present implementation is not yet proof that the architecture generalizes cleanly to other product families
+- the present implementation is not yet proof that the architecture generalizes cleanly to all product families and product-accessory categories
+- the current Echelon-specific shared Basic UDI assumption is known to be incorrect and is being replaced by variant-level linkage
 - the next important step is not only refinement of transport architecture, but also proof that the same preparation and submission pattern can be exercised with additional family data
 
 ## Architectural Bias

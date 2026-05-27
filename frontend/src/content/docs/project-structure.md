@@ -18,6 +18,7 @@ The `Project Structure` section explains how the application is organized techni
   - exposes backend functionality as HTTP endpoints for the frontend
 - `backend/app/services/`
   - contains the main business logic for workbook review, canonical interpretation, validation, and XML generation
+  - now also contains the variant-level Basic UDI join logic that resolves workbook sheets to `BasicUDIs.xlsx` `Device Model` rows
 - `backend/app/canonical_models.py`
   - defines the intermediary business and regulatory model used between source review and XML output
 - `backend/app/xml_models.py`
@@ -29,7 +30,9 @@ The `Project Structure` section explains how the application is organized techni
 - `data/source_excel/`
   - holds the project-local source Excel workbook inputs
 - `data/basic_udi_reference/`
-  - holds the shared Basic UDI reference workbook used for family-level enrichment
+  - holds the shared Basic UDI reference workbooks used for canonical enrichment
+  - `BasicUDIs.xlsx` is the authoritative source
+  - the older tracekey workbook is retained temporarily as legacy comparison material during migration
 - `data/schemas/`
   - holds the local EUDAMED schema and supporting files used for validation
 - `docs/`
@@ -46,7 +49,7 @@ The current implementation is best understood as part of a larger four-layer dir
 
 At present, the codebase is strongest in the `Preparation Layer` and in the first operational slice of the `Submission Layer`, where validated records are turned into XML-ready batches and package previews.
 
-The current end-to-end proof remains constrained to the `Echelon` family because that is the only family for which the required `Basic UDI-DI` support data is currently available.
+The current end-to-end proof was originally constrained to the `Echelon` family because the previous implementation assumed one shared family-level Basic UDI reference. The current workbook and canonical redesign replaces that assumption with variant-level Basic UDI linkage across the in-scope non-accessories families.
 
 ## Backend Layers
 

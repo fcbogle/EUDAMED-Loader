@@ -17,5 +17,10 @@ def test_default_settings_use_project_local_data_dirs(monkeypatch) -> None:
     assert settings.excel_dir == project_root / "data" / "source_excel"
     assert settings.schema_dir == project_root / "data" / "schemas"
     assert settings.basic_udi_reference_dir == project_root / "data" / "basic_udi_reference"
+    assert settings.basic_udi_reference_workbook == project_root / "data" / "basic_udi_reference" / "BasicUDIs.xlsx"
+    assert settings.legacy_basic_udi_reference_workbook == (
+        project_root / "data" / "basic_udi_reference" / "uat-eudamed_mdr_products_tracekey_sample_data.xlsx"
+    )
+    assert settings.excluded_excel_workbook_names == ("Template for Accessories_Footspares EUDAMED.xlsx",)
 
     get_settings.cache_clear()

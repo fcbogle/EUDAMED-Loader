@@ -286,6 +286,58 @@ input {
   margin-top: 18px;
 }
 
+.family-scope-panel {
+  margin-top: -2px;
+}
+
+.family-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.family-scope-card {
+  padding: 9px 11px;
+  border-radius: 14px;
+  background: rgba(0, 68, 90, 0.05);
+  border: 1px solid rgba(0, 68, 90, 0.1);
+}
+
+.family-scope-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.family-scope-head .summary-label {
+  margin-bottom: 0;
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
+}
+
+.family-scope-card strong {
+  display: block;
+  margin-bottom: 0;
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: 1.12rem;
+  line-height: 1;
+  color: #002a3a;
+}
+
+.family-scope-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.family-scope-pill-row .status-pill.compact {
+  padding: 3px 8px;
+  font-size: 0.69rem;
+}
+
 .selected-sheet-panel {
   padding-bottom: 8px;
 }

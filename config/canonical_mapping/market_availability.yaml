@@ -2,9 +2,10 @@ entity_name: MarketAvailability
 entity_path: device_record.market_availability
 qms_decision:
   status: accepted
-  rationale: QMS confirmed that market information is in scope for the first release.
+  rationale: QMS confirmed that market information is in scope for the first release and the new Basic UDI workbook now provides variant-level market availability coverage.
 assumptions:
   - Market information is part of the first upload payload baseline, not a later extension.
+  - The canonical model should preserve repeated per-country market availability items rather than flattening them into one delimited source string.
 field_reviews:
   - mapping:
       canonical_path: device_record.market_availability.market_status
@@ -30,18 +31,35 @@ field_reviews:
       rationale: Direct concept with known normalization support.
   - mapping:
       canonical_path: device_record.market_availability.first_eu_market_country
-      business_label: First EU Market Country
-      classification: direct
+      business_label: Original EU Market Country
+      classification: derived
       source_columns:
-        - Member state where first placed on the EU market e.g. Germany
+        - 'Member State of the placing on the EU market of the Device:'
       schema_targets:
-        - schema_path: UDIDIType/firstEuMarketCountry
+        - schema_path: MarketInfoType/country
           required: true
-          status: direct
-          notes: Confirm final controlled-value representation during XML implementation.
+          status: derived
+          notes: Used to identify the repeated market-availability item where originalPlacedOnTheMarket=true.
       example_source_values:
         - Germany
       example_canonical_value: Germany
     decision:
       status: accepted_with_note
-      rationale: Direct field, though target code representation may need confirmation later.
+      rationale: Preserve the source signal explicitly, but project it later through repeated MarketInfo items rather than one flat XML field.
+  - mapping:
+      canonical_path: device_record.market_availabilities
+      business_label: Market Availability Items
+      classification: repeated
+      source_columns:
+        - 'Member State of the placing on the EU market of the Device:'
+        - 'Member States where device is or is to be made available on the market:'
+      derivation_logic: Split the semicolon-delimited source list into repeated country items and mark the original EU placing-on-market country with originalPlacedOnTheMarket=true.
+      schema_targets:
+        - schema_path: MarketInfosType/marketInfo
+          required: true
+          status: repeated
+          notes: Each item should carry country and originalPlacedOnTheMarket; startDate/endDate remain null when the source workbook does not provide them.
+      example_canonical_value: Germany (original), France, Spain
+    decision:
+      status: accepted_with_note
+      rationale: This is the schema-aligned structure for the new market-availability source data and avoids carrying a flat country-list string into later XML generation.

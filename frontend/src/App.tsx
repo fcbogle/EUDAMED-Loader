@@ -14,6 +14,7 @@ import type {
   DistinctValueProfile,
   EchelonValidationBundle,
   NormalizationRuleFile,
+  ReferenceWorkbookSummary,
   SchemaInventory,
   SheetProfile,
   SheetSummary,
@@ -277,6 +278,25 @@ function formatSchemaPathForInlineNote(schemaPath: string): string {
   return `${fileName} in ${directory}`;
 }
 
+function workbookFamilyLabel(workbookName: string): string {
+  if (workbookName.includes("Echelon")) {
+    return "Echelon";
+  }
+  if (workbookName.includes("Elan")) {
+    return "Elan";
+  }
+  if (workbookName.includes("Elite")) {
+    return "Elite";
+  }
+  if (workbookName.includes("Epirus_Esprit")) {
+    return "Epirus / Esprit";
+  }
+  if (workbookName.includes("Navigator_Javelin_Linx")) {
+    return "Navigator / Javelin / Linx";
+  }
+  return workbookName.replace("Template for ", "").replace(" EUDAMED.xlsx", "");
+}
+
 function suggestAction(
   rawValue: string,
   acceptedValues: string[],
@@ -328,6 +348,7 @@ export function App() {
     DocumentationSection["id"]
   >("projectStructure");
   const [workbooks, setWorkbooks] = useState<WorkbookSummary[]>([]);
+  const [referenceWorkbooks, setReferenceWorkbooks] = useState<ReferenceWorkbookSummary[]>([]);
   const [sheets, setSheets] = useState<SheetSummary[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<SheetSummary | null>(null);
   const [sheetProfile, setSheetProfile] = useState<SheetProfile | null>(null);
@@ -395,6 +416,7 @@ export function App() {
   useEffect(() => {
     void Promise.all([
       api.workbooks(),
+      api.referenceWorkbooks(),
       api.sheets(),
       api.normalizationRules(),
       api.canonicalReview(),
@@ -402,8 +424,9 @@ export function App() {
       api.schemas(),
       api.distinctValues(selectedColumn),
     ])
-      .then(([workbookData, sheetData, ruleData, canonicalData, echelonData, schemaData, distinctData]) => {
+      .then(([workbookData, referenceWorkbookData, sheetData, ruleData, canonicalData, echelonData, schemaData, distinctData]) => {
         setWorkbooks(workbookData);
+        setReferenceWorkbooks(referenceWorkbookData);
         setSheets(sheetData);
         setRules(ruleData);
         setCanonicalReview(canonicalData);
@@ -413,7 +436,10 @@ export function App() {
         );
         setSchemas(schemaData);
         setDistinctValues(distinctData);
-        setSelectedSheet(sheetData[0] ?? null);
+        const firstVisibleWorkbook = workbookData.find((workbook) => workbook.in_scope_for_variant_mapping);
+        const firstVisibleSheet =
+          sheetData.find((sheet) => sheet.workbook === firstVisibleWorkbook?.workbook) ?? sheetData[0] ?? null;
+        setSelectedSheet(firstVisibleSheet);
       })
       .catch((requestError: Error) => setError(requestError.message));
   }, []);
@@ -485,6 +511,7 @@ export function App() {
     .map((item) => `  - raw: ${item.rawValue}\n    normalized: ${item.suggestedNormalized}`)
     .join("\n");
   const canonicalEntityCount = canonicalReview?.entity_reviews.length ?? 0;
+  const variantMappings = canonicalReview?.variant_mappings ?? [];
   const canonicalFieldCount =
     canonicalReview?.entity_reviews.reduce((total, entity) => total + entity.field_reviews.length, 0) ?? 0;
   const canonicalEntityNames = (canonicalReview?.entity_reviews ?? []).map((entity) => entity.entity_name);
@@ -599,9 +626,14 @@ export function App() {
   const notRepresentedFieldCount = coverageSummaryLookup.get("not_yet_represented")?.field_count ?? 0;
   const deferredFieldCount = coverageSummaryLookup.get("deferred_by_design")?.field_count ?? 0;
   const totalWorkbookRows = workbooks.reduce((sum, workbook) => sum + workbook.total_rows, 0);
-  const selectedWorkbookName = selectedSheet?.workbook ?? workbooks[0]?.workbook ?? null;
+  const authoritativeReferenceWorkbook =
+    referenceWorkbooks.find((workbook) => workbook.source_status === "authoritative") ?? null;
+  const inScopeWorkbookCount = workbooks.filter((workbook) => workbook.in_scope_for_variant_mapping).length;
+  const excludedWorkbookCount = workbooks.filter((workbook) => !workbook.in_scope_for_variant_mapping).length;
+  const visibleWorkbooks = workbooks.filter((workbook) => workbook.in_scope_for_variant_mapping);
+  const selectedWorkbookName = selectedSheet?.workbook ?? visibleWorkbooks[0]?.workbook ?? null;
   const selectedWorkbookSummary =
-    workbooks.find((workbook) => workbook.workbook === selectedWorkbookName) ?? workbooks[0] ?? null;
+    visibleWorkbooks.find((workbook) => workbook.workbook === selectedWorkbookName) ?? visibleWorkbooks[0] ?? null;
   const workbookSheets = selectedWorkbookName
     ? sheets.filter((sheet) => sheet.workbook === selectedWorkbookName)
     : [];
@@ -651,6 +683,44 @@ export function App() {
   const topNullColumns = [...profileColumns]
     .sort((left, right) => right.null_count - left.null_count)
     .slice(0, 5);
+  const selectedWorkbookVariantMappings = variantMappings.filter(
+    (mapping) => mapping.workbook === selectedWorkbookSummary?.workbook,
+  );
+  const selectedSheetVariantMapping =
+    variantMappings.find(
+      (mapping) => mapping.workbook === selectedSheet?.workbook && mapping.sheet === selectedSheet?.sheet,
+    ) ?? null;
+  const matchedVariantCount = variantMappings.filter((mapping) => mapping.match_status === "matched").length;
+  const excludedVariantCount = variantMappings.filter((mapping) => mapping.match_status === "excluded").length;
+  const unmatchedVariantCount = variantMappings.filter((mapping) => mapping.match_status === "unmatched").length;
+  const familyWorkbookSummaries = visibleWorkbooks.reduce<
+    { family: string; rows: number; postRows: number; patchRows: number }[]
+  >((families, workbook) => {
+    const family = workbookFamilyLabel(workbook.workbook);
+    const variantRows = sheets.filter((sheet) => sheet.workbook === workbook.workbook);
+    const mappingsForWorkbook = variantMappings.filter(
+      (mapping) => mapping.workbook === workbook.workbook && mapping.match_status === "matched",
+    );
+    const postRows = mappingsForWorkbook
+      .filter((mapping) => mapping.submission_operation === "POST")
+      .reduce((sum, mapping) => {
+        const sheet = variantRows.find((item) => item.sheet === mapping.sheet);
+        return sum + (sheet?.data_rows ?? 0);
+      }, 0);
+    const patchRows = mappingsForWorkbook
+      .filter((mapping) => mapping.submission_operation === "PATCH")
+      .reduce((sum, mapping) => {
+        const sheet = variantRows.find((item) => item.sheet === mapping.sheet);
+        return sum + (sheet?.data_rows ?? 0);
+      }, 0);
+    families.push({
+      family,
+      rows: workbook.total_rows,
+      postRows,
+      patchRows,
+    });
+    return families;
+  }, []);
 
   function queueDraftAction(item: DistinctValueProfile["values"][number], suggestion: SuggestedAction): void {
     setDraftActions((current) => {
@@ -1009,8 +1079,13 @@ export function App() {
           <section className="summary-grid">
             <div className="summary-card">
               <span className="summary-label">Workbook files</span>
-              <strong>{workbooks.length}</strong>
-              <p>Imported Excel workbooks currently available for source review.</p>
+              <strong>{visibleWorkbooks.length}</strong>
+              <p>Imported Excel workbooks currently shown for active source review.</p>
+            </div>
+            <div className="summary-card">
+              <span className="summary-label">Variant mapping scope</span>
+              <strong>{inScopeWorkbookCount}</strong>
+              <p>Accessories_Footspares Template deliberately excluded.</p>
             </div>
             <div className="summary-card">
               <span className="summary-label">Workbook tabs</span>
@@ -1018,14 +1093,39 @@ export function App() {
               <p>Individual sheets available for structure, completeness, and value review.</p>
             </div>
             <div className="summary-card">
-              <span className="summary-label">Total source rows</span>
-              <strong>{totalWorkbookRows}</strong>
-              <p>Total rows reported across the imported workbook inventory.</p>
+              <span className="summary-label">Basic UDI source</span>
+              <strong>{authoritativeReferenceWorkbook ? 1 : 0}</strong>
+              <p>
+                {authoritativeReferenceWorkbook
+                  ? `${authoritativeReferenceWorkbook.workbook} is the active reference workbook.`
+                  : "Authoritative Basic UDI source not found."}
+              </p>
             </div>
-            <div className="summary-card">
-              <span className="summary-label">Schema inventory</span>
-              <strong>{schemas?.total_files ?? 0}</strong>
-              <p>Device and service XSD assets currently indexed by the backend.</p>
+          </section>
+
+          <section className="panel family-scope-panel">
+            <div className="section-heading">
+              <div>
+                <span className="section-kicker">Product Families</span>
+                <h2>Registration Scope</h2>
+              </div>
+            </div>
+            <p className="panel-copy">
+              Detals of HTTP Post versus Patch update, reflecting current EUDAMED registration, by Product Family
+            </p>
+            <div className="family-scope-grid">
+              {familyWorkbookSummaries.map((family) => (
+                <div className="family-scope-card" key={family.family}>
+                  <div className="family-scope-head">
+                    <span className="summary-label">{family.family}</span>
+                    <strong>{family.rows}</strong>
+                  </div>
+                  <div className="family-scope-pill-row">
+                    <span className="status-pill ok compact">{family.postRows} POST</span>
+                    <span className="status-pill warn compact">{family.patchRows} PATCH</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
 
@@ -1041,7 +1141,7 @@ export function App() {
                 Start here to see which source files are in scope. Select a workbook to inspect its sheets and data signals.
               </p>
               <div className="draft-list">
-                {workbooks.map((workbook) => {
+                {visibleWorkbooks.map((workbook) => {
                   const isActive = selectedWorkbookName === workbook.workbook;
                   const firstWorkbookSheet = sheets.find((sheet) => sheet.workbook === workbook.workbook);
                   return (
@@ -1092,11 +1192,19 @@ export function App() {
                       <strong>{selectedWorkbookSummary.total_columns}</strong>
                       <span>tracked columns</span>
                     </div>
+                    <div className="queue-chip">
+                      <strong>{selectedWorkbookSummary.in_scope_for_variant_mapping ? "In scope" : "Excluded"}</strong>
+                      <span>variant mapping</span>
+                    </div>
                   </div>
+                  {selectedWorkbookSummary.notes.length ? (
+                    <p className="panel-copy workbook-note-followup">{selectedWorkbookSummary.notes.join(" ")}</p>
+                  ) : null}
                   <table>
                     <thead>
                       <tr>
                         <th>Sheet</th>
+                        <th>Basic UDI match</th>
                         <th>Rows</th>
                         <th>Populated columns</th>
                         <th>Inspect</th>
@@ -1105,10 +1213,29 @@ export function App() {
                     <tbody>
                       {workbookSheets.map((sheet) => {
                         const isActive = selectedSheet?.workbook === sheet.workbook && selectedSheet?.sheet === sheet.sheet;
+                        const mapping =
+                          selectedWorkbookVariantMappings.find((item) => item.sheet === sheet.sheet) ?? null;
                         return (
                           <tr key={`${sheet.workbook}-${sheet.sheet}`}>
                             <td>
                               <strong>{sheet.sheet}</strong>
+                            </td>
+                            <td>
+                              <span
+                                className={
+                                  mapping?.match_status === "matched"
+                                    ? "status-pill ok compact"
+                                    : mapping?.match_status === "excluded"
+                                      ? "status-pill warn compact"
+                                      : "status-pill warn compact"
+                                }
+                              >
+                                {mapping?.match_status === "matched"
+                                  ? mapping.device_model
+                                  : mapping?.match_status === "excluded"
+                                    ? "Excluded"
+                                    : "Unmatched"}
+                              </span>
                             </td>
                             <td>{sheet.data_rows}</td>
                             <td>{sheet.populated_columns}</td>
@@ -1146,6 +1273,30 @@ export function App() {
                   <p className="panel-copy">
                     This is the active sheet detail view. It provides a quick structure summary before deeper column or value-level review.
                   </p>
+                  {selectedSheetVariantMapping ? (
+                    <div className="queue-summary sheet-mapping-summary">
+                      <div className="queue-chip">
+                        <strong>
+                          {selectedSheetVariantMapping.match_status === "matched"
+                            ? selectedSheetVariantMapping.device_model
+                            : titleCaseToken(selectedSheetVariantMapping.match_status)}
+                        </strong>
+                        <span>Basic UDI variant</span>
+                      </div>
+                      <div className="queue-chip">
+                        <strong>{selectedSheetVariantMapping.submission_operation ?? "N/A"}</strong>
+                        <span>operation</span>
+                      </div>
+                      <div className="queue-chip">
+                        <strong>{selectedSheetVariantMapping.basic_udi_di ?? "N/A"}</strong>
+                        <span>basic UDI-DI</span>
+                      </div>
+                      <div className="queue-chip">
+                        <strong>{selectedSheetVariantMapping.available_market_country_count}</strong>
+                        <span>market countries</span>
+                      </div>
+                    </div>
+                  ) : null}
                   <ul className="supporting-bullets">
                     <li>
                       <strong>Data Rows:</strong> the number of populated source rows currently profiled in this sheet.
@@ -1523,6 +1674,29 @@ export function App() {
 
       {activeTab === "canonical" ? (
         <section className="tab-stack">
+          <section className="summary-grid">
+            <div className="summary-card">
+              <span className="summary-label">Matched variants</span>
+              <strong>{matchedVariantCount}</strong>
+              <p>Workbook sheets with exact `Device Model` matches in the authoritative Basic UDI workbook.</p>
+            </div>
+            <div className="summary-card">
+              <span className="summary-label">Excluded variants</span>
+              <strong>{excludedVariantCount}</strong>
+              <p>Workbook sheets intentionally deferred from active variant-level canonical linkage.</p>
+            </div>
+            <div className="summary-card">
+              <span className="summary-label">Unmatched variants</span>
+              <strong>{unmatchedVariantCount}</strong>
+              <p>Sheets currently lacking an exact Basic UDI `Device Model` match.</p>
+            </div>
+            <div className="summary-card">
+              <span className="summary-label">Authoritative source</span>
+              <strong>{authoritativeReferenceWorkbook?.workbook ?? "Missing"}</strong>
+              <p>Variant-level Basic UDI context is now resolved from the active reference workbook.</p>
+            </div>
+          </section>
+
           <section className="panel">
             <div className="section-heading">
               <div>
@@ -1582,6 +1756,52 @@ export function App() {
                 </p>
               </div>
             </div>
+          </section>
+          <section className="panel">
+            <div className="section-heading">
+              <div>
+                <span className="section-kicker">Variant Join</span>
+                <h2>Workbook To Basic UDI Matching</h2>
+              </div>
+            </div>
+            <p className="panel-copy">
+              The canonical layer now resolves Basic UDI context per product variant. For in-scope family workbooks, the
+              workbook sheet name is used as the primary join key to the authoritative `BasicUDIs.xlsx` `Device Model`.
+            </p>
+            <table className="mapping-contract-table">
+              <thead>
+                <tr>
+                  <th>Workbook</th>
+                  <th>Sheet</th>
+                  <th>Basic UDI variant</th>
+                  <th>Operation</th>
+                  <th>Basic UDI-DI</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {variantMappings.map((mapping) => (
+                  <tr key={`${mapping.workbook}-${mapping.sheet}`}>
+                    <td>{mapping.workbook}</td>
+                    <td>{mapping.sheet}</td>
+                    <td>{mapping.device_model ?? "Pending"}</td>
+                    <td>{mapping.submission_operation ?? "N/A"}</td>
+                    <td>{mapping.basic_udi_di ?? "N/A"}</td>
+                    <td>
+                      <span
+                        className={
+                          mapping.match_status === "matched"
+                            ? "status-pill ok compact"
+                            : "status-pill warn compact"
+                        }
+                      >
+                        {titleCaseToken(mapping.match_status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </section>
           <section className="panel">
             <div className="section-heading">

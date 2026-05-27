@@ -10,6 +10,7 @@ The `XML Generation` area is where approved canonical data is transformed into s
 - the current first upload scope is `MDR` `UDI-DI` device details plus market information
 - the current business content focus is `UDI-DI`, but the generated artifact is a wrapped service `Push` message rooted at `data/schemas/service/Message.xsd`
 - `Basic UDI` records have already been loaded manually and should be treated as upstream reference context in this phase
+- the next XML-generation refinement should run per product variant rather than per workbook family
 - XML generation should project from canonical domain models rather than directly from workbook fields
 - the current implemented backend path generates a single-record wrapped `Push` message for `Echelon`
 - the single-record XML path is currently schema-valid against the imported local EUDAMED service/schema set
@@ -106,6 +107,12 @@ For the current implementation this means:
 - each chunk becomes its own schema-validated wrapped `Push` message
 - the UI previews one selected chunk at a time instead of rendering every batch file inline
 - download produces a `.zip` package rather than a single oversized XML file
+
+For the upcoming generalized path, the batch scope should be narrowed further:
+
+- records should be grouped by product variant before batch generation
+- sibling variants in the same workbook should not be mixed into one family batch package
+- for example, `Echelon`, `Echelon ER`, `Echelon VAC`, and `Echelon VT` should each generate their own single-record and family-batch XML outputs
 
 ## Enum Strategy
 

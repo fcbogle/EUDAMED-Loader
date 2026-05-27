@@ -17,6 +17,20 @@ class WorkbookSummary(BaseModel):
     total_rows: int
     total_columns: int
     sheets: list[str]
+    workbook_role: str = "source_excel"
+    in_scope_for_variant_mapping: bool = True
+    notes: list[str] = Field(default_factory=list)
+
+
+class ReferenceWorkbookSummary(BaseModel):
+    workbook: str
+    sheet_count: int
+    total_rows: int
+    total_columns: int
+    sheets: list[str]
+    workbook_role: str = "basic_udi_reference"
+    source_status: str
+    notes: list[str] = Field(default_factory=list)
 
 
 class SheetSummary(BaseModel):

@@ -1,8 +1,10 @@
 phase_assumptions:
   - First upload scope is limited to MDR UDI-DI device details and market information.
   - UDIDIType.xsd is the primary first-phase schema focus.
-  - The canonical review now tracks the wider XML-facing field set needed for schema-valid single-record Push message generation.
-  - Basic UDI records have already been loaded manually and are treated as upstream context.
+  - The canonical review now tracks the wider XML-facing field set needed for schema-valid single-record and per-variant batch Push message generation.
+  - Basic UDI context now comes from data/basic_udi_reference/BasicUDIs.xlsx, which supersedes the legacy tracekey workbook.
+  - Basic UDI linkage is variant-level rather than family-level and is expected to resolve primarily from workbook sheet name to BasicUDIs.xlsx Device Model.
+  - Template for Accessories_Footspares EUDAMED.xlsx is temporarily excluded from the active mapping scope pending QMS clarification.
   - Shared workbook templates are expected to be broadly aligned to EUDAMED concepts.
   - All fields present in the shared spreadsheets are currently treated as mandatory for first-load preparation unless QMS says otherwise.
   - No approved Playground actor is available yet, so first-phase XML handling should assume controlled manual submission paths.

@@ -12,6 +12,11 @@ def list_workbooks() -> list[dict]:
     return [item.model_dump(mode="json") for item in ExcelProfiler().list_workbooks()]
 
 
+@router.get("/reference-workbooks")
+def list_reference_workbooks() -> list[dict]:
+    return [item.model_dump(mode="json") for item in ExcelProfiler().list_reference_workbooks()]
+
+
 @router.get("/sheets")
 def list_sheets() -> list[dict]:
     return [item.model_dump(mode="json") for item in ExcelProfiler().list_sheets()]

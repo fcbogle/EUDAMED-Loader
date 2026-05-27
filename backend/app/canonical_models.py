@@ -24,6 +24,8 @@ QmsDecisionStatus = Literal[
     "out_of_scope",
 ]
 ValidationSeverity = Literal["info", "warning", "error", "critical"]
+SubmissionOperation = Literal["POST", "PATCH", "PUT", "GET"]
+VariantMatchStatus = Literal["matched", "excluded", "unmatched"]
 
 
 class SourceReference(BaseModel):
@@ -54,10 +56,23 @@ class BasicDevice(BaseModel):
 
     basic_udi_di: str | None = None
     regulation: str = "MDR"
+    device_model: str | None = None
+    device_type: str | None = None
+    special_device_type: str | None = None
     nomenclature_code: str | None = None
     intended_purpose_summary: str | None = None
     annex_xvi_other_purpose: bool | None = None
     clinical_investigation: bool | None = None
+    risk_class: str | None = None
+    implantable: bool | None = None
+    measuring_function: bool | None = None
+    reusable_surgical_instrument: bool | None = None
+    active: bool | None = None
+    administering_medicinal_product: bool | None = None
+    device_model_applicable: bool | None = None
+    additional_information_url: str | None = None
+    submission_operation: SubmissionOperation | None = None
+    source_version_marker: str | None = None
     source_refs: list[SourceReference] = Field(default_factory=list)
 
 
@@ -75,8 +90,12 @@ class CriticalWarning(BaseModel):
 
 
 class MarketAvailability(BaseModel):
+    country: str | None = None
     market_status: str | None = None
     first_eu_market_country: str | None = None
+    original_placed_on_market: bool | None = None
+    start_date: str | None = None
+    end_date: str | None = None
     source_refs: list[SourceReference] = Field(default_factory=list)
 
 
@@ -108,6 +127,7 @@ class DeviceRecord(BaseModel):
     storage_conditions: list[StorageCondition] = Field(default_factory=list)
     warnings: list[CriticalWarning] = Field(default_factory=list)
     market_availability: MarketAvailability | None = None
+    market_availabilities: list[MarketAvailability] = Field(default_factory=list)
     normalization_log: list[NormalizationEvidence] = Field(default_factory=list)
     source_refs: list[SourceReference] = Field(default_factory=list)
 
@@ -172,9 +192,23 @@ class CanonicalEntityReview(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
 
 
+class VariantMappingSummary(BaseModel):
+    workbook: str
+    sheet: str
+    device_model: str | None = None
+    basic_udi_di: str | None = None
+    submission_operation: SubmissionOperation | None = None
+    source_version_marker: str | None = None
+    first_eu_market_country: str | None = None
+    available_market_country_count: int = 0
+    match_status: VariantMatchStatus
+    notes: list[str] = Field(default_factory=list)
+
+
 class CanonicalReviewBundle(BaseModel):
     """Top-level review bundle for canonical design and QMS decisions."""
 
     phase_assumptions: list[str] = Field(default_factory=list)
     device_bundle: CanonicalDeviceBundle
     entity_reviews: list[CanonicalEntityReview] = Field(default_factory=list)
+    variant_mappings: list[VariantMappingSummary] = Field(default_factory=list)

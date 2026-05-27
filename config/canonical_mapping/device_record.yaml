@@ -6,15 +6,16 @@ qms_decision:
 assumptions:
   - Shared workbook templates are expected to be broadly EUDAMED-aligned.
   - Mapping review should emphasize traceability and explicit assumptions rather than aggressive data cleansing.
+  - Basic UDI linkage is now expected to resolve at product-variant level rather than one shared family context.
 field_reviews:
   - mapping:
       canonical_path: device_record.basic_device_ref
       business_label: Basic Device Reference
       classification: derived
-      derivation_logic: Link the UDI-DI record to the previously registered Basic UDI reference list using deterministic lookup.
+      derivation_logic: Link the UDI-DI record to the authoritative BasicUDIs.xlsx row using the source sheet name as the primary Device Model join key.
       assumptions:
-        - Basic UDI linkage is required for UDI-DI upload even if the workbook does not populate the relationship directly.
-        - The lookup source is the previously registered Basic UDI reference list.
+        - In-scope workbook sheets map to explicit Basic UDI variants.
+        - The accessories workbook remains temporarily excluded from active lookup scope pending QMS clarification.
       schema_targets:
         - schema_path: UDIDIType/basicUdiDiId
           required: true
@@ -22,7 +23,7 @@ field_reviews:
           notes: Preserve as explicit relationship context.
     decision:
       status: accepted_with_note
-      rationale: Required for upload, but expected to be resolved from the previously registered Basic UDI reference list rather than from the workbook.
+      rationale: Required for upload, but now expected to be resolved from the new variant-level Basic UDI workbook rather than from one shared family-level reference.
   - mapping:
       canonical_path: device_record.primary_udi_di
       business_label: Primary UDI-DI

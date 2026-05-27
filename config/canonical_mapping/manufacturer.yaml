@@ -29,19 +29,18 @@ field_reviews:
       canonical_path: manufacturer.manufacturer_srn
       business_label: Manufacturer SRN
       classification: derived
-      derivation_logic: Resolve from the Echelon Basic UDI reference workbook (`MDR-Basic!Manufacturer Code`) during canonical enrichment.
+      derivation_logic: Resolve from the authoritative BasicUDIs.xlsx workbook after variant-level join.
       assumptions:
         - The workbook rows do not carry the SRN directly.
-        - The current XML generation path sources it from the shared Echelon Basic UDI reference context.
+        - The value is expected to come from the joined Basic UDI record rather than from the device-row workbook itself.
       schema_targets:
         - schema_path: BasicUDIType/MFActorCode
           required: true
           status: derived
-          notes: Required by `MDRBasicUDI` and currently sourced from the Basic UDI reference workbook.
-      example_canonical_value: UK-MF-000048777
+          notes: Required by `MDRBasicUDI`; exact source column in the new workbook should be confirmed during the next XML-focused phase.
     decision:
       status: accepted_with_note
-      rationale: The first XML path resolves this from the Echelon Basic UDI reference workbook rather than from the source templates.
+      rationale: Keep the field explicit while the new authoritative Basic UDI source is phased into the mapping implementation.
   - mapping:
       canonical_path: manufacturer.designed_by_another_legal_entity
       business_label: Designed By Another Legal Entity

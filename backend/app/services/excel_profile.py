@@ -11,7 +11,7 @@ from app.models import (
     ColumnProfile,
     DistinctValueItem,
     DistinctValueProfile,
-    FileInventoryItem,
+    ReferenceWorkbookSummary,
     SheetProfile,
     SheetSummary,
     WorkbookSummary,
@@ -28,6 +28,12 @@ class ExcelProfiler:
         for path in self._workbook_paths():
             workbook = self._load_workbook(path)
             sheet_summaries = self._sheet_summaries(path, workbook)
+            in_scope = path.name not in self.settings.excluded_excel_workbook_names
+            notes = []
+            if not in_scope:
+                notes.append(
+                    "Temporarily excluded from variant-level Basic UDI mapping pending QMS clarification."
+                )
             items.append(
                 WorkbookSummary(
                     workbook=path.name,
@@ -35,6 +41,39 @@ class ExcelProfiler:
                     total_rows=sum(sheet.data_rows for sheet in sheet_summaries),
                     total_columns=max((sheet.max_columns for sheet in sheet_summaries), default=0),
                     sheets=workbook.sheetnames,
+                    in_scope_for_variant_mapping=in_scope,
+                    notes=notes,
+                )
+            )
+        return items
+
+    def list_reference_workbooks(self) -> list[ReferenceWorkbookSummary]:
+        items: list[ReferenceWorkbookSummary] = []
+        for path, source_status, note in (
+            (
+                self.settings.basic_udi_reference_workbook,
+                "authoritative",
+                "Variant-level Basic UDI source for workbook-to-canonical enrichment.",
+            ),
+            (
+                self.settings.legacy_basic_udi_reference_workbook,
+                "legacy",
+                "Retained temporarily for migration comparison; no longer the active source of truth.",
+            ),
+        ):
+            if not path.exists():
+                continue
+            workbook = self._load_workbook(path)
+            sheet_summaries = self._sheet_summaries(path, workbook)
+            items.append(
+                ReferenceWorkbookSummary(
+                    workbook=path.name,
+                    sheet_count=len(workbook.sheetnames),
+                    total_rows=sum(sheet.data_rows for sheet in sheet_summaries),
+                    total_columns=max((sheet.max_columns for sheet in sheet_summaries), default=0),
+                    sheets=workbook.sheetnames,
+                    source_status=source_status,
+                    notes=[note],
                 )
             )
         return items

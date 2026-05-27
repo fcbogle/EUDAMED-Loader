@@ -4,6 +4,20 @@ export type WorkbookSummary = {
   total_rows: number;
   total_columns: number;
   sheets: string[];
+  workbook_role: string;
+  in_scope_for_variant_mapping: boolean;
+  notes: string[];
+};
+
+export type ReferenceWorkbookSummary = {
+  workbook: string;
+  sheet_count: number;
+  total_rows: number;
+  total_columns: number;
+  sheets: string[];
+  workbook_role: string;
+  source_status: string;
+  notes: string[];
 };
 
 export type SheetSummary = {
@@ -128,6 +142,20 @@ export type CanonicalEntityReview = {
 export type CanonicalReviewBundle = {
   phase_assumptions: string[];
   entity_reviews: CanonicalEntityReview[];
+  variant_mappings: VariantMappingSummary[];
+};
+
+export type VariantMappingSummary = {
+  workbook: string;
+  sheet: string;
+  device_model: string | null;
+  basic_udi_di: string | null;
+  submission_operation: "POST" | "PATCH" | "PUT" | "GET" | null;
+  source_version_marker: string | null;
+  first_eu_market_country: string | null;
+  available_market_country_count: number;
+  match_status: "matched" | "excluded" | "unmatched";
+  notes: string[];
 };
 
 export type CompletenessSnapshot = {

@@ -2,19 +2,20 @@ entity_name: BasicDevice
 entity_path: basic_device
 qms_decision:
   status: accepted_with_note
-  rationale: Basic UDI context remains in the canonical layer even though the first upload is UDI-DI only.
+  rationale: Basic UDI context remains in the canonical layer even though the first upload is UDI-DI only, and is now resolved per product variant.
 assumptions:
-  - Basic UDI records already exist outside this first upload flow.
-  - Basic device fields are retained for linkage, audit, and future schema projection.
+  - The authoritative Basic UDI source is data/basic_udi_reference/BasicUDIs.xlsx.
+  - Basic UDI records remain contextual for the current manual-upload flow, but they are no longer modeled as one shared family bundle.
+  - Workbook sheet name is the primary variant-level join key for the in-scope family workbooks.
+  - Template for Accessories_Footspares EUDAMED.xlsx remains excluded from active Basic UDI variant mapping until QMS clarification is received.
 field_reviews:
   - mapping:
       canonical_path: basic_device.basic_udi_di
       business_label: Basic UDI-DI
       classification: derived
-      derivation_logic: Resolve from the previously registered Basic UDI reference list instead of the current workbook rows.
+      derivation_logic: Resolve from the authoritative BasicUDIs.xlsx workbook using the source sheet name as the primary Device Model join key.
       assumptions:
-        - Absence from the current workbook set is not treated as a first-phase upload omission by default.
-        - The required value should already exist in the prior Basic UDI registration dataset used for lookup.
+        - In-scope family workbook sheets map to specific BasicUDI rows rather than inheriting one family-level Basic UDI context.
       schema_targets:
         - schema_path: UDIDIType/basicUdiDiId
           required: true
@@ -22,7 +23,7 @@ field_reviews:
           notes: Required relationship context for UDI-DI projection.
     decision:
       status: accepted_with_note
-      rationale: Needed for linkage and upload, but expected to come from the previously registered Basic UDI reference list rather than the first-load spreadsheet.
+      rationale: Needed for linkage and upload, and now expected to come from the authoritative variant-level Basic UDI workbook.
   - mapping:
       canonical_path: basic_device.regulation
       business_label: Regulation
@@ -108,7 +109,7 @@ field_reviews:
       canonical_path: basic_device.risk_class
       business_label: Basic Risk Class
       classification: derived
-      derivation_logic: Resolve from the Echelon Basic UDI reference workbook (`MDR-Basic!Risk Class`).
+      derivation_logic: Resolve from BasicUDIs.xlsx `Risk class` after variant-level join.
       schema_targets:
         - schema_path: BasicUDIType/riskClass
           required: true
@@ -117,107 +118,184 @@ field_reviews:
       example_canonical_value: CLASS_I
     decision:
       status: accepted_with_note
-      rationale: Required for XML generation and currently sourced from the Basic UDI reference workbook.
+      rationale: Required for XML generation and now sourced from the authoritative Basic UDI workbook.
   - mapping:
-      canonical_path: basic_device.model
-      business_label: Basic Model
+      canonical_path: basic_device.device_model
+      business_label: Basic Device Model
       classification: derived
-      derivation_logic: Resolve from `MDR-Basic!Model` and project into the `modelName/model` structure for `MDRBasicUDI`.
+      derivation_logic: Resolve from BasicUDIs.xlsx `Device Model` after variant-level join.
       schema_targets:
-        - schema_path: BasicUDIType/modelName/model
-          required: false
-          status: derived
-          notes: Included when the Basic UDI reference workbook provides the device model text.
-      example_canonical_value: tracekey Instruments Ir
-    decision:
-      status: accepted_with_note
-      rationale: The current Echelon XML path uses the Basic UDI reference workbook for this value.
-  - mapping:
-      canonical_path: basic_device.model_name
-      business_label: Basic Model Name
-      classification: derived
-      derivation_logic: Resolve from `MDR-Basic!Model Name`.
-      schema_targets:
-        - schema_path: BasicUDIType/modelName/name
+        - schema_path: BasicUDIType/model
           required: true
           status: derived
-          notes: Required by `MDRBasicUDI`.
-      example_canonical_value: Echelon
+          notes: Use as the variant identity and as the business basis for later XML grouping.
+      example_canonical_value: Echelon VT
     decision:
       status: accepted_with_note
-      rationale: Required for XML generation and currently sourced from the Basic UDI reference workbook.
+      rationale: The new Basic UDI workbook provides explicit per-variant model identity.
   - mapping:
-      canonical_path: basic_device.identifier
-      business_label: Basic Identifier
+      canonical_path: basic_device.device_type
+      business_label: Basic Device Type
       classification: derived
-      derivation_logic: Compose a DI identifier from `Products!Product Code (Value)` and the workbook issuing entity.
+      derivation_logic: Derive from BasicUDIs.xlsx `Is it a System or Procedure Pack which is a Device in itself?` using the EUDAMED DEVICE / PROCEDURE_PACK / SYSTEM enum semantics.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/type
+          required: true
+          status: derived
+          notes: Required to distinguish device-level variants from system/procedure-pack records.
+      example_canonical_value: DEVICE
+    decision:
+      status: accepted_with_note
+      rationale: The source workbook carries the applicability prompt, but the canonical field should store the schema-facing type meaning.
+  - mapping:
+      canonical_path: basic_device.special_device_type
+      business_label: Basic Special Device Type
+      classification: derived
+      derivation_logic: Resolve from BasicUDIs.xlsx `Special device type`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/specialDevice
+          required: false
+          status: derived
+          notes: Optional enum-like property for the MDR Basic UDI model.
+      example_canonical_value: null
+    decision:
+      status: accepted_with_note
+      rationale: Keep explicit because the new workbook carries this as authoritative Basic UDI content.
+  - mapping:
+      canonical_path: basic_device.implantable
+      business_label: Basic Implantable
+      classification: derived
+      derivation_logic: Resolve from BasicUDIs.xlsx `Implantable`.
+      schema_targets:
+        - schema_path: CommonDeviceType/implantable
+          required: true
+          status: derived
+          notes: One of the MDR applicable properties carried at Basic UDI level.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: The new Basic UDI workbook exposes the value directly at variant level.
+  - mapping:
+      canonical_path: basic_device.measuring_function
+      business_label: Basic Measuring Function
+      classification: derived
+      derivation_logic: Resolve from BasicUDIs.xlsx `Measuring function`.
+      schema_targets:
+        - schema_path: CommonDeviceType/measuringFunction
+          required: true
+          status: derived
+          notes: One of the MDR applicable properties carried at Basic UDI level.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: The new Basic UDI workbook exposes the value directly at variant level.
+  - mapping:
+      canonical_path: basic_device.reusable_surgical_instrument
+      business_label: Basic Reusable Surgical Instrument
+      classification: derived
+      derivation_logic: Resolve from BasicUDIs.xlsx `Reusable surgical instrument`.
+      schema_targets:
+        - schema_path: CommonDeviceType/reusable
+          required: true
+          status: derived
+          notes: One of the MDR applicable properties carried at Basic UDI level.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: The new Basic UDI workbook exposes the value directly at variant level.
+  - mapping:
+      canonical_path: basic_device.active
+      business_label: Basic Active Device
+      classification: derived
+      derivation_logic: Resolve from BasicUDIs.xlsx `Active device`.
+      schema_targets:
+        - schema_path: CommonDeviceType/active
+          required: true
+          status: derived
+          notes: One of the MDR applicable properties carried at Basic UDI level.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: The new Basic UDI workbook exposes the value directly at variant level.
+  - mapping:
+      canonical_path: basic_device.administering_medicinal_product
+      business_label: Basic Administering Medicinal Product
+      classification: derived
+      derivation_logic: Resolve from BasicUDIs.xlsx `Device intended to administer and/or remove medicinal product`.
+      schema_targets:
+        - schema_path: CommonDeviceType/administeringMedicine
+          required: true
+          status: derived
+          notes: One of the MDR applicable properties carried at Basic UDI level.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: The new Basic UDI workbook exposes the value directly at variant level.
+  - mapping:
+      canonical_path: basic_device.device_model_applicable
+      business_label: Device Model Applicable
+      classification: derived
+      derivation_logic: Preserve the BasicUDIs.xlsx `Device model applicable` flag as reviewable canonical metadata.
       assumptions:
-        - The shared Echelon family uses the same issuing entity for the Basic and UDI-DI identifiers.
+        - This is an applicability/control field rather than a direct current schema payload field.
       schema_targets:
-        - schema_path: BasicUDIType/identifier
-          required: true
-          status: derived
-          notes: Rendered as a `DIIdentifierType` with `DICode` and `issuingEntityCode`.
-      example_canonical_value: GS1:5050649ECHELONMV
-    decision:
-      status: accepted_with_note
-      rationale: This is derived from the Basic UDI reference workbook plus issuing-entity context from the source template.
-  - mapping:
-      canonical_path: basic_device.authorised_representative_srn
-      business_label: Authorised Representative SRN
-      classification: derived
-      derivation_logic: Resolve from `MDR-Basic!Authorised Representative Actor Code`.
-      schema_targets:
-        - schema_path: DeviceBasicUDIType/ARActorCode
+        - schema_path: BasicUDIType/model
           required: false
           status: derived
-          notes: Present for Echelon and included in the first XML path.
-      example_canonical_value: DE-AR-000006292
+          notes: Used to document whether model text is considered applicable in the source workbook.
+      example_canonical_value: "true"
     decision:
       status: accepted_with_note
-      rationale: The first XML path sources this from the Basic UDI reference workbook.
+      rationale: Preserve the source control field even though it is not itself the schema target.
   - mapping:
-      canonical_path: basic_device.animal_tissues_cells
-      business_label: Basic Animal Tissues Cells
+      canonical_path: basic_device.additional_information_url
+      business_label: Additional Information URL
       classification: derived
-      derivation_logic: Use `MDR-Basic!Animal Tissues Cells` for the Basic UDI projection.
+      source_columns:
+        - 'URL for additional information (as electronic instructions for use):'
+      assumptions:
+        - The source workbook carries this value explicitly, but the exact XML target remains under review.
       schema_targets:
-        - schema_path: DeviceBasicUDIType/animalTissuesCells
+        - schema_path: BasicUDIType/under_review
+          required: false
+          status: gap
+          notes: Preserve in canonical form until the exact EUDAMED field target is confirmed.
+      example_canonical_value: www.blatchfordmobility.com/en-gb/for-professionals/technical-documentation/
+    decision:
+      status: accepted_with_note
+      rationale: Retain in canonical form now so the field is visible while the exact schema target is clarified.
+  - mapping:
+      canonical_path: basic_device.submission_operation
+      business_label: Submission Operation
+      classification: derived
+      source_columns:
+        - Operation
+      schema_targets:
+        - schema_path: ServiceType/serviceOperation
           required: true
           status: derived
-          notes: XML generation prefers the Basic UDI reference value over the workbook prompt.
-      example_canonical_value: "false"
+          notes: Service-envelope metadata that determines variant-scoped XML create vs update behavior.
+      example_canonical_value: POST
     decision:
       status: accepted_with_note
-      rationale: Current XML generation uses the Basic UDI reference workbook as the source of truth.
+      rationale: The new Basic UDI workbook carries explicit submission intent per variant.
   - mapping:
-      canonical_path: basic_device.human_tissues_cells
-      business_label: Basic Human Tissues Cells
+      canonical_path: basic_device.source_version_marker
+      business_label: Source Version Marker
       classification: derived
-      derivation_logic: Use `MDR-Basic!Human Tissues Cells` for the Basic UDI projection.
+      source_columns:
+        - Version
+      assumptions:
+        - This is currently treated as internal workbook metadata rather than authoritative EUDAMED entity version.
       schema_targets:
-        - schema_path: DeviceBasicUDIType/humanTissuesCells
-          required: true
-          status: derived
-          notes: XML generation prefers the Basic UDI reference value over the workbook prompt.
-      example_canonical_value: "false"
+        - schema_path: Entity/version
+          required: false
+          status: gap
+          notes: Preserve separately until QMS or official guidance confirms whether it should populate the XML entity version.
+      example_canonical_value: "1"
     decision:
       status: accepted_with_note
-      rationale: Current XML generation uses the Basic UDI reference workbook as the source of truth.
-  - mapping:
-      canonical_path: basic_device.human_product_check
-      business_label: Human Product Check
-      classification: derived
-      derivation_logic: Resolve from `MDR-Basic!Human Product`.
-      schema_targets:
-        - schema_path: MDRBasicUDIType/humanProductCheck
-          required: true
-          status: derived
-          notes: Required by `MDRBasicUDI`.
-      example_canonical_value: "false"
-    decision:
-      status: accepted_with_note
-      rationale: This first XML path uses the Basic UDI reference workbook for the MDR-specific value.
+      rationale: Preserve the source convention without yet treating it as authoritative entity-version output.
   - mapping:
       canonical_path: basic_device.medicinal_product_check
       business_label: Medicinal Product Check

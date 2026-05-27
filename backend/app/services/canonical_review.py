@@ -13,6 +13,7 @@ from app.canonical_models import (
     Manufacturer,
 )
 from app.config import get_settings
+from app.services.basic_udi_reference import BasicUdiReferenceService
 
 
 class CanonicalReviewService:
@@ -33,6 +34,7 @@ class CanonicalReviewService:
                 device_record=DeviceRecord(),
             ),
             entity_reviews=entity_reviews,
+            variant_mappings=BasicUdiReferenceService().list_variant_mappings(),
         )
 
     def _entity_paths(self) -> list[Path]:

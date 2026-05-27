@@ -20,9 +20,13 @@ The source workbooks are treated as input evidence. The current `Workbooks` expe
 ## Current Decisions
 
 - the source Excel workbooks will remain unchanged
+- `data/basic_udi_reference/BasicUDIs.xlsx` is now the authoritative Basic UDI source workbook
+- `data/basic_udi_reference/uat-eudamed_mdr_products_tracekey_sample_data.xlsx` is retained only as a temporary legacy comparison source
 - workbook issues are handled through normalization and interpretation rules in the application rather than by editing source files
 - workbook analysis should prepare the data needed by the canonical device model
 - the current phase does not introduce database persistence
+- the five main family workbooks currently remain in scope for active variant mapping
+- `Template for Accessories_Footspares EUDAMED.xlsx` is temporarily excluded from active variant mapping until QMS clarifies the accessory Basic UDI split
 - the current UI flow is:
   - inventory
   - selected workbook
@@ -34,14 +38,17 @@ The source workbooks are treated as input evidence. The current `Workbooks` expe
 
 The `Workbooks` area is responsible for producing a trustworthy preparation layer for the canonical model. In practice, that means:
 
+- identifying which workbook sheet maps to which `BasicUDIs.xlsx` `Device Model`
 - identifying which workbook fields support `BasicDevice` meaning
 - identifying which workbook fields support `DeviceRecord` meaning
 - recording where the source data is incomplete, inconsistent, or only partially aligned with the schema
 - carrying normalization outcomes forward as evidence for canonical mapping
+- making temporary exclusions explicit instead of hiding ambiguous source-to-Basic UDI joins
 
 ## Expected Outputs
 
 - workbook and sheet inventory
+- active and legacy Basic UDI reference workbook inventory
 - column profiling summaries
 - detected missing-data and normalization review signals
 - YAML normalization rules

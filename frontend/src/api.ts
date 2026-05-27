@@ -5,6 +5,7 @@ import type {
   DistinctValueProfile,
   EchelonValidationBundle,
   NormalizationRuleFile,
+  ReferenceWorkbookSummary,
   SchemaInventory,
   SheetProfile,
   SheetSummary,
@@ -61,6 +62,7 @@ async function sendDownload(path: string, method: string, body?: unknown): Promi
 
 export const api = {
   workbooks: () => getJson<WorkbookSummary[]>("/workbooks"),
+  referenceWorkbooks: () => getJson<ReferenceWorkbookSummary[]>("/reference-workbooks"),
   sheets: () => getJson<SheetSummary[]>("/sheets"),
   sheetProfile: (workbook: string, sheet: string) =>
     getJson<SheetProfile>(

@@ -10,14 +10,16 @@ The `Canonical` area is the mapping-definition layer between the source workbook
 - the first release is focused on `UDI-DI` device details and market information
 - the current regulatory scope is `MDR` only
 - the first upload phase is focused on `UDI-DI` business content, but the generated XML artifact is a wrapped service `Push` message rooted at `Message.xsd`
-- `Basic UDI` records are already loaded manually and are treated as contextual linkage rather than the primary first-phase upload object
+- `Basic UDI` records remain contextual linkage rather than the primary first-phase upload object, but the authoritative source is now `data/basic_udi_reference/BasicUDIs.xlsx`
 - the model must still preserve both `BasicDevice` meaning and `DeviceRecord` meaning
 - the canonical layer is schema-informed, not a direct copy of the XSD structure
 - the current phase uses non-persistent Pydantic domain models
 - no database is part of the current implementation design
 - workbook analysis is responsible for producing the normalized, traceable inputs needed by canonical mapping
 - every field currently present in the shared Excel workbooks is being treated as mandatory for first-load preparation unless QMS says otherwise
-- the current `Echelon` path includes the wider XML-facing field set needed to generate a schema-valid single-record `Push` message
+- Basic UDI linkage is now variant-level rather than one shared family-level context
+- market-availability meaning should be represented as repeated per-country items rather than one flat country-list field
+- the current XML direction is variant-scoped, so single-record and family-batch XML generation will later run per product variant
 - repeated workbook areas should be assembled first as canonical list items and then normalized to schema enum codes through explicit rule files
 
 ## Reference Implementation
@@ -26,7 +28,7 @@ The first-pass canonical field model is defined in `backend/app/canonical_models
 
 The current read-only mapping review artifact is stored under `config/canonical_mapping/` and exposed through the backend `canonical-review` API.
 
-The review artifact now reflects the wider XML-facing field set used by the `Echelon` validation and single-record XML generation path. In practice, that means the canonical review is no longer limited to a narrow workbook-to-canonical preview. It now also documents the derived and reference-backed fields needed to produce a schema-valid `Push` message for `MDR` `UDI-DI` upload preparation.
+The review artifact now reflects the wider XML-facing field set used by the current `MDR` `UDI-DI` preparation path. In practice, that means the canonical review is no longer limited to a narrow workbook-to-canonical preview. It now also documents the derived and reference-backed fields needed to produce schema-valid `Push` message content for variant-scoped upload preparation.
 
 The current object set is:
 
@@ -88,8 +90,11 @@ The canonical layer should not:
 ## Current State
 
 - the canonical review now documents the fields actively used by the `Echelon` validation and single-record XML path
-- `Basic UDI` context is resolved from the imported Basic UDI reference workbook rather than from the source family workbook rows
+- `Basic UDI` context is resolved from `BasicUDIs.xlsx` rather than from one shared family-level workbook assumption
+- in-scope workbook sheets now map to specific `BasicUDIs.xlsx` `Device Model` rows
 - `Manufacturer SRN`, `Authorised Representative SRN`, `Basic risk class`, `Basic model`, and other `MDRBasicUDI` fields are now represented in the review artifact as derived/reference-backed mappings
+- `Operation` is now treated as explicit submission-intent metadata that later drives `POST` vs `PATCH` service behavior
+- source `Version` is preserved as an internal marker for now and is not yet treated as authoritative EUDAMED entity version
 - `UDI-DI identifier`, `Basic UDI identifier`, `number of reuses`, `base quantity`, and other XML-facing `UDIDIData` fields are now represented explicitly rather than remaining implicit in the review
 - `Storage Conditions` and `Critical Warnings` are now represented as repeated canonical structures with explicit enum normalization rules for the current `Echelon` values
 - the main UI now presents entity-group and field-count summary pills ahead of the flat mapping contract
@@ -228,7 +233,7 @@ Holds manufacturer- or issuer-level information that should not be stored only a
 
 ### Purpose
 
-Represents the basic-level device meaning required by the Device schema and keeps it distinct from device-level UDI-DI record data. In the current first phase this object is mainly retained for context, linkage, and audit because the `Basic UDI` records have already been loaded separately.
+Represents the basic-level device meaning required by the Device schema and keeps it distinct from device-level UDI-DI record data. In the current first phase this object is mainly retained for context, linkage, and audit, but it is now resolved per product variant rather than one shared family bundle.
 
 ### Fields
 
