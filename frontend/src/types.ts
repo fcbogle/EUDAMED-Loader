@@ -264,6 +264,100 @@ export type EchelonValidationBundle = {
   records: EchelonValidationRecord[];
 };
 
+export type CanonicalValidationFieldValue = {
+  canonical_path: string;
+  business_label: string;
+  required: boolean;
+  value: string | null;
+  source: string;
+  source_detail: string | null;
+  review_note: string | null;
+};
+
+export type MarketAvailabilityItemPreview = {
+  sequence: number;
+  country: string;
+  original_placed_on_market: boolean;
+};
+
+export type CanonicalValidationRecord = {
+  source_workbook: string;
+  product_family: string;
+  product_variant: string;
+  source_sheet: string;
+  source_row_index: number;
+  trade_name: string | null;
+  primary_udi_di: string | null;
+  catalogue_number: string | null;
+  issuing_entity: string | null;
+  submission_operation: string | null;
+  reference_match_status: string;
+  completeness: CompletenessSnapshot;
+  blockers: string[];
+  storage_condition_items: StructuredListItemPreview[];
+  critical_warning_items: StructuredListItemPreview[];
+  market_availability_items: MarketAvailabilityItemPreview[];
+  fields: CanonicalValidationFieldValue[];
+};
+
+export type ValidationBlockerSummary = {
+  canonical_path: string;
+  business_label: string;
+  missing_count: number;
+};
+
+export type FamilyValidationSummary = {
+  product_family: string;
+  variant_count: number;
+  total_records: number;
+  ready_records: number;
+  blocked_records: number;
+  post_records: number;
+  patch_records: number;
+};
+
+export type VariantValidationSummary = {
+  product_family: string;
+  product_variant: string;
+  source_workbook: string;
+  source_sheet: string;
+  submission_operation: string | null;
+  total_records: number;
+  ready_records: number;
+  blocked_records: number;
+  missing_required_field_total: number;
+  common_blockers: string[];
+};
+
+export type DeferredValidationScopeSummary = {
+  workbook: string;
+  sheet_name: string;
+  record_count: number;
+  reason: string;
+};
+
+export type CanonicalValidationBundle = {
+  family_scope: string;
+  scope_note: string;
+  validation_note: string;
+  total_source_records: number;
+  validation_subset_records: number;
+  excluded_records: number;
+  matched_reference_records: number;
+  tracked_required_fields: number;
+  ready_records: number;
+  blocked_records: number;
+  family_summaries: FamilyValidationSummary[];
+  variant_summaries: VariantValidationSummary[];
+  blocker_summaries: ValidationBlockerSummary[];
+  source_field_total: number;
+  source_field_coverage_summaries: SourceFieldCoverageSummary[];
+  source_field_coverage: SourceFieldCoverageEntry[];
+  sample_records: CanonicalValidationRecord[];
+  deferred_scope_summaries: DeferredValidationScopeSummary[];
+  records: CanonicalValidationRecord[];
+};
+
 export type XmlValidationIssue = {
   level: "error" | "warning";
   line: number | null;

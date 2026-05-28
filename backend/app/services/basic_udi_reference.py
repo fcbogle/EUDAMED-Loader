@@ -4,15 +4,27 @@ from dataclasses import dataclass
 
 from openpyxl import load_workbook
 
-from app.canonical_models import VariantMappingSummary
+from app.canonical_models import SubmissionOperation, VariantMappingSummary
 from app.config import get_settings
 
 
 @dataclass(frozen=True)
 class BasicUdiReferenceRow:
+    applicable_regulation: str | None
+    issuing_entity: str | None
     device_model: str
     basic_udi_di: str
-    submission_operation: str | None
+    device_type: str | None
+    special_device_type: str | None
+    risk_class: str | None
+    implantable: str | None
+    measuring_function: str | None
+    reusable_surgical_instrument: str | None
+    active_device: str | None
+    administering_medicinal_product: str | None
+    device_model_applicable: str | None
+    additional_information_url: str | None
+    submission_operation: SubmissionOperation | None
     source_version_marker: str | None
     first_eu_market_country: str | None
     available_market_countries: tuple[str, ...]
@@ -23,7 +35,7 @@ class BasicUdiReferenceService:
         self.settings = get_settings()
 
     def list_variant_mappings(self) -> list[VariantMappingSummary]:
-        reference_rows = self._rows_by_device_model()
+        reference_rows = self.rows_by_device_model()
         mappings: list[VariantMappingSummary] = []
 
         for workbook_path in sorted(self.settings.excel_dir.glob("*.xlsx")):
@@ -90,7 +102,7 @@ class BasicUdiReferenceService:
 
         return mappings
 
-    def _rows_by_device_model(self) -> dict[str, BasicUdiReferenceRow]:
+    def rows_by_device_model(self) -> dict[str, BasicUdiReferenceRow]:
         workbook = load_workbook(self.settings.basic_udi_reference_workbook, read_only=True, data_only=True)
         worksheet = workbook["BasicUDI"]
         rows = list(worksheet.iter_rows(values_only=True))
@@ -103,9 +115,36 @@ class BasicUdiReferenceService:
             if not device_model:
                 continue
             references[device_model] = BasicUdiReferenceRow(
+                applicable_regulation=self._cell(row, index, "Applicable regulation") or None,
+                issuing_entity=self._cell(row, index, "Issuing Entity") or None,
                 device_model=device_model,
                 basic_udi_di=self._cell(row, index, "Basic UDI-DI code"),
-                submission_operation=self._cell(row, index, "Operation") or None,
+                device_type=self._cell(
+                    row,
+                    index,
+                    "Is it a System or Procedure Pack which is a Device in itself?",
+                )
+                or None,
+                special_device_type=self._cell(row, index, "Special device type") or None,
+                risk_class=self._cell(row, index, "Risk class") or None,
+                implantable=self._cell(row, index, "Implantable") or None,
+                measuring_function=self._cell(row, index, "Measuring function") or None,
+                reusable_surgical_instrument=self._cell(row, index, "Reusable surgical instrument") or None,
+                active_device=self._cell(row, index, "Active device") or None,
+                administering_medicinal_product=self._cell(
+                    row,
+                    index,
+                    "Device intended to administer and/or remove medicinal product",
+                )
+                or None,
+                device_model_applicable=self._cell(row, index, "Device model applicable") or None,
+                additional_information_url=self._cell(
+                    row,
+                    index,
+                    "URL for additional information (as electronic instructions for use):",
+                )
+                or None,
+                submission_operation=self._submission_operation(self._cell(row, index, "Operation")),
                 source_version_marker=self._cell(row, index, "Version") or None,
                 first_eu_market_country=self._cell(
                     row,
@@ -140,3 +179,16 @@ class BasicUdiReferenceService:
         if value is None:
             return ""
         return " ".join(str(value).split())
+
+    @staticmethod
+    def _submission_operation(value: str) -> SubmissionOperation | None:
+        token = value.strip().upper()
+        if token == "POST":
+            return "POST"
+        if token == "PATCH":
+            return "PATCH"
+        if token == "PUT":
+            return "PUT"
+        if token == "GET":
+            return "GET"
+        return None

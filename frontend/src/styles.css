@@ -752,6 +752,41 @@ th {
   letter-spacing: 0.06em;
 }
 
+.validation-pill-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 8px;
+}
+
+.validation-pill-row .queue-chip {
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  border-radius: 10px;
+}
+
+.validation-pill-row .queue-chip strong {
+  font-size: 0.82rem;
+}
+
+.validation-pill-row .queue-chip span {
+  font-size: 0.64rem;
+  letter-spacing: 0.04em;
+}
+
+.validation-selected-panel .validation-pill-row .queue-chip {
+  padding: 7px 9px;
+  border-radius: 10px;
+}
+
+.validation-selected-panel .validation-pill-row .queue-chip strong {
+  font-size: 0.82rem;
+}
+
+.validation-selected-panel .validation-pill-row .queue-chip span {
+  font-size: 0.64rem;
+  letter-spacing: 0.04em;
+}
+
 .draft-card {
   padding: 14px;
   border: 1px solid rgba(76, 111, 122, 0.12);
@@ -1050,7 +1085,7 @@ th {
 }
 
 .validation-equal-panel {
-  height: 36rem;
+  min-height: 0;
 }
 
 .validation-summary-panel {
@@ -1114,6 +1149,28 @@ th {
 
 .validation-samples-panel {
   overflow: visible;
+}
+
+.validation-step-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.validation-step-grid .validation-equal-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.validation-step-grid .draft-list {
+  overflow: visible;
+}
+
+.validation-step-grid .validation-samples-panel .draft-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .selected-table-row {

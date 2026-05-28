@@ -1,6 +1,7 @@
 import type {
   ApplyNormalizationRulesResponse,
   BatchXmlPreview,
+  CanonicalValidationBundle,
   CanonicalReviewBundle,
   DistinctValueProfile,
   EchelonValidationBundle,
@@ -85,6 +86,7 @@ export const api = {
       rules,
     }),
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
+  canonicalValidation: () => getJson<CanonicalValidationBundle>("/canonical-validation"),
   echelonCanonicalValidation: () => getJson<EchelonValidationBundle>("/canonical-validation/echelon"),
   previewEchelonXmlRecord: (catalogueNumber: string) =>
     sendJson<SingleRecordXmlPreview>("/xml/echelon/preview-record", "POST", {
