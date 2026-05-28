@@ -162,6 +162,23 @@ field_reviews:
       status: accepted_with_note
       rationale: Keep explicit because the new workbook carries this as authoritative Basic UDI content.
   - mapping:
+      canonical_path: basic_device.authorised_representative_srn
+      business_label: Authorised Representative SRN
+      classification: derived
+      derivation_logic: Resolve from the legacy tracekey Basic UDI workbook as a supplemental SRN source after variant-level join.
+      assumptions:
+        - The current authoritative BasicUDIs.xlsx workbook does not carry authorised representative SRN.
+        - QMS confirmed the legacy tracekey authorised representative SRN is valid for all in-scope product families.
+      schema_targets:
+        - schema_path: BasicUDIType/ARActorCode
+          required: false
+          status: derived
+          notes: Optional in `MDRBasicUDI`; currently supplemented from `uat-eudamed_mdr_products_tracekey_sample_data.xlsx!MDR-Basic Authorised Representative Actor Code`.
+      example_canonical_value: DE-AR-000006292
+    decision:
+      status: accepted_with_note
+      rationale: Keep the field explicit while using the legacy tracekey workbook as a narrow supplemental SRN source.
+  - mapping:
       canonical_path: basic_device.implantable
       business_label: Basic Implantable
       classification: derived
@@ -295,19 +312,61 @@ field_reviews:
       status: accepted_with_note
       rationale: Preserve the source convention without yet treating it as authoritative entity-version output.
   - mapping:
+      canonical_path: basic_device.human_tissues_cells
+      business_label: Human Tissues Or Cells Present
+      classification: derived
+      derivation_logic: Resolve from the workbook `Contains cells or tissues of human origin?`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/humanCellsTissuesCheck
+          required: true
+          status: derived
+          notes: Required by `MDRBasicUDI` when projecting MDR-specific applicable properties.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: Included in the XML-facing canonical review so human-origin applicable properties remain visible to QMS.
+  - mapping:
+      canonical_path: basic_device.animal_tissues_cells
+      business_label: Animal Tissues Or Cells Present
+      classification: derived
+      derivation_logic: Resolve from the workbook `Contains cells or tissues of animal origin?`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/animalCellsTissuesCheck
+          required: true
+          status: derived
+          notes: Required by `MDRBasicUDI` when projecting MDR-specific applicable properties.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: Included in the XML-facing canonical review so animal-origin applicable properties remain visible to QMS.
+  - mapping:
+      canonical_path: basic_device.human_product_check
+      business_label: Human Product Check
+      classification: derived
+      derivation_logic: Resolve from the workbook `Does the device incorporate, as an integral part, a substance which, if used separately, can be considered to be a medicinal product derived from human blood or human plasma?`.
+      schema_targets:
+        - schema_path: MDRBasicUDIType/humanProductCheck
+          required: true
+          status: derived
+          notes: Required by `MDRBasicUDI` when projecting MDR-specific applicable properties.
+      example_canonical_value: "false"
+    decision:
+      status: accepted_with_note
+      rationale: Included in the XML-facing canonical review so the human-derived medicinal-product check is visible in the Canonical table.
+  - mapping:
       canonical_path: basic_device.medicinal_product_check
       business_label: Medicinal Product Check
       classification: derived
-      derivation_logic: Resolve from `MDR-Basic!Medicinal Product`.
+      derivation_logic: Resolve from the workbook `Does the device contain a medicinal product?`.
       schema_targets:
         - schema_path: MDRBasicUDIType/medicinalProductCheck
           required: true
           status: derived
-          notes: Required by `MDRBasicUDI`.
+          notes: Required by `MDRBasicUDI` when projecting MDR-specific applicable properties.
       example_canonical_value: "false"
     decision:
       status: accepted_with_note
-      rationale: This first XML path uses the Basic UDI reference workbook for the MDR-specific value.
+      rationale: Included in the XML-facing canonical review so medicinal-product applicability remains visible to QMS.
   - mapping:
       canonical_path: basic_device.type
       business_label: Basic Device Type

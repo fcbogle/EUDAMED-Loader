@@ -1173,6 +1173,22 @@ th {
   overflow: auto;
 }
 
+.xml-selection-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.xml-selection-grid .validation-equal-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.xml-selection-grid .draft-list {
+  overflow: visible;
+}
+
 .selected-table-row {
   background: rgba(0, 68, 90, 0.05);
 }

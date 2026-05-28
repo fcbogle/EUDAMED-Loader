@@ -268,6 +268,7 @@ export type CanonicalValidationFieldValue = {
   canonical_path: string;
   business_label: string;
   required: boolean;
+  xml_required: boolean;
   value: string | null;
   source: string;
   source_detail: string | null;
@@ -293,7 +294,9 @@ export type CanonicalValidationRecord = {
   submission_operation: string | null;
   reference_match_status: string;
   completeness: CompletenessSnapshot;
+  xml_readiness: CompletenessSnapshot;
   blockers: string[];
+  xml_blockers: string[];
   storage_condition_items: StructuredListItemPreview[];
   critical_warning_items: StructuredListItemPreview[];
   market_availability_items: MarketAvailabilityItemPreview[];
@@ -312,6 +315,8 @@ export type FamilyValidationSummary = {
   total_records: number;
   ready_records: number;
   blocked_records: number;
+  xml_ready_records: number;
+  xml_blocked_records: number;
   post_records: number;
   patch_records: number;
 };
@@ -325,8 +330,12 @@ export type VariantValidationSummary = {
   total_records: number;
   ready_records: number;
   blocked_records: number;
+  xml_ready_records: number;
+  xml_blocked_records: number;
   missing_required_field_total: number;
+  missing_xml_required_field_total: number;
   common_blockers: string[];
+  common_xml_blockers: string[];
 };
 
 export type DeferredValidationScopeSummary = {
@@ -345,8 +354,11 @@ export type CanonicalValidationBundle = {
   excluded_records: number;
   matched_reference_records: number;
   tracked_required_fields: number;
+  tracked_xml_required_fields: number;
   ready_records: number;
   blocked_records: number;
+  xml_ready_records: number;
+  xml_blocked_records: number;
   family_summaries: FamilyValidationSummary[];
   variant_summaries: VariantValidationSummary[];
   blocker_summaries: ValidationBlockerSummary[];
@@ -373,12 +385,31 @@ export type XmlValidationResult = {
 
 export type SingleRecordXmlPreview = {
   mode: "single";
+  product_family: string | null;
+  product_variant: string | null;
+  submission_operation: string | null;
   catalogue_number: string;
   trade_name: string | null;
   primary_udi_di: string;
   file_name: string;
   xml: string;
   validation: XmlValidationResult;
+};
+
+export type XmlGenerationSelectionSummary = {
+  product_family: string;
+  product_variant: string;
+  submission_operation: string | null;
+  total_records: number;
+  xml_ready_records: number;
+  xml_blocked_records: number;
+};
+
+export type XmlGenerationScopeBundle = {
+  family_scope: string;
+  scope_note: string;
+  total_xml_ready_records: number;
+  families: XmlGenerationSelectionSummary[];
 };
 
 export type BatchXmlChunkSummary = {

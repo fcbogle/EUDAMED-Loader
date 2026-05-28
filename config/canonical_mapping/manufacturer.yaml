@@ -29,18 +29,19 @@ field_reviews:
       canonical_path: manufacturer.manufacturer_srn
       business_label: Manufacturer SRN
       classification: derived
-      derivation_logic: Resolve from the authoritative BasicUDIs.xlsx workbook after variant-level join.
+      derivation_logic: Resolve from the legacy tracekey Basic UDI workbook as a supplemental SRN source after variant-level join.
       assumptions:
         - The workbook rows do not carry the SRN directly.
-        - The value is expected to come from the joined Basic UDI record rather than from the device-row workbook itself.
+        - The current authoritative BasicUDIs.xlsx workbook does not carry manufacturer SRN.
+        - QMS confirmed the legacy tracekey manufacturer SRN is valid for all in-scope product families.
       schema_targets:
         - schema_path: BasicUDIType/MFActorCode
           required: true
           status: derived
-          notes: Required by `MDRBasicUDI`; exact source column in the new workbook should be confirmed during the next XML-focused phase.
+          notes: Required by `MDRBasicUDI`; currently supplemented from `uat-eudamed_mdr_products_tracekey_sample_data.xlsx!MDR-Basic Manufacturer Code`.
     decision:
       status: accepted_with_note
-      rationale: Keep the field explicit while the new authoritative Basic UDI source is phased into the mapping implementation.
+      rationale: Keep the field explicit while using the legacy tracekey workbook as a narrow supplemental SRN source.
   - mapping:
       canonical_path: manufacturer.designed_by_another_legal_entity
       business_label: Designed By Another Legal Entity

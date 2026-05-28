@@ -34,9 +34,9 @@ The `Canonical Validation` area is the readiness checkpoint between `Canonical` 
 - drill down into one product family
 - drill down further into one product variant
 - inspect representative sample rows for that variant
+- compare canonical completeness with XML readiness
 - review common blocker fields across the current scope
 - inspect field-level canonical evidence for a selected sample row
-- compare workbook header coverage against the active canonical review path
 
 ## Current Validation Scope
 
@@ -47,13 +47,16 @@ The `Canonical Validation` area is the readiness checkpoint between `Canonical` 
   - operation
   - basic device properties
   - market availability context
+- `Manufacturer SRN` and `Authorised Representative SRN` are currently supplemented from the legacy tracekey workbook because the authoritative `BasicUDIs.xlsx` workbook does not yet carry those SRN values
 - row completeness is measured against the current canonical-required field set
+- XML readiness is now measured separately against the current XML-facing required field set
 - completeness is currently not split into separate `POST` and `PATCH` rule sets
 - repeated structures such as:
   - `Market Availability`
   - `Storage Conditions`
   - `Critical Warnings`
   are represented in the validation model and surfaced in the selected-sample view
+- the validation field set is now aligned to the current Canonical review field set so Canonical Validation can act as the operational basis for later XML generation
 
 ## Review Hierarchy
 
@@ -72,21 +75,32 @@ The `Canonical Validation` tab should help a reviewer answer:
 
 - which product families are currently ready for deeper submission preparation?
 - which product variants within a family are ready or blocked?
+- which rows are canonically understandable but still not yet XML-ready?
 - what are the most common missing canonical fields?
+- what are the most common missing XML-facing fields?
 - what repeated structures are being assembled from the workbook or reference data?
 - what does a selected sample row currently look like in canonical terms?
 
-## Workbook Coverage
+## Canonical Completeness Versus XML Readiness
 
-`Workbook Coverage Summary` is still header-level, not row-level.
+The validation tab now separates two different review questions:
 
-It answers:
+- `Canonical completeness`
+  - are the fields needed for the current canonical review contract present?
+- `XML readiness`
+  - are the fields needed for the current XML payload shape present?
 
-- which source headers across the in-scope workbook set are represented in the canonical review path
-- which headers are only partially covered
-- which headers are not yet represented
+This matters because a row can now be canonically understandable while still not being ready for XML generation.
 
-This is intentionally separate from row completeness. A header may be documented in the canonical model even if some rows still fail completeness because required values are missing.
+The current main example used during the redesign was `Manufacturer SRN`:
+
+- it is an XML-facing requirement
+- it is not currently carried by `BasicUDIs.xlsx`
+- it is not currently carried by the in-scope device-row workbooks
+- it is therefore supplemented from `data/basic_udi_reference/uat-eudamed_mdr_products_tracekey_sample_data.xlsx`
+- QMS has confirmed that the current legacy SRN values are valid across the in-scope product families for the present preparation phase
+
+At present this supplemental SRN enrichment removes the SRN XML blocker across the in-scope validation population. It should still be treated as a narrow supplemental source, not as a replacement for the new authoritative `BasicUDIs.xlsx` workbook.
 
 ## QMS Header Review Note
 
@@ -145,11 +159,13 @@ Yes, these nuances can be seen directly in the input Excel workbooks. They are n
 
 ## Current Limitation
 
-The validation tab now reflects the broadened multi-family canonical design. `XML Generation` does not yet fully do so.
+The validation tab now reflects the broadened multi-family canonical design, distinguishes canonical completeness from XML readiness, and mirrors the current Canonical field set. `XML Generation` does not yet fully do so.
 
 That means:
 
 - validation is now family-aware and variant-aware
+- validation now surfaces XML-facing blockers explicitly
+- validation now provides the aligned Canonical field set that later XML generation should consume
 - XML generation still needs its own redesign so that:
   - product family is selected first
   - product variants can then be selected

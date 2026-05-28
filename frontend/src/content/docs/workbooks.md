@@ -29,6 +29,7 @@ The source workbooks are treated as input evidence. The current `Workbooks` expe
 - the five main family workbooks currently remain in scope for active variant mapping
 - `Template for Accessories_Footspares EUDAMED.xlsx` is temporarily excluded from active variant mapping until QMS clarifies the accessory Basic UDI split
 - the active workbook inventory intentionally hides the excluded accessories workbook from the main review list
+- the normalization panel is now a read-only review surface for the current selected field and scope; legacy selector controls have been removed
 - the current UI flow is:
   - workbook summary
   - product-family registration/update overview
@@ -49,6 +50,24 @@ The `Workbooks` area is responsible for producing a trustworthy preparation laye
 - carrying normalization outcomes forward as evidence for canonical mapping
 - making temporary exclusions explicit instead of hiding ambiguous source-to-Basic UDI joins
 
+## Downstream Logical Schema Types
+
+The `Workbooks` tab is not itself a schema-mapping surface, but its reviewed source evidence now feeds Canonical and Canonical Validation work that references these logical EUDAMED schema types:
+
+- `UDIDIType`
+- `BasicUDIType`
+- `DeviceBasicUDIType`
+- `MDRBasicUDIType`
+- `CommonDeviceType`
+- `MarketInfoType`
+- `MarketInfosType`
+- `Entity`
+- `ServiceType`
+- `UDIDIDataType`
+- `DeviceUDIDIDataType`
+
+These are logical schema types, not a count of physical `.xsd` files.
+
 ## Expected Outputs
 
 - workbook and sheet inventory
@@ -56,5 +75,5 @@ The `Workbooks` area is responsible for producing a trustworthy preparation laye
 - product-family row totals with `POST` and `PATCH` split
 - column profiling summaries
 - detected missing-data and normalization review signals
-- YAML normalization rules
+- active normalization rule visibility without changing the source Excel files
 - a cleaner preparation layer for canonical mapping

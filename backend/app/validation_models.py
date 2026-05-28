@@ -6,7 +6,14 @@ from pydantic import BaseModel, Field
 
 CompletenessStatus = Literal["complete", "incomplete"]
 MatchStatus = Literal["matched", "excluded", "unmatched"]
-ValueSourceType = Literal["workbook", "basic_udi_reference", "derived", "missing"]
+ValueSourceType = Literal[
+    "workbook",
+    "basic_udi_reference",
+    "legacy_basic_udi_reference",
+    "derived",
+    "normalized",
+    "missing",
+]
 SourceFieldCoverageStatus = Literal[
     "represented",
     "partially_represented",
@@ -125,6 +132,7 @@ class CanonicalValidationFieldValue(BaseModel):
     canonical_path: str
     business_label: str
     required: bool = True
+    xml_required: bool = False
     value: str | None = None
     source: ValueSourceType
     source_detail: str | None = None
@@ -150,7 +158,9 @@ class CanonicalValidationRecord(BaseModel):
     submission_operation: str | None = None
     reference_match_status: MatchStatus
     completeness: CompletenessSnapshot
+    xml_readiness: CompletenessSnapshot
     blockers: list[str] = Field(default_factory=list)
+    xml_blockers: list[str] = Field(default_factory=list)
     storage_condition_items: list[StructuredListItemPreview] = Field(default_factory=list)
     critical_warning_items: list[StructuredListItemPreview] = Field(default_factory=list)
     market_availability_items: list[MarketAvailabilityItemPreview] = Field(default_factory=list)
@@ -169,6 +179,8 @@ class FamilyValidationSummary(BaseModel):
     total_records: int
     ready_records: int
     blocked_records: int
+    xml_ready_records: int
+    xml_blocked_records: int
     post_records: int
     patch_records: int
 
@@ -182,8 +194,12 @@ class VariantValidationSummary(BaseModel):
     total_records: int
     ready_records: int
     blocked_records: int
+    xml_ready_records: int
+    xml_blocked_records: int
     missing_required_field_total: int
+    missing_xml_required_field_total: int
     common_blockers: list[str] = Field(default_factory=list)
+    common_xml_blockers: list[str] = Field(default_factory=list)
 
 
 class DeferredValidationScopeSummary(BaseModel):
@@ -202,8 +218,11 @@ class CanonicalValidationBundle(BaseModel):
     excluded_records: int
     matched_reference_records: int
     tracked_required_fields: int
+    tracked_xml_required_fields: int
     ready_records: int
     blocked_records: int
+    xml_ready_records: int
+    xml_blocked_records: int
     family_summaries: list[FamilyValidationSummary] = Field(default_factory=list)
     variant_summaries: list[VariantValidationSummary] = Field(default_factory=list)
     blocker_summaries: list[ValidationBlockerSummary] = Field(default_factory=list)

@@ -1198,11 +1198,12 @@ class EchelonValidationService:
         raw = EchelonValidationService._string_value(value)
         if raw is None:
             return None
+        normalized = raw.lower().replace(" / ", "/").replace("/ ", "/").replace(" /", "/")
         mapping = {
             "serial number/ manufacturing date": "SERIALISATION_NUMBER",
             "serial number/manufacturing date": "SERIALISATION_NUMBER",
         }
-        return mapping.get(raw.lower(), raw.upper().replace(" ", "_"))
+        return mapping.get(normalized, raw.upper().replace(" ", "_"))
 
     @staticmethod
     def _number_of_reuses(values: dict[str, object | None]) -> str | None:

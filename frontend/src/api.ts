@@ -12,6 +12,7 @@ import type {
   SheetSummary,
   SingleRecordXmlPreview,
   WorkbookSummary,
+  XmlGenerationScopeBundle,
 } from "./types";
 
 const API_ROOT = "http://localhost:8000/api";
@@ -88,6 +89,19 @@ export const api = {
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
   canonicalValidation: () => getJson<CanonicalValidationBundle>("/canonical-validation"),
   echelonCanonicalValidation: () => getJson<EchelonValidationBundle>("/canonical-validation/echelon"),
+  xmlGenerationScope: () => getJson<XmlGenerationScopeBundle>("/xml/scope"),
+  previewXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+    sendJson<SingleRecordXmlPreview>("/xml/preview-record", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber,
+    }),
+  downloadXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+    sendDownload("/xml/download-record", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber,
+    }),
   previewEchelonXmlRecord: (catalogueNumber: string) =>
     sendJson<SingleRecordXmlPreview>("/xml/echelon/preview-record", "POST", {
       catalogue_number: catalogueNumber,

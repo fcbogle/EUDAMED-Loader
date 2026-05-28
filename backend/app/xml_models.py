@@ -73,12 +73,31 @@ class EchelonXmlRecord(BaseModel):
 
 class SingleRecordXmlPreview(BaseModel):
     mode: Literal["single"] = "single"
+    product_family: str | None = None
+    product_variant: str | None = None
+    submission_operation: str | None = None
     catalogue_number: str
     trade_name: str | None = None
     primary_udi_di: str
     file_name: str
     xml: str
     validation: XmlValidationResult
+
+
+class XmlGenerationSelectionSummary(BaseModel):
+    product_family: str
+    product_variant: str
+    submission_operation: str | None = None
+    total_records: int
+    xml_ready_records: int
+    xml_blocked_records: int
+
+
+class XmlGenerationScopeBundle(BaseModel):
+    family_scope: str
+    scope_note: str
+    total_xml_ready_records: int
+    families: list[XmlGenerationSelectionSummary] = Field(default_factory=list)
 
 
 class BatchXmlChunkSummary(BaseModel):

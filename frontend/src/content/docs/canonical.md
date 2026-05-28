@@ -96,6 +96,7 @@ The canonical layer should not:
 - `Basic UDI` context is resolved from `BasicUDIs.xlsx` rather than from one shared family-level workbook assumption
 - in-scope workbook sheets now map to specific `BasicUDIs.xlsx` `Device Model` rows
 - `Manufacturer SRN`, `Authorised Representative SRN`, `Basic risk class`, `Basic model`, and other `MDRBasicUDI` fields are now represented in the review artifact as derived/reference-backed mappings
+- `Manufacturer SRN` and `Authorised Representative SRN` are now modeled as supplemental legacy tracekey enrichments because the authoritative `BasicUDIs.xlsx` workbook does not currently carry those SRN values
 - `Operation` is now treated as explicit submission-intent metadata that later drives `POST` vs `PATCH` service behavior
 - source `Version` is preserved as an internal marker for now and is not yet treated as authoritative EUDAMED entity version
 - `UDI-DI identifier`, `Basic UDI identifier`, `number of reuses`, `base quantity`, and other XML-facing `UDIDIData` fields are now represented explicitly rather than remaining implicit in the review
@@ -147,6 +148,9 @@ The current canonical review spans more than one logical schema layer.
   - `ServiceType`
 - base entity metadata:
   - `Entity`
+- device-data payload schemas:
+  - `UDIDIDataType`
+  - `DeviceUDIDIDataType`
 
 This matters because the canonical layer is no longer only a business-payload mapping surface. It now also carries fields that later feed:
 
@@ -190,8 +194,16 @@ The remaining items are narrower than before and fall into different categories.
   - current issue:
     - the exact downstream XML-facing schema placement still needs confirmation in the next XML-focused phase
 - `manufacturer.manufacturer_srn`
-  - current issue:
-    - the schema intent is understood, but the exact new source column confirmation from `BasicUDIs.xlsx` still needs to be finalized
+  - current state:
+    - the field is no longer unresolved for current review or validation
+    - it is supplemented from `data/basic_udi_reference/uat-eudamed_mdr_products_tracekey_sample_data.xlsx`
+  - interpretation:
+    - the remaining question is governance and source ownership, not absence of a current value
+- `basic_device.authorised_representative_srn`
+  - current state:
+    - the field is likewise supplemented from `data/basic_udi_reference/uat-eudamed_mdr_products_tracekey_sample_data.xlsx`
+  - interpretation:
+    - the remaining question is whether this supplemental legacy source should remain the long-term owner for SRN values
 
 ### Important Distinction
 
@@ -215,7 +227,7 @@ The current enum strategy is deliberately explicit and reviewable.
 - normalization rules live in `config/normalization/` rather than being hidden in the XML renderer
 - comments and free text remain separate from enum codes
 
-For current `Echelon` scope, the implemented mappings are:
+For the current implemented workbook examples, the normalization mappings are:
 
 - `Lower limit of temp` -> `SHC006`
 - `Upper limit of temp` -> `SHC007`
@@ -859,13 +871,14 @@ This bundle is a useful working contract for previewing how one workbook row or 
 
 ## Known Gaps and Open Issues
 
-- no confirmed workbook field for `BasicDevice.basic_udi_di`
-- no confirmed workbook field for manufacturer `SRN`
+- `BasicDevice.basic_udi_di` is no longer a source-workbook gap; it is now resolved from the authoritative `BasicUDIs.xlsx` workbook after variant-level sheet matching
+- manufacturer and authorised representative `SRN` values are currently supplied by the legacy tracekey workbook rather than by the authoritative `BasicUDIs.xlsx` workbook, so the remaining question is long-term source ownership rather than current absence
+- several XML-facing `BasicDevice` properties are now carried as explicit canonical review fields even where the current source remains provisional or incomplete
 - no confirmed dedicated intended-purpose narrative field
-- `DeviceRecord.basic_device_ref` is structurally planned but not yet populated by an implemented mapper
+- `DeviceRecord.basic_device_ref` is now populated through the current validation-aligned canonical path, but later XML generation still needs to consume it directly
 - the workbook has unlabeled fields such as `Unlabeled column (..., column 36)` and `Unlabeled column (..., column 37)` that currently have no canonical destination
-- row-level canonical preview generation is not implemented yet
-- source-to-canonical mapping is documented, but not yet executed by a mapping service
+- row-level canonical review is now surfaced operationally through `Canonical Validation`, while the `Canonical` tab remains the mapping-contract surface
+- source-to-canonical mapping is now executed in validation-oriented services, but later XML generation still needs to consume that aligned field set directly
 
 ## Expected Outputs
 

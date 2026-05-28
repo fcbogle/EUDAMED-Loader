@@ -4,12 +4,73 @@ from io import BytesIO
 from zipfile import ZipFile
 
 from app.routers.xml_generation import (
+    download_xml_record,
     download_echelon_batch,
     download_echelon_record,
+    preview_xml_record,
     preview_echelon_batch,
     preview_echelon_record,
 )
 from app.services.echelon_xml_generation import EchelonXmlGenerationService
+from app.services.xml_generation import XmlGenerationService
+
+
+def test_generic_single_record_preview_generates_schema_valid_xml() -> None:
+    preview = XmlGenerationService().preview_single_record(
+        product_family="Echelon",
+        product_variant="Echelon",
+        catalogue_number="EC22L1S",
+    )
+
+    assert preview.file_name == "echelon-echelon-EC22L1S.xml"
+    assert preview.product_family == "Echelon"
+    assert preview.product_variant == "Echelon"
+    assert preview.submission_operation == "PATCH"
+    assert preview.catalogue_number == "EC22L1S"
+    assert preview.validation.valid is True
+    assert "<m:Push" in preview.xml
+    assert "<marketinfo:marketInfo>" in preview.xml
+    assert "<s:serviceOperation>PATCH</s:serviceOperation>" in preview.xml
+
+
+def test_generic_single_record_preview_normalizes_udi_pi_variants_for_elan_ic() -> None:
+    preview = XmlGenerationService().preview_single_record(
+        product_family="Elan",
+        product_variant="Elan IC",
+        catalogue_number="ELANIC22L1S",
+    )
+
+    assert preview.validation.valid is True
+    assert "<udidi:productionIdentifier>SERIALISATION_NUMBER</udidi:productionIdentifier>" in preview.xml
+
+
+def test_generic_preview_route_returns_single_record_payload() -> None:
+    payload = preview_xml_record(
+        {
+            "product_family": "Echelon",
+            "product_variant": "Echelon",
+            "catalogue_number": "EC22L1S",
+        }
+    )
+
+    assert payload["product_family"] == "Echelon"
+    assert payload["product_variant"] == "Echelon"
+    assert payload["catalogue_number"] == "EC22L1S"
+    assert payload["validation"]["valid"] is True
+
+
+def test_generic_download_route_returns_xml_file() -> None:
+    response = download_xml_record(
+        {
+            "product_family": "Echelon",
+            "product_variant": "Echelon",
+            "catalogue_number": "EC22L1S",
+        }
+    )
+
+    assert response.media_type == "application/xml"
+    assert 'filename="echelon-echelon-EC22L1S.xml"' in response.headers["Content-Disposition"]
+    assert b"<m:Push" in response.body
 
 
 def test_single_record_preview_generates_schema_valid_xml() -> None:

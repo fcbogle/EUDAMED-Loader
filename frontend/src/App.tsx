@@ -9,11 +9,9 @@ import softwareEngineeringPatternsDocumentation from "./content/docs/software-en
 import workbooksDocumentation from "./content/docs/workbooks.md?raw";
 import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import type {
-  BatchXmlPreview,
   CanonicalValidationBundle,
   CanonicalReviewBundle,
   DistinctValueProfile,
-  EchelonValidationBundle,
   NormalizationRuleFile,
   ReferenceWorkbookSummary,
   SchemaInventory,
@@ -30,7 +28,6 @@ const focusColumns = [
 
 type MainTab = "workbooks" | "canonical" | "canonicalValidation" | "xml" | "documentation";
 type ScopeMode = "all" | "sheet";
-type XmlGenerationMode = "single" | "batch";
 
 type DraftAction = {
   column: string;
@@ -418,18 +415,19 @@ export function App() {
   const [selectedSheet, setSelectedSheet] = useState<SheetSummary | null>(null);
   const [sheetProfile, setSheetProfile] = useState<SheetProfile | null>(null);
   const [distinctValues, setDistinctValues] = useState<DistinctValueProfile | null>(null);
-  const [selectedColumn, setSelectedColumn] = useState<string>(focusColumns[0]);
+  const [selectedColumn] = useState<string>(focusColumns[0]);
   const [rules, setRules] = useState<NormalizationRuleFile[]>([]);
   const [schemas, setSchemas] = useState<SchemaInventory | null>(null);
   const [canonicalReview, setCanonicalReview] = useState<CanonicalReviewBundle | null>(null);
   const [canonicalValidation, setCanonicalValidation] = useState<CanonicalValidationBundle | null>(null);
-  const [echelonValidation, setEchelonValidation] = useState<EchelonValidationBundle | null>(null);
   const [validationStepsOpen, setValidationStepsOpen] = useState<boolean>(false);
   const [selectedValidationRecordKey, setSelectedValidationRecordKey] = useState<string | null>(null);
   const [selectedValidationFamily, setSelectedValidationFamily] = useState<string | null>(null);
   const [selectedValidationVariant, setSelectedValidationVariant] = useState<string | null>(null);
-  const [xmlGenerationMode, setXmlGenerationMode] = useState<XmlGenerationMode>("single");
-  const [scopeMode, setScopeMode] = useState<ScopeMode>("all");
+  const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
+  const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
+  const [selectedXmlRecordKey, setSelectedXmlRecordKey] = useState<string | null>(null);
+  const [scopeMode] = useState<ScopeMode>("all");
   const [showUnmappedOnly, setShowUnmappedOnly] = useState<boolean>(true);
   const [valueFilter, setValueFilter] = useState<string>("");
   const [draftActions, setDraftActions] = useState<DraftAction[]>([]);
@@ -437,8 +435,6 @@ export function App() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [xmlPreview, setXmlPreview] = useState<SingleRecordXmlPreview | null>(null);
-  const [batchXmlPreview, setBatchXmlPreview] = useState<BatchXmlPreview | null>(null);
-  const [selectedBatchChunkSequence, setSelectedBatchChunkSequence] = useState<number>(1);
   const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
@@ -489,7 +485,6 @@ export function App() {
       api.normalizationRules(),
       api.canonicalReview(),
       api.canonicalValidation(),
-      api.echelonCanonicalValidation(),
       api.schemas(),
       api.distinctValues(selectedColumn),
     ])
@@ -500,7 +495,6 @@ export function App() {
         ruleData,
         canonicalData,
         canonicalValidationData,
-        echelonData,
         schemaData,
         distinctData,
       ]) => {
@@ -510,7 +504,6 @@ export function App() {
         setRules(ruleData);
         setCanonicalReview(canonicalData);
         setCanonicalValidation(canonicalValidationData);
-        setEchelonValidation(echelonData);
         setSelectedValidationRecordKey(
           canonicalValidationData.sample_records[0]?.catalogue_number ??
             canonicalValidationData.records[0]?.catalogue_number ??
@@ -518,6 +511,11 @@ export function App() {
         );
         setSelectedValidationFamily(canonicalValidationData.family_summaries[0]?.product_family ?? null);
         setSelectedValidationVariant(canonicalValidationData.variant_summaries[0]?.product_variant ?? null);
+        setSelectedXmlFamily(canonicalValidationData.family_summaries[0]?.product_family ?? null);
+        setSelectedXmlVariant(canonicalValidationData.variant_summaries[0]?.product_variant ?? null);
+        setSelectedXmlRecordKey(
+          canonicalValidationData.records.find((record) => record.xml_readiness.status === "complete")?.catalogue_number ?? null,
+        );
         setSchemas(schemaData);
         setDistinctValues(distinctData);
         const firstVisibleWorkbook = workbookData.find((workbook) => workbook.in_scope_for_variant_mapping);
@@ -550,7 +548,7 @@ export function App() {
 
   useEffect(() => {
     setXmlPreview(null);
-  }, [selectedValidationRecordKey, xmlGenerationMode]);
+  }, [selectedXmlRecordKey, selectedXmlFamily, selectedXmlVariant]);
 
   useEffect(() => {
     if (!canonicalValidation?.family_summaries.length) {
@@ -600,8 +598,52 @@ export function App() {
   }, [canonicalValidation, selectedValidationFamily, selectedValidationVariant, selectedValidationRecordKey]);
 
   useEffect(() => {
-    setBatchXmlPreview(null);
-  }, [selectedBatchChunkSequence]);
+    if (!canonicalValidation?.family_summaries.length) {
+      return;
+    }
+    if (
+      selectedXmlFamily &&
+      canonicalValidation.family_summaries.some((summary) => summary.product_family === selectedXmlFamily)
+    ) {
+      return;
+    }
+    setSelectedXmlFamily(canonicalValidation.family_summaries[0]?.product_family ?? null);
+  }, [canonicalValidation, selectedXmlFamily]);
+
+  useEffect(() => {
+    const familyVariantSummaries = (canonicalValidation?.variant_summaries ?? []).filter(
+      (summary) => summary.product_family === selectedXmlFamily,
+    );
+    if (!familyVariantSummaries.length) {
+      return;
+    }
+    if (
+      selectedXmlVariant &&
+      familyVariantSummaries.some((summary) => summary.product_variant === selectedXmlVariant)
+    ) {
+      return;
+    }
+    setSelectedXmlVariant(familyVariantSummaries[0]?.product_variant ?? null);
+  }, [canonicalValidation, selectedXmlFamily, selectedXmlVariant]);
+
+  useEffect(() => {
+    const variantRecords = (canonicalValidation?.records ?? []).filter(
+      (record) =>
+        record.product_family === selectedXmlFamily &&
+        record.product_variant === selectedXmlVariant &&
+        record.xml_readiness.status === "complete",
+    );
+    if (!variantRecords.length) {
+      return;
+    }
+    if (
+      selectedXmlRecordKey &&
+      variantRecords.some((record) => record.catalogue_number === selectedXmlRecordKey)
+    ) {
+      return;
+    }
+    setSelectedXmlRecordKey(variantRecords[0]?.catalogue_number ?? null);
+  }, [canonicalValidation, selectedXmlFamily, selectedXmlVariant, selectedXmlRecordKey]);
 
   const selectedRuleFile = rules.find((item) => item.column === selectedColumn);
   const acceptedValues = Array.from(new Set(selectedRuleFile?.rules.map((rule) => rule.normalized) ?? []));
@@ -645,6 +687,11 @@ export function App() {
   const variantMappings = canonicalReview?.variant_mappings ?? [];
   const canonicalFieldCount =
     canonicalReview?.entity_reviews.reduce((total, entity) => total + entity.field_reviews.length, 0) ?? 0;
+  const uniqueCanonicalFieldCount = new Set(
+    (canonicalReview?.entity_reviews ?? []).flatMap((entity) =>
+      entity.field_reviews.map((fieldReview) => fieldReview.mapping.canonical_path),
+    ),
+  ).size;
   const canonicalEntityNames = (canonicalReview?.entity_reviews ?? []).map((entity) => entity.entity_name);
   const canonicalMappingRows: CanonicalMappingRow[] = (canonicalReview?.entity_reviews ?? []).flatMap((entity) =>
     entity.field_reviews.map((fieldReview) => ({
@@ -737,6 +784,7 @@ export function App() {
   const selectedWarningExample = selectedValidationRecord?.critical_warning_items[0] ?? null;
   const selectedMarketAvailabilityExample = selectedValidationRecord?.market_availability_items[0] ?? null;
   const selectedOpenBlockerPreview = selectedValidationRecord?.blockers.slice(0, 3) ?? [];
+  const selectedXmlBlockerPreview = selectedValidationRecord?.xml_blockers.slice(0, 3) ?? [];
   const trackedValidationFieldCount =
     canonicalValidationRecords[0]?.fields.length ?? canonicalValidation?.sample_records[0]?.fields.length ?? 0;
   const optionalValidationFieldCount = Math.max(
@@ -763,12 +811,27 @@ export function App() {
   const workbookSheets = selectedWorkbookName
     ? sheets.filter((sheet) => sheet.workbook === selectedWorkbookName)
     : [];
-  const xmlValidationRecords = echelonValidation?.records ?? [];
-  const xmlReadyRecords = xmlValidationRecords.filter((record) => record.after_completeness.status === "complete");
-  const xmlBlockedRecords = xmlValidationRecords.filter((record) => record.after_completeness.status !== "complete");
+  const xmlValidationRecords = canonicalValidationRecords;
+  const xmlReadyRecords = xmlValidationRecords.filter((record) => record.xml_readiness.status === "complete");
+  const xmlBlockedRecords = xmlValidationRecords.filter((record) => record.xml_readiness.status !== "complete");
+  const xmlFamilySummaries = validationFamilySummaries;
+  const selectedXmlFamilySummary =
+    xmlFamilySummaries.find((summary) => summary.product_family === selectedXmlFamily) ?? xmlFamilySummaries[0] ?? null;
+  const selectedXmlVariantSummaries = validationVariantSummaries.filter(
+    (summary) => summary.product_family === (selectedXmlFamilySummary?.product_family ?? selectedXmlFamily),
+  );
+  const selectedXmlVariantSummary =
+    selectedXmlVariantSummaries.find((summary) => summary.product_variant === selectedXmlVariant) ??
+    selectedXmlVariantSummaries[0] ??
+    null;
+  const selectedXmlVariantRecords = xmlReadyRecords.filter(
+    (record) =>
+      record.product_family === (selectedXmlFamilySummary?.product_family ?? selectedXmlFamily) &&
+      record.product_variant === (selectedXmlVariantSummary?.product_variant ?? selectedXmlVariant),
+  );
   const selectedXmlRecord =
-    xmlReadyRecords.find((record) => record.catalogue_number === selectedValidationRecordKey) ??
-    xmlReadyRecords[0] ??
+    selectedXmlVariantRecords.find((record) => record.catalogue_number === selectedXmlRecordKey) ??
+    selectedXmlVariantRecords[0] ??
     null;
   const xmlPreviewLines = selectedXmlRecord
     ? xmlPreview?.xml ??
@@ -777,10 +840,8 @@ export function App() {
         `<catalogue-number>${selectedXmlRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
         `<udi-di>${selectedXmlRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
       ].join("\n")
-    : "<!-- No XML-ready Echelon record is currently available -->";
-  const batchChunkOptions = batchXmlPreview?.chunks ?? [];
-  const selectedBatchValidation =
-    xmlGenerationMode === "batch" ? batchXmlPreview?.selected_chunk_validation ?? null : xmlPreview?.validation ?? null;
+    : "<!-- No XML-ready record is currently available for the selected family and variant -->";
+  const selectedBatchValidation = xmlPreview?.validation ?? null;
   const validationStatusLabel = selectedBatchValidation
     ? selectedBatchValidation.valid
       ? "Schema valid"
@@ -789,12 +850,6 @@ export function App() {
   const selectedSchemaLabel = selectedBatchValidation
     ? formatSchemaPathForInlineNote(selectedBatchValidation.schema_path)
     : null;
-  const batchPreviewLines = batchXmlPreview?.selected_chunk_xml ??
-    [
-      "<!-- Generate batch XML to preview one chunked Push message -->",
-      `<eligible-records>${xmlReadyRecords.length}</eligible-records>`,
-      `<max-records-per-file>300</max-records-per-file>`,
-    ].join("\n");
   const profileColumns = sheetProfile?.columns ?? [];
   const highNullColumns = profileColumns.filter((column) => {
     if (!sheetProfile?.data_rows) {
@@ -973,13 +1028,17 @@ export function App() {
   }
 
   async function generateXmlPreview(): Promise<void> {
-    if (!selectedXmlRecord?.catalogue_number) {
+    if (!selectedXmlRecord?.catalogue_number || !selectedXmlFamilySummary || !selectedXmlVariantSummary) {
       return;
     }
     setIsGeneratingXml(true);
     setError(null);
     try {
-      const preview = await api.previewEchelonXmlRecord(selectedXmlRecord.catalogue_number);
+      const preview = await api.previewXmlRecord(
+        selectedXmlFamilySummary.product_family,
+        selectedXmlVariantSummary.product_variant,
+        selectedXmlRecord.catalogue_number,
+      );
       setXmlPreview(preview);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Failed to generate XML preview.");
@@ -989,57 +1048,30 @@ export function App() {
   }
 
   async function downloadXmlRecord(): Promise<void> {
-    if (!selectedXmlRecord?.catalogue_number) {
+    if (!selectedXmlRecord?.catalogue_number || !selectedXmlFamilySummary || !selectedXmlVariantSummary) {
       return;
     }
     setIsGeneratingXml(true);
     setError(null);
     try {
-      const { blob, fileName } = await api.downloadEchelonXmlRecord(selectedXmlRecord.catalogue_number);
+      const { blob, fileName } = await api.downloadXmlRecord(
+        selectedXmlFamilySummary.product_family,
+        selectedXmlVariantSummary.product_variant,
+        selectedXmlRecord.catalogue_number,
+      );
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
-      anchor.download = fileName ?? xmlPreview?.file_name ?? `echelon-${selectedXmlRecord.catalogue_number}.xml`;
+      anchor.download =
+        fileName ??
+        xmlPreview?.file_name ??
+        `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlRecord.catalogue_number}.xml`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(objectUrl);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Failed to download XML.");
-    } finally {
-      setIsGeneratingXml(false);
-    }
-  }
-
-  async function generateBatchXmlPreview(chunkSequence = selectedBatchChunkSequence): Promise<void> {
-    setIsGeneratingXml(true);
-    setError(null);
-    try {
-      const preview = await api.previewEchelonXmlBatch(chunkSequence);
-      setBatchXmlPreview(preview);
-      setSelectedBatchChunkSequence(preview.selected_chunk_sequence);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Failed to generate batch XML preview.");
-    } finally {
-      setIsGeneratingXml(false);
-    }
-  }
-
-  async function downloadBatchXml(): Promise<void> {
-    setIsGeneratingXml(true);
-    setError(null);
-    try {
-      const { blob, fileName } = await api.downloadEchelonXmlBatch();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = fileName ?? batchXmlPreview?.package_file_name ?? "echelon-batch-package.zip";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(objectUrl);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Failed to download batch XML package.");
     } finally {
       setIsGeneratingXml(false);
     }
@@ -1131,10 +1163,10 @@ export function App() {
           {activeTab === "xml" ? (
             <>
               <p className="eyebrow">XML Generation</p>
-              <h1>Generate Echelon EUDAMED XML</h1>
+              <h1>Generate Product Variant EUDAMED XML</h1>
               <p className="hero-copy">
-                Produce previewable payloads for the Echelon product family, validate them against the
-                local schema set, and prepare controlled manual submission packages.
+                Produce previewable wrapped `Push` messages for XML-ready product-variant rows, validate
+                them against the local schema set, and prepare controlled manual submission files.
               </p>
             </>
           ) : null}
@@ -1163,10 +1195,10 @@ export function App() {
           {activeTab === "canonical" ? (
             <>
               <span className="status-label">Current phase</span>
-              <span className="status-pill warn">MDR UDI-DI first load</span>
+              <span className="status-pill ok">MDR UDI-DI first load</span>
               <p className="status-detail">
-                <span className="inline-stat-pill">{canonicalFieldCount} review-model definitions</span>
-                are available in the canonical mapping view.
+                <span className="inline-stat-pill">{uniqueCanonicalFieldCount} unique canonical fields</span>
+                are currently represented by {canonicalFieldCount} mapping review rows.
               </p>
             </>
           ) : null}
@@ -1176,7 +1208,7 @@ export function App() {
               <span className="status-pill ok">{canonicalValidation?.family_scope ?? "Loading scope"}</span>
               <p className="status-detail">
                 {trackedValidationFieldCount
-                  ? `${trackedValidationFieldCount} validation-subset fields are currently under review.`
+                  ? `${trackedValidationFieldCount} unique canonical fields are currently carried into validation.`
                   : "Loading validation subset..."}
               </p>
             </>
@@ -1189,7 +1221,7 @@ export function App() {
               </span>
               <p className="status-detail">
                 {xmlReadyRecords.length
-                  ? `${xmlReadyRecords.length} validated Echelon record${xmlReadyRecords.length === 1 ? "" : "s"} are currently eligible for XML generation.`
+                  ? `${xmlReadyRecords.length} validated product-variant row${xmlReadyRecords.length === 1 ? "" : "s"} are currently eligible for XML generation.`
                   : "XML generation remains downstream of canonical mapping and awaits validation-ready records."}
               </p>
             </>
@@ -1557,19 +1589,8 @@ export function App() {
                   <h2>Normalization Status</h2>
                 </div>
                 <div className="control-row">
-                  <select value={selectedColumn} onChange={(event) => setSelectedColumn(event.target.value)}>
-                    {focusColumns.map((column) => (
-                      <option key={column} value={column}>
-                        {column}
-                      </option>
-                    ))}
-                  </select>
-                  <select value={scopeMode} onChange={(event) => setScopeMode(event.target.value as ScopeMode)}>
-                    <option value="all">All sheets</option>
-                    <option value="sheet" disabled={!selectedSheet}>
-                      Selected sheet
-                    </option>
-                  </select>
+                  <span className="status-pill ok compact">{selectedColumn}</span>
+                  <span className="status-pill ok compact">{scopeLabel}</span>
                 </div>
               </div>
               <p className="panel-copy">
@@ -1847,7 +1868,7 @@ export function App() {
               <div className="canonical-summary-item">
                 <span className="summary-label">Scope in review</span>
                 <p className="canonical-summary-inline">
-                  {canonicalFieldCount} canonical fields are currently defined for review across {canonicalEntityCount} canonical entity groups and {logicalSchemaTypeCount} logical schema types referenced.
+                  {uniqueCanonicalFieldCount} unique canonical fields are currently defined for review across {canonicalEntityCount} canonical entity groups and {logicalSchemaTypeCount} logical schema types referenced, represented by {canonicalFieldCount} mapping rows.
                   {canonicalEntityNames.length ? (
                     <span className="canonical-entity-pill-row" aria-label="Canonical entity groups">
                       {" "}
@@ -1909,6 +1930,7 @@ export function App() {
                       <th>Basic UDI-DI</th>
                       <th>Registration mode</th>
                       <th>Review status</th>
+                      <th>Review notes</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1932,6 +1954,7 @@ export function App() {
                             {titleCaseToken(mapping.match_status)}
                           </span>
                         </td>
+                        <td>{mapping.notes.join(" ")}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1943,7 +1966,7 @@ export function App() {
             <details className="group-accordion">
               <summary>
                 <span>Canonical Mapping</span>
-                <span className="status-pill ok compact">{canonicalFieldCount} fields</span>
+                <span className="status-pill ok compact">{uniqueCanonicalFieldCount} unique fields</span>
               </summary>
               <div className="accordion-body">
                 <p className="panel-copy canonical-schema-pill-copy">
@@ -2015,14 +2038,14 @@ export function App() {
               <p>Rows currently covered by active variant-level canonical validation.</p>
             </div>
             <div className="summary-card">
-              <span className="summary-label">Ready rows</span>
+              <span className="summary-label">Canonical-ready rows</span>
               <strong>{canonicalValidation?.ready_records ?? 0}</strong>
               <p>Rows complete against the current canonical-required field set.</p>
             </div>
             <div className="summary-card">
-              <span className="summary-label">Blocked rows</span>
-              <strong>{canonicalValidation?.blocked_records ?? 0}</strong>
-              <p>Rows still missing required canonical fields in the current validation scope.</p>
+              <span className="summary-label">XML-ready rows</span>
+              <strong>{canonicalValidation?.xml_ready_records ?? 0}</strong>
+              <p>Rows currently complete enough for downstream XML projection.</p>
             </div>
           </section>
 
@@ -2052,11 +2075,15 @@ export function App() {
               </div>
               <div className="queue-chip">
                 <strong>{trackedValidationFieldCount}</strong>
-                <span>tracked fields</span>
+                <span>unique canonical fields</span>
               </div>
               <div className="queue-chip">
                 <strong>{canonicalValidation?.tracked_required_fields ?? 0}</strong>
                 <span>required for completeness</span>
+              </div>
+              <div className="queue-chip">
+                <strong>{canonicalValidation?.tracked_xml_required_fields ?? 0}</strong>
+                <span>required for XML</span>
               </div>
               <div className="queue-chip">
                 <strong>{canonicalValidation?.deferred_scope_summaries.length ?? 0}</strong>
@@ -2094,6 +2121,9 @@ export function App() {
                         </small>
                         <small>
                           {summary.ready_records} ready · {summary.blocked_records} blocked
+                        </small>
+                        <small>
+                          XML {summary.xml_ready_records} ready · {summary.xml_blocked_records} blocked
                         </small>
                         <small>
                           POST {summary.post_records} · PATCH {summary.patch_records}
@@ -2135,10 +2165,19 @@ export function App() {
                           {summary.ready_records} ready · {summary.blocked_records} blocked
                         </small>
                         <small>
+                          XML {summary.xml_ready_records} ready · {summary.xml_blocked_records} blocked
+                        </small>
+                        <small>
                           {summary.missing_required_field_total} missing required fields
+                        </small>
+                        <small>
+                          {summary.missing_xml_required_field_total} missing XML-required fields
                         </small>
                         {summary.common_blockers.length ? (
                           <small>{summary.common_blockers.join(" | ")}</small>
+                        ) : null}
+                        {summary.common_xml_blockers.length ? (
+                          <small>XML: {summary.common_xml_blockers.join(" | ")}</small>
                         ) : null}
                       </button>
                     );
@@ -2217,30 +2256,24 @@ export function App() {
                   </div>
                   <section className="summary-grid validation-record-grid">
                     <div className="summary-card">
-                      <span className="summary-label">Mapped required fields</span>
+                      <span className="summary-label">Canonical mapped fields</span>
                       <strong>{selectedValidationRecord.completeness.mapped_required_fields}</strong>
                       <p>{selectedValidationRecord.completeness.total_required_fields} required fields tracked.</p>
                     </div>
                     <div className="summary-card">
-                      <span className="summary-label">Missing required fields</span>
+                      <span className="summary-label">Canonical missing fields</span>
                       <strong>{selectedValidationRecord.completeness.missing_required_fields}</strong>
                       <p>Remaining blockers for this sample row.</p>
                     </div>
                     <div className="summary-card">
-                      <span className="summary-label">Market availability</span>
-                      <strong>{selectedValidationRecord.market_availability_items.length}</strong>
-                      <p>Repeated market-availability items assembled from the variant reference row.</p>
+                      <span className="summary-label">XML mapped fields</span>
+                      <strong>{selectedValidationRecord.xml_readiness.mapped_required_fields}</strong>
+                      <p>{selectedValidationRecord.xml_readiness.total_required_fields} XML-required fields tracked.</p>
                     </div>
                     <div className="summary-card">
-                      <span className="summary-label">Structured repeats</span>
-                      <strong>
-                        {selectedValidationRecord.storage_condition_items.length +
-                          selectedValidationRecord.critical_warning_items.length}
-                      </strong>
-                      <p>
-                        {selectedValidationRecord.storage_condition_items.length} storage items and{" "}
-                        {selectedValidationRecord.critical_warning_items.length} warnings.
-                      </p>
+                      <span className="summary-label">XML missing fields</span>
+                      <strong>{selectedValidationRecord.xml_readiness.missing_required_fields}</strong>
+                      <p>Remaining XML blockers for this sample row.</p>
                     </div>
                   </section>
                   <div className="draft-list">
@@ -2295,7 +2328,7 @@ export function App() {
                     </div>
                     <div className="draft-card">
                       <div className="draft-card-head">
-                        <strong>Current Blockers</strong>
+                        <strong>Canonical Blockers</strong>
                         <span className={selectedOpenBlockerPreview.length ? "status-pill warn compact" : "status-pill ok compact"}>
                           {selectedOpenBlockerPreview.length}
                         </span>
@@ -2308,6 +2341,23 @@ export function App() {
                         </ul>
                       ) : (
                         <p className="panel-copy">No blocker fields remain missing for this sample row.</p>
+                      )}
+                    </div>
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>XML Blockers</strong>
+                        <span className={selectedXmlBlockerPreview.length ? "status-pill warn compact" : "status-pill ok compact"}>
+                          {selectedXmlBlockerPreview.length}
+                        </span>
+                      </div>
+                      {selectedXmlBlockerPreview.length ? (
+                        <ul className="compact-list validation-highlight-list">
+                          {selectedXmlBlockerPreview.map((blocker) => (
+                            <li key={blocker}>{blocker}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="panel-copy">No XML blocker fields remain missing for this sample row.</p>
                       )}
                     </div>
                   </div>
@@ -2363,12 +2413,12 @@ export function App() {
             <div className="summary-card">
               <span className="summary-label">Validated rows</span>
               <strong>{xmlValidationRecords.length}</strong>
-              <p>Rows available from the Echelon canonical validation workspace.</p>
+              <p>Rows available from the current Canonical Validation workspace.</p>
             </div>
             <div className="summary-card">
               <span className="summary-label">XML-ready rows</span>
               <strong>{xmlReadyRecords.length}</strong>
-              <p>Rows whose post-mapping completeness is currently suitable for XML projection.</p>
+              <p>Rows currently eligible for generic single-record XML generation.</p>
             </div>
             <div className="summary-card">
               <span className="summary-label">Blocked rows</span>
@@ -2376,9 +2426,9 @@ export function App() {
               <p>Rows that would need canonical validation fixes before XML generation should include them.</p>
             </div>
             <div className="summary-card">
-              <span className="summary-label">Schema target</span>
-              <strong>UDIDIType.xsd</strong>
-              <p>The XML workspace is currently designed around the first-phase MDR UDI-DI schema target.</p>
+              <span className="summary-label">Current mode</span>
+              <strong>Single XML</strong>
+              <p>The first generic XML slice runs per product variant and generates one wrapped `Push` message per selected row.</p>
             </div>
           </section>
 
@@ -2393,17 +2443,21 @@ export function App() {
               </span>
             </div>
             <p className="panel-copy">
-              This workspace consumes the validated Echelon mapping output. If a record is blocked in
-              canonical validation, it should not be included in XML generation.
+              This workspace now consumes the aligned Canonical Validation output. Select a product family,
+              product variant, and one XML-ready row before generating a schema-valid wrapped `Push` message.
             </p>
             <div className="queue-summary">
               <div className="queue-chip">
-                <strong>{echelonValidation?.family_scope ?? "Echelon only"}</strong>
+                <strong>{canonicalValidation?.family_scope ?? "Loading scope"}</strong>
                 <span>generation scope</span>
               </div>
               <div className="queue-chip">
-                <strong>{echelonValidation?.matched_reference_records ?? 0}</strong>
-                <span>rows with shared Basic UDI context</span>
+                <strong>{xmlFamilySummaries.length}</strong>
+                <span>families in scope</span>
+              </div>
+              <div className="queue-chip">
+                <strong>{selectedXmlVariantSummaries.length}</strong>
+                <span>variants in selected family</span>
               </div>
               <div className="queue-chip">
                 <strong>{xmlBlockedRecords.length}</strong>
@@ -2412,265 +2466,150 @@ export function App() {
             </div>
           </section>
 
-          <section className="content-grid xml-mode-layout">
-            <div className="panel xml-mode-panel xml-equal-panel xml-top-panel">
+          <section className="content-grid validation-layout xml-selection-grid">
+            <div className="panel validation-equal-panel validation-summary-panel">
               <div className="section-heading">
                 <div>
-                  <span className="section-kicker">Mode</span>
-                  <h2>Generation Mode</h2>
+                  <span className="section-kicker">Step 1</span>
+                  <h2>Select Product Family</h2>
                 </div>
               </div>
-              <div className="xml-mode-toggle">
-                <button
-                  className={xmlGenerationMode === "single" ? "nav-link active xml-mode-button" : "nav-link xml-mode-button"}
-                  type="button"
-                  onClick={() => setXmlGenerationMode("single")}
-                >
-                  Single record
-                </button>
-                <button
-                  className={xmlGenerationMode === "batch" ? "nav-link active xml-mode-button" : "nav-link xml-mode-button"}
-                  type="button"
-                  onClick={() => setXmlGenerationMode("batch")}
-                >
-                  Full family batch
-                </button>
-              </div>
-              <p className="panel-copy">
-                Start with a single validated record for schema testing, then move to a full-family batch
-                once the single-record payload shape is stable.
-              </p>
-            </div>
-
-            <div className="panel xml-readiness-panel xml-equal-panel xml-top-panel">
-              <div className="section-heading">
-                <div>
-                  <span className="section-kicker">Readiness</span>
-                  <h2>Generation Summary</h2>
-                </div>
-              </div>
+              <p className="panel-copy">Start by selecting the product family whose XML-ready variants you want to inspect.</p>
               <div className="draft-list">
-                <div className="draft-card">
-                  <div className="draft-card-head">
-                    <strong>Included</strong>
-                    <span className="status-pill ok compact">{xmlReadyRecords.length}</span>
-                  </div>
-                  <p className="panel-copy">Records that would currently be eligible for XML generation.</p>
+                {xmlFamilySummaries.map((summary) => {
+                  const isSelected = summary.product_family === selectedXmlFamilySummary?.product_family;
+                  return (
+                    <button
+                      key={summary.product_family}
+                      className={isSelected ? "sheet-card active validation-sample-card" : "sheet-card validation-sample-card"}
+                      type="button"
+                      onClick={() => setSelectedXmlFamily(summary.product_family)}
+                    >
+                      <span className="sheet-title">{summary.product_family}</span>
+                      <small>
+                        {summary.variant_count} variants · {summary.total_records} rows
+                      </small>
+                      <small>
+                        XML {summary.xml_ready_records} ready · {summary.xml_blocked_records} blocked
+                      </small>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="panel validation-equal-panel validation-blockers-panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Step 2</span>
+                  <h2>Select Product Variant</h2>
                 </div>
-                <div className="draft-card">
-                  <div className="draft-card-head">
-                    <strong>Excluded</strong>
-                    <span className="status-pill warn compact">{xmlBlockedRecords.length}</span>
-                  </div>
-                  <p className="panel-copy">
-                    Records blocked by canonical validation and therefore excluded from downstream XML scope.
-                  </p>
-                </div>
+              </div>
+              <p className="panel-copy">Choose one variant inside the selected family.</p>
+              <div className="draft-list">
+                {selectedXmlVariantSummaries.map((summary) => {
+                  const isSelected = summary.product_variant === selectedXmlVariantSummary?.product_variant;
+                  return (
+                    <button
+                      key={summary.product_variant}
+                      className={isSelected ? "sheet-card active validation-sample-card" : "sheet-card validation-sample-card"}
+                      type="button"
+                      onClick={() => setSelectedXmlVariant(summary.product_variant)}
+                    >
+                      <span className="sheet-title">{summary.product_variant}</span>
+                      <small>
+                        {summary.submission_operation ?? "N/A"} · {summary.total_records} rows
+                      </small>
+                      <small>
+                        XML {summary.xml_ready_records} ready · {summary.xml_blocked_records} blocked
+                      </small>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </section>
 
           <section className="content-grid xml-mode-layout">
-            {xmlGenerationMode === "single" ? (
-              <>
-                <div className="panel xml-workspace-panel xml-equal-panel xml-middle-panel">
-                  <div className="section-heading">
-                    <div>
-                      <span className="section-kicker">Single Record</span>
-                      <h2>Record Selection</h2>
+            <div className="panel xml-workspace-panel xml-equal-panel xml-middle-panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Single XML</span>
+                  <h2>Generation Workspace</h2>
+                </div>
+              </div>
+              {selectedXmlRecord ? (
+                <div className="draft-list">
+                  <div className="draft-card">
+                    <div className="draft-card-head">
+                      <strong>{selectedXmlRecord.catalogue_number}</strong>
+                      <span className="status-pill ok compact">{selectedXmlRecord.submission_operation ?? "No operation"}</span>
                     </div>
-                  </div>
-                  <p className="panel-copy">
-                    Choose one validated Echelon record to use as the first XML generation and schema-validation target.
-                  </p>
-                  <div className="control-row xml-control-row">
-                    <select
-                      value={selectedXmlRecord?.catalogue_number ?? ""}
-                      onChange={(event) => setSelectedValidationRecordKey(event.target.value)}
-                    >
-                      {xmlReadyRecords.map((record) => (
-                        <option key={record.catalogue_number ?? record.primary_udi_di ?? record.source_row_index} value={record.catalogue_number ?? ""}>
-                          {record.catalogue_number} · {record.source_sheet}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {selectedXmlRecord ? (
-                    <div className="draft-list">
-                      <div className="draft-card">
-                        <div className="draft-card-head">
-                          <strong>{selectedXmlRecord.catalogue_number}</strong>
-                          <span className="status-pill ok compact">XML-ready</span>
-                        </div>
-                        <p className="draft-meta">{selectedXmlRecord.source_sheet} · row {selectedXmlRecord.source_row_index}</p>
-                        <p className="panel-copy">{selectedXmlRecord.trade_name}</p>
-                        <p className="panel-copy">
-                          UDI-DI {selectedXmlRecord.primary_udi_di} · Basic context {selectedXmlRecord.basic_reference_name}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="panel-copy">No XML-ready Echelon record is currently available.</p>
-                  )}
-                  <div className="draft-actions-bar">
-                    <button
-                      className="action-button"
-                      type="button"
-                      onClick={() => void generateXmlPreview()}
-                      disabled={!selectedXmlRecord || isGeneratingXml}
-                    >
-                      {isGeneratingXml ? "Generating..." : "Generate XML"}
-                    </button>
-                    <button
-                      className="ghost-button"
-                      type="button"
-                      onClick={() => void generateXmlPreview()}
-                      disabled={!selectedXmlRecord || isGeneratingXml}
-                    >
-                      Validate Against XSD
-                    </button>
-                    <button
-                      className="ghost-button"
-                      type="button"
-                      onClick={() => void downloadXmlRecord()}
-                      disabled={!selectedXmlRecord || isGeneratingXml}
-                    >
-                      Download XML
-                    </button>
-                  </div>
-                  <div className="workflow-note">
-                    <strong>Validation result</strong>
-                    <span>
-                      {selectedBatchValidation
-                        ? `${validationStatusLabel} against ${selectedSchemaLabel}${selectedBatchValidation.errors.length ? ` · ${selectedBatchValidation.errors.length} issue${selectedBatchValidation.errors.length === 1 ? "" : "s"}` : ""}.`
-                        : "Use Generate XML or Validate Against XSD to populate the validation result."}
-                    </span>
+                    <p className="draft-meta">
+                      {selectedXmlRecord.product_family} / {selectedXmlRecord.product_variant}
+                    </p>
+                    <p className="panel-copy">{selectedXmlRecord.trade_name ?? "No trade name"}</p>
+                    <p className="panel-copy">
+                      UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
+                    </p>
+                    <p className="panel-copy">
+                      Sample row selected automatically from the chosen variant's XML-ready records.
+                    </p>
                   </div>
                 </div>
+              ) : (
+                <p className="panel-copy">No XML-ready sample row is currently available for the selected family and variant.</p>
+              )}
+              <div className="draft-actions-bar">
+                <button
+                  className="action-button"
+                  type="button"
+                  onClick={() => void generateXmlPreview()}
+                  disabled={!selectedXmlRecord || isGeneratingXml}
+                >
+                  {isGeneratingXml ? "Generating..." : "Generate XML"}
+                </button>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => void generateXmlPreview()}
+                  disabled={!selectedXmlRecord || isGeneratingXml}
+                >
+                  Validate Against XSD
+                </button>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => void downloadXmlRecord()}
+                  disabled={!selectedXmlRecord || isGeneratingXml}
+                >
+                  Download XML
+                </button>
+              </div>
+              <div className="workflow-note">
+                <strong>Next slice</strong>
+                <span>Variant Batch XML will be added after the generic single-record path is reviewed and approved.</span>
+              </div>
+            </div>
 
-                <div className="panel xml-preview-panel xml-equal-panel xml-middle-panel">
-                  <div className="section-heading">
-                    <div>
-                      <span className="section-kicker">Preview</span>
-                      <h2>Single Record XML Preview</h2>
-                    </div>
-                  </div>
-                  <pre className="xml-preview-block">
-                    <code>{xmlPreviewLines}</code>
-                  </pre>
-                  <div className="workflow-note">
-                    <strong>Preview status</strong>
-                    <span>
-                      {xmlPreview
-                        ? `Preview generated for ${xmlPreview.catalogue_number}.`
-                        : "No XML preview generated yet for the selected record."}
-                    </span>
-                  </div>
+            <div className="panel xml-preview-panel xml-equal-panel xml-middle-panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Preview</span>
+                  <h2>Single Record XML Preview</h2>
                 </div>
-              </>
-            ) : (
-              <>
-                <div className="panel xml-workspace-panel xml-equal-panel xml-middle-panel">
-                  <div className="section-heading">
-                    <div>
-                      <span className="section-kicker">Batch</span>
-                      <h2>Full Family Batch Scope</h2>
-                    </div>
-                  </div>
-                  <p className="panel-copy">
-                    Batch generation will include all validation-ready Echelon rows and report any excluded rows separately.
-                  </p>
-                  <div className="draft-list">
-                    <div className="draft-card">
-                      <div className="draft-card-head">
-                        <strong>Included rows</strong>
-                        <span className="status-pill ok compact">{xmlReadyRecords.length}</span>
-                      </div>
-                      <p className="panel-copy">Validation-ready rows that would enter the batch payload set.</p>
-                    </div>
-                    <div className="draft-card">
-                      <div className="draft-card-head">
-                        <strong>Excluded rows</strong>
-                        <span className="status-pill warn compact">{xmlBlockedRecords.length}</span>
-                      </div>
-                      <p className="panel-copy">Rows still blocked by canonical validation and omitted from the batch.</p>
-                    </div>
-                    <div className="draft-card">
-                      <div className="draft-card-head">
-                        <strong>Chunk limit</strong>
-                        <span className="status-pill ok compact">300</span>
-                      </div>
-                      <p className="panel-copy">Each wrapped Push message may contain at most 300 device entries.</p>
-                    </div>
-                  </div>
-                  <div className="control-row xml-control-row">
-                    <select
-                      value={selectedBatchChunkSequence}
-                      onChange={(event) => setSelectedBatchChunkSequence(Number(event.target.value))}
-                      disabled={!batchChunkOptions.length}
-                    >
-                      {(batchChunkOptions.length ? batchChunkOptions : [{ sequence: 1, file_name: "Chunk 1" }]).map((chunk) => (
-                        <option key={chunk.sequence} value={chunk.sequence}>
-                          {`Chunk ${chunk.sequence}${"record_count" in chunk ? ` · ${chunk.record_count} rows` : ""}`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="draft-actions-bar">
-                    <button className="action-button" type="button" onClick={() => void generateBatchXmlPreview()} disabled={!xmlReadyRecords.length || isGeneratingXml}>
-                      {isGeneratingXml ? "Generating..." : "Generate Batch XML"}
-                    </button>
-                    <button className="ghost-button" type="button" onClick={() => void generateBatchXmlPreview()} disabled={!xmlReadyRecords.length || isGeneratingXml}>
-                      Validate Batch
-                    </button>
-                    <button className="ghost-button" type="button" onClick={() => void downloadBatchXml()} disabled={!xmlReadyRecords.length || isGeneratingXml}>
-                      Download Batch Package
-                    </button>
-                  </div>
-                  <div className="workflow-note">
-                    <strong>Validation result</strong>
-                    <span>
-                      {selectedBatchValidation
-                        ? `Selected chunk is ${selectedBatchValidation.valid ? "schema valid" : "schema invalid"} against ${selectedSchemaLabel}${selectedBatchValidation.errors.length ? ` · ${selectedBatchValidation.errors.length === 1 ? "" : "s"}` : ""}.`
-                        : "Generate Batch XML or Validate Batch to populate the chunk validation result."}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="panel xml-preview-panel xml-equal-panel xml-middle-panel">
-                  <div className="section-heading">
-                    <div>
-                      <span className="section-kicker">Batch Output</span>
-                      <h2>Family Batch Preview</h2>
-                    </div>
-                  </div>
-                  <pre className="xml-preview-block">
-                    <code>{batchPreviewLines}</code>
-                  </pre>
-                  <div className="workflow-note">
-                    <strong>Preview status</strong>
-                    <span>
-                      {batchXmlPreview
-                        ? `Chunk ${batchXmlPreview.selected_chunk_sequence} preview generated for ${batchXmlPreview.selected_chunk_record_count} record${batchXmlPreview.selected_chunk_record_count === 1 ? "" : "s"}.`
-                        : "No batch preview generated yet."}
-                    </span>
-                  </div>
-                  {batchXmlPreview ? (
-                    <div className="roadmap-list compact-structured-list">
-                      {batchXmlPreview.chunks.map((chunk) => (
-                        <div className="roadmap-item compact-structured-item" key={chunk.sequence}>
-                          <strong>{chunk.file_name}</strong>
-                          <p>
-                            {chunk.record_count} rows · {chunk.first_catalogue_number ?? "Unknown"} to{" "}
-                            {chunk.last_catalogue_number ?? "Unknown"}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </>
-            )}
+              </div>
+              <pre className="xml-preview-block">
+                <code>{xmlPreviewLines}</code>
+              </pre>
+              <div className="workflow-note">
+                <strong>Preview status</strong>
+                <span>
+                  {xmlPreview
+                    ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
+                    : "No XML preview generated yet for the selected row."}
+                </span>
+              </div>
+            </div>
           </section>
 
           <section className="content-grid xml-mode-layout">
@@ -2685,7 +2624,7 @@ export function App() {
                 <div className="draft-card">
                   <div className="draft-card-head">
                     <strong>Schema target</strong>
-                    <span className="status-pill ok compact">UDIDIType.xsd</span>
+                    <span className="status-pill ok compact">Message.xsd</span>
                   </div>
                   <p className="panel-copy">
                     Generated XML is validated against the wrapped EUDAMED service-message schema set rooted at `Message.xsd`.
@@ -2698,7 +2637,7 @@ export function App() {
                       {selectedBatchValidation
                         ? selectedBatchValidation.valid
                           ? "Schema valid"
-                          : "Schema invalid"
+                        : "Schema invalid"
                         : "Awaiting preview"}
                     </span>
                   </div>
@@ -2717,19 +2656,11 @@ export function App() {
                           ))}
                         </div>
                       ) : (
-                        <p className="panel-copy">
-                          {xmlGenerationMode === "batch"
-                            ? "The selected batch chunk validates cleanly against the service-message schema set."
-                            : "The generated single-record Push message validates cleanly."}
-                        </p>
+                        <p className="panel-copy">The generated single-record Push message validates cleanly.</p>
                       )}
                     </>
                   ) : (
-                    <p className="panel-copy">
-                      {xmlGenerationMode === "batch"
-                        ? "Generate a batch preview to inspect the chunk-level schema validation outcome."
-                        : "Generate a single-record preview to inspect the schema validation outcome."}
-                    </p>
+                    <p className="panel-copy">Generate a single-record preview to inspect the schema validation outcome.</p>
                   )}
                 </div>
               </div>
@@ -2745,31 +2676,27 @@ export function App() {
               <div className="roadmap-list">
                 <div className="roadmap-item">
                   <strong>1. Validate Canonical</strong>
-                  <p>Confirm the selected Echelon records are complete before entering XML generation.</p>
+                  <p>Confirm the selected family and variant have XML-ready rows before entering XML generation.</p>
                 </div>
                 <div className="roadmap-item">
-                  <strong>2. Generate Single XML</strong>
+                  <strong>2. Select Product Family And Variant</strong>
+                  <p>Choose the exact product variant that will own the XML generation scope.</p>
+                </div>
+                <div className="roadmap-item">
+                  <strong>3. Generate Single XML</strong>
                   <p>Start with one XML-ready record to confirm payload shape and mapped values.</p>
                 </div>
                 <div className="roadmap-item">
-                  <strong>3. Validate Against Schema</strong>
-                  <p>Validate the wrapped Push message before any download or batch run.</p>
+                  <strong>4. Validate Against Schema</strong>
+                  <p>Validate the wrapped Push message before any download or later variant-batch run.</p>
                 </div>
                 <div className="roadmap-item">
-                  <strong>4. Download Single XML</strong>
+                  <strong>5. Download Single XML</strong>
                   <p>Download the reviewed single-record file for controlled inspection.</p>
                 </div>
                 <div className="roadmap-item">
-                  <strong>5. Generate Batch XML</strong>
-                  <p>Generate the Echelon batch package in chunks of up to 300 devices.</p>
-                </div>
-                <div className="roadmap-item">
-                  <strong>6. Validate Batch Against Schema</strong>
-                  <p>Review a batch chunk preview and confirm the package validates cleanly.</p>
-                </div>
-                <div className="roadmap-item">
-                  <strong>7. Download Batch Package</strong>
-                  <p>Download the zip package containing the XML chunk files and manifest.</p>
+                  <strong>6. Add Variant Batch XML Next</strong>
+                  <p>Once the single-record path is stable, extend generation to XML-ready rows within the same selected variant only.</p>
                 </div>
               </div>
             </div>

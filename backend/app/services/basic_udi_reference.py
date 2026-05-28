@@ -14,6 +14,10 @@ class BasicUdiReferenceRow:
     issuing_entity: str | None
     device_model: str
     basic_udi_di: str
+    manufacturer_srn: str | None
+    manufacturer_srn_source: str | None
+    authorised_representative_srn: str | None
+    authorised_representative_srn_source: str | None
     device_type: str | None
     special_device_type: str | None
     risk_class: str | None
@@ -96,13 +100,23 @@ class BasicUdiReferenceService:
                         first_eu_market_country=reference.first_eu_market_country,
                         available_market_country_count=len(reference.available_market_countries),
                         match_status="matched",
-                        notes=["Exact sheet-to-Device Model match from the authoritative Basic UDI workbook."],
+                        notes=[
+                            "Exact sheet-to-Device Model match from the authoritative Basic UDI workbook.",
+                            *(
+                                [
+                                    "Manufacturer and authorised representative SRN are supplemented from the legacy tracekey Basic UDI workbook."
+                                ]
+                                if reference.manufacturer_srn_source == "legacy_basic_udi_reference"
+                                else []
+                            ),
+                        ],
                     )
                 )
 
         return mappings
 
     def rows_by_device_model(self) -> dict[str, BasicUdiReferenceRow]:
+        legacy_srn_rows = self._legacy_srn_rows_by_device_model()
         workbook = load_workbook(self.settings.basic_udi_reference_workbook, read_only=True, data_only=True)
         worksheet = workbook["BasicUDI"]
         rows = list(worksheet.iter_rows(values_only=True))
@@ -114,11 +128,20 @@ class BasicUdiReferenceService:
             device_model = self._cell(row, index, "Device Model")
             if not device_model:
                 continue
+            legacy_srn_row = self._matching_legacy_srn_row(device_model, legacy_srn_rows)
             references[device_model] = BasicUdiReferenceRow(
                 applicable_regulation=self._cell(row, index, "Applicable regulation") or None,
                 issuing_entity=self._cell(row, index, "Issuing Entity") or None,
                 device_model=device_model,
                 basic_udi_di=self._cell(row, index, "Basic UDI-DI code"),
+                manufacturer_srn=legacy_srn_row.manufacturer_srn if legacy_srn_row else None,
+                manufacturer_srn_source=legacy_srn_row.manufacturer_srn_source if legacy_srn_row else None,
+                authorised_representative_srn=(
+                    legacy_srn_row.authorised_representative_srn if legacy_srn_row else None
+                ),
+                authorised_representative_srn_source=(
+                    legacy_srn_row.authorised_representative_srn_source if legacy_srn_row else None
+                ),
                 device_type=self._cell(
                     row,
                     index,
@@ -166,6 +189,82 @@ class BasicUdiReferenceService:
                 ),
             )
         return references
+
+    def _legacy_srn_rows_by_device_model(self) -> dict[str, BasicUdiReferenceRow]:
+        workbook = load_workbook(self.settings.legacy_basic_udi_reference_workbook, read_only=True, data_only=True)
+
+        products_sheet = workbook["Products"]
+        products_rows = list(products_sheet.iter_rows(values_only=True))
+        products_headers = [self._stringify(cell) for cell in products_rows[0]]
+        products_index = {header: i for i, header in enumerate(products_headers) if header}
+
+        basic_sheet = workbook["MDR-Basic"]
+        basic_rows = list(basic_sheet.iter_rows(values_only=True))
+        basic_headers = [self._stringify(cell) for cell in basic_rows[0]]
+        basic_index = {header: i for i, header in enumerate(basic_headers) if header}
+
+        basic_by_material_number = {
+            self._cell(row, basic_index, "Material Number"): row
+            for row in basic_rows[1:]
+            if self._cell(row, basic_index, "Material Number")
+        }
+
+        legacy_rows: dict[str, BasicUdiReferenceRow] = {}
+        for row in products_rows[1:]:
+            if self._cell(row, products_index, "Product Template") != "EUDAMED Basic UDI-DI":
+                continue
+            device_model = self._cell(row, products_index, "Name")
+            material_number = self._cell(row, products_index, "Material Number")
+            if not device_model or not material_number:
+                continue
+            basic_row = basic_by_material_number.get(material_number)
+            if basic_row is None:
+                continue
+            legacy_rows[device_model] = BasicUdiReferenceRow(
+                applicable_regulation=None,
+                issuing_entity=None,
+                device_model=device_model,
+                basic_udi_di=self._cell(row, products_index, "Product Code (Value)"),
+                manufacturer_srn=self._cell(basic_row, basic_index, "Manufacturer Code") or None,
+                manufacturer_srn_source="legacy_basic_udi_reference",
+                authorised_representative_srn=(
+                    self._cell(basic_row, basic_index, "Authorised Representative Actor Code") or None
+                ),
+                authorised_representative_srn_source="legacy_basic_udi_reference",
+                device_type=self._cell(basic_row, basic_index, "Type") or None,
+                special_device_type=self._cell(basic_row, basic_index, "Special Device") or None,
+                risk_class=self._cell(basic_row, basic_index, "Risk Class") or None,
+                implantable=self._cell(basic_row, basic_index, "Implantable") or None,
+                measuring_function=self._cell(basic_row, basic_index, "Measuring Function") or None,
+                reusable_surgical_instrument=self._cell(basic_row, basic_index, "Reusable") or None,
+                active_device=self._cell(basic_row, basic_index, "Active") or None,
+                administering_medicinal_product=(
+                    self._cell(basic_row, basic_index, "Administers or/and Removes Medicine") or None
+                ),
+                device_model_applicable=None,
+                additional_information_url=None,
+                submission_operation=None,
+                source_version_marker=None,
+                first_eu_market_country=None,
+                available_market_countries=(),
+            )
+        return legacy_rows
+
+    @staticmethod
+    def _matching_legacy_srn_row(
+        device_model: str,
+        legacy_rows: dict[str, BasicUdiReferenceRow],
+    ) -> BasicUdiReferenceRow | None:
+        exact = legacy_rows.get(device_model)
+        if exact is not None:
+            return exact
+        for legacy_model, legacy_row in legacy_rows.items():
+            if device_model.startswith(f"{legacy_model} "):
+                return legacy_row
+        # Current QMS confirmation: the legacy tracekey SRN values are valid for all products.
+        if len(legacy_rows) == 1:
+            return next(iter(legacy_rows.values()))
+        return None
 
     @staticmethod
     def _cell(row: tuple[object | None, ...], index: dict[str, int], header: str) -> str:

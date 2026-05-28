@@ -64,6 +64,11 @@ class BasicDevice(BaseModel):
     annex_xvi_other_purpose: bool | None = None
     clinical_investigation: bool | None = None
     risk_class: str | None = None
+    authorised_representative_srn: str | None = None
+    human_tissues_cells: bool | None = None
+    animal_tissues_cells: bool | None = None
+    human_product_check: bool | None = None
+    medicinal_product_check: bool | None = None
     implantable: bool | None = None
     measuring_function: bool | None = None
     reusable_surgical_instrument: bool | None = None
@@ -103,25 +108,36 @@ class DeviceRecord(BaseModel):
     """Primary first-phase canonical entity for MDR UDI-DI upload preparation."""
 
     basic_device_ref: str | None = None
+    identifier: str | None = None
     primary_udi_di: str | None = None
     catalogue_number: str | None = None
+    basic_udi_identifier: str | None = None
+    status: str | None = None
     secondary_udi_di_applicable: bool | None = None
+    secondary_identifier: str | None = None
     trade_name: str | None = None
     language: str | None = None
     quantity: int | None = None
+    base_quantity: int | None = None
     direct_marking: bool | None = None
     udi_pi_type: str | None = None
+    production_identifier: str | None = None
     clinical_size_applicable: bool | None = None
     single_use: bool | None = None
     max_reuses_applicable: bool | None = None
+    number_of_reuses: int | None = None
     sterilisation_before_use: bool | None = None
+    sterilization: bool | None = None
     sterile: bool | None = None
     contains_latex: bool | None = None
     cmr_present: bool | None = None
     endocrine_disruptor_present: bool | None = None
     reprocessed_single_use: bool | None = None
+    reprocessed: bool | None = None
     human_tissue_present: bool | None = None
+    human_tissues_present: bool | None = None
     animal_tissue_present: bool | None = None
+    animal_tissues_present: bool | None = None
     medicinal_substance_present: bool | None = None
     blood_plasma_derivative_present: bool | None = None
     storage_conditions: list[StorageCondition] = Field(default_factory=list)

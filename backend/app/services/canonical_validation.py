@@ -50,15 +50,19 @@ STERILE_HEADER = "Device labelled as sterile e.g. NO"
 LATEX_HEADER = "Containing latex e.g. NO"
 DIRECT_MARKING_HEADER = "Is the device directly marked? E.g. NO"
 SINGLE_USE_HEADER = "Labelled as single use e.g.NO"
+CLINICAL_SIZE_APPLICABLE_HEADER = "Clinical size applicable e.g. NO"
 MAX_REUSES_APPLICABLE_HEADER = "Maximum number of reuses applicable e.g. NO"
 STERILIZATION_HEADER = "Need for sterilsation before use e.g. NO"
 REPROCESSED_HEADER = "Reprocessed single use device e.g. NO"
+ANNEX_XVI_HEADER = "Intended purpose other than medical (Annex XVI) e.g. NO"
 DESIGNED_BY_ANOTHER_HEADER = "Is the device designed and manufactured by another legal or natural person? E.g. NO"
 CLINICAL_INVESTIGATION_HEADER = "Clinical Investigation e.g. NO"
 HUMAN_TISSUE_HEADER = "Presence of human tissues or cells, or their derivatives e.g. NO"
 ANIMAL_TISSUE_HEADER = "Presence of animal tissues or cells, or their derivatives e.g. NO"
 MEDICINAL_SUBSTANCE_HEADER = "Presence of a substance which, if used separately, may be considered to be a medicinal product e.g. NO"
 HUMAN_BLOOD_SUBSTANCE_HEADER = "Presence of a substance which, if used separately, may be considered to be a medicinal product derived from human blood or human plasma e.g. NO"
+CMR_HEADER = "Labelled for presence of Carcinogenic, Mutagenic and toxic to Reproduction (CMR) substances of category 1A or 1B e.g. NO"
+ENDOCRINE_DISRUPTOR_HEADER = "Labelled for presence of substances with endocrine-disrupting properties e.g. NO"
 FIRST_EU_MARKET_HEADER = "Member state where first placed on the EU market e.g. Germany"
 STORAGE_APPLICABLE_HEADER = "Storage/handling conditions, if applicable e.g. YES"
 STORAGE_TYPE_HEADER = "Storage /handling conditions type e.g. Lower limit of temp"
@@ -67,6 +71,8 @@ STORAGE_TYPE_TWO_HEADER = "Add another Storage/handling condition e.g. Upper lim
 STORAGE_DESCRIPTION_TWO_HEADER = "Description e.g. taken from  IFU Technical Data page Storage Temp range e.g. +50C"
 WARNING_APPLICABLE_HEADER = "Critical warnings or contra-indications, if applicable e.g. Yes"
 WARNING_TYPE_HEADER = "Critical warning type e.g.  Consult instructions for use"
+SECONDARY_IDENTIFIER_CODE_HEADER = "Secondary Identifier - Code"
+SECONDARY_IDENTIFIER_ENTITY_HEADER = "Secondary Identifier - Issuing Entity"
 
 FAMILY_LABELS: dict[str, str] = {
     "Template for Echelon family EUDAMED.xlsx": "Echelon",
@@ -166,6 +172,11 @@ class CanonicalValidationService:
             if records
             else 0
         )
+        tracked_xml_required_fields = (
+            sum(1 for field in records[0].fields if field.xml_required)
+            if records
+            else 0
+        )
 
         return CanonicalValidationBundle(
             family_scope="In-scope non-accessories families",
@@ -174,17 +185,20 @@ class CanonicalValidationService:
                 "variant-level Basic UDI linkage from the authoritative BasicUDIs.xlsx workbook."
             ),
             validation_note=(
-                "Readiness is currently measured against one shared canonical-required field set across POST "
-                "and PATCH variants. Operation-specific validation rules can be tightened later once QMS "
-                "confirms any divergent requirements."
+                "Canonical completeness and XML readiness are now shown separately. XML readiness applies "
+                "the current XML-facing required field set across POST and PATCH variants, while "
+                "operation-specific rules can still be tightened later once QMS confirms any divergent requirements."
             ),
             total_source_records=total_source_records,
             validation_subset_records=len(records),
             excluded_records=sum(summary.record_count for summary in deferred_scope_summaries),
             matched_reference_records=len(records),
             tracked_required_fields=tracked_required_fields,
+            tracked_xml_required_fields=tracked_xml_required_fields,
             ready_records=sum(1 for record in records if record.completeness.status == "complete"),
             blocked_records=sum(1 for record in records if record.completeness.status == "incomplete"),
+            xml_ready_records=sum(1 for record in records if record.xml_readiness.status == "complete"),
+            xml_blocked_records=sum(1 for record in records if record.xml_readiness.status == "incomplete"),
             family_summaries=self._build_family_summaries(records),
             variant_summaries=self._build_variant_summaries(records),
             blocker_summaries=self._build_blocker_summaries(records),
@@ -207,9 +221,15 @@ class CanonicalValidationService:
         source_values = row.values
         issuing_entity = self._issuing_entity_code(source_values.get(ISSUING_ENTITY_HEADER))
         primary_udi_di = self._first_string_value(source_values, UDI_DI_HEADERS)
+        basic_udi_identifier = self._di_identifier(issuing_entity=issuing_entity, di_code=reference_row.basic_udi_di)
+        secondary_identifier = self._di_identifier(
+            issuing_entity=self._issuing_entity_code(source_values.get(SECONDARY_IDENTIFIER_ENTITY_HEADER)),
+            di_code=self._string_value(source_values.get(SECONDARY_IDENTIFIER_CODE_HEADER)),
+        )
         storage_condition_items = self._assemble_storage_condition_items(source_values)
         critical_warning_items = self._assemble_critical_warning_items(source_values)
         market_availability_items = self._assemble_market_availability_items(reference_row)
+        production_identifier = self._production_identifier(source_values.get(UDI_PI_HEADER))
 
         fields = [
             self._field(
@@ -218,6 +238,34 @@ class CanonicalValidationService:
                 value=issuing_entity,
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{ISSUING_ENTITY_HEADER}",
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="manufacturer.manufacturer_srn",
+                business_label="Manufacturer SRN",
+                value=reference_row.manufacturer_srn,
+                source=reference_row.manufacturer_srn_source or "missing",
+                source_detail=(
+                    "uat-eudamed_mdr_products_tracekey_sample_data.xlsx!MDR-Basic Manufacturer Code"
+                    if reference_row.manufacturer_srn_source == "legacy_basic_udi_reference"
+                    else "No confirmed workbook or authoritative Basic UDI source column is currently available."
+                ),
+                review_note=(
+                    "Supplemented from the legacy tracekey workbook because the current authoritative BasicUDIs.xlsx "
+                    "workbook does not carry manufacturer SRN."
+                    if reference_row.manufacturer_srn_source == "legacy_basic_udi_reference"
+                    else "Still required for XML generation, but not currently present in BasicUDIs.xlsx or the in-scope device workbooks."
+                ),
+                required=False,
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="manufacturer.designed_by_another_legal_entity",
+                business_label="Designed By Another Legal Entity",
+                value=self._normalized_boolean(source_values.get(DESIGNED_BY_ANOTHER_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{DESIGNED_BY_ANOTHER_HEADER}",
+                required=False,
             ),
             self._field(
                 canonical_path="basic_device.regulation",
@@ -225,6 +273,7 @@ class CanonicalValidationService:
                 value=self._regulation_code(reference_row.applicable_regulation),
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Applicable regulation",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="basic_device.basic_udi_di",
@@ -232,6 +281,7 @@ class CanonicalValidationService:
                 value=reference_row.basic_udi_di,
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Basic UDI-DI code",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="basic_device.device_model",
@@ -239,6 +289,7 @@ class CanonicalValidationService:
                 value=reference_row.device_model,
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Device Model",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="basic_device.device_type",
@@ -246,6 +297,7 @@ class CanonicalValidationService:
                 value=self._device_type(reference_row.device_type),
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Is it a System or Procedure Pack which is a Device in itself?",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="basic_device.special_device_type",
@@ -253,6 +305,7 @@ class CanonicalValidationService:
                 value=reference_row.special_device_type,
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Special device type",
+                required=False,
             ),
             self._field(
                 canonical_path="basic_device.risk_class",
@@ -260,6 +313,96 @@ class CanonicalValidationService:
                 value=reference_row.risk_class,
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Risk class",
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="basic_device.authorised_representative_srn",
+                business_label="Authorised Representative SRN",
+                value=reference_row.authorised_representative_srn,
+                source=reference_row.authorised_representative_srn_source or "missing",
+                source_detail=(
+                    "uat-eudamed_mdr_products_tracekey_sample_data.xlsx!MDR-Basic Authorised Representative Actor Code"
+                    if reference_row.authorised_representative_srn_source == "legacy_basic_udi_reference"
+                    else "No confirmed workbook or authoritative Basic UDI source column is currently available."
+                ),
+                review_note=(
+                    "Supplemented from the legacy tracekey workbook because the current authoritative BasicUDIs.xlsx "
+                    "workbook does not carry authorised representative SRN."
+                    if reference_row.authorised_representative_srn_source == "legacy_basic_udi_reference"
+                    else "Optional in XML unless the manufacturer is non-EU, but retained here as an explicit reviewable gap."
+                ),
+                required=False,
+            ),
+            self._field(
+                canonical_path="basic_device.nomenclature_code",
+                business_label="EMDN Code",
+                value=self._string_value(source_values.get(EMDN_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{EMDN_HEADER}",
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="basic_device.intended_purpose_summary",
+                business_label="Intended Purpose Summary",
+                value=None,
+                source="missing",
+                source_detail="No dedicated intended-purpose summary field is currently confirmed in the in-scope workbook templates.",
+                review_note="Retained as a visible canonical gap until QMS confirms a source field or an approved enrichment rule.",
+                required=False,
+            ),
+            self._field(
+                canonical_path="basic_device.annex_xvi_other_purpose",
+                business_label="Annex XVI Other Purpose",
+                value=self._normalized_boolean(source_values.get(ANNEX_XVI_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{ANNEX_XVI_HEADER}",
+            ),
+            self._field(
+                canonical_path="basic_device.clinical_investigation",
+                business_label="Clinical Investigation",
+                value=self._normalized_boolean(source_values.get(CLINICAL_INVESTIGATION_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{CLINICAL_INVESTIGATION_HEADER}",
+            ),
+            self._field(
+                canonical_path="basic_device.human_tissues_cells",
+                business_label="Human Tissues Cells",
+                value=self._normalized_boolean(source_values.get(HUMAN_TISSUE_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{HUMAN_TISSUE_HEADER}",
+                review_note="Used as the current XML-facing surrogate until an authoritative Basic UDI-level source is confirmed.",
+                required=False,
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="basic_device.animal_tissues_cells",
+                business_label="Animal Tissues Cells",
+                value=self._normalized_boolean(source_values.get(ANIMAL_TISSUE_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{ANIMAL_TISSUE_HEADER}",
+                review_note="Used as the current XML-facing surrogate until an authoritative Basic UDI-level source is confirmed.",
+                required=False,
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="basic_device.human_product_check",
+                business_label="Human Product Check",
+                value=self._normalized_boolean(source_values.get(HUMAN_BLOOD_SUBSTANCE_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{HUMAN_BLOOD_SUBSTANCE_HEADER}",
+                review_note="Used as the current XML-facing surrogate until an authoritative Basic UDI-level source is confirmed.",
+                required=False,
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="basic_device.medicinal_product_check",
+                business_label="Medicinal Product Check",
+                value=self._normalized_boolean(source_values.get(MEDICINAL_SUBSTANCE_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{MEDICINAL_SUBSTANCE_HEADER}",
+                review_note="Used as the current XML-facing surrogate until an authoritative Basic UDI-level source is confirmed.",
+                required=False,
+                xml_required=True,
             ),
             self._field(
                 canonical_path="basic_device.implantable",
@@ -267,6 +410,7 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(reference_row.implantable),
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Implantable",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="basic_device.measuring_function",
@@ -274,6 +418,7 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(reference_row.measuring_function),
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Measuring function",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="basic_device.reusable_surgical_instrument",
@@ -281,6 +426,15 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(reference_row.reusable_surgical_instrument),
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Reusable surgical instrument",
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="basic_device.reusable",
+                business_label="Reusable",
+                value=self._normalized_boolean(reference_row.reusable_surgical_instrument),
+                source="basic_udi_reference",
+                source_detail="BasicUDIs.xlsx!Reusable surgical instrument",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="basic_device.active",
@@ -288,6 +442,7 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(reference_row.active_device),
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Active device",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="basic_device.administering_medicinal_product",
@@ -295,6 +450,15 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(reference_row.administering_medicinal_product),
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Device intended to administer and/or remove medicinal product",
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="basic_device.administering_medicine",
+                business_label="Administering Medicine",
+                value=self._normalized_boolean(reference_row.administering_medicinal_product),
+                source="basic_udi_reference",
+                source_detail="BasicUDIs.xlsx!Device intended to administer and/or remove medicinal product",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="basic_device.device_model_applicable",
@@ -302,6 +466,7 @@ class CanonicalValidationService:
                 value=self._normalized_yes_no(reference_row.device_model_applicable),
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Device model applicable",
+                required=False,
             ),
             self._field(
                 canonical_path="basic_device.additional_information_url",
@@ -309,6 +474,7 @@ class CanonicalValidationService:
                 value=reference_row.additional_information_url,
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!URL for additional information (as electronic instructions for use):",
+                required=False,
             ),
             self._field(
                 canonical_path="basic_device.submission_operation",
@@ -316,6 +482,33 @@ class CanonicalValidationService:
                 value=reference_row.submission_operation,
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Operation",
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="basic_device.source_version_marker",
+                business_label="Source Version Marker",
+                value=reference_row.source_version_marker,
+                source="basic_udi_reference" if reference_row.source_version_marker else "missing",
+                source_detail="BasicUDIs.xlsx!Version",
+                review_note="Preserved as workbook metadata until QMS confirms whether it should populate a true EUDAMED entity-version field.",
+                required=False,
+            ),
+            self._field(
+                canonical_path="basic_device.type",
+                business_label="Basic Device Type",
+                value=self._device_type(reference_row.device_type),
+                source="basic_udi_reference",
+                source_detail="BasicUDIs.xlsx!Is it a System or Procedure Pack which is a Device in itself?",
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="device_record.basic_device_ref",
+                business_label="Basic Device Reference",
+                value=reference_row.basic_udi_di,
+                source="basic_udi_reference",
+                source_detail="BasicUDIs.xlsx!Basic UDI-DI code",
+                review_note="Explicitly links the UDI-DI row to the matched Basic UDI-DI variant context.",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="device_record.identifier",
@@ -324,6 +517,7 @@ class CanonicalValidationService:
                 source="derived",
                 source_detail=f"{row.sheet_name}!{ISSUING_ENTITY_HEADER} + UDI-DI code",
                 review_note="Composed as a DI identifier using workbook issuing entity and primary UDI-DI code.",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="device_record.primary_udi_di",
@@ -331,6 +525,7 @@ class CanonicalValidationService:
                 value=primary_udi_di,
                 source="workbook",
                 source_detail=f"{row.sheet_name}!UDI-DI code",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="device_record.catalogue_number",
@@ -338,6 +533,17 @@ class CanonicalValidationService:
                 value=self._catalogue_number(source_values),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!Reference/ Catalogue number",
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="device_record.basic_udi_identifier",
+                business_label="Basic UDI Identifier",
+                value=basic_udi_identifier,
+                source="derived",
+                source_detail="BasicUDIs.xlsx!Basic UDI-DI code + workbook issuing entity",
+                review_note="Composed as a DI identifier using the matched Basic UDI-DI and workbook issuing entity.",
+                required=False,
+                xml_required=True,
             ),
             self._field(
                 canonical_path="device_record.trade_name",
@@ -345,6 +551,7 @@ class CanonicalValidationService:
                 value=self._string_value(source_values.get(TRADE_NAME_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{TRADE_NAME_HEADER}",
+                required=False,
             ),
             self._field(
                 canonical_path="device_record.language",
@@ -352,6 +559,7 @@ class CanonicalValidationService:
                 value=self._string_value(source_values.get(LANGUAGE_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{LANGUAGE_HEADER}",
+                required=False,
             ),
             self._field(
                 canonical_path="device_record.status",
@@ -359,6 +567,7 @@ class CanonicalValidationService:
                 value=self._status_code(source_values.get(STATUS_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{STATUS_HEADER}",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="device_record.quantity",
@@ -366,6 +575,7 @@ class CanonicalValidationService:
                 value=self._string_value(source_values.get(QUANTITY_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{QUANTITY_HEADER}",
+                required=False,
             ),
             self._field(
                 canonical_path="device_record.udi_pi_type",
@@ -373,6 +583,23 @@ class CanonicalValidationService:
                 value=self._string_value(source_values.get(UDI_PI_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{UDI_PI_HEADER}",
+                required=False,
+            ),
+            self._field(
+                canonical_path="device_record.clinical_size_applicable",
+                business_label="Clinical Size Applicable",
+                value=self._normalized_boolean(source_values.get(CLINICAL_SIZE_APPLICABLE_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{CLINICAL_SIZE_APPLICABLE_HEADER}",
+            ),
+            self._field(
+                canonical_path="device_record.production_identifier",
+                business_label="Production Identifier",
+                value=production_identifier,
+                source="normalized" if production_identifier else "missing",
+                source_detail=f"{row.sheet_name}!{UDI_PI_HEADER}",
+                review_note="Optional XML-facing value normalized from the UDI-PI workbook selection.",
+                required=False,
             ),
             self._field(
                 canonical_path="device_record.number_of_reuses",
@@ -381,6 +608,14 @@ class CanonicalValidationService:
                 source="derived",
                 source_detail=f"{row.sheet_name}!{MAX_REUSES_APPLICABLE_HEADER}",
                 review_note="Derived from the workbook applicability field for current canonical validation.",
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="device_record.max_reuses_applicable",
+                business_label="Maximum Reuses Applicable",
+                value=self._normalized_boolean(source_values.get(MAX_REUSES_APPLICABLE_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{MAX_REUSES_APPLICABLE_HEADER}",
             ),
             self._field(
                 canonical_path="device_record.secondary_udi_di_applicable",
@@ -388,6 +623,18 @@ class CanonicalValidationService:
                 value=self._normalized_yes_no(source_values.get(SECONDARY_UDI_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{SECONDARY_UDI_HEADER}",
+                required=False,
+            ),
+            self._field(
+                canonical_path="device_record.secondary_identifier",
+                business_label="Secondary Identifier",
+                value=secondary_identifier,
+                source="workbook" if secondary_identifier else "missing",
+                source_detail=(
+                    f"{row.sheet_name}!{SECONDARY_IDENTIFIER_ENTITY_HEADER} + {SECONDARY_IDENTIFIER_CODE_HEADER}"
+                ),
+                review_note="Only populated when the workbook provides both a secondary issuing entity and a secondary identifier code.",
+                required=False,
             ),
             self._field(
                 canonical_path="device_record.sterile",
@@ -395,6 +642,7 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(source_values.get(STERILE_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{STERILE_HEADER}",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="device_record.sterilization",
@@ -402,6 +650,15 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(source_values.get(STERILIZATION_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{STERILIZATION_HEADER}",
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="device_record.sterilisation_before_use",
+                business_label="Sterilisation Before Use",
+                value=self._normalized_boolean(source_values.get(STERILIZATION_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{STERILIZATION_HEADER}",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="device_record.contains_latex",
@@ -409,6 +666,7 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(source_values.get(LATEX_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{LATEX_HEADER}",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="device_record.reprocessed",
@@ -416,6 +674,15 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(source_values.get(REPROCESSED_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{REPROCESSED_HEADER}",
+                xml_required=True,
+            ),
+            self._field(
+                canonical_path="device_record.reprocessed_single_use",
+                business_label="Reprocessed Single Use Device",
+                value=self._normalized_boolean(source_values.get(REPROCESSED_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{REPROCESSED_HEADER}",
+                xml_required=True,
             ),
             self._field(
                 canonical_path="device_record.direct_marking",
@@ -423,6 +690,7 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(source_values.get(DIRECT_MARKING_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{DIRECT_MARKING_HEADER}",
+                required=False,
             ),
             self._field(
                 canonical_path="device_record.single_use",
@@ -430,31 +698,32 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(source_values.get(SINGLE_USE_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{SINGLE_USE_HEADER}",
+                required=False,
             ),
             self._field(
-                canonical_path="device_record.designed_by_another_legal_entity",
-                business_label="Designed By Another Legal Entity",
-                value=self._normalized_boolean(source_values.get(DESIGNED_BY_ANOTHER_HEADER)),
+                canonical_path="device_record.cmr_present",
+                business_label="CMR Present",
+                value=self._normalized_boolean(source_values.get(CMR_HEADER)),
                 source="workbook",
-                source_detail=f"{row.sheet_name}!{DESIGNED_BY_ANOTHER_HEADER}",
+                source_detail=f"{row.sheet_name}!{CMR_HEADER}",
             ),
             self._field(
-                canonical_path="device_record.clinical_investigation",
-                business_label="Clinical Investigation",
-                value=self._normalized_boolean(source_values.get(CLINICAL_INVESTIGATION_HEADER)),
+                canonical_path="device_record.endocrine_disruptor_present",
+                business_label="Endocrine Disruptor Present",
+                value=self._normalized_boolean(source_values.get(ENDOCRINE_DISRUPTOR_HEADER)),
                 source="workbook",
-                source_detail=f"{row.sheet_name}!{CLINICAL_INVESTIGATION_HEADER}",
+                source_detail=f"{row.sheet_name}!{ENDOCRINE_DISRUPTOR_HEADER}",
             ),
             self._field(
-                canonical_path="device_record.human_tissues_present",
-                business_label="Human Tissues Present",
+                canonical_path="device_record.human_tissue_present",
+                business_label="Human Tissue Present",
                 value=self._normalized_boolean(source_values.get(HUMAN_TISSUE_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{HUMAN_TISSUE_HEADER}",
             ),
             self._field(
-                canonical_path="device_record.animal_tissues_present",
-                business_label="Animal Tissues Present",
+                canonical_path="device_record.animal_tissue_present",
+                business_label="Animal Tissue Present",
                 value=self._normalized_boolean(source_values.get(ANIMAL_TISSUE_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{ANIMAL_TISSUE_HEADER}",
@@ -465,13 +734,30 @@ class CanonicalValidationService:
                 value=self._normalized_boolean(source_values.get(MEDICINAL_SUBSTANCE_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{MEDICINAL_SUBSTANCE_HEADER}",
+                required=False,
             ),
             self._field(
-                canonical_path="device_record.human_blood_substance_present",
-                business_label="Human Blood/Plasma Substance Present",
+                canonical_path="device_record.blood_plasma_derivative_present",
+                business_label="Blood Plasma Derivative Present",
                 value=self._normalized_boolean(source_values.get(HUMAN_BLOOD_SUBSTANCE_HEADER)),
                 source="workbook",
                 source_detail=f"{row.sheet_name}!{HUMAN_BLOOD_SUBSTANCE_HEADER}",
+            ),
+            self._field(
+                canonical_path="device_record.market_availability",
+                business_label="Market Availability",
+                value="present" if market_availability_items else None,
+                source="basic_udi_reference" if market_availability_items else "missing",
+                source_detail="BasicUDIs.xlsx!Member State of the placing on the EU market of the Device + available market country list",
+                review_note="Represented as a nested canonical object with a market status and first-EU-market-country subfield.",
+                required=False,
+            ),
+            self._field(
+                canonical_path="device_record.market_availability.market_status",
+                business_label="UDI-DI Market Status",
+                value=self._status_code(source_values.get(STATUS_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{STATUS_HEADER}",
             ),
             self._field(
                 canonical_path="device_record.market_availabilities",
@@ -480,6 +766,7 @@ class CanonicalValidationService:
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Member States where device is or is to be made available on the market:",
                 review_note="Represented as repeated market-availability items in the canonical layer.",
+                required=False,
             ),
             self._field(
                 canonical_path="device_record.market_availability.first_eu_market_country",
@@ -487,6 +774,16 @@ class CanonicalValidationService:
                 value=reference_row.first_eu_market_country or self._string_value(source_values.get(FIRST_EU_MARKET_HEADER)),
                 source="basic_udi_reference" if reference_row.first_eu_market_country else "workbook",
                 source_detail="BasicUDIs.xlsx!Member State of the placing on the EU market of the Device:",
+                required=False,
+            ),
+            self._field(
+                canonical_path="device_record.base_quantity",
+                business_label="Base Quantity",
+                value=self._string_value(source_values.get(QUANTITY_HEADER)),
+                source="workbook",
+                source_detail=f"{row.sheet_name}!{QUANTITY_HEADER}",
+                review_note="Optional XML-facing quantity field currently taken directly from the workbook quantity column.",
+                required=False,
             ),
             self._field(
                 canonical_path="device_record.storage_conditions",
@@ -495,21 +792,26 @@ class CanonicalValidationService:
                 source="derived" if storage_condition_items else "missing",
                 source_detail=f"{row.sheet_name}!{STORAGE_APPLICABLE_HEADER}",
                 required=self._normalized_yes_no(source_values.get(STORAGE_APPLICABLE_HEADER)) == "Yes",
-                review_note="Represented as repeated storage-condition items when the workbook applicability flag is Yes.",
             ),
             self._field(
-                canonical_path="device_record.critical_warnings",
+                canonical_path="device_record.warnings",
                 business_label="Critical Warnings",
                 value=str(len(critical_warning_items)) if critical_warning_items else None,
                 source="derived" if critical_warning_items else "missing",
                 source_detail=f"{row.sheet_name}!{WARNING_APPLICABLE_HEADER}",
+                review_note="Represented as repeated warning items in the canonical layer.",
                 required=self._normalized_yes_no(source_values.get(WARNING_APPLICABLE_HEADER)) == "Yes",
-                review_note="Represented as repeated critical-warning items when the workbook applicability flag is Yes.",
             ),
         ]
 
         blockers = [f"{field.business_label} is not populated." for field in fields if field.required and field.value is None]
         completeness = self._completeness_snapshot(fields)
+        xml_blockers = [
+            f"{field.business_label} is not populated for XML generation."
+            for field in fields
+            if field.xml_required and field.value is None
+        ]
+        xml_readiness = self._xml_readiness_snapshot(fields)
 
         return CanonicalValidationRecord(
             source_workbook=workbook_name,
@@ -524,7 +826,9 @@ class CanonicalValidationService:
             submission_operation=reference_row.submission_operation,
             reference_match_status="matched",
             completeness=completeness,
+            xml_readiness=xml_readiness,
             blockers=blockers,
+            xml_blockers=xml_blockers,
             storage_condition_items=storage_condition_items,
             critical_warning_items=critical_warning_items,
             market_availability_items=market_availability_items,
@@ -697,6 +1001,8 @@ class CanonicalValidationService:
                     total_records=len(family_records),
                     ready_records=sum(1 for record in family_records if record.completeness.status == "complete"),
                     blocked_records=sum(1 for record in family_records if record.completeness.status == "incomplete"),
+                    xml_ready_records=sum(1 for record in family_records if record.xml_readiness.status == "complete"),
+                    xml_blocked_records=sum(1 for record in family_records if record.xml_readiness.status == "incomplete"),
                     post_records=sum(1 for record in family_records if record.submission_operation == "POST"),
                     patch_records=sum(1 for record in family_records if record.submission_operation == "PATCH"),
                 )
@@ -712,9 +1018,12 @@ class CanonicalValidationService:
         for (_, _), variant_records in sorted(grouped.items()):
             first = variant_records[0]
             blocker_counts: dict[str, int] = {}
+            xml_blocker_counts: dict[str, int] = {}
             for record in variant_records:
                 for blocker in record.blockers:
                     blocker_counts[blocker] = blocker_counts.get(blocker, 0) + 1
+                for blocker in record.xml_blockers:
+                    xml_blocker_counts[blocker] = xml_blocker_counts.get(blocker, 0) + 1
             summaries.append(
                 VariantValidationSummary(
                     product_family=first.product_family,
@@ -725,12 +1034,21 @@ class CanonicalValidationService:
                     total_records=len(variant_records),
                     ready_records=sum(1 for record in variant_records if record.completeness.status == "complete"),
                     blocked_records=sum(1 for record in variant_records if record.completeness.status == "incomplete"),
+                    xml_ready_records=sum(1 for record in variant_records if record.xml_readiness.status == "complete"),
+                    xml_blocked_records=sum(1 for record in variant_records if record.xml_readiness.status == "incomplete"),
                     missing_required_field_total=sum(
                         record.completeness.missing_required_fields for record in variant_records
+                    ),
+                    missing_xml_required_field_total=sum(
+                        record.xml_readiness.missing_required_fields for record in variant_records
                     ),
                     common_blockers=[
                         blocker
                         for blocker, _ in sorted(blocker_counts.items(), key=lambda item: (-item[1], item[0]))[:3]
+                    ],
+                    common_xml_blockers=[
+                        blocker
+                        for blocker, _ in sorted(xml_blocker_counts.items(), key=lambda item: (-item[1], item[0]))[:3]
                     ],
                 )
             )
@@ -820,11 +1138,13 @@ class CanonicalValidationService:
         source_detail: str,
         review_note: str | None = None,
         required: bool = True,
+        xml_required: bool = False,
     ) -> CanonicalValidationFieldValue:
         return CanonicalValidationFieldValue(
             canonical_path=canonical_path,
             business_label=business_label,
             required=required,
+            xml_required=xml_required,
             value=value,
             source=source,
             source_detail=source_detail,
@@ -834,6 +1154,19 @@ class CanonicalValidationService:
     @staticmethod
     def _completeness_snapshot(fields: list[CanonicalValidationFieldValue]) -> CompletenessSnapshot:
         values = [field.value for field in fields if field.required]
+        mapped_required_fields = sum(1 for value in values if value is not None)
+        total_required_fields = len(values)
+        missing_required_fields = total_required_fields - mapped_required_fields
+        return CompletenessSnapshot(
+            mapped_required_fields=mapped_required_fields,
+            total_required_fields=total_required_fields,
+            missing_required_fields=missing_required_fields,
+            status="complete" if missing_required_fields == 0 else "incomplete",
+        )
+
+    @staticmethod
+    def _xml_readiness_snapshot(fields: list[CanonicalValidationFieldValue]) -> CompletenessSnapshot:
+        values = [field.value for field in fields if field.xml_required]
         mapped_required_fields = sum(1 for value in values if value is not None)
         total_required_fields = len(values)
         missing_required_fields = total_required_fields - mapped_required_fields
@@ -926,6 +1259,18 @@ class CanonicalValidationService:
         if applicable and applicable.strip().lower() in {"no", "false"}:
             return "1"
         return None
+
+    @staticmethod
+    def _production_identifier(value: object | None) -> str | None:
+        raw = CanonicalValidationService._string_value(value)
+        if raw is None:
+            return None
+        normalized = raw.lower().replace(" / ", "/").replace("/ ", "/").replace(" /", "/")
+        mapping = {
+            "serial number/ manufacturing date": "SERIALISATION_NUMBER",
+            "serial number/manufacturing date": "SERIALISATION_NUMBER",
+        }
+        return mapping.get(normalized, raw.upper().replace(" ", "_"))
 
     @staticmethod
     def _string_value(value: object | None) -> str | None:
