@@ -4,9 +4,11 @@ from io import BytesIO
 from zipfile import ZipFile
 
 from app.routers.xml_generation import (
+    download_xml_batch,
     download_xml_record,
     download_echelon_batch,
     download_echelon_record,
+    preview_xml_batch,
     preview_xml_record,
     preview_echelon_batch,
     preview_echelon_record,
@@ -71,6 +73,67 @@ def test_generic_download_route_returns_xml_file() -> None:
     assert response.media_type == "application/xml"
     assert 'filename="echelon-echelon-EC22L1S.xml"' in response.headers["Content-Disposition"]
     assert b"<m:Push" in response.body
+
+
+def test_generic_batch_preview_generates_variant_scoped_schema_valid_xml() -> None:
+    preview = XmlGenerationService().preview_batch(
+        product_family="Echelon",
+        product_variant="Echelon VT",
+        chunk_sequence=1,
+    )
+
+    assert preview.product_family == "Echelon"
+    assert preview.product_variant == "Echelon VT"
+    assert preview.submission_operation == "POST"
+    assert preview.package_file_name == "echelon-echelon-vt-batch-package.zip"
+    assert preview.total_ready_records == 1696
+    assert preview.excluded_records == 0
+    assert preview.max_records_per_file == 300
+    assert preview.chunk_count == 6
+    assert preview.selected_chunk_sequence == 1
+    assert preview.selected_chunk_file_name == "echelon-echelon-vt-batch-01-of-06.xml"
+    assert preview.selected_chunk_record_count == 300
+    assert preview.selected_chunk_validation.valid is True
+    assert len(preview.chunks) == 6
+    assert preview.chunks[-1].record_count == 196
+    assert "<m:Push" in preview.selected_chunk_xml
+    assert "<s:serviceOperation>POST</s:serviceOperation>" in preview.selected_chunk_xml
+
+
+def test_generic_batch_preview_route_returns_variant_batch_payload() -> None:
+    payload = preview_xml_batch(
+        {
+            "product_family": "Echelon",
+            "product_variant": "Echelon VT",
+            "chunk_sequence": 2,
+        }
+    )
+
+    assert payload["mode"] == "batch"
+    assert payload["product_family"] == "Echelon"
+    assert payload["product_variant"] == "Echelon VT"
+    assert payload["chunk_count"] == 6
+    assert payload["selected_chunk_sequence"] == 2
+    assert payload["selected_chunk_record_count"] == 300
+    assert payload["selected_chunk_validation"]["valid"] is True
+
+
+def test_generic_batch_download_route_returns_zip_package() -> None:
+    response = download_xml_batch(
+        {
+            "product_family": "Echelon",
+            "product_variant": "Echelon VT",
+        }
+    )
+
+    assert response.media_type == "application/zip"
+    assert 'filename="echelon-echelon-vt-batch-package.zip"' in response.headers["Content-Disposition"]
+
+    with ZipFile(BytesIO(response.body)) as archive:
+        names = archive.namelist()
+        assert "manifest.json" in names
+        assert "echelon-echelon-vt-batch-01-of-06.xml" in names
+        assert "echelon-echelon-vt-batch-06-of-06.xml" in names
 
 
 def test_single_record_preview_generates_schema_valid_xml() -> None:

@@ -423,6 +423,9 @@ export type BatchXmlChunkSummary = {
 
 export type BatchXmlPreview = {
   mode: "batch";
+  product_family: string | null;
+  product_variant: string | null;
+  submission_operation: string | null;
   package_file_name: string;
   total_ready_records: number;
   excluded_records: number;

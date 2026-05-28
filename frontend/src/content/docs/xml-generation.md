@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The `XML Generation` area is where XML-ready canonical data is transformed into schema-aware EUDAMED payloads. This stage should only become active after `Canonical Validation` shows that the selected row is ready for XML generation.
+The `XML Generation` area is where XML-ready canonical data is transformed into schema-aware EUDAMED payloads. This stage should only become active after `Canonical Validation` shows that the selected variant has XML-ready data available for generation.
 
 ## Current Decisions
 
@@ -11,11 +11,13 @@ The `XML Generation` area is where XML-ready canonical data is transformed into 
 - the generated artifact is a wrapped service `Push` message rooted at `data/schemas/service/Message.xsd`
 - `Basic UDI` records remain upstream reference context and are now resolved through the aligned canonical-validation field set
 - XML generation now starts at `Product Family` and `Product Variant` level rather than at workbook-family level
-- the current implemented generic slice is:
+- the current implemented generic slices are:
   - `Single XML`
-  - one selected XML-ready row
-  - one wrapped `Push` message
-- `Variant Batch XML` is the next planned slice and is not yet part of the new generic path
+    - one auto-selected XML-ready sample row
+    - one wrapped `Push` message
+  - `Variant Batch XML`
+    - all XML-ready rows for one selected product variant only
+    - chunked wrapped `Push` messages at up to `300` rows per file
 - database persistence is not required for the current XML design phase
 
 ## What The User Does Here
@@ -23,23 +25,31 @@ The `XML Generation` area is where XML-ready canonical data is transformed into 
 - review XML scope and readiness derived from `Canonical Validation`
 - select a `Product Family`
 - select a `Product Variant`
-- select one XML-ready row
-- generate a single wrapped `Push` message preview
+- choose `Single XML` or `Variant Batch XML`
+- for single mode, review the auto-selected XML-ready sample row
+- for batch mode, review the selected batch chunk for the chosen variant
+- generate a wrapped `Push` message preview
 - validate that preview against the local schema set
-- download the reviewed XML file
+- download the reviewed XML file or variant batch package
 
 ## Current Implemented State
 
 - the XML tab now consumes the aligned `Canonical Validation` record set rather than the old Echelon-only validation bundle
 - the current generic single-record path:
-  - selects one XML-ready row inside one selected product variant
+  - selects one auto-selected XML-ready row inside one selected product variant
   - uses the aligned canonical field set as the XML source contract
   - renders a wrapped `Push` message
   - validates the message against the local EUDAMED XSD set
   - allows XML download from the UI
+- the current generic variant-batch path:
+  - selects all XML-ready rows inside one selected product variant
+  - chunks them into wrapped `Push` message files at up to `300` rows per file
+  - previews one selected chunk at a time
+  - validates each chunk against the local EUDAMED XSD set
+  - allows variant-batch package download from the UI
 - `POST` and `PATCH` now flow from the selected variant context through `serviceOperation`
 - repeated market-availability items are now projected into repeated `marketInfo` XML elements
-- normalized `Storage Conditions` and `Critical Warnings` are carried forward when present for the selected row
+- normalized `Storage Conditions` and `Critical Warnings` are carried forward when present for the selected XML payload scope
 
 ## Design Intent
 
@@ -55,7 +65,7 @@ The real generation unit is now:
 
 - one `Product Variant`
 
-So even when later batch generation is added, records should only be grouped inside the same selected variant.
+Records should only be grouped inside the same selected variant.
 
 ## Push Message Design
 
@@ -71,7 +81,7 @@ That means the payload has two layers:
   - `recipient`
   - `payload`
 - a business payload inside that wrapper
-  - one `device:Device` entry in the current single-record path
+  - one or more `device:Device` entries depending on mode
   - rendered with `xsi:type="device:MDRDeviceType"`
   - containing:
     - `device:MDRBasicUDI`
@@ -116,24 +126,20 @@ The UI surfaces:
 - schema path used
 - validation errors when present
 
-## Next Slice
+## Current Batch Design
 
-The next XML refactor slice is:
+The current batch path:
 
-- `Variant Batch XML`
-
-That later slice should:
-
-- keep the same `Product Family` -> `Product Variant` selection flow
-- include all XML-ready rows for the selected variant only
-- chunk output when needed
-- avoid mixing sibling variants in one payload package
+- keeps the same `Product Family` -> `Product Variant` selection flow as single XML
+- includes all XML-ready rows for the selected variant only
+- chunks output when needed
+- previews one selected chunk at a time
+- avoids mixing sibling variants in one payload package
 
 ## Expected Outputs
 
 - previewable single-record XML payloads
+- previewable variant-batch XML payloads
 - XSD validation results
 - downloadable `.xml` output for controlled manual submission/testing
-- later:
-  - variant-batch XML previews
-  - downloadable variant-batch packages
+- downloadable variant-batch `.zip` packages

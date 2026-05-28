@@ -96,11 +96,22 @@ export const api = {
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
     }),
+  previewXmlBatch: (productFamily: string, productVariant: string, chunkSequence = 1) =>
+    sendJson<BatchXmlPreview>("/xml/preview-batch", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      chunk_sequence: chunkSequence,
+    }),
   downloadXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-record", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
+    }),
+  downloadXmlBatch: (productFamily: string, productVariant: string) =>
+    sendDownload("/xml/download-batch", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
     }),
   previewEchelonXmlRecord: (catalogueNumber: string) =>
     sendJson<SingleRecordXmlPreview>("/xml/echelon/preview-record", "POST", {

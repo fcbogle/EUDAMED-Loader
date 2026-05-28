@@ -9,6 +9,7 @@ import softwareEngineeringPatternsDocumentation from "./content/docs/software-en
 import workbooksDocumentation from "./content/docs/workbooks.md?raw";
 import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import type {
+  BatchXmlPreview,
   CanonicalValidationBundle,
   CanonicalReviewBundle,
   DistinctValueProfile,
@@ -427,6 +428,8 @@ export function App() {
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
   const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
   const [selectedXmlRecordKey, setSelectedXmlRecordKey] = useState<string | null>(null);
+  const [xmlMode, setXmlMode] = useState<"single" | "batch">("single");
+  const [selectedXmlChunkSequence, setSelectedXmlChunkSequence] = useState<number>(1);
   const [scopeMode] = useState<ScopeMode>("all");
   const [showUnmappedOnly, setShowUnmappedOnly] = useState<boolean>(true);
   const [valueFilter, setValueFilter] = useState<string>("");
@@ -435,6 +438,7 @@ export function App() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [xmlPreview, setXmlPreview] = useState<SingleRecordXmlPreview | null>(null);
+  const [xmlBatchPreview, setXmlBatchPreview] = useState<BatchXmlPreview | null>(null);
   const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
@@ -548,7 +552,8 @@ export function App() {
 
   useEffect(() => {
     setXmlPreview(null);
-  }, [selectedXmlRecordKey, selectedXmlFamily, selectedXmlVariant]);
+    setXmlBatchPreview(null);
+  }, [selectedXmlRecordKey, selectedXmlFamily, selectedXmlVariant, selectedXmlChunkSequence, xmlMode]);
 
   useEffect(() => {
     if (!canonicalValidation?.family_summaries.length) {
@@ -644,6 +649,10 @@ export function App() {
     }
     setSelectedXmlRecordKey(variantRecords[0]?.catalogue_number ?? null);
   }, [canonicalValidation, selectedXmlFamily, selectedXmlVariant, selectedXmlRecordKey]);
+
+  useEffect(() => {
+    setSelectedXmlChunkSequence(1);
+  }, [selectedXmlFamily, selectedXmlVariant]);
 
   const selectedRuleFile = rules.find((item) => item.column === selectedColumn);
   const acceptedValues = Array.from(new Set(selectedRuleFile?.rules.map((rule) => rule.normalized) ?? []));
@@ -833,15 +842,28 @@ export function App() {
     selectedXmlVariantRecords.find((record) => record.catalogue_number === selectedXmlRecordKey) ??
     selectedXmlVariantRecords[0] ??
     null;
-  const xmlPreviewLines = selectedXmlRecord
-    ? xmlPreview?.xml ??
-      [
-        "<!-- Generate XML to load the schema-valid Push message preview -->",
-        `<catalogue-number>${selectedXmlRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
-        `<udi-di>${selectedXmlRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
-      ].join("\n")
-    : "<!-- No XML-ready record is currently available for the selected family and variant -->";
-  const selectedBatchValidation = xmlPreview?.validation ?? null;
+  const selectedXmlVariantChunkCount = selectedXmlVariantSummary
+    ? Math.max(Math.ceil(selectedXmlVariantSummary.xml_ready_records / 300), 1)
+    : 1;
+  const xmlPreviewLines =
+    xmlMode === "single"
+      ? selectedXmlRecord
+        ? xmlPreview?.xml ??
+          [
+            "<!-- Generate XML to load the schema-valid Push message preview -->",
+            `<catalogue-number>${selectedXmlRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
+            `<udi-di>${selectedXmlRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
+          ].join("\n")
+        : "<!-- No XML-ready record is currently available for the selected family and variant -->"
+      : xmlBatchPreview?.selected_chunk_xml ??
+        [
+          "<!-- Generate XML to preview the selected variant batch -->",
+          `<product-family>${selectedXmlFamilySummary?.product_family ?? "PENDING"}</product-family>`,
+          `<product-variant>${selectedXmlVariantSummary?.product_variant ?? "PENDING"}</product-variant>`,
+          `<chunk-sequence>${selectedXmlChunkSequence}</chunk-sequence>`,
+        ].join("\n");
+  const selectedBatchValidation =
+    xmlMode === "single" ? xmlPreview?.validation ?? null : xmlBatchPreview?.selected_chunk_validation ?? null;
   const validationStatusLabel = selectedBatchValidation
     ? selectedBatchValidation.valid
       ? "Schema valid"
@@ -1028,18 +1050,30 @@ export function App() {
   }
 
   async function generateXmlPreview(): Promise<void> {
-    if (!selectedXmlRecord?.catalogue_number || !selectedXmlFamilySummary || !selectedXmlVariantSummary) {
+    if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) {
       return;
     }
     setIsGeneratingXml(true);
     setError(null);
     try {
-      const preview = await api.previewXmlRecord(
-        selectedXmlFamilySummary.product_family,
-        selectedXmlVariantSummary.product_variant,
-        selectedXmlRecord.catalogue_number,
-      );
-      setXmlPreview(preview);
+      if (xmlMode === "single") {
+        if (!selectedXmlRecord?.catalogue_number) {
+          return;
+        }
+        const preview = await api.previewXmlRecord(
+          selectedXmlFamilySummary.product_family,
+          selectedXmlVariantSummary.product_variant,
+          selectedXmlRecord.catalogue_number,
+        );
+        setXmlPreview(preview);
+      } else {
+        const preview = await api.previewXmlBatch(
+          selectedXmlFamilySummary.product_family,
+          selectedXmlVariantSummary.product_variant,
+          selectedXmlChunkSequence,
+        );
+        setXmlBatchPreview(preview);
+      }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Failed to generate XML preview.");
     } finally {
@@ -1048,24 +1082,33 @@ export function App() {
   }
 
   async function downloadXmlRecord(): Promise<void> {
-    if (!selectedXmlRecord?.catalogue_number || !selectedXmlFamilySummary || !selectedXmlVariantSummary) {
+    if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) {
       return;
     }
     setIsGeneratingXml(true);
     setError(null);
     try {
-      const { blob, fileName } = await api.downloadXmlRecord(
-        selectedXmlFamilySummary.product_family,
-        selectedXmlVariantSummary.product_variant,
-        selectedXmlRecord.catalogue_number,
-      );
+      const { blob, fileName } =
+        xmlMode === "single" && selectedXmlRecord?.catalogue_number
+          ? await api.downloadXmlRecord(
+              selectedXmlFamilySummary.product_family,
+              selectedXmlVariantSummary.product_variant,
+              selectedXmlRecord.catalogue_number,
+            )
+          : await api.downloadXmlBatch(
+              selectedXmlFamilySummary.product_family,
+              selectedXmlVariantSummary.product_variant,
+            );
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
       anchor.download =
         fileName ??
-        xmlPreview?.file_name ??
-        `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlRecord.catalogue_number}.xml`;
+        (xmlMode === "single"
+          ? xmlPreview?.file_name ??
+            `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlRecord?.catalogue_number ?? "record"}.xml`
+          : xmlBatchPreview?.package_file_name ??
+            `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-batch-package.zip`);
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -2427,8 +2470,12 @@ export function App() {
             </div>
             <div className="summary-card">
               <span className="summary-label">Current mode</span>
-              <strong>Single XML</strong>
-              <p>The first generic XML slice runs per product variant and generates one wrapped `Push` message per selected row.</p>
+              <strong>{xmlMode === "single" ? "Single XML" : "Variant Batch XML"}</strong>
+              <p>
+                {xmlMode === "single"
+                  ? "The generic XML path runs per product variant and generates one wrapped `Push` message for an auto-selected sample row."
+                  : "Variant Batch XML chunks all XML-ready rows for the selected variant into schema-validated batch files."}
+              </p>
             </div>
           </section>
 
@@ -2444,7 +2491,7 @@ export function App() {
             </div>
             <p className="panel-copy">
               This workspace now consumes the aligned Canonical Validation output. Select a product family,
-              product variant, and one XML-ready row before generating a schema-valid wrapped `Push` message.
+              product variant, and then generate either a single sample XML or a variant-scoped batch package.
             </p>
             <div className="queue-summary">
               <div className="queue-chip">
@@ -2533,46 +2580,100 @@ export function App() {
             <div className="panel xml-workspace-panel xml-equal-panel xml-middle-panel">
               <div className="section-heading">
                 <div>
-                  <span className="section-kicker">Single XML</span>
+                  <span className="section-kicker">{xmlMode === "single" ? "Single XML" : "Variant Batch XML"}</span>
                   <h2>Generation Workspace</h2>
                 </div>
               </div>
-              {selectedXmlRecord ? (
+              <div className="xml-mode-toggle">
+                <button
+                  className={xmlMode === "single" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                  type="button"
+                  onClick={() => setXmlMode("single")}
+                >
+                  Single XML
+                </button>
+                <button
+                  className={xmlMode === "batch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                  type="button"
+                  onClick={() => setXmlMode("batch")}
+                >
+                  Variant Batch XML
+                </button>
+              </div>
+              {xmlMode === "single" ? (
+                selectedXmlRecord ? (
+                  <div className="draft-list">
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>{selectedXmlRecord.catalogue_number}</strong>
+                        <span className="status-pill ok compact">{selectedXmlRecord.submission_operation ?? "No operation"}</span>
+                      </div>
+                      <p className="draft-meta">
+                        {selectedXmlRecord.product_family} / {selectedXmlRecord.product_variant}
+                      </p>
+                      <p className="panel-copy">{selectedXmlRecord.trade_name ?? "No trade name"}</p>
+                      <p className="panel-copy">
+                        UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
+                      </p>
+                      <p className="panel-copy">
+                        Sample row selected automatically from the chosen variant's XML-ready records.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="panel-copy">No XML-ready sample row is currently available for the selected family and variant.</p>
+                )
+              ) : selectedXmlVariantSummary ? (
                 <div className="draft-list">
                   <div className="draft-card">
                     <div className="draft-card-head">
-                      <strong>{selectedXmlRecord.catalogue_number}</strong>
-                      <span className="status-pill ok compact">{selectedXmlRecord.submission_operation ?? "No operation"}</span>
+                      <strong>{selectedXmlVariantSummary.product_variant}</strong>
+                      <span className="status-pill ok compact">{selectedXmlVariantSummary.submission_operation ?? "No operation"}</span>
                     </div>
                     <p className="draft-meta">
-                      {selectedXmlRecord.product_family} / {selectedXmlRecord.product_variant}
-                    </p>
-                    <p className="panel-copy">{selectedXmlRecord.trade_name ?? "No trade name"}</p>
-                    <p className="panel-copy">
-                      UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
+                      {selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}
                     </p>
                     <p className="panel-copy">
-                      Sample row selected automatically from the chosen variant's XML-ready records.
+                      {selectedXmlVariantSummary.xml_ready_records} XML-ready rows will be grouped into {selectedXmlVariantChunkCount} batch file
+                      {selectedXmlVariantChunkCount === 1 ? "" : "s"} at up to 300 rows per file.
                     </p>
+                    <p className="panel-copy">
+                      {selectedXmlVariantSummary.xml_blocked_records} row{selectedXmlVariantSummary.xml_blocked_records === 1 ? "" : "s"} remain excluded until resolved.
+                    </p>
+                    <label className="field-label" htmlFor="xml-batch-chunk-sequence">
+                      Preview batch chunk
+                    </label>
+                    <select
+                      id="xml-batch-chunk-sequence"
+                      className="rule-select"
+                      value={selectedXmlChunkSequence}
+                      onChange={(event) => setSelectedXmlChunkSequence(Number(event.target.value))}
+                    >
+                      {Array.from({ length: selectedXmlVariantChunkCount }, (_, index) => index + 1).map((sequence) => (
+                        <option key={sequence} value={sequence}>
+                          Chunk {sequence} of {selectedXmlVariantChunkCount}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               ) : (
-                <p className="panel-copy">No XML-ready sample row is currently available for the selected family and variant.</p>
+                <p className="panel-copy">No XML-ready variant batch is currently available for the selected family and variant.</p>
               )}
               <div className="draft-actions-bar">
                 <button
                   className="action-button"
                   type="button"
                   onClick={() => void generateXmlPreview()}
-                  disabled={!selectedXmlRecord || isGeneratingXml}
+                  disabled={(xmlMode === "single" && !selectedXmlRecord) || !selectedXmlVariantSummary || isGeneratingXml}
                 >
-                  {isGeneratingXml ? "Generating..." : "Generate XML"}
+                  {isGeneratingXml ? "Generating..." : xmlMode === "single" ? "Generate XML" : "Generate Batch Preview"}
                 </button>
                 <button
                   className="ghost-button"
                   type="button"
                   onClick={() => void generateXmlPreview()}
-                  disabled={!selectedXmlRecord || isGeneratingXml}
+                  disabled={(xmlMode === "single" && !selectedXmlRecord) || !selectedXmlVariantSummary || isGeneratingXml}
                 >
                   Validate Against XSD
                 </button>
@@ -2580,14 +2681,18 @@ export function App() {
                   className="ghost-button"
                   type="button"
                   onClick={() => void downloadXmlRecord()}
-                  disabled={!selectedXmlRecord || isGeneratingXml}
+                  disabled={(xmlMode === "single" && !selectedXmlRecord) || !selectedXmlVariantSummary || isGeneratingXml}
                 >
-                  Download XML
+                  {xmlMode === "single" ? "Download XML" : "Download Batch Package"}
                 </button>
               </div>
               <div className="workflow-note">
-                <strong>Next slice</strong>
-                <span>Variant Batch XML will be added after the generic single-record path is reviewed and approved.</span>
+                <strong>{xmlMode === "single" ? "Single-record review" : "Variant-batch scope"}</strong>
+                <span>
+                  {xmlMode === "single"
+                    ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
+                    : "Batch generation remains strictly within the selected product variant and only includes XML-ready rows."}
+                </span>
               </div>
             </div>
 
@@ -2595,7 +2700,7 @@ export function App() {
               <div className="section-heading">
                 <div>
                   <span className="section-kicker">Preview</span>
-                  <h2>Single Record XML Preview</h2>
+                  <h2>{xmlMode === "single" ? "Single Record XML Preview" : "Variant Batch XML Preview"}</h2>
                 </div>
               </div>
               <pre className="xml-preview-block">
@@ -2604,9 +2709,13 @@ export function App() {
               <div className="workflow-note">
                 <strong>Preview status</strong>
                 <span>
-                  {xmlPreview
-                    ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
-                    : "No XML preview generated yet for the selected row."}
+                  {xmlMode === "single"
+                    ? xmlPreview
+                      ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
+                      : "No XML preview generated yet for the selected row."
+                    : xmlBatchPreview
+                      ? `Batch preview generated for ${xmlBatchPreview.product_family} / ${xmlBatchPreview.product_variant}, chunk ${xmlBatchPreview.selected_chunk_sequence}.`
+                      : "No batch XML preview generated yet for the selected variant."}
                 </span>
               </div>
             </div>
@@ -2656,13 +2765,44 @@ export function App() {
                           ))}
                         </div>
                       ) : (
-                        <p className="panel-copy">The generated single-record Push message validates cleanly.</p>
+                        <p className="panel-copy">
+                          {xmlMode === "single"
+                            ? "The generated single-record Push message validates cleanly."
+                            : "The generated variant-batch Push message validates cleanly."}
+                        </p>
                       )}
                     </>
                   ) : (
-                    <p className="panel-copy">Generate a single-record preview to inspect the schema validation outcome.</p>
+                    <p className="panel-copy">
+                      {xmlMode === "single"
+                        ? "Generate a single-record preview to inspect the schema validation outcome."
+                        : "Generate a variant-batch preview to inspect the schema validation outcome."}
+                    </p>
                   )}
                 </div>
+                {xmlMode === "batch" && xmlBatchPreview ? (
+                  <div className="draft-card">
+                    <div className="draft-card-head">
+                      <strong>Batch chunk summary</strong>
+                      <span className="status-pill ok compact">
+                        {xmlBatchPreview.chunk_count} chunk{xmlBatchPreview.chunk_count === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <p className="panel-copy">
+                      Selected file: {xmlBatchPreview.selected_chunk_file_name} · {xmlBatchPreview.selected_chunk_record_count} rows
+                    </p>
+                    <div className="roadmap-list">
+                      {xmlBatchPreview.chunks.slice(0, 6).map((chunk) => (
+                        <div className="roadmap-item" key={chunk.file_name}>
+                          <strong>{chunk.file_name}</strong>
+                          <p>
+                            {chunk.record_count} rows · {chunk.first_catalogue_number ?? "?"} to {chunk.last_catalogue_number ?? "?"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -2691,12 +2831,12 @@ export function App() {
                   <p>Validate the wrapped Push message before any download or later variant-batch run.</p>
                 </div>
                 <div className="roadmap-item">
-                  <strong>5. Download Single XML</strong>
-                  <p>Download the reviewed single-record file for controlled inspection.</p>
+                  <strong>5. Download XML Output</strong>
+                  <p>Download either the reviewed single-record file or the selected variant batch package.</p>
                 </div>
                 <div className="roadmap-item">
-                  <strong>6. Add Variant Batch XML Next</strong>
-                  <p>Once the single-record path is stable, extend generation to XML-ready rows within the same selected variant only.</p>
+                  <strong>6. Review Variant Batch</strong>
+                  <p>Use batch preview for the same selected variant only, with no mixed-family or mixed-variant XML payloads.</p>
                 </div>
               </div>
             </div>

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from io import BytesIO
+import json
 from typing import Any
 from uuid import uuid4
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import lxml.etree as etree
 
@@ -24,6 +27,8 @@ from app.services.echelon_xml_generation import (
 from app.services.xml_validation import XmlValidationService
 from app.validation_models import CanonicalValidationRecord
 from app.xml_models import (
+    BatchXmlChunkSummary,
+    BatchXmlPreview,
     CriticalWarningXmlItem,
     SingleRecordXmlPreview,
     StorageConditionXmlItem,
@@ -31,6 +36,7 @@ from app.xml_models import (
     XmlGenerationSelectionSummary,
 )
 
+MAX_BATCH_RECORDS = 300
 XmlElement = Any
 
 
@@ -196,6 +202,160 @@ class XmlGenerationService:
         )
         return preview.file_name, preview.xml.encode("utf-8")
 
+    def preview_batch(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        chunk_sequence: int = 1,
+    ) -> BatchXmlPreview:
+        bundle = self.validation_service.build_validation_bundle()
+        records = self._xml_ready_variant_records(
+            bundle.records,
+            product_family=product_family,
+            product_variant=product_variant,
+        )
+        if not records:
+            raise ValueError(
+                f"No XML-ready records are currently available for batch generation for "
+                f"{product_family} / {product_variant}."
+            )
+
+        record_chunks = self._chunk_records(records)
+        xml_chunks: list[tuple[int, list[CanonicalValidationRecord], bytes]] = []
+        chunk_summaries: list[BatchXmlChunkSummary] = []
+        total_chunks = len(record_chunks)
+        for sequence, chunk_records in enumerate(record_chunks, start=1):
+            xml_records = [self._to_xml_record(record) for record in chunk_records]
+            xml_bytes = self._render_push_message_records(xml_records)
+            validation = self.xml_validation_service.validate_message(xml_bytes)
+            file_name = self._batch_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+                sequence=sequence,
+                total_chunks=total_chunks,
+            )
+            xml_chunks.append((sequence, chunk_records, xml_bytes))
+            chunk_summaries.append(
+                BatchXmlChunkSummary(
+                    sequence=sequence,
+                    file_name=file_name,
+                    record_count=len(chunk_records),
+                    first_catalogue_number=chunk_records[0].catalogue_number if chunk_records else None,
+                    last_catalogue_number=chunk_records[-1].catalogue_number if chunk_records else None,
+                    validation=validation,
+                )
+            )
+
+        if chunk_sequence < 1 or chunk_sequence > total_chunks:
+            raise ValueError(f"Batch chunk {chunk_sequence} is out of range. Valid chunks are 1 to {total_chunks}.")
+
+        selected_sequence, selected_records, selected_xml_bytes = xml_chunks[chunk_sequence - 1]
+        selected_summary = chunk_summaries[chunk_sequence - 1]
+        variant_summary = next(
+            (
+                summary
+                for summary in bundle.variant_summaries
+                if summary.product_family == product_family and summary.product_variant == product_variant
+            ),
+            None,
+        )
+        excluded_records = variant_summary.xml_blocked_records if variant_summary else 0
+        return BatchXmlPreview(
+            product_family=product_family,
+            product_variant=product_variant,
+            submission_operation=records[0].submission_operation,
+            package_file_name=self._batch_package_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+            ),
+            total_ready_records=len(records),
+            excluded_records=excluded_records,
+            max_records_per_file=MAX_BATCH_RECORDS,
+            chunk_count=total_chunks,
+            selected_chunk_sequence=selected_sequence,
+            selected_chunk_file_name=selected_summary.file_name,
+            selected_chunk_record_count=len(selected_records),
+            selected_chunk_xml=selected_xml_bytes.decode("utf-8"),
+            selected_chunk_validation=selected_summary.validation,
+            chunks=chunk_summaries,
+        )
+
+    def download_batch(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+    ) -> tuple[str, bytes]:
+        bundle = self.validation_service.build_validation_bundle()
+        records = self._xml_ready_variant_records(
+            bundle.records,
+            product_family=product_family,
+            product_variant=product_variant,
+        )
+        if not records:
+            raise ValueError(
+                f"No XML-ready records are currently available for batch generation for "
+                f"{product_family} / {product_variant}."
+            )
+
+        record_chunks = self._chunk_records(records)
+        package_file_name = self._batch_package_file_name(
+            product_family=product_family,
+            product_variant=product_variant,
+        )
+        variant_summary = next(
+            (
+                summary
+                for summary in bundle.variant_summaries
+                if summary.product_family == product_family and summary.product_variant == product_variant
+            ),
+            None,
+        )
+        excluded_records = variant_summary.xml_blocked_records if variant_summary else 0
+
+        buffer = BytesIO()
+        with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
+            manifest_chunks = []
+            total_chunks = len(record_chunks)
+            for sequence, chunk_records in enumerate(record_chunks, start=1):
+                file_name = self._batch_file_name(
+                    product_family=product_family,
+                    product_variant=product_variant,
+                    sequence=sequence,
+                    total_chunks=total_chunks,
+                )
+                xml_records = [self._to_xml_record(record) for record in chunk_records]
+                xml_bytes = self._render_push_message_records(xml_records)
+                validation = self.xml_validation_service.validate_message(xml_bytes)
+                archive.writestr(file_name, xml_bytes)
+                manifest_chunks.append(
+                    {
+                        "sequence": sequence,
+                        "file_name": file_name,
+                        "record_count": len(chunk_records),
+                        "first_catalogue_number": chunk_records[0].catalogue_number if chunk_records else None,
+                        "last_catalogue_number": chunk_records[-1].catalogue_number if chunk_records else None,
+                        "valid": validation.valid,
+                        "error_count": len(validation.errors),
+                    }
+                )
+
+            manifest = {
+                "package_file_name": package_file_name,
+                "product_family": product_family,
+                "product_variant": product_variant,
+                "submission_operation": records[0].submission_operation,
+                "total_ready_records": len(records),
+                "excluded_records": excluded_records,
+                "max_records_per_file": MAX_BATCH_RECORDS,
+                "chunk_count": len(record_chunks),
+                "chunks": manifest_chunks,
+            }
+            archive.writestr("manifest.json", json.dumps(manifest, indent=2))
+
+        return package_file_name, buffer.getvalue()
+
     def _find_validation_record(
         self,
         *,
@@ -216,6 +376,30 @@ class XmlGenerationService:
             f"Catalogue number {catalogue_number} was not found as an XML-ready record for "
             f"{product_family} / {product_variant}."
         )
+
+    @staticmethod
+    def _xml_ready_variant_records(
+        records: list[CanonicalValidationRecord],
+        *,
+        product_family: str,
+        product_variant: str,
+    ) -> list[CanonicalValidationRecord]:
+        return [
+            record
+            for record in records
+            if record.product_family == product_family
+            and record.product_variant == product_variant
+            and record.xml_readiness.status == "complete"
+        ]
+
+    @staticmethod
+    def _chunk_records(
+        records: list[CanonicalValidationRecord], max_records_per_file: int = MAX_BATCH_RECORDS
+    ) -> list[list[CanonicalValidationRecord]]:
+        return [
+            records[index : index + max_records_per_file]
+            for index in range(0, len(records), max_records_per_file)
+        ]
 
     def _to_xml_record(self, record: CanonicalValidationRecord) -> DeviceXmlRecord:
         field_map = {field.canonical_path: field.value for field in record.fields}
@@ -278,22 +462,32 @@ class XmlGenerationService:
         )
 
     def _render_push_message(self, record: DeviceXmlRecord) -> bytes:
+        return self._render_push_message_records([record])
+
+    def _render_push_message_records(self, records: list[DeviceXmlRecord]) -> bytes:
         root = etree.Element(self._q(MESSAGE_NS, "Push"), nsmap=NSMAP)
         root.set("version", "3.0.28")
 
         self._append_text(root, MESSAGE_NS, "correlationID", str(uuid4()))
         self._append_text(root, MESSAGE_NS, "creationDateTime", datetime.now(UTC).replace(microsecond=0).isoformat())
         self._append_text(root, MESSAGE_NS, "messageID", str(uuid4()))
-        root.append(self._endpoint_element(tag_name="recipient", node_actor_code="EUDAMED", service_operation=record.submission_operation or "POST"))
+        root.append(
+            self._endpoint_element(
+                tag_name="recipient",
+                node_actor_code="EUDAMED",
+                service_operation=records[0].submission_operation or "POST",
+            )
+        )
 
         payload = etree.SubElement(root, self._q(MESSAGE_NS, "payload"))
-        payload.append(self._device_payload(record))
+        for record in records:
+            payload.append(self._device_payload(record))
 
         root.append(
             self._endpoint_element(
                 tag_name="sender",
-                node_actor_code=record.manufacturer_srn,
-                service_operation=record.submission_operation or "POST",
+                node_actor_code=records[0].manufacturer_srn,
+                service_operation=records[0].submission_operation or "POST",
             )
         )
 
@@ -545,6 +739,24 @@ class XmlGenerationService:
             f"{cls._slugify(product_family)}-{cls._slugify(product_variant)}-"
             f"{''.join(char if char.isalnum() or char in {'-', '_'} else '-' for char in catalogue_number)}.xml"
         )
+
+    @classmethod
+    def _batch_file_name(
+        cls,
+        *,
+        product_family: str,
+        product_variant: str,
+        sequence: int,
+        total_chunks: int,
+    ) -> str:
+        return (
+            f"{cls._slugify(product_family)}-{cls._slugify(product_variant)}-"
+            f"batch-{sequence:02d}-of-{total_chunks:02d}.xml"
+        )
+
+    @classmethod
+    def _batch_package_file_name(cls, *, product_family: str, product_variant: str) -> str:
+        return f"{cls._slugify(product_family)}-{cls._slugify(product_variant)}-batch-package.zip"
 
     @staticmethod
     def _language_code(value: str) -> str:

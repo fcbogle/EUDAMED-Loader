@@ -111,6 +111,9 @@ class BatchXmlChunkSummary(BaseModel):
 
 class BatchXmlPreview(BaseModel):
     mode: Literal["batch"] = "batch"
+    product_family: str | None = None
+    product_variant: str | None = None
+    submission_operation: str | None = None
     package_file_name: str
     total_ready_records: int
     excluded_records: int

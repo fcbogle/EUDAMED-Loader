@@ -157,30 +157,28 @@ These do not always break the current mapping path, but they are still useful to
 
 Yes, these nuances can be seen directly in the input Excel workbooks. They are not inferred only from code or documentation. The current validation and mapping logic is based on the actual workbook headers observed in the source templates.
 
-## Current Limitation
+## Current Integration
 
-The validation tab now reflects the broadened multi-family canonical design, distinguishes canonical completeness from XML readiness, and mirrors the current Canonical field set. `XML Generation` does not yet fully do so.
+The validation tab now reflects the broadened multi-family canonical design, distinguishes canonical completeness from XML readiness, and mirrors the current Canonical field set. `XML Generation` now consumes that aligned validation output directly.
 
 That means:
 
 - validation is now family-aware and variant-aware
 - validation now surfaces XML-facing blockers explicitly
-- validation now provides the aligned Canonical field set that later XML generation should consume
-- XML generation still needs its own redesign so that:
-  - product family is selected first
-  - product variants can then be selected
-  - generation runs as:
-    - `Single XML`
-    - `Variant Batch XML`
+- validation now provides the aligned Canonical field set that XML generation consumes
+- XML generation now follows the same product-family and product-variant structure
+- XML generation now supports:
+  - `Single XML`
+  - `Variant Batch XML`
 
-## Near-Term Direction
+## Current Downstream Use
 
-The next implementation step after this validation redesign is to align `XML Generation` with the same product-family and product-variant structure.
+The current XML generation flow now uses Canonical Validation as its operational gate.
 
-The expected direction is:
+The current direction in use is:
 
 - choose a `Product Family`
-- choose one or more `Product Variants`
+- choose a `Product Variant`
 - generate:
-  - a single XML for a selected variant row
+  - a single XML for an auto-selected XML-ready sample row
   - or a variant batch XML for all eligible rows in that variant
