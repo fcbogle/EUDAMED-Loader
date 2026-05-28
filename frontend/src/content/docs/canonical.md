@@ -2,7 +2,10 @@
 
 ## Purpose
 
-The `Canonical` area is the mapping-definition layer between the source workbooks and XML generation. It translates workbook fields into stable regulatory meaning and makes the `Excel -> Canonical -> Schema` path visible for first-phase review.
+The `Canonical` area is the mapping-definition review layer between the source workbooks and later XML generation. It translates workbook fields into stable regulatory meaning and presents two linked review surfaces:
+
+- `Source Sheet To Basic UDI Variant`
+- `Canonical Mapping`
 
 ## Current Decisions
 
@@ -56,9 +59,9 @@ The canonical layer should:
 
 The `Canonical` tab should present the mapping contract in a review-friendly way:
 
-- keep the main mapping path visible
+- keep variant-level Basic UDI linkage visible
 - use a summary-first explanation of the business layer before the mapping contract
-- show the `Excel -> Canonical -> Schema` path as a flat review table without overloading the main screen
+- keep the review tables available on demand through closed accordions so the main screen stays readable
 
 The canonical layer should not:
 
@@ -89,15 +92,117 @@ The canonical layer should not:
 
 ## Current State
 
-- the canonical review now documents the fields actively used by the `Echelon` validation and single-record XML path
+- the canonical review now supports variant-level Basic UDI linkage across all in-scope non-accessories product families
 - `Basic UDI` context is resolved from `BasicUDIs.xlsx` rather than from one shared family-level workbook assumption
 - in-scope workbook sheets now map to specific `BasicUDIs.xlsx` `Device Model` rows
 - `Manufacturer SRN`, `Authorised Representative SRN`, `Basic risk class`, `Basic model`, and other `MDRBasicUDI` fields are now represented in the review artifact as derived/reference-backed mappings
 - `Operation` is now treated as explicit submission-intent metadata that later drives `POST` vs `PATCH` service behavior
 - source `Version` is preserved as an internal marker for now and is not yet treated as authoritative EUDAMED entity version
 - `UDI-DI identifier`, `Basic UDI identifier`, `number of reuses`, `base quantity`, and other XML-facing `UDIDIData` fields are now represented explicitly rather than remaining implicit in the review
-- `Storage Conditions` and `Critical Warnings` are now represented as repeated canonical structures with explicit enum normalization rules for the current `Echelon` values
-- the main UI now presents entity-group and field-count summary pills ahead of the flat mapping contract
+- `Market Availability`, `Storage Conditions`, and `Critical Warnings` are now represented as repeated canonical structures where applicable
+- the main UI now presents:
+  - top-level variant/source summary cards
+  - a four-part `Business Layer` summary, including canonical field count, canonical entity groups, and logical schema types referenced
+  - a closed `Source Sheet To Basic UDI Variant` review table
+  - a closed `Canonical Mapping` review table with schema-use pills and per-row schema-file references
+
+## Review Surfaces
+
+The current `Canonical` UI is organized to support QMS review rather than developer-only inspection.
+
+### `Source Sheet To Basic UDI Variant`
+
+This table is the product-variant linkage review surface. It is intended to answer:
+
+- which source workbook sheet is being treated as which product variant
+- which `Basic UDI-DI` record is being linked
+- whether the linked variant is currently treated as `POST` or `PATCH`
+- whether the linkage is matched, excluded, or still needs attention
+
+### `Canonical Mapping`
+
+This table is the field-level mapping contract. It is intended to answer:
+
+- which source workbook field is being used
+- what canonical meaning the application assigns to it
+- what EUDAMED target it maps to
+- which schema file currently carries that target
+- whether the mapping is direct, derived, normalized, repeated, or a gap
+- what assumptions or review notes still apply
+
+## Schema Coverage
+
+The current canonical review spans more than one logical schema layer.
+
+- business payload schemas:
+  - `UDIDIType`
+  - `BasicUDIType`
+  - `DeviceBasicUDIType`
+  - `MDRBasicUDIType`
+  - `CommonDeviceType`
+- market information schemas:
+  - `MarketInfoType`
+  - `MarketInfosType`
+- service-envelope schema:
+  - `ServiceType`
+- base entity metadata:
+  - `Entity`
+
+This matters because the canonical layer is no longer only a business-payload mapping surface. It now also carries fields that later feed:
+
+- wrapped service-message behavior
+- per-variant market-availability structures
+- base entity metadata decisions that still require QMS confirmation
+
+In the current UI, these schema references are shown primarily as logical schema types under `EUDAMED Schema Use:`. Physical `.xsd` files are not summarized as a separate top-level count; instead, they are shown row-by-row in the `Canonical Mapping` table where they add direct traceability value.
+
+## Resolved And Unresolved Items
+
+The current canonical review should be read as a mixture of:
+
+- resolved schema mappings
+- resolved enrichment rules
+- remaining business or source-data questions
+
+### Resolved Schema Mapping Example
+
+The `URL for additional information (as electronic instructions for use):` field is now mapped to:
+
+- `UDIDIType/website`
+
+That means the field is no longer only preserved as a visible canonical placeholder. It now has a concrete schema target in the local EUDAMED `UDIDI` model.
+
+### Remaining Unresolved Or Partially Resolved Items
+
+The remaining items are narrower than before and fall into different categories.
+
+- `basic_device.intended_purpose_summary`
+  - current issue:
+    - no confirmed source field exists in the current workbook set
+  - interpretation:
+    - source-data gap more than schema-file uncertainty
+- `basic_device.source_version_marker`
+  - current issue:
+    - the workbook `Version` field is still treated as internal submission metadata
+  - interpretation:
+    - the team has not yet confirmed whether it should populate real EUDAMED `Entity/version`
+- `device_record.secondary_identifier`
+  - current issue:
+    - the exact downstream XML-facing schema placement still needs confirmation in the next XML-focused phase
+- `manufacturer.manufacturer_srn`
+  - current issue:
+    - the schema intent is understood, but the exact new source column confirmation from `BasicUDIs.xlsx` still needs to be finalized
+
+### Important Distinction
+
+Two different questions appear in the canonical review and should not be confused.
+
+- value resolved by enrichment:
+  - the application can determine the value from a trusted joined or derived source such as `BasicUDIs.xlsx`
+- schema target confirmed:
+  - the application has identified the exact logical schema path and, where possible, the underlying `.xsd` file
+
+A field can be resolved in the first sense without yet being fully confirmed in the second.
 
 ## Enum Strategy
 

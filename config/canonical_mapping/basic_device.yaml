@@ -253,17 +253,15 @@ field_reviews:
       classification: derived
       source_columns:
         - 'URL for additional information (as electronic instructions for use):'
-      assumptions:
-        - The source workbook carries this value explicitly, but the exact XML target remains under review.
       schema_targets:
-        - schema_path: BasicUDIType/under_review
+        - schema_path: UDIDIType/website
           required: false
-          status: gap
-          notes: Preserve in canonical form until the exact EUDAMED field target is confirmed.
+          status: derived
+          notes: Manufacturer website where additional information about the device (UDI-DI) are available.
       example_canonical_value: www.blatchfordmobility.com/en-gb/for-professionals/technical-documentation/
     decision:
-      status: accepted_with_note
-      rationale: Retain in canonical form now so the field is visible while the exact schema target is clarified.
+      status: accepted
+      rationale: The local UDIDI schema includes a direct website field for additional device information.
   - mapping:
       canonical_path: basic_device.submission_operation
       business_label: Submission Operation

@@ -191,6 +191,11 @@ input {
   color: #a35e00;
 }
 
+.status-pill.danger {
+  background: rgba(181, 43, 43, 0.16);
+  color: #9f1f1f;
+}
+
 .status-pill.compact {
   padding: 4px 10px;
   font-size: 0.76rem;
@@ -260,6 +265,25 @@ input {
 
 .workbook-note-followup {
   margin-top: 10px;
+}
+
+.canonical-schema-label {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: #4c6f7a;
+}
+
+.canonical-schema-pill-copy {
+  margin-top: 6px;
+}
+
+.canonical-schema-pill {
+  margin: 0 6px 4px 0;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  line-height: 1.1;
 }
 
 .supporting-bullets {

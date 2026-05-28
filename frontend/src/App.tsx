@@ -75,7 +75,9 @@ type CanonicalMappingRow = {
   canonicalPath: string;
   businessLabel: string;
   schemaTarget: string;
+  schemaFile: string;
   classification: string;
+  reviewNotes: string;
   exampleSourceValues: string[];
   exampleCanonicalValue: string | null;
 };
@@ -276,6 +278,68 @@ function formatSchemaPathForInlineNote(schemaPath: string): string {
   const fileName = projectRelativePath.split("/").pop() ?? projectRelativePath;
   const directory = projectRelativePath.replace(`/${fileName}`, "");
   return `${fileName} in ${directory}`;
+}
+
+function schemaFileForTarget(schemaPath: string): string {
+  if (schemaPath.startsWith("UDIDIType/")) {
+    return "data/schemas/data/Entity/Device/RegulationDevice/UDIDIType.xsd";
+  }
+  if (schemaPath.startsWith("BasicUDIType/")) {
+    return "data/schemas/data/Entity/Device/RegulationDevice/BasicUDIType.xsd";
+  }
+  if (schemaPath.startsWith("DeviceBasicUDIType/")) {
+    return "data/schemas/data/Entity/Device/RegulationDevice/BasicUDIType.xsd";
+  }
+  if (schemaPath.startsWith("MDRBasicUDIType/")) {
+    return "data/schemas/data/Entity/Device/RegulationDevice/BasicUDIType.xsd";
+  }
+  if (schemaPath.startsWith("CommonDeviceType/")) {
+    return "data/schemas/data/Entity/Device/CommonDeviceType.xsd";
+  }
+  if (schemaPath.startsWith("MarketInfoType/")) {
+    return "data/schemas/data/Entity/MarketInfo/MarketInfoType.xsd";
+  }
+  if (schemaPath.startsWith("MarketInfosType/")) {
+    return "data/schemas/data/Entity/MarketInfo/MarketInfoType.xsd";
+  }
+  if (schemaPath.startsWith("ServiceType/")) {
+    return "data/schemas/service/Service/ServiceType.xsd";
+  }
+  if (schemaPath.startsWith("Entity/")) {
+    return "data/schemas/data/Entity/Entity.xsd";
+  }
+  return "Schema file under review";
+}
+
+function schemaFamilyForTarget(schemaPath: string): string {
+  if (schemaPath.startsWith("UDIDIType/")) {
+    return "Business payload";
+  }
+  if (schemaPath.startsWith("BasicUDIType/")) {
+    return "Business payload";
+  }
+  if (schemaPath.startsWith("DeviceBasicUDIType/")) {
+    return "Business payload";
+  }
+  if (schemaPath.startsWith("MDRBasicUDIType/")) {
+    return "Business payload";
+  }
+  if (schemaPath.startsWith("CommonDeviceType/")) {
+    return "Business payload";
+  }
+  if (schemaPath.startsWith("MarketInfoType/")) {
+    return "Market information";
+  }
+  if (schemaPath.startsWith("MarketInfosType/")) {
+    return "Market information";
+  }
+  if (schemaPath.startsWith("ServiceType/")) {
+    return "Service envelope";
+  }
+  if (schemaPath.startsWith("Entity/")) {
+    return "Base entity metadata";
+  }
+  return "Under review";
 }
 
 function workbookFamilyLabel(workbookName: string): string {
@@ -524,7 +588,17 @@ export function App() {
       businessLabel: fieldReview.mapping.business_label,
       schemaTarget:
         fieldReview.mapping.schema_targets.map((target) => target.schema_path).join(" | ") || "Not yet aligned",
+      schemaFile:
+        Array.from(
+          new Set(fieldReview.mapping.schema_targets.map((target) => schemaFileForTarget(target.schema_path))),
+        ).join(" | ") || "Schema file under review",
       classification: fieldReview.mapping.classification,
+      reviewNotes:
+        fieldReview.mapping.derivation_logic ??
+        fieldReview.mapping.assumptions[0] ??
+        fieldReview.mapping.schema_targets[0]?.notes ??
+        fieldReview.decision.rationale ??
+        "No additional review note recorded.",
       exampleSourceValues: fieldReview.mapping.example_source_values,
       exampleCanonicalValue: fieldReview.mapping.example_canonical_value,
     })),
@@ -535,9 +609,30 @@ export function App() {
   }, {});
   const directCount = classificationCounts.direct ?? 0;
   const repeatedCount = classificationCounts.repeated ?? 0;
+  const gapCount = classificationCounts.gap ?? 0;
   const derivedRows = canonicalMappingRows.filter((row) => row.classification === "derived");
   const normalizedRows = canonicalMappingRows.filter((row) => row.classification === "normalized");
   const contextHeavyCount = derivedRows.length + normalizedRows.length;
+  const schemaFileCount = new Set(
+    canonicalMappingRows
+      .map((row) => row.schemaFile)
+      .filter((schemaFile) => schemaFile && schemaFile !== "Schema file under review")
+      .flatMap((schemaFile) => schemaFile.split(" | ")),
+  ).size;
+  const schemaScopeGroups = Array.from(
+    canonicalMappingRows.reduce<Map<string, Set<string>>>((groups, row) => {
+      const targets = row.schemaTarget === "Not yet aligned" ? [] : row.schemaTarget.split(" | ");
+      for (const target of targets) {
+        const family = schemaFamilyForTarget(target);
+        if (!groups.has(family)) {
+          groups.set(family, new Set<string>());
+        }
+        groups.get(family)?.add(target.split("/")[0] ?? target);
+      }
+      return groups;
+    }, new Map()),
+  );
+  const logicalSchemaTypeCount = schemaScopeGroups.reduce((count, [, schemaNames]) => count + schemaNames.size, 0);
   const validationRecords = echelonValidation?.records ?? [];
   const sampleValidationRecords = echelonValidation?.sample_records ?? [];
   const selectedValidationRecord =
@@ -693,6 +788,10 @@ export function App() {
   const matchedVariantCount = variantMappings.filter((mapping) => mapping.match_status === "matched").length;
   const excludedVariantCount = variantMappings.filter((mapping) => mapping.match_status === "excluded").length;
   const unmatchedVariantCount = variantMappings.filter((mapping) => mapping.match_status === "unmatched").length;
+  const orderedVariantMappings = [...variantMappings].sort((left, right) => {
+    const order = { matched: 0, unmatched: 1, excluded: 2 };
+    return order[left.match_status] - order[right.match_status];
+  });
   const familyWorkbookSummaries = visibleWorkbooks.reduce<
     { family: string; rows: number; postRows: number; patchRows: number }[]
   >((families, workbook) => {
@@ -1714,10 +1813,7 @@ export function App() {
               <div className="canonical-summary-item">
                 <span className="summary-label">Scope in review</span>
                 <p className="canonical-summary-inline">
-                  {canonicalEntityCount} entity groups are currently defined for the first MDR UDI-DI load.
-                  <span className="canonical-inline-pill-row">
-                    <span className="canonical-entity-pill">{canonicalFieldCount} review-model definitions</span>
-                  </span>
+                  {canonicalFieldCount} canonical fields are currently defined for review across {canonicalEntityCount} canonical entity groups and {logicalSchemaTypeCount} logical schema types referenced.
                   {canonicalEntityNames.length ? (
                     <span className="canonical-entity-pill-row" aria-label="Canonical entity groups">
                       {" "}
@@ -1731,117 +1827,142 @@ export function App() {
                 </p>
               </div>
               <div className="canonical-summary-item">
-                <span className="summary-label">Workbook-aligned fields</span>
+                <span className="summary-label">Direct Fields</span>
                 <p>
                   {directCount} fields map directly from workbook meaning into the canonical layer without
                   extra transformation logic.
                 </p>
               </div>
               <div className="canonical-summary-item">
-                <span className="summary-label">Normalization and derivation</span>
-                <p>
+                <span className="summary-label">Derived And Normalized Fields</span>
+                <p className="canonical-summary-inline">
                   {contextHeavyCount} fields need normalization or derivation so business meaning stays
                   stable before schema-specific codes or combined values are applied.
+                  <span className="canonical-inline-pill-row">
+                    <span className="canonical-entity-pill">{derivedRows.length} derived</span>
+                    <span className="canonical-entity-pill">{normalizedRows.length} normalized</span>
+                  </span>
                 </p>
               </div>
               <div className="canonical-summary-item">
-                <span className="summary-label">Repeated structures</span>
+                <span className="summary-label">Repeated Structures And Known Gaps</span>
                 <p className="canonical-summary-inline">
-                  {repeatedCount} fields are modeled as repeated business structures, including
+                  {repeatedCount + gapCount} fields are represented as repeated business structures or visible review gaps.
                   <span className="canonical-inline-pill-row">
+                    <span className="canonical-entity-pill">{repeatedCount} repeated</span>
+                    <span className="canonical-entity-pill">{gapCount} gaps</span>
+                    <span className="canonical-entity-pill">Market Availability</span>
                     <span className="canonical-entity-pill">Storage Conditions</span>
                     <span className="canonical-entity-pill">Critical Warnings</span>
-                  </span>,
-                  before projection into nested schema elements.
+                  </span>
                 </p>
               </div>
             </div>
           </section>
           <section className="panel">
-            <div className="section-heading">
-              <div>
-                <span className="section-kicker">Variant Join</span>
-                <h2>Workbook To Basic UDI Matching</h2>
+            <details className="group-accordion">
+              <summary>
+                <span>Source Sheet To Basic UDI Variant</span>
+                <span className="status-pill ok compact">{matchedVariantCount} matched</span>
+              </summary>
+              <div className="accordion-body">
+                <table className="mapping-contract-table">
+                  <thead>
+                    <tr>
+                      <th>Workbook</th>
+                      <th>Source sheet</th>
+                      <th>Basic UDI variant</th>
+                      <th>Basic UDI-DI</th>
+                      <th>Registration mode</th>
+                      <th>Review status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderedVariantMappings.map((mapping) => (
+                      <tr key={`${mapping.workbook}-${mapping.sheet}`}>
+                        <td>{mapping.workbook}</td>
+                        <td>{mapping.sheet}</td>
+                        <td>{mapping.device_model ?? "Pending"}</td>
+                        <td>{mapping.basic_udi_di ?? "N/A"}</td>
+                        <td>{mapping.submission_operation ?? "N/A"}</td>
+                        <td>
+                          <span
+                            className={
+                              mapping.match_status === "matched"
+                                ? "status-pill ok compact"
+                                : mapping.match_status === "excluded"
+                                  ? "status-pill danger compact"
+                                  : "status-pill warn compact"
+                            }
+                          >
+                            {titleCaseToken(mapping.match_status)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-            <p className="panel-copy">
-              The canonical layer now resolves Basic UDI context per product variant. For in-scope family workbooks, the
-              workbook sheet name is used as the primary join key to the authoritative `BasicUDIs.xlsx` `Device Model`.
-            </p>
-            <table className="mapping-contract-table">
-              <thead>
-                <tr>
-                  <th>Workbook</th>
-                  <th>Sheet</th>
-                  <th>Basic UDI variant</th>
-                  <th>Operation</th>
-                  <th>Basic UDI-DI</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {variantMappings.map((mapping) => (
-                  <tr key={`${mapping.workbook}-${mapping.sheet}`}>
-                    <td>{mapping.workbook}</td>
-                    <td>{mapping.sheet}</td>
-                    <td>{mapping.device_model ?? "Pending"}</td>
-                    <td>{mapping.submission_operation ?? "N/A"}</td>
-                    <td>{mapping.basic_udi_di ?? "N/A"}</td>
-                    <td>
-                      <span
-                        className={
-                          mapping.match_status === "matched"
-                            ? "status-pill ok compact"
-                            : "status-pill warn compact"
-                        }
-                      >
-                        {titleCaseToken(mapping.match_status)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            </details>
           </section>
           <section className="panel">
-            <div className="section-heading">
-              <div>
-                <span className="section-kicker">Mapping Contract</span>
-                <h2>Excel To Canonical To Schema</h2>
+            <details className="group-accordion">
+              <summary>
+                <span>Canonical Mapping</span>
+                <span className="status-pill ok compact">{canonicalFieldCount} fields</span>
+              </summary>
+              <div className="accordion-body">
+                <p className="panel-copy canonical-schema-pill-copy">
+                  <span className="canonical-schema-label">EUDAMED Schema Use:</span>
+                  <br />
+                  {schemaScopeGroups.flatMap(([family, schemaNames]) =>
+                    Array.from(schemaNames).map((schemaName) => (
+                      <span className="inline-stat-pill canonical-schema-pill" key={`mapping-${family}-${schemaName}`}>
+                        {schemaName}
+                      </span>
+                    )),
+                  )}
+                </p>
+                <table className="mapping-contract-table">
+                  <colgroup>
+                    <col className="mapping-col-excel" />
+                    <col className="mapping-col-canonical" />
+                    <col className="mapping-col-schema" />
+                    <col className="mapping-col-schema" />
+                    <col className="mapping-col-type" />
+                    <col className="mapping-col-schema" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>Source workbook field</th>
+                      <th>Canonical meaning</th>
+                      <th>EUDAMED target</th>
+                      <th>Schema file</th>
+                      <th>Mapping method</th>
+                      <th>Review notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {canonicalMappingRows.map((row) => (
+                      <tr key={row.canonicalPath}>
+                        <td>{row.excelField}</td>
+                        <td>
+                          <strong>{row.businessLabel}</strong>
+                          <br />
+                          <code>{row.canonicalPath}</code>
+                        </td>
+                        <td>{row.schemaTarget}</td>
+                        <td>{row.schemaFile}</td>
+                        <td>
+                          <span className="status-pill ok compact">{titleCaseToken(row.classification)}</span>
+                        </td>
+                        <td>{row.reviewNotes}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-            <table className="mapping-contract-table">
-              <colgroup>
-                <col className="mapping-col-excel" />
-                <col className="mapping-col-canonical" />
-                <col className="mapping-col-schema" />
-                <col className="mapping-col-type" />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>Excel field</th>
-                  <th>Canonical field</th>
-                  <th>Schema target</th>
-                  <th>Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {canonicalMappingRows.map((row) => (
-                  <tr key={row.canonicalPath}>
-                    <td>{row.excelField}</td>
-                    <td>
-                      <strong>{row.businessLabel}</strong>
-                      <br />
-                      <code>{row.canonicalPath}</code>
-                    </td>
-                    <td>{row.schemaTarget}</td>
-                    <td>
-                      <span className="status-pill ok compact">{titleCaseToken(row.classification)}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            </details>
           </section>
         </section>
       ) : null}

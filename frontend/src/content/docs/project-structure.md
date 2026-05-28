@@ -49,7 +49,20 @@ The current implementation is best understood as part of a larger four-layer dir
 
 At present, the codebase is strongest in the `Preparation Layer` and in the first operational slice of the `Submission Layer`, where validated records are turned into XML-ready batches and package previews.
 
-The current end-to-end proof was originally constrained to the `Echelon` family because the previous implementation assumed one shared family-level Basic UDI reference. The current workbook and canonical redesign replaces that assumption with variant-level Basic UDI linkage across the in-scope non-accessories families.
+The current workbook and canonical design uses variant-level Basic UDI linkage across the in-scope non-accessories families. The next implementation step is to bring `Canonical Validation` and `XML Generation` into line with that broader scope.
+
+The current workbook and canonical scope is:
+
+- in scope:
+  - `Echelon`
+  - `Elan`
+  - `Elite`
+  - `Epirus / Esprit`
+  - `Navigator / Javelin / Linx`
+- currently out of scope:
+  - `Template for Accessories_Footspares EUDAMED.xlsx`
+  - this workbook is deliberately excluded from active variant mapping while awaiting accessory mapping rules from QMS
+  - those rules are expected shortly and will allow this workbook to be brought back into the main preparation flow
 
 ## Backend Layers
 
@@ -153,7 +166,7 @@ This should sit downstream of the existing preparation and submission flow. The 
 
 ## Near-Term Architectural Check
 
-Before over-refining the future delivery architecture, the likely next structural check is to prove the current pipeline end to end with additional product family data when supporting `Basic UDI-DI` context becomes available.
+Before over-refining the future delivery architecture, the likely next structural check is to align the current end-to-end pipeline with the broader family scope now already available in workbook review and canonical mapping.
 
 That is important because it will show whether current assumptions are:
 

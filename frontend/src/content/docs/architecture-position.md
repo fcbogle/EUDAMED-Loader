@@ -2,20 +2,31 @@
 
 ## Purpose
 
-This note records the current architectural position for the EUDAMED preparation platform. It is intended to guide near-term implementation choices so the application remains usable for the current `Echelon` family scope while staying extensible for future `Playground`, `manual upload`, and `M2M / AS4` delivery modes.
+This note records the current architectural position for the EUDAMED preparation platform. It is intended to guide near-term implementation choices so the application remains usable for the current in-scope non-accessories product families while staying extensible for future `Playground`, `manual upload`, and `M2M / AS4` delivery modes.
 
 ## Current Reality
 
-The current pipeline already proves an important point: the application can inspect workbook data, normalize values, enrich records with `Basic UDI-DI` context, validate canonical readiness, and generate schema-valid XML batch packages.
+The application is now designed to support multiple in-scope non-accessories product families through a shared preparation model. Workbook review and canonical mapping use variant-level `Basic UDI-DI` linkage from the authoritative `BasicUDIs.xlsx` workbook, so the same preparation approach can be applied across the current family set rather than being tied to one product line.
 
-However, the next implementation pass changes one important source assumption: `Basic UDI-DI` context is no longer modeled as one shared family-level lookup bundle. The authoritative `BasicUDIs.xlsx` workbook provides explicit variant-level Basic UDI rows across the in-scope product families.
+In practical terms:
 
-That means:
+- `Workbooks` supports review of the in-scope product-family workbooks as a shared intake set
+- `Canonical` supports variant-level Basic UDI linkage and field-level mapping across that same scope
+- the next implementation step is to align `Canonical Validation` and `XML Generation` with this broader multi-family, product-variant-based design
+- XML generation should operate at `Product Variant` level within each product family
 
-- the present end-to-end implementation is a valid first operational slice
-- the present implementation is not yet proof that the architecture generalizes cleanly to all product families and product-accessory categories
-- the current Echelon-specific shared Basic UDI assumption is known to be incorrect and is being replaced by variant-level linkage
-- the next important step is not only refinement of transport architecture, but also proof that the same preparation and submission pattern can be exercised with additional family data
+The current family scope should be understood explicitly:
+
+- in scope:
+  - `Echelon`
+  - `Elan`
+  - `Elite`
+  - `Epirus / Esprit`
+  - `Navigator / Javelin / Linx`
+- currently out of scope:
+  - `Template for Accessories_Footspares EUDAMED.xlsx`
+  - this workbook is deliberately excluded from active variant mapping while awaiting QMS mapping rules for accessories and footspares
+  - those QMS rules are expected shortly
 
 ## Architectural Bias
 
@@ -210,15 +221,16 @@ The following patterns would likely create refactoring pressure later.
 - coupling audit history only to M2M and not to manual or Playground modes
 - assuming the Echelon family shape is the universal shape for all future families
 
-## Immediate Constraint: Echelon Only
+## Immediate Constraint: End-To-End Path Not Yet Generalized
 
-The current end-to-end path is still constrained by a real business-data limitation:
+The current end-to-end path is not yet generalized across the full in-scope family set.
 
-- only the `Echelon` family currently has the required `Basic UDI-DI` context available to support the existing complete pipeline
+The present limitation is that `Canonical Validation` and `XML Generation` still need to be aligned with the broader family-aware workbook and canonical design.
 
 That means the application is currently proving:
 
-- one family-specific preparation and XML generation path
+- broader family-aware workbook review and canonical mapping
+- one currently implemented validation and XML generation path
 
 It is not yet fully proving:
 
@@ -228,7 +240,7 @@ It is not yet fully proving:
 
 ## Likely Next Step
 
-Before major refinement of the full `Preparation -> Submission -> Delivery -> History` model, the likely next step is to prove the current pipeline end to end with additional product family data.
+Before major refinement of the full `Preparation -> Submission -> Delivery -> History` model, the likely next step is to refactor the current end-to-end path so it matches the broader product-family scope already established in `Workbooks` and `Canonical`.
 
 That matters because it will expose whether:
 
@@ -238,14 +250,14 @@ That matters because it will expose whether:
 - batch assembly inputs are stable across families
 - XML generation assumptions remain defensible beyond the current slice
 
-In other words, the next major architectural learning may come less from AS4 planning and more from trying to run another product family through the same preparation path.
+In other words, the next major architectural learning may come less from AS4 planning and more from aligning validation and XML generation with the full in-scope family set and its product variants.
 
 ## Recommended Near-Term Direction
 
 The recommended direction is:
 
-1. preserve the current Echelon end-to-end flow as the reference slice
-2. prove the preparation pipeline against at least one additional family when supporting `Basic UDI-DI` data becomes available
+1. generalize `Canonical Validation` and `XML Generation` to the current in-scope non-accessories families
+2. make XML generation operate at `Product Variant` level within each product family
 3. separate `Submission Layer` concerns from the current XML-generation service
 4. introduce explicit submission models before implementing transport expansion
 5. add delivery-mode switching through configuration and adapter selection

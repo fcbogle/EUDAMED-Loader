@@ -7,6 +7,7 @@ The `Workbooks` area is the intake and source-review stage for the application. 
 ## What The User Does Here
 
 - review workbook inventory and workbook-family variants
+- review product-family registration/update totals at a glance
 - inspect the selected workbook and selected sheet
 - review sheet-level profiling and missing-data signals
 - inspect deeper profile and normalization detail when needed
@@ -27,7 +28,10 @@ The source workbooks are treated as input evidence. The current `Workbooks` expe
 - the current phase does not introduce database persistence
 - the five main family workbooks currently remain in scope for active variant mapping
 - `Template for Accessories_Footspares EUDAMED.xlsx` is temporarily excluded from active variant mapping until QMS clarifies the accessory Basic UDI split
+- the active workbook inventory intentionally hides the excluded accessories workbook from the main review list
 - the current UI flow is:
+  - workbook summary
+  - product-family registration/update overview
   - inventory
   - selected workbook
   - selected sheet
@@ -48,7 +52,8 @@ The `Workbooks` area is responsible for producing a trustworthy preparation laye
 ## Expected Outputs
 
 - workbook and sheet inventory
-- active and legacy Basic UDI reference workbook inventory
+- active workbook scope for variant mapping
+- product-family row totals with `POST` and `PATCH` split
 - column profiling summaries
 - detected missing-data and normalization review signals
 - YAML normalization rules
