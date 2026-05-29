@@ -28,49 +28,6 @@ class CriticalWarningXmlItem(BaseModel):
     comment: str | None = None
 
 
-class EchelonXmlRecord(BaseModel):
-    catalogue_number: str
-    trade_name: str | None = None
-    primary_udi_di: str
-    issuing_entity: str
-    language_code: str
-    basic_udi_di: str
-    basic_identifier_code: str
-    basic_identifier_issuing_entity: str
-    device_identifier_code: str
-    device_identifier_issuing_entity: str
-    risk_class: str
-    model: str | None = None
-    model_name: str
-    manufacturer_srn: str
-    authorised_representative_srn: str | None = None
-    human_tissues_cells: bool
-    animal_tissues_cells: bool
-    human_product_check: bool
-    medicinal_product_check: bool
-    basic_device_type: str
-    active: bool
-    administering_medicine: bool
-    implantable: bool
-    measuring_function: bool
-    reusable: bool
-    nomenclature_codes: list[str] = Field(default_factory=list)
-    status_code: str
-    production_identifier: str | None = None
-    reference_number: str
-    secondary_identifier_code: str | None = None
-    secondary_identifier_issuing_entity: str | None = None
-    sterile: bool
-    sterilization: bool
-    number_of_reuses: int
-    contains_latex: bool
-    reprocessed: bool
-    first_eu_market_country: str | None = None
-    base_quantity: int | None = None
-    storage_conditions: list[StorageConditionXmlItem] = Field(default_factory=list)
-    critical_warnings: list[CriticalWarningXmlItem] = Field(default_factory=list)
-
-
 class SingleRecordXmlPreview(BaseModel):
     mode: Literal["single"] = "single"
     product_family: str | None = None

@@ -165,40 +165,6 @@ export type CompletenessSnapshot = {
   status: string;
 };
 
-export type ValidationFieldValue = {
-  canonical_path: string;
-  business_label: string;
-  required: boolean;
-  before_value: string | null;
-  after_value: string | null;
-  before_source: string;
-  after_source: string;
-  source_detail: string | null;
-  update_reason: string | null;
-};
-
-export type ExcludedSheetSummary = {
-  sheet_name: string;
-  record_count: number;
-  reason: string;
-};
-
-export type BlockerSummary = {
-  canonical_path: string;
-  business_label: string;
-  before_missing_count: number;
-  after_missing_count: number;
-};
-
-export type SheetValidationSummary = {
-  sheet_name: string;
-  record_count: number;
-  before_complete_records: number;
-  after_complete_records: number;
-  before_missing_field_total: number;
-  after_missing_field_total: number;
-};
-
 export type SourceFieldCoverageSummary = {
   status: string;
   label: string;
@@ -220,48 +186,6 @@ export type StructuredListItemPreview = {
   normalized_code: string | null;
   description: string | null;
   source_fields: string[];
-};
-
-export type EchelonValidationRecord = {
-  source_workbook: string;
-  source_sheet: string;
-  source_row_index: number;
-  trade_name: string | null;
-  primary_udi_di: string | null;
-  catalogue_number: string | null;
-  issuing_entity: string | null;
-  reference_match_status: string;
-  basic_reference_material_number: string | null;
-  basic_reference_name: string | null;
-  before_completeness: CompletenessSnapshot;
-  after_completeness: CompletenessSnapshot;
-  before_blockers: string[];
-  after_blockers: string[];
-  storage_condition_items: StructuredListItemPreview[];
-  critical_warning_items: StructuredListItemPreview[];
-  fields: ValidationFieldValue[];
-};
-
-export type EchelonValidationBundle = {
-  family_scope: string;
-  scope_note: string;
-  validation_note: string;
-  source_workbook: string;
-  total_source_records: number;
-  validation_subset_records: number;
-  excluded_records: number;
-  matched_reference_records: number;
-  tracked_required_fields: number;
-  before_complete_records: number;
-  after_complete_records: number;
-  blocker_summaries: BlockerSummary[];
-  sheet_summaries: SheetValidationSummary[];
-  source_field_total: number;
-  source_field_coverage_summaries: SourceFieldCoverageSummary[];
-  source_field_coverage: SourceFieldCoverageEntry[];
-  sample_records: EchelonValidationRecord[];
-  excluded_sheet_summaries: ExcludedSheetSummary[];
-  records: EchelonValidationRecord[];
 };
 
 export type CanonicalValidationFieldValue = {

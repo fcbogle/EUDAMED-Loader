@@ -12,8 +12,10 @@ In practical terms:
 
 - `Workbooks` supports review of the in-scope product-family workbooks as a shared intake set
 - `Canonical` supports variant-level Basic UDI linkage and field-level mapping across that same scope
-- the next implementation step is to align `Canonical Validation` and `XML Generation` with this broader multi-family, product-variant-based design
-- XML generation should operate at `Product Variant` level within each product family
+- `Canonical Validation` now supports family-aware and variant-aware readiness review across that same scope
+- `XML Generation` now operates at `Product Variant` level within each product family for both:
+  - `Single XML`
+  - `Variant Batch XML`
 
 The current family scope should be understood explicitly:
 
@@ -221,47 +223,48 @@ The following patterns would likely create refactoring pressure later.
 - coupling audit history only to M2M and not to manual or Playground modes
 - assuming the Echelon family shape is the universal shape for all future families
 
-## Immediate Constraint: End-To-End Path Not Yet Generalized
+## Immediate Constraint: End-To-End Path Still Needs Hardening
 
-The current end-to-end path is not yet generalized across the full in-scope family set.
+The current end-to-end path is now generalized across the current in-scope non-accessories family set, but it still needs architectural hardening.
 
-The present limitation is that `Canonical Validation` and `XML Generation` still need to be aligned with the broader family-aware workbook and canonical design.
+The present limitation is no longer family scope. It is that the new generalized path still coexists with legacy Echelon-specific services and has not yet been fully simplified into one durable submission path.
 
 That means the application is currently proving:
 
 - broader family-aware workbook review and canonical mapping
-- one currently implemented validation and XML generation path
+- family-aware canonical validation
+- product-variant-based single and batch XML generation
 
 It is not yet fully proving:
 
-- family-agnostic preparation
-- family-agnostic enrichment assumptions
-- family-agnostic submission assembly
+- removal of legacy Echelon-only XML code
+- clean separation between preparation concerns and submission-assembly concerns
+- stable artifact/package conventions for later manual upload and future delivery modes
 
 ## Likely Next Step
 
-Before major refinement of the full `Preparation -> Submission -> Delivery -> History` model, the likely next step is to refactor the current end-to-end path so it matches the broader product-family scope already established in `Workbooks` and `Canonical`.
+Before major refinement of the full `Preparation -> Submission -> Delivery -> History` model, the likely next step is to harden and simplify the current generalized end-to-end path.
 
 That matters because it will expose whether:
 
-- current canonical assumptions are too Echelon-specific
-- enrichment rules depend too heavily on one family workbook pattern
-- validation coverage generalizes cleanly
-- batch assembly inputs are stable across families
-- XML generation assumptions remain defensible beyond the current slice
+- the aligned canonical field set is now stable enough to remain the long-term XML source contract
+- enrichment rules remain defensible across the full in-scope family set
+- batch assembly inputs and file/package naming are stable across variants
+- legacy Echelon-specific code can now be removed without losing useful behavior
+- later manual-upload and future delivery workflows can consume the same submission artifacts
 
-In other words, the next major architectural learning may come less from AS4 planning and more from aligning validation and XML generation with the full in-scope family set and its product variants.
+In other words, the next major architectural learning may come less from AS4 planning and more from simplifying the generalized validation/XML path into a durable submission layer.
 
 ## Recommended Near-Term Direction
 
 The recommended direction is:
 
-1. generalize `Canonical Validation` and `XML Generation` to the current in-scope non-accessories families
-2. make XML generation operate at `Product Variant` level within each product family
-3. separate `Submission Layer` concerns from the current XML-generation service
-4. introduce explicit submission models before implementing transport expansion
-5. add delivery-mode switching through configuration and adapter selection
-6. design history tracking so manual, Playground, and future M2M flows can share the same audit model
+1. remove or retire the legacy Echelon-only validation and XML paths once the generic path is fully reviewed
+2. separate `Submission Layer` concerns from the current XML-generation service
+3. introduce explicit submission models before implementing transport expansion
+4. add delivery-mode switching through configuration and adapter selection
+5. design history tracking so manual, Playground, and future M2M flows can share the same audit model
+6. keep accessories out of active scope until QMS provides the missing mapping rules
 
 ## Position Summary
 

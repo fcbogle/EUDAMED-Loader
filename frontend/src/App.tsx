@@ -283,6 +283,9 @@ function schemaFileForTarget(schemaPath: string): string {
   if (schemaPath.startsWith("UDIDIType/")) {
     return "data/schemas/data/Entity/Device/RegulationDevice/UDIDIType.xsd";
   }
+  if (schemaPath.startsWith("UDIDIDataType/")) {
+    return "data/schemas/data/Entity/Device/LegacyDevice/EUUDIDIDataType.xsd";
+  }
   if (schemaPath.startsWith("BasicUDIType/")) {
     return "data/schemas/data/Entity/Device/RegulationDevice/BasicUDIType.xsd";
   }
@@ -291,6 +294,12 @@ function schemaFileForTarget(schemaPath: string): string {
   }
   if (schemaPath.startsWith("MDRBasicUDIType/")) {
     return "data/schemas/data/Entity/Device/RegulationDevice/BasicUDIType.xsd";
+  }
+  if (schemaPath.startsWith("DeviceUDIDIDataType/")) {
+    return "data/schemas/data/Entity/Device/LegacyDevice/EUUDIDIDataType.xsd";
+  }
+  if (schemaPath.startsWith("MDRUDIDIDataType/")) {
+    return "data/schemas/data/Entity/Device/LegacyDevice/EUUDIDIDataType.xsd";
   }
   if (schemaPath.startsWith("CommonDeviceType/")) {
     return "data/schemas/data/Entity/Device/CommonDeviceType.xsd";
@@ -314,6 +323,9 @@ function schemaFamilyForTarget(schemaPath: string): string {
   if (schemaPath.startsWith("UDIDIType/")) {
     return "Business payload";
   }
+  if (schemaPath.startsWith("UDIDIDataType/")) {
+    return "Business payload";
+  }
   if (schemaPath.startsWith("BasicUDIType/")) {
     return "Business payload";
   }
@@ -321,6 +333,12 @@ function schemaFamilyForTarget(schemaPath: string): string {
     return "Business payload";
   }
   if (schemaPath.startsWith("MDRBasicUDIType/")) {
+    return "Business payload";
+  }
+  if (schemaPath.startsWith("DeviceUDIDIDataType/")) {
+    return "Business payload";
+  }
+  if (schemaPath.startsWith("MDRUDIDIDataType/")) {
     return "Business payload";
   }
   if (schemaPath.startsWith("CommonDeviceType/")) {

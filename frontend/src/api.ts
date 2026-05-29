@@ -4,7 +4,6 @@ import type {
   CanonicalValidationBundle,
   CanonicalReviewBundle,
   DistinctValueProfile,
-  EchelonValidationBundle,
   NormalizationRuleFile,
   ReferenceWorkbookSummary,
   SchemaInventory,
@@ -88,7 +87,6 @@ export const api = {
     }),
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
   canonicalValidation: () => getJson<CanonicalValidationBundle>("/canonical-validation"),
-  echelonCanonicalValidation: () => getJson<EchelonValidationBundle>("/canonical-validation/echelon"),
   xmlGenerationScope: () => getJson<XmlGenerationScopeBundle>("/xml/scope"),
   previewXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendJson<SingleRecordXmlPreview>("/xml/preview-record", "POST", {
@@ -113,18 +111,5 @@ export const api = {
       product_family: productFamily,
       product_variant: productVariant,
     }),
-  previewEchelonXmlRecord: (catalogueNumber: string) =>
-    sendJson<SingleRecordXmlPreview>("/xml/echelon/preview-record", "POST", {
-      catalogue_number: catalogueNumber,
-    }),
-  previewEchelonXmlBatch: (chunkSequence = 1) =>
-    sendJson<BatchXmlPreview>("/xml/echelon/preview-batch", "POST", {
-      chunk_sequence: chunkSequence,
-    }),
-  downloadEchelonXmlRecord: (catalogueNumber: string) =>
-    sendDownload("/xml/echelon/download-record", "POST", {
-      catalogue_number: catalogueNumber,
-    }),
-  downloadEchelonXmlBatch: () => sendDownload("/xml/echelon/download-batch", "POST"),
   schemas: () => getJson<SchemaInventory>("/schemas"),
 };

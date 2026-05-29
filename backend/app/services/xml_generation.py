@@ -10,20 +10,6 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import lxml.etree as etree
 
 from app.services.canonical_validation import CanonicalValidationService
-from app.services.echelon_xml_generation import (
-    BASIC_UDI_NS,
-    COMMON_DEVICE_NS,
-    DEVICE_NS,
-    EU_COUNTRY_CODE_MAP,
-    LANGUAGE_CODE_MAP,
-    LANGUAGE_NS,
-    MARKET_INFO_NS,
-    MESSAGE_NS,
-    NSMAP,
-    SERVICE_NS,
-    UDIDI_NS,
-    XSI_NS,
-)
 from app.services.xml_validation import XmlValidationService
 from app.validation_models import CanonicalValidationRecord
 from app.xml_models import (
@@ -38,6 +24,69 @@ from app.xml_models import (
 
 MAX_BATCH_RECORDS = 300
 XmlElement = Any
+
+MESSAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1"
+SERVICE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1"
+DEVICE_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/v1"
+BASIC_UDI_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/BasicUDI/v1"
+UDIDI_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/UDIDI/v1"
+COMMON_DEVICE_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/CommonDevice/v1"
+LANGUAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/LanguageSpecific/v1"
+MARKET_INFO_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/MktInfo/MarketInfo/v1"
+XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
+
+NSMAP = {
+    "m": MESSAGE_NS,
+    "s": SERVICE_NS,
+    "device": DEVICE_NS,
+    "basicudi": BASIC_UDI_NS,
+    "udidi": UDIDI_NS,
+    "commondi": COMMON_DEVICE_NS,
+    "lsn": LANGUAGE_NS,
+    "marketinfo": MARKET_INFO_NS,
+    "xsi": XSI_NS,
+}
+
+LANGUAGE_CODE_MAP = {
+    "english": "EN",
+    "french": "FR",
+    "german": "DE",
+    "dutch": "NL",
+    "spanish": "ES",
+    "italian": "IT",
+    "portuguese": "PT",
+}
+
+EU_COUNTRY_CODE_MAP = {
+    "austria": "AT",
+    "belgium": "BE",
+    "bulgaria": "BG",
+    "croatia": "HR",
+    "cyprus": "CY",
+    "czech republic": "CZ",
+    "czechia": "CZ",
+    "denmark": "DK",
+    "estonia": "EE",
+    "finland": "FI",
+    "france": "FR",
+    "germany": "DE",
+    "greece": "EL",
+    "hungary": "HU",
+    "ireland": "IE",
+    "italy": "IT",
+    "latvia": "LV",
+    "lithuania": "LT",
+    "luxembourg": "LU",
+    "malta": "MT",
+    "netherlands": "NL",
+    "poland": "PL",
+    "portugal": "PT",
+    "romania": "RO",
+    "slovakia": "SK",
+    "slovenia": "SI",
+    "spain": "ES",
+    "sweden": "SE",
+}
 
 
 class DeviceXmlRecord:
