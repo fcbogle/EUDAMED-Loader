@@ -5,6 +5,7 @@ import architecturePositionDocumentation from "./content/docs/architecture-posit
 import canonicalDocumentation from "./content/docs/canonical.md?raw";
 import canonicalValidationDocumentation from "./content/docs/canonical-validation.md?raw";
 import projectStructureDocumentation from "./content/docs/project-structure.md?raw";
+import roadmapDocumentation from "./content/docs/roadmap.md?raw";
 import softwareEngineeringPatternsDocumentation from "./content/docs/software-engineering-patterns.md?raw";
 import workbooksDocumentation from "./content/docs/workbooks.md?raw";
 import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
@@ -61,6 +62,7 @@ type DocumentationSection = {
     | "canonical"
     | "canonicalValidation"
     | "xml"
+    | "roadmap"
     | "projectStructure"
     | "softwareEngineeringPatterns";
   title: string;
@@ -488,6 +490,11 @@ export function App() {
       id: "xml",
       title: "XML Generation",
       markdown: xmlGenerationDocumentation,
+    },
+    {
+      id: "roadmap",
+      title: "Roadmap",
+      markdown: roadmapDocumentation,
     },
     {
       id: "softwareEngineeringPatterns",
