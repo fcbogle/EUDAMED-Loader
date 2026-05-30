@@ -9,6 +9,7 @@ import roadmapDocumentation from "./content/docs/roadmap.md?raw";
 import softwareEngineeringPatternsDocumentation from "./content/docs/software-engineering-patterns.md?raw";
 import workbooksDocumentation from "./content/docs/workbooks.md?raw";
 import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
+import xmlSampleComparisonDocumentation from "./content/docs/xml-sample-comparison.md?raw";
 import type {
   BatchXmlPreview,
   CanonicalValidationBundle,
@@ -62,6 +63,7 @@ type DocumentationSection = {
     | "canonical"
     | "canonicalValidation"
     | "xml"
+    | "xmlSampleComparison"
     | "roadmap"
     | "projectStructure"
     | "softwareEngineeringPatterns";
@@ -490,6 +492,11 @@ export function App() {
       id: "xml",
       title: "XML Generation",
       markdown: xmlGenerationDocumentation,
+    },
+    {
+      id: "xmlSampleComparison",
+      title: "XML Sample Comparison",
+      markdown: xmlSampleComparisonDocumentation,
     },
     {
       id: "roadmap",
