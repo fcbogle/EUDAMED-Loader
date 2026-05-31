@@ -854,7 +854,7 @@ class CanonicalValidationService:
                     continue
                 if not any(value not in (None, "") for value in values):
                     continue
-                mapped_values = {
+                mapped_values: dict[str, object | None] = {
                     headers[index]: values[index] if index < len(values) else None
                     for index in range(len(headers))
                     if headers[index]

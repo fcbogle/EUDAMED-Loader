@@ -6,6 +6,7 @@ from openpyxl import load_workbook
 
 from app.canonical_models import SubmissionOperation, VariantMappingSummary
 from app.config import get_settings
+from app.validation_models import ValueSourceType
 
 
 @dataclass(frozen=True)
@@ -15,9 +16,9 @@ class BasicUdiReferenceRow:
     device_model: str
     basic_udi_di: str
     manufacturer_srn: str | None
-    manufacturer_srn_source: str | None
+    manufacturer_srn_source: ValueSourceType | None
     authorised_representative_srn: str | None
-    authorised_representative_srn_source: str | None
+    authorised_representative_srn_source: ValueSourceType | None
     device_type: str | None
     special_device_type: str | None
     risk_class: str | None
