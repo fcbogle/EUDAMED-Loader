@@ -19,6 +19,8 @@
 		   xmlns:procdt="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/MsuProcedures/ProcedureData/v1"
 		   xmlns:vigbase="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Vigilance"
 		   xmlns:ocm="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/OCM/v1"
+		   xmlns:postcrtf="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/PostCertificateType/v1"
+		   xmlns:refcrtf="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/RefusedCertificate/v1"
 		   elementFormDefault="qualified">
 
 	<xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/SSCP/v1" schemaLocation="../../data/Entity/SSCP/SSCPType.xsd"/>
@@ -42,6 +44,8 @@
 	<xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/MsuProcedures/ProcedureData/v1" schemaLocation="../../data/Entity/Msu/Procedures/MsuProcedureData.xsd"/>
 	<xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Vigilance" schemaLocation="../../data/Entity/Vigilance/vigilance.xsd"/>
 	<xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/OCM/v1" schemaLocation="../../data/Entity/OldCustomMadeDevice.xsd"/>
+	<xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/PostCertificateType/v1" schemaLocation="../../data/Entity/Certificate/PostCertificateType.xsd"/>
+	<xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/RefusedCertificate/v1" schemaLocation="../../data/Entity/Certificate/RefusedCertificateType.xsd"/>
 
 	<xs:complexType name="AcknowledgementType">
 		<xs:annotation>
@@ -157,31 +161,46 @@
 				Optional empty fields are removed from the XML responses.</xs:documentation>
 		</xs:annotation>
 		<xs:sequence>
-			<xs:element name="conversationID" type="xs:string" minOccurs="0" maxOccurs="1">
+			<xs:element name="conversationID" minOccurs="0" maxOccurs="1">
 				<xs:annotation>
 					<xs:documentation>Allows multiple response messages to be sent as reply to a single request message.</xs:documentation>
 				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:maxLength value="255"/>
+					</xs:restriction>
+				</xs:simpleType>
 			</xs:element>
-			<xs:element name="correlationID" type="xs:string" minOccurs="1" maxOccurs="1">
+			<xs:element name="correlationID" minOccurs="1" maxOccurs="1">
 				<xs:annotation>
 					<xs:documentation>Correlates the request to the response and to the acknowledgments. It has the UUID format.</xs:documentation>
 				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:maxLength value="255"/>
+					</xs:restriction>
+				</xs:simpleType>
 			</xs:element>
 			<xs:element name="creationDateTime" type="xs:dateTime" minOccurs="1" maxOccurs="1">
 				<xs:annotation>
 					<xs:documentation>The date and time when this message object was created</xs:documentation>
 				</xs:annotation>
 			</xs:element>
-			<xs:element name="messageID" type="xs:string" minOccurs="1" maxOccurs="1">
+			<xs:element name="messageID" minOccurs="1" maxOccurs="1">
 				<xs:annotation>
 					<xs:documentation>Identifies uniquely a message at the level of EUDAMED. It has the UUID format.</xs:documentation>
 				</xs:annotation>
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:maxLength value="255"/>
+					</xs:restriction>
+				</xs:simpleType>
 			</xs:element>
 			<xs:element name="recipient" type="m:EndpointType" minOccurs="1" maxOccurs="1"/>
 			<xs:element name="payload" type="m:CoreEntityPayloadType" minOccurs="1" maxOccurs="1"/>
 			<xs:element name="sender" type="m:EndpointType" minOccurs="1" maxOccurs="1"/>
 		</xs:sequence>
-		<xs:attribute name="version" use="required" fixed="3.0.28" type="xs:string">
+		<xs:attribute name="version" use="required" fixed="3.0.30" type="xs:string">
 			<xs:annotation>
 				<xs:documentation>Version of the XSD model schema against the current entities are validated.</xs:documentation>
 			</xs:annotation>
@@ -264,6 +283,8 @@
 				<xs:element ref="vigbase:Dossier" minOccurs="1" maxOccurs="300" />
 				<xs:element ref="ocm:OldCustomMadeDevice" minOccurs="1" maxOccurs="unbounded" />
                 <xs:element ref="device:DeviceAll" minOccurs="1" maxOccurs="1"/>
+				<xs:element ref="postcrtf:PostCertificate" minOccurs="1" maxOccurs="unbounded" />
+				<xs:element ref="refcrtf:RefusedCertificate" minOccurs="1" maxOccurs="unbounded" />
 			</xs:choice>
 		</xs:sequence>
 	</xs:complexType>

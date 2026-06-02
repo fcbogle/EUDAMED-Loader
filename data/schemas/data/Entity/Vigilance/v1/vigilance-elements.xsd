@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?><?xml-stylesheet type="text/xsl" href="/tools/eudamed/dtx/xslt/index.xsl"?>
 <xs:schema xmlns:vigbase="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Vigilance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Vigilance/v1"
-           xmlns:vig="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Vigilance/v1" targetNamespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Vigilance/v1" elementFormDefault="qualified">
+    xmlns:vig="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Vigilance/v1" targetNamespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Vigilance/v1" elementFormDefault="qualified">
     <xs:include schemaLocation="vigilance-commons.xsd"/>
     <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Vigilance" schemaLocation="../vigilance.xsd"/>
     <xs:complexType name="initialReporterContact_AddressType">
@@ -1617,8 +1617,7 @@
                                                                                     </xs:complexType>
                                                                                     <xs:key name="imdrfCodeAnnexAKey-2">
                                                                                         <xs:annotation>
-                                                                                            <xs:documentation>Must be unique relative to this list and constant across different payloads deliveries for the same data it references
-                                                                                            </xs:documentation>
+                                                                                            <xs:documentation>Must be unique relative to this list and constant across different payloads deliveries for the same data it references</xs:documentation>
                                                                                         </xs:annotation>
                                                                                         <xs:selector xpath="vig:imdrfCodeAnnexA"/>
                                                                                         <xs:field xpath="@ordinal"/>
@@ -1641,8 +1640,7 @@
                                                                                     </xs:complexType>
                                                                                     <xs:key name="imdrfCodeAnnexCKey-2">
                                                                                         <xs:annotation>
-                                                                                            <xs:documentation>Must be unique relative to this list and constant across different payloads deliveries for the same data it references
-                                                                                            </xs:documentation>
+                                                                                            <xs:documentation>Must be unique relative to this list and constant across different payloads deliveries for the same data it references</xs:documentation>
                                                                                         </xs:annotation>
                                                                                         <xs:selector xpath="vig:imdrfCodeAnnexC"/>
                                                                                         <xs:field xpath="@ordinal"/>
@@ -1665,8 +1663,7 @@
                                                                                     </xs:complexType>
                                                                                     <xs:key name="imdrfCodeAnnexDKey-2">
                                                                                         <xs:annotation>
-                                                                                            <xs:documentation>Must be unique relative to this list and constant across different payloads deliveries for the same data it references
-                                                                                            </xs:documentation>
+                                                                                            <xs:documentation>Must be unique relative to this list and constant across different payloads deliveries for the same data it references</xs:documentation>
                                                                                         </xs:annotation>
                                                                                         <xs:selector xpath="vig:imdrfCodeAnnexD"/>
                                                                                         <xs:field xpath="@ordinal"/>

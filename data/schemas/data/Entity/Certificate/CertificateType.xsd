@@ -61,6 +61,7 @@
 			</xs:extension>
 		</xs:complexContent>
 	</xs:complexType>
+
 	<xs:complexType name="QualityProcedureType">
 		<xs:complexContent>
 			<xs:extension base="crtf:ConformityAssesmentType">

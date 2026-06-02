@@ -127,4 +127,9 @@
 			<xs:enumeration value="Unknown"/>
 		</xs:restriction>
 	</xs:simpleType>
+	<xs:complexType name="ARActors">
+		<xs:sequence>
+			<xs:element name="actorCode" type="commonbasic:stringSRNType" minOccurs="0" maxOccurs="unbounded"/>
+		</xs:sequence>
+	</xs:complexType>
 </xs:schema>

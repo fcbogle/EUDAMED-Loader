@@ -59,7 +59,7 @@
                         <xs:annotation>
                             <xs:documentation>
                                 #FLD-UDID-157# - Maximum number of reuses. Property defines the Maximum Number of reuses applicable for the Device.
-                                Use 1 value when the maximum number of reuses is not defined (Maximum number of reuses are not applicable), 0 if the Device is considered Single-use device and
+                                Use -1 value when the maximum number of reuses is not defined (Maximum number of reuses are not applicable), 0 if the Device is considered Single-use device and
                                 a positive number when the Device has a limited number of reuses (provided number being the number of reuses applicable).
                             </xs:documentation>
                         </xs:annotation>

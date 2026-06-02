@@ -23,6 +23,7 @@ from app.xml_models import (
 )
 
 MAX_BATCH_RECORDS = 300
+MESSAGE_SCHEMA_VERSION = "3.0.30"
 XmlElement = Any
 
 MESSAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1"
@@ -515,7 +516,7 @@ class XmlGenerationService:
 
     def _render_push_message_records(self, records: list[DeviceXmlRecord]) -> bytes:
         root = etree.Element(self._q(MESSAGE_NS, "Push"), nsmap=NSMAP)
-        root.set("version", "3.0.28")
+        root.set("version", MESSAGE_SCHEMA_VERSION)
 
         self._append_text(root, MESSAGE_NS, "correlationID", str(uuid4()))
         self._append_text(root, MESSAGE_NS, "creationDateTime", datetime.now(UTC).replace(microsecond=0).isoformat())

@@ -145,5 +145,12 @@
 			<xs:element name="decision" type="crtfdecisionupdate:CertificateStatusChangeDecisionType" minOccurs="0" maxOccurs="1"/>
 		</xs:sequence>
 	</xs:complexType>
-	<xs:element name="IssuedCertificate" type="crtfissued:IssuedCertificateType"/>
+	<xs:element name="IssuedCertificate">
+		<xs:complexType>
+			<xs:complexContent>
+				<xs:extension base="crtfissued:IssuedCertificateType">
+				</xs:extension>
+			</xs:complexContent>
+		</xs:complexType>
+	</xs:element>
 </xs:schema>
