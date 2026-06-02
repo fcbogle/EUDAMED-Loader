@@ -16,6 +16,11 @@ In practical terms:
 - `XML Generation` now operates at `Product Variant` level within each product family for both:
   - `Single XML`
   - `Variant Batch XML`
+- the local EUDAMED schema baseline has now been refreshed from `3.0.28` to `3.0.30`
+- the current XML path now projects explicit entity lifecycle metadata for UDI-DI payloads:
+  - `e:state = REGISTERED` for `POST` and `PATCH`
+  - `e:version` for `PATCH` from the source `Version` marker
+- `numberOfReuses` now uses `-1` for the non-applicable case in line with the refreshed schema guidance
 
 The current family scope should be understood explicitly:
 

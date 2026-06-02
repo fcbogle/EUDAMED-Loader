@@ -98,7 +98,7 @@ The canonical layer should not:
 - `Manufacturer SRN`, `Authorised Representative SRN`, `Basic risk class`, `Basic model`, and other `MDRBasicUDI` fields are now represented in the review artifact as derived/reference-backed mappings
 - `Manufacturer SRN` and `Authorised Representative SRN` are now modeled as supplemental legacy tracekey enrichments because the authoritative `BasicUDIs.xlsx` workbook does not currently carry those SRN values
 - `Operation` is now treated as explicit submission-intent metadata that later drives `POST` vs `PATCH` service behavior
-- source `Version` is preserved as an internal marker for now and is not yet treated as authoritative EUDAMED entity version
+- source `Version` is now used as the current `PATCH` entity-version signal for XML generation while still being preserved separately as source metadata in the canonical layer
 - `UDI-DI identifier`, `Basic UDI identifier`, `number of reuses`, `base quantity`, and other XML-facing `UDIDIData` fields are now represented explicitly rather than remaining implicit in the review
 - `Market Availability`, `Storage Conditions`, and `Critical Warnings` are now represented as repeated canonical structures where applicable
 - the main UI now presents:
@@ -187,9 +187,9 @@ The remaining items are narrower than before and fall into different categories.
     - source-data gap more than schema-file uncertainty
 - `basic_device.source_version_marker`
   - current issue:
-    - the workbook `Version` field is still treated as internal submission metadata
+    - the workbook `Version` field is now used operationally for current `PATCH` XML `Entity/version`
   - interpretation:
-    - the team has not yet confirmed whether it should populate real EUDAMED `Entity/version`
+    - the canonical layer still preserves the source marker explicitly because future QMS guidance may refine how version should be governed outside the current XML-generation path
 - `device_record.secondary_identifier`
   - current issue:
     - the exact downstream XML-facing schema placement still needs confirmation in the next XML-focused phase

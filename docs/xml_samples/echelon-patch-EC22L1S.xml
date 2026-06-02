@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
-<m:Push xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1" xmlns:device="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/v1" xmlns:basicudi="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/BasicUDI/v1" xmlns:udidi="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/UDIDI/v1" xmlns:commondi="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/CommonDevice/v1" xmlns:lsn="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/LanguageSpecific/v1" xmlns:marketinfo="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/MktInfo/MarketInfo/v1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="3.0.28">
-  <m:correlationID>c687e7d0-0442-4839-a01b-e272055698d4</m:correlationID>
-  <m:creationDateTime>2026-05-30T05:30:21+00:00</m:creationDateTime>
-  <m:messageID>9007dc77-e733-46b0-b2b1-7b99e5bd5db5</m:messageID>
+<m:Push xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1" xmlns:device="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/v1" xmlns:basicudi="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/BasicUDI/v1" xmlns:udidi="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/UDIDI/v1" xmlns:e="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/v1" xmlns:commondi="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/CommonDevice/v1" xmlns:lsn="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/LanguageSpecific/v1" xmlns:marketinfo="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/MktInfo/MarketInfo/v1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="3.0.30">
+  <m:correlationID>a772c720-5741-48f8-b31f-ccc2fe8e8078</m:correlationID>
+  <m:creationDateTime>2026-06-02T09:39:28+00:00</m:creationDateTime>
+  <m:messageID>c07a8b67-f6f5-408f-88b6-793323bec05f</m:messageID>
   <m:recipient>
     <m:node>
       <s:nodeActorCode>EUDAMED</s:nodeActorCode>
@@ -37,6 +37,8 @@
         <commondi:reusable>false</commondi:reusable>
       </device:MDRBasicUDI>
       <device:MDRUDIDIData>
+        <e:state>REGISTERED</e:state>
+        <e:version>2</e:version>
         <udidi:identifier>
           <commondi:DICode>05050649030109</commondi:DICode>
           <commondi:issuingEntityCode>GS1</commondi:issuingEntityCode>
@@ -84,8 +86,9 @@
             <commondi:warningValue>CW010</commondi:warningValue>
           </commondi:warning>
         </udidi:criticalWarnings>
-        <udidi:numberOfReuses>1</udidi:numberOfReuses>
+        <udidi:numberOfReuses>-1</udidi:numberOfReuses>
         <udidi:marketInfos>
+          <e:state>REGISTERED</e:state>
           <marketinfo:marketInfo>
             <marketinfo:country>AT</marketinfo:country>
             <marketinfo:originalPlacedOnTheMarket>false</marketinfo:originalPlacedOnTheMarket>
