@@ -31,6 +31,7 @@ SERVICE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1"
 DEVICE_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/v1"
 BASIC_UDI_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/BasicUDI/v1"
 UDIDI_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/UDIDI/v1"
+ENTITY_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/v1"
 COMMON_DEVICE_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/CommonDevice/v1"
 LANGUAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/LanguageSpecific/v1"
 MARKET_INFO_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/MktInfo/MarketInfo/v1"
@@ -42,6 +43,7 @@ NSMAP = {
     "device": DEVICE_NS,
     "basicudi": BASIC_UDI_NS,
     "udidi": UDIDI_NS,
+    "e": ENTITY_NS,
     "commondi": COMMON_DEVICE_NS,
     "lsn": LANGUAGE_NS,
     "marketinfo": MARKET_INFO_NS,
@@ -128,6 +130,7 @@ class DeviceXmlRecord:
         secondary_identifier_issuing_entity: str | None,
         sterile: bool,
         sterilization: bool,
+        source_version_marker: str | None,
         number_of_reuses: int,
         contains_latex: bool,
         reprocessed: bool,
@@ -170,6 +173,7 @@ class DeviceXmlRecord:
         self.secondary_identifier_issuing_entity = secondary_identifier_issuing_entity
         self.sterile = sterile
         self.sterilization = sterilization
+        self.source_version_marker = source_version_marker
         self.number_of_reuses = number_of_reuses
         self.contains_latex = contains_latex
         self.reprocessed = reprocessed
@@ -502,6 +506,7 @@ class XmlGenerationService:
             secondary_identifier_issuing_entity=secondary_identifier_issuing_entity,
             sterile=self._bool(self._required(field_map, "device_record.sterile")),
             sterilization=self._bool(self._required(field_map, "device_record.sterilisation_before_use")),
+            source_version_marker=field_map.get("basic_device.source_version_marker"),
             number_of_reuses=int(self._required(field_map, "device_record.number_of_reuses")),
             contains_latex=self._bool(self._required(field_map, "device_record.contains_latex")),
             reprocessed=self._bool(self._required(field_map, "device_record.reprocessed")),
@@ -604,6 +609,9 @@ class XmlGenerationService:
 
     def _udidi_data_element(self, record: DeviceXmlRecord) -> XmlElement:
         udidi = etree.Element(self._q(DEVICE_NS, "MDRUDIDIData"))
+        self._append_text(udidi, ENTITY_NS, "state", "REGISTERED")
+        if (record.submission_operation or "").upper() == "PATCH" and record.source_version_marker:
+            self._append_text(udidi, ENTITY_NS, "version", record.source_version_marker)
         udidi.append(
             self._di_identifier_element(
                 di_code=record.device_identifier_code,
@@ -656,6 +664,7 @@ class XmlGenerationService:
 
     def _market_infos_element(self, items: list[tuple[str, bool]]) -> XmlElement:
         market_infos = etree.Element(self._q(UDIDI_NS, "marketInfos"))
+        self._append_text(market_infos, ENTITY_NS, "state", "REGISTERED")
         for country_code, original in items:
             market_info = etree.SubElement(market_infos, self._q(MARKET_INFO_NS, "marketInfo"))
             self._append_text(market_info, MARKET_INFO_NS, "country", country_code)

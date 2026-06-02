@@ -1257,7 +1257,7 @@ class CanonicalValidationService:
         if single_use and single_use.strip().lower() in {"yes", "true"}:
             return "0"
         if applicable and applicable.strip().lower() in {"no", "false"}:
-            return "1"
+            return "-1"
         return None
 
     @staticmethod

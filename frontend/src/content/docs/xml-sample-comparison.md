@@ -123,9 +123,13 @@ Colleague samples use:
 
 - `-1`
 
-This system uses:
+This system previously used:
 
 - `1`
+
+The current application now aligns this non-applicable case to:
+
+- `-1`
 
 This is potentially significant because it suggests a different interpretation of the underlying workbook logic rather than a simple missing field.
 

@@ -509,13 +509,13 @@ field_reviews:
       derivation_logic: Derive from `Labelled as single use` and `Maximum number of reuses applicable`.
       assumptions:
         - Use `0` for single-use devices.
-        - Use `1` when the workbook says the maximum-number-of-reuses concept is not applicable.
+        - Use `-1` when the workbook says the maximum-number-of-reuses concept is not applicable.
       schema_targets:
         - schema_path: DeviceUDIDIDataType/numberOfReuses
           required: true
           status: derived
           notes: Required by the device-side UDI-DI data structure.
-      example_canonical_value: "1"
+      example_canonical_value: "-1"
     decision:
       status: accepted_with_note
       rationale: This is a derived XML-facing field rather than a raw workbook column.
