@@ -33,6 +33,7 @@ The current XML renderer is now aligned to:
 
 - EUDAMED schema pack `3.0.30`
 - `m:Push/@version = 3.0.30`
+- `serviceID = UDI_DI`
 - `numberOfReuses = -1` when the workbook marks the concept as not applicable
 - explicit `e:state = REGISTERED` on generated `MDRUDIDIData`
 - explicit `e:version` on generated `PATCH` payloads from the source version marker

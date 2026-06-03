@@ -97,11 +97,15 @@ Colleague samples use:
 
 - `serviceID = UDI_DI`
 
-This system uses:
+This system previously used:
 
 - `serviceID = DEVICE`
 
-Because `serviceID` is part of the service wrapper, this is a potentially significant interoperability difference and should be checked against the correct EUDAMED service contract for the current message type.
+The current application now aligns to:
+
+- `serviceID = UDI_DI`
+
+This area is therefore no longer a known divergence in the local XML-generation path.
 
 ### 4. `productionIdentifier` Interpretation Differs
 
@@ -182,10 +186,9 @@ That means the two systems are not fundamentally disconnected. The main differen
 Before using the colleague samples as a benchmark, the following should be clarified:
 
 1. Should `EC22L1SD` currently be `POST` or `PATCH`?
-2. Is the service wrapper expected to use `UDI_DI` or `DEVICE`?
-3. Should the payload root be `device:UDIDIData` directly, or a fuller `device:Device` structure?
-4. Is `productionIdentifier` expected to support a combined value, or should it resolve to a single enum token?
-5. Should `PATCH` samples carry explicit `state` and `version` values?
+2. Should the payload root be `device:UDIDIData` directly, or a fuller `device:Device` structure?
+3. Is `productionIdentifier` expected to support a combined value, or should it resolve to a single enum token?
+4. Are the current `PATCH` state/version rules now sufficient beyond the resolved lifecycle tags?
 
 These questions should be settled before judging one XML design as definitively correct.
 
@@ -241,23 +244,23 @@ This supports the idea that Basic UDI information and UDI-DI information belong 
 
 ### Service Analysis
 
-The XML comparison also revealed a service-layer difference:
+The XML comparison revealed a service-layer difference that has now been resolved by EUDAMED feedback:
 
 - colleague sample:
   - `serviceID = UDI_DI`
-- this application:
-  - `serviceID = DEVICE`
+- this application now also uses:
+  - `serviceID = UDI_DI`
 
-Public EUDAMED material available online strongly supports a **UDI/Device module** and a **Device upload object**, but it does **not** provide a sufficiently explicit public technical statement to prove whether the exact service wrapper should use:
+The decisive evidence was the EUDAMED rejection:
 
-- `DEVICE`
-- or `UDI_DI`
+- `ERR-DTX-EUD-103.03-02`
+- `Provided XML service DEVICE.PATCH does not match selected UDI_DI.PATCH service.`
 
 So the current position is:
 
-- the **module/service domain** is clearly UDI/Device
-- the **object design** appears to favor a Device-oriented upload object
-- but the exact `serviceID` token still requires confirmation from the more detailed EUDAMED technical documentation or an authoritative working example
+- the service wrapper token for this submission path should be treated as `UDI_DI`
+- this is no longer an open local design question
+- broader payload-shape questions still remain open
 
 ### PATCH State And Version Signal
 
@@ -275,11 +278,11 @@ Based on the public material reviewed so far, the best current interpretation is
 
 - this application's **Device-oriented** XML design is better supported than a pure `UDIDIData`-only design
 - the colleague sample still raises valid questions about:
-  - exact `serviceID`
   - exact update semantics
-  - whether explicit `state` and `version` should be present in `PATCH`
+  - whether the fuller `device:Device` wrapper is accepted end-to-end
+  - whether any additional update-specific fields are still expected beyond the current lifecycle tags
 
-So the public evidence currently supports the broader design direction of this application more than the colleague sample, while still leaving important service-wrapper and update-semantics questions open.
+So the public evidence currently supports the broader design direction of this application more than the colleague sample, while still leaving important payload-shape and update-semantics questions open.
 
 ## EUDAMED Discussion Checklist
 
@@ -288,7 +291,6 @@ If there is an opportunity to discuss transport and submission design directly w
 ### XML Contract
 
 1. For UDI/Device M2M submission, what is the correct service wrapper contract?
-   - exact `serviceID`
    - exact payload root
    - exact `POST` versus `PATCH` expectations
 
@@ -383,7 +385,7 @@ If there is an opportunity to discuss transport and submission design directly w
 
 ### Current Application Design Review
 
-20. Does the current `DEVICE` service wrapper look directionally correct?
+20. Does the current `UDI_DI` service wrapper now match the intended submission service in all environments?
 
 21. Is emitting the fuller repeated `marketInfos` structure correct for regulation-device upload?
 

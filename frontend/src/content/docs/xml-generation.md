@@ -138,9 +138,8 @@ The UI surfaces:
 
 ## Current Open Questions
 
-- `serviceID` is still emitted as `DEVICE`; colleague samples that upload successfully use `UDI_DI`
 - the payload still uses the fuller `device:Device` wrapper rather than a bare `device:UDIDIData` root object
-- live EUDAMED acceptance of the current wrapper and service token is still not yet proven
+- live EUDAMED acceptance of the current wrapper beyond the resolved `UDI_DI` service token is still not yet fully proven
 
 ## Current Batch Design
 

@@ -24,6 +24,7 @@ from app.xml_models import (
 
 MAX_BATCH_RECORDS = 300
 MESSAGE_SCHEMA_VERSION = "3.0.30"
+SERVICE_ID = "UDI_DI"
 XmlElement = Any
 
 MESSAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1"
@@ -553,7 +554,7 @@ class XmlGenerationService:
         node = etree.SubElement(endpoint, self._q(MESSAGE_NS, "node"))
         self._append_text(node, SERVICE_NS, "nodeActorCode", node_actor_code)
         service = etree.SubElement(endpoint, self._q(MESSAGE_NS, "service"))
-        self._append_text(service, SERVICE_NS, "serviceID", "DEVICE")
+        self._append_text(service, SERVICE_NS, "serviceID", SERVICE_ID)
         self._append_text(service, SERVICE_NS, "serviceOperation", service_operation)
         return endpoint
 

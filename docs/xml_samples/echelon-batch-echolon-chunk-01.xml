@@ -1,14 +1,14 @@
 <?xml version='1.0' encoding='utf-8'?>
 <m:Push xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1" xmlns:device="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/v1" xmlns:basicudi="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/BasicUDI/v1" xmlns:udidi="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/UDIDI/v1" xmlns:e="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/v1" xmlns:commondi="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/CommonDevice/v1" xmlns:lsn="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/LanguageSpecific/v1" xmlns:marketinfo="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/MktInfo/MarketInfo/v1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="3.0.30">
-  <m:correlationID>a6ec2c6e-9ff4-4ff3-8899-bda110b5a2d3</m:correlationID>
-  <m:creationDateTime>2026-06-02T09:40:00+00:00</m:creationDateTime>
-  <m:messageID>09198f94-b4dc-4cc1-8352-79ef2d1055cc</m:messageID>
+  <m:correlationID>3cfb1581-6873-486a-9e7f-ab164cf4cc93</m:correlationID>
+  <m:creationDateTime>2026-06-02T11:46:24+00:00</m:creationDateTime>
+  <m:messageID>86f0be7a-4838-4ba3-91d2-b48d5382ab0f</m:messageID>
   <m:recipient>
     <m:node>
       <s:nodeActorCode>EUDAMED</s:nodeActorCode>
     </m:node>
     <m:service>
-      <s:serviceID>DEVICE</s:serviceID>
+      <s:serviceID>UDI_DI</s:serviceID>
       <s:serviceOperation>PATCH</s:serviceOperation>
     </m:service>
   </m:recipient>
@@ -54619,7 +54619,7 @@
       <s:nodeActorCode>UK-MF-000048777</s:nodeActorCode>
     </m:node>
     <m:service>
-      <s:serviceID>DEVICE</s:serviceID>
+      <s:serviceID>UDI_DI</s:serviceID>
       <s:serviceOperation>PATCH</s:serviceOperation>
     </m:service>
   </m:sender>
