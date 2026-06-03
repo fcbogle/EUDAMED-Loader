@@ -17,6 +17,7 @@ In practical terms:
   - `Single XML`
   - `Variant Batch XML`
 - the local EUDAMED schema baseline has now been refreshed from `3.0.28` to `3.0.30`
+- the active `UDI_DI` XML payload shape has now been aligned to direct `device:UDIDIData`
 - the current XML path now projects explicit entity lifecycle metadata for UDI-DI payloads:
   - `e:state = REGISTERED` for `POST` and `PATCH`
   - `e:version` for `PATCH` from the source `Version` marker

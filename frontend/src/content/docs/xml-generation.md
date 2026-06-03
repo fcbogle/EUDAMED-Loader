@@ -50,7 +50,7 @@ The `XML Generation` area is where XML-ready canonical data is transformed into 
   - allows variant-batch package download from the UI
 - `POST` and `PATCH` now flow from the selected variant context through `serviceOperation`
 - generated messages now emit `m:Push/@version = 3.0.30`
-- `MDRUDIDIData` now emits `e:state = REGISTERED` for both `POST` and `PATCH`
+- `UDIDIData` now emits `e:state = REGISTERED` for both `POST` and `PATCH`
 - `PATCH` now emits `e:version` from the canonical `basic_device.source_version_marker`
 - nested `udidi:marketInfos` now emits `e:state = REGISTERED`
 - repeated market-availability items are now projected into repeated `marketInfo` XML elements
@@ -88,14 +88,11 @@ That means the payload has two layers:
   - `payload`
   - `version = 3.0.30`
 - a business payload inside that wrapper
-  - one or more `device:Device` entries depending on mode
-  - rendered with `xsi:type="device:MDRDeviceType"`
-  - containing:
-    - `device:MDRBasicUDI`
-    - `device:MDRUDIDIData`
-    - entity lifecycle metadata where currently projected:
-      - `e:state`
-      - `e:version` for `PATCH`
+  - one or more `device:UDIDIData` entries depending on mode
+  - rendered with `xsi:type="udidi:MDRUDIDIDataType"`
+  - carrying entity lifecycle metadata where currently projected:
+    - `e:state`
+    - `e:version` for `PATCH`
 
 ## Current Generic Projection
 
@@ -136,10 +133,23 @@ The UI surfaces:
 - schema path used
 - validation errors when present
 
+Local XSD validity is necessary but not sufficient for live EUDAMED acceptance.
+
+The current project has already shown why:
+
+- the earlier `device:Device` payload shape validated locally against the schema pack
+- but EUDAMED still rejected `UDI_DI.PATCH` because the XML body did not match the selected service contract
+
+So the effective contract for this path should be understood as:
+
+- schema validity
+- service selection
+- operation semantics
+- service-specific business expectations that may be enforced beyond what the XSD alone proves
+
 ## Current Open Questions
 
-- the payload still uses the fuller `device:Device` wrapper rather than a bare `device:UDIDIData` root object
-- live EUDAMED acceptance of the current wrapper beyond the resolved `UDI_DI` service token is still not yet fully proven
+- live EUDAMED acceptance of the aligned `device:UDIDIData` payload for both `POST` and `PATCH` still needs confirmation beyond local XSD validation
 
 ## Current Batch Design
 

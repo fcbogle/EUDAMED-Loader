@@ -537,7 +537,7 @@ class XmlGenerationService:
 
         payload = etree.SubElement(root, self._q(MESSAGE_NS, "payload"))
         for record in records:
-            payload.append(self._device_payload(record))
+            payload.append(self._udidi_data_element(record))
 
         root.append(
             self._endpoint_element(
@@ -558,58 +558,9 @@ class XmlGenerationService:
         self._append_text(service, SERVICE_NS, "serviceOperation", service_operation)
         return endpoint
 
-    def _device_payload(self, record: DeviceXmlRecord) -> XmlElement:
-        device = etree.Element(self._q(DEVICE_NS, "Device"))
-        device.set(self._q(XSI_NS, "type"), "device:MDRDeviceType")
-        device.append(self._basic_udi_element(record))
-        device.append(self._udidi_data_element(record))
-        return device
-
-    def _basic_udi_element(self, record: DeviceXmlRecord) -> XmlElement:
-        basic_udi = etree.Element(self._q(DEVICE_NS, "MDRBasicUDI"))
-        self._append_text(basic_udi, BASIC_UDI_NS, "riskClass", record.risk_class)
-
-        model_name = etree.SubElement(basic_udi, self._q(BASIC_UDI_NS, "modelName"))
-        self._append_text(model_name, COMMON_DEVICE_NS, "name", record.model_name)
-
-        basic_udi.append(
-            self._di_identifier_element(
-                di_code=record.basic_identifier_code,
-                issuing_entity_code=record.basic_identifier_issuing_entity,
-            )
-        )
-        self._append_text(basic_udi, BASIC_UDI_NS, "animalTissuesCells", self._bool_text(record.animal_tissues_cells))
-        if record.authorised_representative_srn:
-            self._append_text(basic_udi, BASIC_UDI_NS, "ARActorCode", record.authorised_representative_srn)
-        self._append_text(basic_udi, BASIC_UDI_NS, "humanTissuesCells", self._bool_text(record.human_tissues_cells))
-        self._append_text(basic_udi, BASIC_UDI_NS, "MFActorCode", record.manufacturer_srn)
-        self._append_text(basic_udi, BASIC_UDI_NS, "humanProductCheck", self._bool_text(record.human_product_check))
-        self._append_text(
-            basic_udi,
-            BASIC_UDI_NS,
-            "medicinalProductCheck",
-            self._bool_text(record.medicinal_product_check),
-        )
-        self._append_text(basic_udi, BASIC_UDI_NS, "type", record.basic_device_type)
-        self._append_text(basic_udi, COMMON_DEVICE_NS, "active", self._bool_text(record.active))
-        self._append_text(
-            basic_udi,
-            COMMON_DEVICE_NS,
-            "administeringMedicine",
-            self._bool_text(record.administering_medicine),
-        )
-        self._append_text(basic_udi, COMMON_DEVICE_NS, "implantable", self._bool_text(record.implantable))
-        self._append_text(
-            basic_udi,
-            COMMON_DEVICE_NS,
-            "measuringFunction",
-            self._bool_text(record.measuring_function),
-        )
-        self._append_text(basic_udi, COMMON_DEVICE_NS, "reusable", self._bool_text(record.reusable))
-        return basic_udi
-
     def _udidi_data_element(self, record: DeviceXmlRecord) -> XmlElement:
-        udidi = etree.Element(self._q(DEVICE_NS, "MDRUDIDIData"))
+        udidi = etree.Element(self._q(DEVICE_NS, "UDIDIData"))
+        udidi.set(self._q(XSI_NS, "type"), "udidi:MDRUDIDIDataType")
         self._append_text(udidi, ENTITY_NS, "state", "REGISTERED")
         if (record.submission_operation or "").upper() == "PATCH" and record.source_version_marker:
             self._append_text(udidi, ENTITY_NS, "version", record.source_version_marker)

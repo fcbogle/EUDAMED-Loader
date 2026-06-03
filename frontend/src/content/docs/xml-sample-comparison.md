@@ -31,14 +31,9 @@ Stored project XML artifacts for ongoing review are kept in:
 
 ## High-Level Findings
 
-The two systems are not using the same XML design approach.
+The payload-shape gap that originally separated the two systems has now been resolved locally.
 
-The colleague samples model the payload as a single `device:UDIDIData` element, while this application models the payload as a `device:Device` wrapper containing:
-
-- `device:MDRBasicUDI`
-- `device:MDRUDIDIData`
-
-This is not a minor content difference. It is a structural modeling difference.
+The colleague samples model the payload as a single `device:UDIDIData` element. The current application now does the same for both `POST` and `PATCH`.
 
 The most significant current issue is that the colleague `POST` sample for `EC22L1SD` does not match the current operational classification in this system, which treats `EC22L1SD` as `PATCH`.
 
@@ -69,27 +64,18 @@ The most likely interpretation is that the colleague sample was prepared as a si
 
 This should still be reviewed with QMS or against current EUDAMED registration reality before treating the two XMLs as equivalent.
 
-### 2. Payload Structure Is Materially Different
+### 2. Payload Structure Is Now Aligned
 
 Colleague samples use:
 
 - `device:UDIDIData`
 
-This system uses:
+The current application now also uses:
 
-- `device:Device`
-  - `device:MDRBasicUDI`
-  - `device:MDRUDIDIData`
+- `device:UDIDIData`
+  - rendered with `xsi:type="udidi:MDRUDIDIDataType"`
 
-This is a significant architectural difference.
-
-It may reflect:
-
-- a different schema interpretation
-- a different schema version
-- or a simpler XML design that does not model the full object structure this application currently emits
-
-This difference should not be treated as a simple “more or less populated” payload difference.
+This area is therefore no longer a known divergence in the local XML-generation path.
 
 ### 3. `serviceID` Value Does Not Match
 
@@ -151,7 +137,7 @@ The current application now aligns its `PATCH` XML to emit:
 - `e:version` from the canonical `source_version_marker`
 - `e:state = REGISTERED`
 
-This area is therefore no longer a known divergence in the local XML-generation path, although live EUDAMED acceptance of the broader wrapper and service contract still needs confirmation.
+This area is therefore no longer a known divergence in the local XML-generation path, although live EUDAMED acceptance of the aligned `PATCH` update semantics still needs confirmation.
 
 ## Non-Material Differences
 
@@ -178,7 +164,7 @@ The following values align cleanly between the two systems for the equivalent re
 That means the two systems are not fundamentally disconnected. The main differences are at the level of:
 
 - operation semantics
-- wrapper/service modeling
+- remaining update expectations
 - selected XML field semantics
 
 ## Recommended Next Review Questions
@@ -186,29 +172,20 @@ That means the two systems are not fundamentally disconnected. The main differen
 Before using the colleague samples as a benchmark, the following should be clarified:
 
 1. Should `EC22L1SD` currently be `POST` or `PATCH`?
-2. Should the payload root be `device:UDIDIData` directly, or a fuller `device:Device` structure?
-3. Is `productionIdentifier` expected to support a combined value, or should it resolve to a single enum token?
-4. Are the current `PATCH` state/version rules now sufficient beyond the resolved lifecycle tags?
+2. Is `productionIdentifier` expected to support a combined value, or should it resolve to a single enum token?
+3. Are the current `PATCH` state/version rules now sufficient beyond the resolved lifecycle tags?
 
 These questions should be settled before judging one XML design as definitively correct.
 
 ## Device.xsd Versus UDIDIData Discussion
 
-The XML comparison also raises three broader design questions that should be settled before the submission-layer XML design is treated as final:
+The XML comparison originally raised broader design questions about whether the payload should be a fuller Device object or direct UDI-DI data. EUDAMED feedback on `UDI_DI.PATCH` combined with the successful colleague samples is now strong enough that the local renderer has been aligned to direct `device:UDIDIData` payloads.
 
-1. What is the intended business object for this submission?
-   - a fuller device object
-   - or UDI-DI registration data only
+That means the remaining questions are narrower:
 
-2. What does the intended EUDAMED message/schema expect as the payload root?
-   - `device:Device`
-   - or `device:UDIDIData`
-
-3. Is `MDRBasicUDI` supposed to travel in the same payload for this use case?
-   - this application currently assumes yes
-   - the colleague sample suggests no, or at least not in the same structure
-
-These questions are separate from simple field population. They determine which XML design approach is actually correct.
+1. Are there any additional `PATCH`-specific business fields still expected by EUDAMED?
+2. Is the current local `productionIdentifier` interpretation too narrow?
+3. Are any market-information cardinality or business-rule adjustments still required?
 
 ## Official EUDAMED Signals
 
@@ -229,7 +206,7 @@ The rules state that a **Device upload object** should contain:
 
 This points toward a fuller **Device-oriented upload object** rather than a bare standalone `UDIDIData` payload.
 
-In other words, the public rules are directionally closer to this application's current `Device`-oriented design than to the colleague sample's simpler `UDIDIData`-only design.
+However, the practical EUDAMED evidence gathered through QMS testing has now outweighed that earlier interpretation for the current `UDI_DI` service path. The active renderer has therefore been aligned to the direct `UDIDIData` shape used by the successful colleague samples.
 
 ### Basic UDI And UDI-DI In The Same Submission Context
 
@@ -262,6 +239,15 @@ So the current position is:
 - this is no longer an open local design question
 - broader payload-shape questions still remain open
 
+Just as importantly, this rejection demonstrated that XSD validity alone does not prove service compatibility.
+
+In practical terms:
+
+- a payload can be schema-valid against the local EUDAMED XSD pack
+- and still be rejected because it does not match the specific `UDI_DI.POST` or `UDI_DI.PATCH` service contract selected at submission time
+
+That is the clearest explanation for why the earlier local `device:Device` payload could validate successfully while still failing in live EUDAMED processing.
+
 ### PATCH State And Version Signal
 
 Public business rules also indicate that:
@@ -274,15 +260,11 @@ This means the colleague sample's inclusion of `state` and `version` should not 
 
 ### Current Interpretation
 
-Based on the public material reviewed so far, the best current interpretation is:
+Based on the public material reviewed so far and the later EUDAMED rejection feedback, the best current interpretation is:
 
-- this application's **Device-oriented** XML design is better supported than a pure `UDIDIData`-only design
-- the colleague sample still raises valid questions about:
-  - exact update semantics
-  - whether the fuller `device:Device` wrapper is accepted end-to-end
-  - whether any additional update-specific fields are still expected beyond the current lifecycle tags
-
-So the public evidence currently supports the broader design direction of this application more than the colleague sample, while still leaving important payload-shape and update-semantics questions open.
+- the active `UDI_DI` submission path should use direct `device:UDIDIData`
+- `PATCH` should carry explicit lifecycle metadata
+- the remaining uncertainty is now in update semantics and business-rule expectations, not the top-level payload shape
 
 ## EUDAMED Discussion Checklist
 
@@ -296,7 +278,7 @@ If there is an opportunity to discuss transport and submission design directly w
 
 2. For `PATCH`, are `state` and `version` required in the payload, or are they managed implicitly by EUDAMED?
 
-3. Is a regulation-device upload expected to be a fuller Device object including Basic UDI and UDI-DI context, or can it be a narrower `UDIDIData` submission?
+3. Beyond the now-aligned `UDIDIData` shape, are there any additional update-only XML sections or fields expected for `PATCH`?
 
 4. Are official XML examples available for:
    - one regulation-device `POST`

@@ -35,8 +35,13 @@ The current XML renderer is now aligned to:
 - `m:Push/@version = 3.0.30`
 - `serviceID = UDI_DI`
 - `numberOfReuses = -1` when the workbook marks the concept as not applicable
-- explicit `e:state = REGISTERED` on generated `MDRUDIDIData`
+- direct `device:UDIDIData xsi:type="udidi:MDRUDIDIDataType"` payloads
+- explicit `e:state = REGISTERED` on generated `UDIDIData`
 - explicit `e:version` on generated `PATCH` payloads from the source version marker
+
+One important lesson from the QMS/EUDAMED test cycle is that local schema validity does not automatically mean the payload matches the selected live service contract.
+
+In this project, an earlier `device:Device` payload validated locally but was still rejected by EUDAMED for the `UDI_DI` submission path. These sample files therefore represent the current best-known live contract shape, not just the current best-known XSD-valid shape.
 
 ## Relation To Colleague Comparison
 

@@ -78,7 +78,7 @@ The canonical layer should not:
 - target legislation:
   - `MDR`
 - target schema understanding:
-  - wrapped `Message.xsd` service-message output carrying `MDRBasicUDI` and `MDRUDIDIData` content
+  - wrapped `Message.xsd` service-message output carrying direct `UDIDIData` payload content
 - current submission mode:
   - manual XML handoff for human testing in the production environment if needed
 - current access constraint:
