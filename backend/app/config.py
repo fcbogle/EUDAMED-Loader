@@ -19,7 +19,10 @@ class Settings(BaseModel):
     reports_dir: Path
     eudamed_message_schema_version: str
     eudamed_max_batch_records: int
-    eudamed_service_id: str
+    eudamed_post_service_id: str
+    eudamed_patch_service_id: str
+    eudamed_post_profile: str
+    eudamed_patch_profile: str
 
 
 @lru_cache(maxsize=1)
@@ -31,6 +34,7 @@ def get_settings() -> Settings:
             str(project_root / "data" / "basic_udi_reference"),
         )
     )
+    legacy_service_id = os.getenv("EUDAMED_SERVICE_ID")
     return Settings(
         excel_dir=Path(
             os.getenv(
@@ -54,5 +58,8 @@ def get_settings() -> Settings:
         reports_dir=project_root / "docs" / "reports",
         eudamed_message_schema_version=os.getenv("EUDAMED_MESSAGE_SCHEMA_VERSION", "3.0.30"),
         eudamed_max_batch_records=int(os.getenv("EUDAMED_MAX_BATCH_RECORDS", "300")),
-        eudamed_service_id=os.getenv("EUDAMED_SERVICE_ID", "UDI_DI"),
+        eudamed_post_service_id=os.getenv("EUDAMED_POST_SERVICE_ID", legacy_service_id or "DEVICE"),
+        eudamed_patch_service_id=os.getenv("EUDAMED_PATCH_SERVICE_ID", legacy_service_id or "UDI_DI"),
+        eudamed_post_profile=os.getenv("EUDAMED_POST_PROFILE", "device_post"),
+        eudamed_patch_profile=os.getenv("EUDAMED_PATCH_PROFILE", "udidi_patch"),
     )

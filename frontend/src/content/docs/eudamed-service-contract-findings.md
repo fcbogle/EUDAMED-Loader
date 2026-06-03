@@ -129,7 +129,8 @@ So the current design direction is:
 - keep core UDI-DI update fields
 - keep `e:state`
 - keep `e:version`
-- leave market-information redesign aside for now
+- exclude `marketInfos` from the current default `PATCH` path
+- leave wider market-information redesign aside for now
 
 This means the next `PATCH` iteration should be treated as a controlled minimal update path rather than a full canonical projection.
 
@@ -137,7 +138,6 @@ This means the next `PATCH` iteration should be treated as a controlled minimal 
 
 Compared with the successful leaner `UDI_DI` examples, the current application-generated `UDI_DI` files have tended to:
 
-- emit a broader `marketInfos` country set
 - emit a narrower `productionIdentifier` value than the successful examples
 
 These differences remain relevant, but they are secondary to the main service-contract decisions above.

@@ -526,42 +526,113 @@ class XmlGenerationService:
         self._append_text(root, MESSAGE_NS, "correlationID", str(uuid4()))
         self._append_text(root, MESSAGE_NS, "creationDateTime", datetime.now(UTC).replace(microsecond=0).isoformat())
         self._append_text(root, MESSAGE_NS, "messageID", str(uuid4()))
+        first_operation = self._normalized_operation(records[0].submission_operation)
         root.append(
             self._endpoint_element(
                 tag_name="recipient",
                 node_actor_code="EUDAMED",
-                service_operation=records[0].submission_operation or "POST",
+                service_operation=first_operation,
+                service_id=self._service_id_for_operation(first_operation),
             )
         )
 
         payload = etree.SubElement(root, self._q(MESSAGE_NS, "payload"))
         for record in records:
-            payload.append(self._udidi_data_element(record))
+            payload.append(self._payload_element(record))
 
         root.append(
             self._endpoint_element(
                 tag_name="sender",
                 node_actor_code=records[0].manufacturer_srn,
-                service_operation=records[0].submission_operation or "POST",
+                service_operation=first_operation,
+                service_id=self._service_id_for_operation(first_operation),
             )
         )
 
         return etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True)
 
-    def _endpoint_element(self, *, tag_name: str, node_actor_code: str, service_operation: str) -> XmlElement:
+    def _endpoint_element(
+        self,
+        *,
+        tag_name: str,
+        node_actor_code: str,
+        service_operation: str,
+        service_id: str,
+    ) -> XmlElement:
         endpoint = etree.Element(self._q(MESSAGE_NS, tag_name))
         node = etree.SubElement(endpoint, self._q(MESSAGE_NS, "node"))
         self._append_text(node, SERVICE_NS, "nodeActorCode", node_actor_code)
         service = etree.SubElement(endpoint, self._q(MESSAGE_NS, "service"))
-        self._append_text(service, SERVICE_NS, "serviceID", self.settings.eudamed_service_id)
+        self._append_text(service, SERVICE_NS, "serviceID", service_id)
         self._append_text(service, SERVICE_NS, "serviceOperation", service_operation)
         return endpoint
 
+    def _payload_element(self, record: DeviceXmlRecord) -> XmlElement:
+        profile = self._profile_for_operation(record.submission_operation)
+        if profile == "device_post":
+            return self._device_payload(record)
+        return self._udidi_data_element(record)
+
+    def _device_payload(self, record: DeviceXmlRecord) -> XmlElement:
+        device = etree.Element(self._q(DEVICE_NS, "Device"))
+        device.set(self._q(XSI_NS, "type"), "device:MDRDeviceType")
+        device.append(self._basic_udi_element(record))
+        device.append(self._udidi_data_element(record))
+        return device
+
+    def _basic_udi_element(self, record: DeviceXmlRecord) -> XmlElement:
+        basic_udi = etree.Element(self._q(DEVICE_NS, "MDRBasicUDI"))
+        self._append_text(basic_udi, ENTITY_NS, "state", "REGISTERED")
+        self._append_text(basic_udi, BASIC_UDI_NS, "riskClass", record.risk_class)
+
+        model_name = etree.SubElement(basic_udi, self._q(BASIC_UDI_NS, "modelName"))
+        self._append_text(model_name, COMMON_DEVICE_NS, "name", record.model_name)
+
+        basic_udi.append(
+            self._di_identifier_element(
+                di_code=record.basic_identifier_code,
+                issuing_entity_code=record.basic_identifier_issuing_entity,
+            )
+        )
+        self._append_text(basic_udi, BASIC_UDI_NS, "animalTissuesCells", self._bool_text(record.animal_tissues_cells))
+        if record.authorised_representative_srn:
+            self._append_text(basic_udi, BASIC_UDI_NS, "ARActorCode", record.authorised_representative_srn)
+        self._append_text(basic_udi, BASIC_UDI_NS, "humanTissuesCells", self._bool_text(record.human_tissues_cells))
+        self._append_text(basic_udi, BASIC_UDI_NS, "MFActorCode", record.manufacturer_srn)
+        self._append_text(basic_udi, BASIC_UDI_NS, "humanProductCheck", self._bool_text(record.human_product_check))
+        self._append_text(
+            basic_udi,
+            BASIC_UDI_NS,
+            "medicinalProductCheck",
+            self._bool_text(record.medicinal_product_check),
+        )
+        self._append_text(basic_udi, BASIC_UDI_NS, "type", record.basic_device_type)
+        self._append_text(basic_udi, COMMON_DEVICE_NS, "active", self._bool_text(record.active))
+        self._append_text(
+            basic_udi,
+            COMMON_DEVICE_NS,
+            "administeringMedicine",
+            self._bool_text(record.administering_medicine),
+        )
+        self._append_text(basic_udi, COMMON_DEVICE_NS, "implantable", self._bool_text(record.implantable))
+        self._append_text(
+            basic_udi,
+            COMMON_DEVICE_NS,
+            "measuringFunction",
+            self._bool_text(record.measuring_function),
+        )
+        self._append_text(basic_udi, COMMON_DEVICE_NS, "reusable", self._bool_text(record.reusable))
+        return basic_udi
+
     def _udidi_data_element(self, record: DeviceXmlRecord) -> XmlElement:
-        udidi = etree.Element(self._q(DEVICE_NS, "UDIDIData"))
-        udidi.set(self._q(XSI_NS, "type"), "udidi:MDRUDIDIDataType")
+        profile = self._profile_for_operation(record.submission_operation)
+        if profile == "device_post":
+            udidi = etree.Element(self._q(DEVICE_NS, "MDRUDIDIData"))
+        else:
+            udidi = etree.Element(self._q(DEVICE_NS, "UDIDIData"))
+            udidi.set(self._q(XSI_NS, "type"), "udidi:MDRUDIDIDataType")
         self._append_text(udidi, ENTITY_NS, "state", "REGISTERED")
-        if (record.submission_operation or "").upper() == "PATCH" and record.source_version_marker:
+        if self._normalized_operation(record.submission_operation) == "PATCH" and record.source_version_marker:
             self._append_text(udidi, ENTITY_NS, "version", record.source_version_marker)
         udidi.append(
             self._di_identifier_element(
@@ -605,13 +676,29 @@ class XmlGenerationService:
         if record.critical_warnings:
             udidi.append(self._critical_warnings_element(record.critical_warnings))
         self._append_text(udidi, UDIDI_NS, "numberOfReuses", str(record.number_of_reuses))
-        if record.market_countries:
+        if record.market_countries and profile != "udidi_patch":
             udidi.append(self._market_infos_element(record.market_countries))
         if record.base_quantity is not None:
             self._append_text(udidi, UDIDI_NS, "baseQuantity", str(record.base_quantity))
         self._append_text(udidi, UDIDI_NS, "latex", self._bool_text(record.contains_latex))
         self._append_text(udidi, UDIDI_NS, "reprocessed", self._bool_text(record.reprocessed))
         return udidi
+
+    def _profile_for_operation(self, submission_operation: str | None) -> str:
+        operation = self._normalized_operation(submission_operation)
+        if operation == "PATCH":
+            return self.settings.eudamed_patch_profile
+        return self.settings.eudamed_post_profile
+
+    def _service_id_for_operation(self, submission_operation: str | None) -> str:
+        operation = self._normalized_operation(submission_operation)
+        if operation == "PATCH":
+            return self.settings.eudamed_patch_service_id
+        return self.settings.eudamed_post_service_id
+
+    @staticmethod
+    def _normalized_operation(submission_operation: str | None) -> str:
+        return (submission_operation or "POST").upper()
 
     def _market_infos_element(self, items: list[tuple[str, bool]]) -> XmlElement:
         market_infos = etree.Element(self._q(UDIDI_NS, "marketInfos"))

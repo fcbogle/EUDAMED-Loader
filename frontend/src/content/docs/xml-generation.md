@@ -48,12 +48,12 @@ The `XML Generation` area is where XML-ready canonical data is transformed into 
   - previews one selected chunk at a time
   - validates each chunk against the local EUDAMED XSD set
   - allows variant-batch package download from the UI
-- `POST` and `PATCH` now flow from the selected variant context through `serviceOperation`
+- `POST` and `PATCH` now flow from the selected variant context through distinct default submission profiles
 - generated messages now emit `m:Push/@version = 3.0.30`
-- `UDIDIData` now emits `e:state = REGISTERED` for both `POST` and `PATCH`
-- `PATCH` now emits `e:version` from the canonical `basic_device.source_version_marker`
-- nested `udidi:marketInfos` now emits `e:state = REGISTERED`
-- repeated market-availability items are now projected into repeated `marketInfo` XML elements
+- default `POST` generation now emits `DEVICE.POST` with a fuller `device:Device` payload
+- default `PATCH` generation now emits `UDI_DI.PATCH` with direct `device:UDIDIData`
+- generated UDI-DI sections emit `e:state = REGISTERED`
+- generated `PATCH` payloads emit `e:version` from the canonical `basic_device.source_version_marker`
 - normalized `Storage Conditions` and `Critical Warnings` are carried forward when present for the selected XML payload scope
 - `numberOfReuses` now uses `-1` when the workbook indicates that the concept is not applicable
 
@@ -88,8 +88,16 @@ That means the payload has two layers:
   - `payload`
   - `version = 3.0.30`
 - a business payload inside that wrapper
-  - one or more `device:UDIDIData` entries depending on mode
-  - rendered with `xsi:type="udidi:MDRUDIDIDataType"`
+  - one or more payload entries depending on the active submission profile
+  - default `POST` profile:
+    - `device:Device`
+    - `xsi:type="device:MDRDeviceType"`
+    - containing:
+      - `device:MDRBasicUDI`
+      - `device:MDRUDIDIData`
+  - default `PATCH` profile:
+    - `device:UDIDIData`
+    - `xsi:type="udidi:MDRUDIDIDataType"`
   - carrying entity lifecycle metadata where currently projected:
     - `e:state`
     - `e:version` for `PATCH`
@@ -149,8 +157,8 @@ So the effective contract for this path should be understood as:
 
 ## Current Open Questions
 
-- live EUDAMED acceptance of the aligned `device:UDIDIData` payload for both `POST` and `PATCH` still needs confirmation beyond local XSD validation
 - the broader live service-contract evidence is now tracked separately in `EUDAMED Service Contract Findings`, because successful QMS submissions have shown more than one viable `POST` service/payload profile
+- the current default design is now `DEVICE.POST` and `UDI_DI.PATCH`, but `PATCH` version strategy still needs further real-world confirmation
 
 ## Current Batch Design
 

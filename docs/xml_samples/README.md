@@ -6,26 +6,19 @@ Some files in this folder may lag behind the latest XML-generation behavior. In 
 
 ## Included Files
 
-- `echelon-post-ECER22L1S.xml`
-  - true current `POST` sample
+- `echelon-post-ECVT22L11S.xml`
+  - current default `DEVICE.POST` sample
   - source scope:
     - `Product Family`: `Echelon`
-    - `Product Variant`: `Echelon ER`
-    - `Catalogue Number`: `ECER22L1S`
+    - `Product Variant`: `Echelon VT`
+    - `Catalogue Number`: `ECVT22L11S`
 
 - `echelon-patch-EC22L1S.xml`
-  - true current `PATCH` sample
+  - current default `UDI_DI.PATCH` sample
   - source scope:
     - `Product Family`: `Echelon`
     - `Product Variant`: `Echelon`
     - `Catalogue Number`: `EC22L1S`
-
-- `echelon-batch-echolon-chunk-01.xml`
-  - current batch-chunk XML sample
-  - source scope:
-    - `Product Family`: `Echelon`
-    - `Product Variant`: `Echelon`
-    - `Batch chunk`: `1`
 
 ## Current Renderer Baseline
 
@@ -33,15 +26,18 @@ The current XML renderer is now aligned to:
 
 - EUDAMED schema pack `3.0.30`
 - `m:Push/@version = 3.0.30`
-- `serviceID = UDI_DI`
+- default `POST` service path `DEVICE.POST`
+- default `PATCH` service path `UDI_DI.PATCH`
 - `numberOfReuses = -1` when the workbook marks the concept as not applicable
-- direct `device:UDIDIData xsi:type="udidi:MDRUDIDIDataType"` payloads
-- explicit `e:state = REGISTERED` on generated `UDIDIData`
+- default `POST` payload `device:Device` with `MDRBasicUDI` and `MDRUDIDIData`
+- default `PATCH` payload `device:UDIDIData xsi:type="udidi:MDRUDIDIDataType"`
+- explicit `e:state = REGISTERED` on generated payload entities
 - explicit `e:version` on generated `PATCH` payloads from the source version marker
+- current default `PATCH` path excludes `marketInfos`
 
 One important lesson from the QMS/EUDAMED test cycle is that local schema validity does not automatically mean the payload matches the selected live service contract.
 
-In this project, an earlier `device:Device` payload validated locally but was still rejected by EUDAMED for the `UDI_DI` submission path. These sample files therefore represent the current best-known live contract shape, not just the current best-known XSD-valid shape.
+In this project, an earlier `device:Device` payload validated locally but was still rejected by EUDAMED for the `UDI_DI` submission path. These sample files therefore represent the current best-known active generator shape, not just the current best-known XSD-valid shape.
 
 ## Relation To Colleague Comparison
 
@@ -49,10 +45,7 @@ The colleague XML comparison also discussed `EC22L1SD`.
 
 That record is not stored here as a `POST` sample because the current application does **not** classify it as `POST`. In the current validation and XML-generation flow, `EC22L1SD` resolves as `PATCH`.
 
-So this folder intentionally stores:
+So this folder currently stores:
 
-- one true current `POST`
-- one true current `PATCH`
-- one real Echelon batch XML example
-
-rather than preserving a potentially misleading `POST` artifact for a record the current system treats as `PATCH`.
+- one default active `DEVICE.POST` example
+- one default active `UDI_DI.PATCH` example
