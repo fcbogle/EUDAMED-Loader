@@ -17,6 +17,9 @@ class Settings(BaseModel):
     normalization_dir: Path
     canonical_mapping_dir: Path
     reports_dir: Path
+    eudamed_message_schema_version: str
+    eudamed_max_batch_records: int
+    eudamed_service_id: str
 
 
 @lru_cache(maxsize=1)
@@ -49,4 +52,7 @@ def get_settings() -> Settings:
         normalization_dir=project_root / "config" / "normalization",
         canonical_mapping_dir=project_root / "config" / "canonical_mapping",
         reports_dir=project_root / "docs" / "reports",
+        eudamed_message_schema_version=os.getenv("EUDAMED_MESSAGE_SCHEMA_VERSION", "3.0.30"),
+        eudamed_max_batch_records=int(os.getenv("EUDAMED_MAX_BATCH_RECORDS", "300")),
+        eudamed_service_id=os.getenv("EUDAMED_SERVICE_ID", "UDI_DI"),
     )

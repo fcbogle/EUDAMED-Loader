@@ -150,6 +150,7 @@ So the effective contract for this path should be understood as:
 ## Current Open Questions
 
 - live EUDAMED acceptance of the aligned `device:UDIDIData` payload for both `POST` and `PATCH` still needs confirmation beyond local XSD validation
+- the broader live service-contract evidence is now tracked separately in `EUDAMED Service Contract Findings`, because successful QMS submissions have shown more than one viable `POST` service/payload profile
 
 ## Current Batch Design
 

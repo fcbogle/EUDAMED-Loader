@@ -4,6 +4,7 @@ import { api } from "./api";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
 import canonicalDocumentation from "./content/docs/canonical.md?raw";
 import canonicalValidationDocumentation from "./content/docs/canonical-validation.md?raw";
+import eudamedServiceContractFindingsDocumentation from "./content/docs/eudamed-service-contract-findings.md?raw";
 import projectStructureDocumentation from "./content/docs/project-structure.md?raw";
 import roadmapDocumentation from "./content/docs/roadmap.md?raw";
 import softwareEngineeringPatternsDocumentation from "./content/docs/software-engineering-patterns.md?raw";
@@ -62,6 +63,7 @@ type DocumentationSection = {
     | "workbooks"
     | "canonical"
     | "canonicalValidation"
+    | "eudamedServiceContractFindings"
     | "xml"
     | "xmlSampleComparison"
     | "roadmap"
@@ -497,6 +499,11 @@ export function App() {
       id: "xmlSampleComparison",
       title: "XML Sample Comparison",
       markdown: xmlSampleComparisonDocumentation,
+    },
+    {
+      id: "eudamedServiceContractFindings",
+      title: "EUDAMED Service Contract Findings",
+      markdown: eudamedServiceContractFindingsDocumentation,
     },
     {
       id: "roadmap",

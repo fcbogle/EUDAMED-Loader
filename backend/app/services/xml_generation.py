@@ -9,6 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import lxml.etree as etree
 
+from app.config import get_settings
 from app.services.canonical_validation import CanonicalValidationService
 from app.services.xml_validation import XmlValidationService
 from app.validation_models import CanonicalValidationRecord
@@ -22,9 +23,6 @@ from app.xml_models import (
     XmlGenerationSelectionSummary,
 )
 
-MAX_BATCH_RECORDS = 300
-MESSAGE_SCHEMA_VERSION = "3.0.30"
-SERVICE_ID = "UDI_DI"
 XmlElement = Any
 
 MESSAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1"
@@ -186,6 +184,7 @@ class DeviceXmlRecord:
 
 class XmlGenerationService:
     def __init__(self) -> None:
+        self.settings = get_settings()
         self.validation_service = CanonicalValidationService()
         self.xml_validation_service = XmlValidationService()
 
@@ -276,7 +275,7 @@ class XmlGenerationService:
                 f"{product_family} / {product_variant}."
             )
 
-        record_chunks = self._chunk_records(records)
+        record_chunks = self._chunk_records(records, self.settings.eudamed_max_batch_records)
         xml_chunks: list[tuple[int, list[CanonicalValidationRecord], bytes]] = []
         chunk_summaries: list[BatchXmlChunkSummary] = []
         total_chunks = len(record_chunks)
@@ -326,7 +325,7 @@ class XmlGenerationService:
             ),
             total_ready_records=len(records),
             excluded_records=excluded_records,
-            max_records_per_file=MAX_BATCH_RECORDS,
+            max_records_per_file=self.settings.eudamed_max_batch_records,
             chunk_count=total_chunks,
             selected_chunk_sequence=selected_sequence,
             selected_chunk_file_name=selected_summary.file_name,
@@ -354,7 +353,7 @@ class XmlGenerationService:
                 f"{product_family} / {product_variant}."
             )
 
-        record_chunks = self._chunk_records(records)
+        record_chunks = self._chunk_records(records, self.settings.eudamed_max_batch_records)
         package_file_name = self._batch_package_file_name(
             product_family=product_family,
             product_variant=product_variant,
@@ -403,7 +402,7 @@ class XmlGenerationService:
                 "submission_operation": records[0].submission_operation,
                 "total_ready_records": len(records),
                 "excluded_records": excluded_records,
-                "max_records_per_file": MAX_BATCH_RECORDS,
+                "max_records_per_file": self.settings.eudamed_max_batch_records,
                 "chunk_count": len(record_chunks),
                 "chunks": manifest_chunks,
             }
@@ -449,7 +448,7 @@ class XmlGenerationService:
 
     @staticmethod
     def _chunk_records(
-        records: list[CanonicalValidationRecord], max_records_per_file: int = MAX_BATCH_RECORDS
+        records: list[CanonicalValidationRecord], max_records_per_file: int
     ) -> list[list[CanonicalValidationRecord]]:
         return [
             records[index : index + max_records_per_file]
@@ -522,7 +521,7 @@ class XmlGenerationService:
 
     def _render_push_message_records(self, records: list[DeviceXmlRecord]) -> bytes:
         root = etree.Element(self._q(MESSAGE_NS, "Push"), nsmap=NSMAP)
-        root.set("version", MESSAGE_SCHEMA_VERSION)
+        root.set("version", self.settings.eudamed_message_schema_version)
 
         self._append_text(root, MESSAGE_NS, "correlationID", str(uuid4()))
         self._append_text(root, MESSAGE_NS, "creationDateTime", datetime.now(UTC).replace(microsecond=0).isoformat())
@@ -554,7 +553,7 @@ class XmlGenerationService:
         node = etree.SubElement(endpoint, self._q(MESSAGE_NS, "node"))
         self._append_text(node, SERVICE_NS, "nodeActorCode", node_actor_code)
         service = etree.SubElement(endpoint, self._q(MESSAGE_NS, "service"))
-        self._append_text(service, SERVICE_NS, "serviceID", SERVICE_ID)
+        self._append_text(service, SERVICE_NS, "serviceID", self.settings.eudamed_service_id)
         self._append_text(service, SERVICE_NS, "serviceOperation", service_operation)
         return endpoint
 
