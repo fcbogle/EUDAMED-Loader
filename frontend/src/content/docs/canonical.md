@@ -98,6 +98,7 @@ The canonical layer should not:
 - `Manufacturer SRN`, `Authorised Representative SRN`, `Basic risk class`, `Basic model`, and other `MDRBasicUDI` fields are now represented in the review artifact as derived/reference-backed mappings
 - `Manufacturer SRN` and `Authorised Representative SRN` are now modeled as supplemental legacy tracekey enrichments because the authoritative `BasicUDIs.xlsx` workbook does not currently carry those SRN values
 - `Operation` is now treated as explicit submission-intent metadata that later drives `POST` vs `PATCH` service behavior
+- `BasicUDIs.xlsx` is again authoritative for both variant linkage and current `POST` / `PATCH` state
 - source `Version` is now used as the current `PATCH` entity-version signal for XML generation while still being preserved separately as source metadata in the canonical layer
 - `UDI-DI identifier`, `Basic UDI identifier`, `number of reuses`, `base quantity`, and other XML-facing `UDIDIData` fields are now represented explicitly rather than remaining implicit in the review
 - `Market Availability`, `Storage Conditions`, and `Critical Warnings` are now represented as repeated canonical structures where applicable
@@ -119,6 +120,8 @@ This table is the product-variant linkage review surface. It is intended to answ
 - which `Basic UDI-DI` record is being linked
 - whether the linked variant is currently treated as `POST` or `PATCH`
 - whether the linkage is matched, excluded, or still needs attention
+
+The displayed `POST` / `PATCH` value now comes directly from the current authoritative `BasicUDIs.xlsx` reference workbook.
 
 ### `Canonical Mapping`
 

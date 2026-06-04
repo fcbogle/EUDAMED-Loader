@@ -49,6 +49,7 @@ The `XML Generation` area is where XML-ready canonical data is transformed into 
   - validates each chunk against the local EUDAMED XSD set
   - allows variant-batch package download from the UI
 - `POST` and `PATCH` now flow from the selected variant context through distinct default submission profiles
+- the selected variant and effective `POST` / `PATCH` state now both come directly from the current authoritative `BasicUDIs.xlsx` workbook
 - generated messages now emit `m:Push/@version = 3.0.30`
 - default `POST` generation now emits `DEVICE.POST` with a fuller `device:Device` payload
 - default `PATCH` generation now emits `UDI_DI.PATCH` with direct `device:UDIDIData`
@@ -101,6 +102,24 @@ That means the payload has two layers:
   - carrying entity lifecycle metadata where currently projected:
     - `e:state`
     - `e:version` for `PATCH`
+
+## Submission Operation Control
+
+The XML layer now treats the updated `BasicUDIs.xlsx` workbook as the single source for submission intent.
+
+Current source ownership is:
+
+- `BasicUDIs.xlsx`
+  - variant linkage
+  - `Basic UDI-DI`
+  - current `POST` / `PATCH` state
+  - source version marker
+  - supporting Basic UDI reference fields
+
+For the current workbook structure, the application derives submission intent from sheet membership:
+
+- `Upload(BasicUDI not registered)` => `POST`, version marker `1`
+- `Update(BasicUDI registered)` => `PATCH`, version marker `2`
 
 ## Current Generic Projection
 

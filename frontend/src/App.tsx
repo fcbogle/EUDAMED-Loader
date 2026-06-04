@@ -798,6 +798,12 @@ export function App() {
   const canonicalValidationRecords = canonicalValidation?.records ?? [];
   const validationFamilySummaries = canonicalValidation?.family_summaries ?? [];
   const validationVariantSummaries = canonicalValidation?.variant_summaries ?? [];
+  const validationVariantOperationLookup = new Map(
+    validationVariantSummaries.map((summary) => [
+      `${summary.source_workbook}::${summary.source_sheet}`,
+      summary.submission_operation,
+    ]),
+  );
   const selectedFamilySummary =
     validationFamilySummaries.find((summary) => summary.product_family === selectedValidationFamily) ??
     validationFamilySummaries[0] ??
@@ -928,11 +934,15 @@ export function App() {
   const topNullColumns = [...profileColumns]
     .sort((left, right) => right.null_count - left.null_count)
     .slice(0, 5);
-  const selectedWorkbookVariantMappings = variantMappings.filter(
-    (mapping) => mapping.workbook === selectedWorkbookSummary?.workbook,
-  );
+  const selectedWorkbookVariantMappings = variantMappings
+    .filter((mapping) => mapping.workbook === selectedWorkbookSummary?.workbook)
+    .map((mapping) => ({
+      ...mapping,
+      submission_operation:
+        validationVariantOperationLookup.get(`${mapping.workbook}::${mapping.sheet}`) ?? mapping.submission_operation,
+    }));
   const selectedSheetVariantMapping =
-    variantMappings.find(
+    selectedWorkbookVariantMappings.find(
       (mapping) => mapping.workbook === selectedSheet?.workbook && mapping.sheet === selectedSheet?.sheet,
     ) ?? null;
   const matchedVariantCount = variantMappings.filter((mapping) => mapping.match_status === "matched").length;
@@ -942,34 +952,18 @@ export function App() {
     const order = { matched: 0, unmatched: 1, excluded: 2 };
     return order[left.match_status] - order[right.match_status];
   });
-  const familyWorkbookSummaries = visibleWorkbooks.reduce<
-    { family: string; rows: number; postRows: number; patchRows: number }[]
-  >((families, workbook) => {
+  const familyWorkbookSummaries = visibleWorkbooks.map((workbook) => {
     const family = workbookFamilyLabel(workbook.workbook);
-    const variantRows = sheets.filter((sheet) => sheet.workbook === workbook.workbook);
-    const mappingsForWorkbook = variantMappings.filter(
-      (mapping) => mapping.workbook === workbook.workbook && mapping.match_status === "matched",
+    const variantSummariesForWorkbook = validationVariantSummaries.filter(
+      (summary) => summary.source_workbook === workbook.workbook,
     );
-    const postRows = mappingsForWorkbook
-      .filter((mapping) => mapping.submission_operation === "POST")
-      .reduce((sum, mapping) => {
-        const sheet = variantRows.find((item) => item.sheet === mapping.sheet);
-        return sum + (sheet?.data_rows ?? 0);
-      }, 0);
-    const patchRows = mappingsForWorkbook
-      .filter((mapping) => mapping.submission_operation === "PATCH")
-      .reduce((sum, mapping) => {
-        const sheet = variantRows.find((item) => item.sheet === mapping.sheet);
-        return sum + (sheet?.data_rows ?? 0);
-      }, 0);
-    families.push({
+    return {
       family,
       rows: workbook.total_rows,
-      postRows,
-      patchRows,
-    });
-    return families;
-  }, []);
+      postVariants: variantSummariesForWorkbook.filter((summary) => summary.submission_operation === "POST").length,
+      patchVariants: variantSummariesForWorkbook.filter((summary) => summary.submission_operation === "PATCH").length,
+    };
+  });
 
   function queueDraftAction(item: DistinctValueProfile["values"][number], suggestion: SuggestedAction): void {
     setDraftActions((current) => {
@@ -1368,8 +1362,8 @@ export function App() {
                     <strong>{family.rows}</strong>
                   </div>
                   <div className="family-scope-pill-row">
-                    <span className="status-pill ok compact">{family.postRows} POST</span>
-                    <span className="status-pill warn compact">{family.patchRows} PATCH</span>
+                    <span className="status-pill ok compact">{family.postVariants} POST variants</span>
+                    <span className="status-pill warn compact">{family.patchVariants} PATCH variants</span>
                   </div>
                 </div>
               ))}

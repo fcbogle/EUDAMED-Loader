@@ -25,28 +25,35 @@ class Settings(BaseModel):
     eudamed_patch_profile: str
 
 
+def _path_setting(project_root: Path, env_name: str, default: Path) -> Path:
+    raw = os.getenv(env_name)
+    if not raw:
+        return default
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = project_root / candidate
+    return candidate
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     project_root = Path(__file__).resolve().parents[2]
-    basic_udi_reference_dir = Path(
-        os.getenv(
-            "EUDAMED_BASIC_UDI_REFERENCE_DIR",
-            str(project_root / "data" / "basic_udi_reference"),
-        )
+    basic_udi_reference_dir = _path_setting(
+        project_root,
+        "EUDAMED_BASIC_UDI_REFERENCE_DIR",
+        project_root / "data" / "basic_udi_reference",
     )
     legacy_service_id = os.getenv("EUDAMED_SERVICE_ID")
     return Settings(
-        excel_dir=Path(
-            os.getenv(
-                "EUDAMED_EXCEL_DIR",
-                str(project_root / "data" / "source_excel"),
-            )
+        excel_dir=_path_setting(
+            project_root,
+            "EUDAMED_EXCEL_DIR",
+            project_root / "data" / "source_excel",
         ),
-        schema_dir=Path(
-            os.getenv(
-                "EUDAMED_SCHEMA_DIR",
-                str(project_root / "data" / "schemas"),
-            )
+        schema_dir=_path_setting(
+            project_root,
+            "EUDAMED_SCHEMA_DIR",
+            project_root / "data" / "schemas",
         ),
         basic_udi_reference_dir=basic_udi_reference_dir,
         basic_udi_reference_workbook=basic_udi_reference_dir / "BasicUDIs.xlsx",

@@ -49,6 +49,32 @@ For now, market-information update design is being left aside so the application
 
 ## Successful Reference Shapes
 
+## Payload Object Distinction
+
+The XML testing work has shown that two different payload object scopes matter in practice:
+
+- `device:Device`
+  - the broader device wrapper object
+  - used with the successful `DEVICE.POST` example
+  - carries both:
+    - `device:MDRBasicUDI`
+    - `device:MDRUDIDIData`
+- `device:UDIDIData`
+  - the narrower direct UDI-DI payload object
+  - used with the successful `UDI_DI.POST` and `UDI_DI.PATCH` examples
+
+These are both declared in the same top-level schema entry file:
+
+- `data/schemas/data/Entity/DI.xsd`
+
+But they do not behave as the same object:
+
+- `device:Device` uses the broader device wrapper type family
+- `device:UDIDIData` uses the UDI-DI type family, with the detailed MDR UDI-DI structure defined under:
+  - `data/schemas/data/Entity/Device/RegulationDevice/UDIDIType.xsd`
+
+This distinction matters because local XSD validity alone did not tell us which service contract should use which payload object.
+
 ### `DEVICE.POST`
 
 - `serviceID = DEVICE`
@@ -79,6 +105,25 @@ For now, market-information update design is being left aside so the application
 ## Current Design Decisions
 
 The application should now move to the following default XML-generation design:
+
+### Submission Operation Source
+
+`BasicUDIs.xlsx` is again the single authoritative source for:
+
+- variant linkage
+- `Basic UDI-DI`
+- current `POST` / `PATCH` state
+- source version marker
+- other reference-backed device metadata
+
+The current workbook structure separates:
+
+- `Upload(BasicUDI not registered)`
+  - treated by the application as `POST`
+  - source version marker `1`
+- `Update(BasicUDI registered)`
+  - treated by the application as `PATCH`
+  - source version marker `2`
 
 ### POST
 

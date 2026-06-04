@@ -16,6 +16,7 @@ In practical terms:
 - `XML Generation` now operates at `Product Variant` level within each product family for both:
   - `Single XML`
   - `Variant Batch XML`
+- `BasicUDIs.xlsx` is again the single reference source for variant linkage, Basic UDI enrichment, and current `POST` / `PATCH` state
 - the local EUDAMED schema baseline has now been refreshed from `3.0.28` to `3.0.30`
 - the active `UDI_DI` XML payload shape has now been aligned to direct `device:UDIDIData`
 - the current XML path now projects explicit entity lifecycle metadata for UDI-DI payloads:

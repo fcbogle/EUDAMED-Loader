@@ -119,76 +119,11 @@ class BasicUdiReferenceService:
     def rows_by_device_model(self) -> dict[str, BasicUdiReferenceRow]:
         legacy_srn_rows = self._legacy_srn_rows_by_device_model()
         workbook = load_workbook(self.settings.basic_udi_reference_workbook, read_only=True, data_only=True)
-        worksheet = workbook["BasicUDI"]
-        rows = list(worksheet.iter_rows(values_only=True))
-        headers = [self._stringify(cell) for cell in rows[0]]
-        index = {header: i for i, header in enumerate(headers) if header}
-
         references: dict[str, BasicUdiReferenceRow] = {}
-        for row in rows[1:]:
-            device_model = self._cell(row, index, "Device Model")
-            if not device_model:
-                continue
-            legacy_srn_row = self._matching_legacy_srn_row(device_model, legacy_srn_rows)
-            references[device_model] = BasicUdiReferenceRow(
-                applicable_regulation=self._cell(row, index, "Applicable regulation") or None,
-                issuing_entity=self._cell(row, index, "Issuing Entity") or None,
-                device_model=device_model,
-                basic_udi_di=self._cell(row, index, "Basic UDI-DI code"),
-                manufacturer_srn=legacy_srn_row.manufacturer_srn if legacy_srn_row else None,
-                manufacturer_srn_source=legacy_srn_row.manufacturer_srn_source if legacy_srn_row else None,
-                authorised_representative_srn=(
-                    legacy_srn_row.authorised_representative_srn if legacy_srn_row else None
-                ),
-                authorised_representative_srn_source=(
-                    legacy_srn_row.authorised_representative_srn_source if legacy_srn_row else None
-                ),
-                device_type=self._cell(
-                    row,
-                    index,
-                    "Is it a System or Procedure Pack which is a Device in itself?",
-                )
-                or None,
-                special_device_type=self._cell(row, index, "Special device type") or None,
-                risk_class=self._cell(row, index, "Risk class") or None,
-                implantable=self._cell(row, index, "Implantable") or None,
-                measuring_function=self._cell(row, index, "Measuring function") or None,
-                reusable_surgical_instrument=self._cell(row, index, "Reusable surgical instrument") or None,
-                active_device=self._cell(row, index, "Active device") or None,
-                administering_medicinal_product=self._cell(
-                    row,
-                    index,
-                    "Device intended to administer and/or remove medicinal product",
-                )
-                or None,
-                device_model_applicable=self._cell(row, index, "Device model applicable") or None,
-                additional_information_url=self._cell(
-                    row,
-                    index,
-                    "URL for additional information (as electronic instructions for use):",
-                )
-                or None,
-                submission_operation=self._submission_operation(self._cell(row, index, "Operation")),
-                source_version_marker=self._cell(row, index, "Version") or None,
-                first_eu_market_country=self._cell(
-                    row,
-                    index,
-                    "Member State of the placing on the EU market of the Device:",
-                )
-                or None,
-                available_market_countries=tuple(
-                    country
-                    for country in (
-                        item.strip()
-                        for item in self._cell(
-                            row,
-                            index,
-                            "Member States where device is or is to be made available on the market:",
-                        ).split(";")
-                    )
-                    if country
-                ),
-            )
+        if "BasicUDI" in workbook.sheetnames:
+            self._load_legacy_basic_udi_sheet(workbook, legacy_srn_rows, references)
+        else:
+            self._load_current_basic_udi_sheets(workbook, legacy_srn_rows, references)
         return references
 
     def _legacy_srn_rows_by_device_model(self) -> dict[str, BasicUdiReferenceRow]:
@@ -250,6 +185,198 @@ class BasicUdiReferenceService:
                 available_market_countries=(),
             )
         return legacy_rows
+
+    def _load_legacy_basic_udi_sheet(
+        self,
+        workbook,
+        legacy_srn_rows: dict[str, BasicUdiReferenceRow],
+        references: dict[str, BasicUdiReferenceRow],
+    ) -> None:
+        worksheet = workbook["BasicUDI"]
+        rows = list(worksheet.iter_rows(values_only=True))
+        headers = [self._stringify(cell) for cell in rows[0]]
+        index = {header: i for i, header in enumerate(headers) if header}
+
+        for row in rows[1:]:
+            device_model = self._cell(row, index, "Device Model")
+            if not device_model:
+                continue
+            self._add_reference_row(
+                references=references,
+                legacy_srn_rows=legacy_srn_rows,
+                device_model=device_model,
+                basic_udi_di=self._cell(row, index, "Basic UDI-DI code"),
+                applicable_regulation=self._cell(row, index, "Applicable regulation") or None,
+                issuing_entity=self._cell(row, index, "Issuing Entity") or None,
+                device_type=self._cell(
+                    row,
+                    index,
+                    "Is it a System or Procedure Pack which is a Device in itself?",
+                )
+                or None,
+                special_device_type=self._cell(row, index, "Special device type") or None,
+                risk_class=self._cell(row, index, "Risk class") or None,
+                implantable=self._cell(row, index, "Implantable") or None,
+                measuring_function=self._cell(row, index, "Measuring function") or None,
+                reusable_surgical_instrument=self._cell(row, index, "Reusable surgical instrument") or None,
+                active_device=self._cell(row, index, "Active device") or None,
+                administering_medicinal_product=self._cell(
+                    row,
+                    index,
+                    "Device intended to administer and/or remove medicinal product",
+                )
+                or None,
+                device_model_applicable=self._cell(row, index, "Device model applicable") or None,
+                additional_information_url=self._cell(
+                    row,
+                    index,
+                    "URL for additional information (as electronic instructions for use):",
+                )
+                or None,
+                submission_operation=self._submission_operation(self._cell(row, index, "Operation")),
+                source_version_marker=self._cell(row, index, "Version") or None,
+                first_eu_market_country=self._cell(
+                    row,
+                    index,
+                    "Member State of the placing on the EU market of the Device:",
+                )
+                or None,
+                available_market_countries=self._market_countries(
+                    self._cell(
+                        row,
+                        index,
+                        "Member States where device is or is to be made available on the market:",
+                    )
+                ),
+            )
+
+    def _load_current_basic_udi_sheets(
+        self,
+        workbook,
+        legacy_srn_rows: dict[str, BasicUdiReferenceRow],
+        references: dict[str, BasicUdiReferenceRow],
+    ) -> None:
+        sheet_definitions = (
+            ("Upload(BasicUDI not registered)", "POST", "1"),
+            ("Update(BasicUDI registered)", "PATCH", "2"),
+        )
+        for sheet_name, operation_token, version_marker in sheet_definitions:
+            if sheet_name not in workbook.sheetnames:
+                continue
+            worksheet = workbook[sheet_name]
+            rows = list(worksheet.iter_rows(values_only=True))
+            headers = [self._stringify(cell) for cell in rows[0]]
+            index = {header: i for i, header in enumerate(headers) if header}
+            for row in rows[1:]:
+                device_model = self._cell(row, index, "Device Model")
+                if not device_model:
+                    continue
+                self._add_reference_row(
+                    references=references,
+                    legacy_srn_rows=legacy_srn_rows,
+                    device_model=device_model,
+                    basic_udi_di=self._cell(row, index, "Basic UDI-DI code"),
+                    applicable_regulation=self._cell(row, index, "Applicable regulation") or None,
+                    issuing_entity=self._cell(row, index, "Issuing Entity") or None,
+                    device_type=self._cell(
+                        row,
+                        index,
+                        "Is it a System or Procedure Pack which is a Device in itself?",
+                    )
+                    or None,
+                    special_device_type=self._cell(row, index, "Special device type") or None,
+                    risk_class=self._cell(row, index, "Risk class") or None,
+                    implantable=self._cell(row, index, "Implantable") or None,
+                    measuring_function=self._cell(row, index, "Measuring function") or None,
+                    reusable_surgical_instrument=self._cell(row, index, "Reusable surgical instrument") or None,
+                    active_device=self._cell(row, index, "Active device") or None,
+                    administering_medicinal_product=self._cell(
+                        row,
+                        index,
+                        "Device intended to administer and/or remove medicinal product",
+                    )
+                    or None,
+                    device_model_applicable=self._cell(row, index, "Device model applicable") or None,
+                    additional_information_url=self._cell(
+                        row,
+                        index,
+                        "URL for additional information (as electronic instructions for use):",
+                    )
+                    or None,
+                    submission_operation=self._submission_operation(operation_token),
+                    source_version_marker=version_marker,
+                    first_eu_market_country=self._cell(
+                        row,
+                        index,
+                        "Member State of the placing on the EU market of the Device:",
+                    )
+                    or None,
+                    available_market_countries=self._market_countries(
+                        self._cell(
+                            row,
+                            index,
+                            "Member States where device is or is to be made available on the market:",
+                        )
+                    ),
+                )
+
+    def _add_reference_row(
+        self,
+        *,
+        references: dict[str, BasicUdiReferenceRow],
+        legacy_srn_rows: dict[str, BasicUdiReferenceRow],
+        device_model: str,
+        basic_udi_di: str,
+        applicable_regulation: str | None,
+        issuing_entity: str | None,
+        device_type: str | None,
+        special_device_type: str | None,
+        risk_class: str | None,
+        implantable: str | None,
+        measuring_function: str | None,
+        reusable_surgical_instrument: str | None,
+        active_device: str | None,
+        administering_medicinal_product: str | None,
+        device_model_applicable: str | None,
+        additional_information_url: str | None,
+        submission_operation: SubmissionOperation | None,
+        source_version_marker: str | None,
+        first_eu_market_country: str | None,
+        available_market_countries: tuple[str, ...],
+    ) -> None:
+        legacy_srn_row = self._matching_legacy_srn_row(device_model, legacy_srn_rows)
+        references[device_model] = BasicUdiReferenceRow(
+            applicable_regulation=applicable_regulation,
+            issuing_entity=issuing_entity,
+            device_model=device_model,
+            basic_udi_di=basic_udi_di,
+            manufacturer_srn=legacy_srn_row.manufacturer_srn if legacy_srn_row else None,
+            manufacturer_srn_source=legacy_srn_row.manufacturer_srn_source if legacy_srn_row else None,
+            authorised_representative_srn=(
+                legacy_srn_row.authorised_representative_srn if legacy_srn_row else None
+            ),
+            authorised_representative_srn_source=(
+                legacy_srn_row.authorised_representative_srn_source if legacy_srn_row else None
+            ),
+            device_type=device_type,
+            special_device_type=special_device_type,
+            risk_class=risk_class,
+            implantable=implantable,
+            measuring_function=measuring_function,
+            reusable_surgical_instrument=reusable_surgical_instrument,
+            active_device=active_device,
+            administering_medicinal_product=administering_medicinal_product,
+            device_model_applicable=device_model_applicable,
+            additional_information_url=additional_information_url,
+            submission_operation=submission_operation,
+            source_version_marker=source_version_marker,
+            first_eu_market_country=first_eu_market_country,
+            available_market_countries=available_market_countries,
+        )
+
+    @staticmethod
+    def _market_countries(value: str) -> tuple[str, ...]:
+        return tuple(country for country in (item.strip() for item in value.split(";")) if country)
 
     @staticmethod
     def _matching_legacy_srn_row(
