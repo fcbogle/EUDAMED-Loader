@@ -4,6 +4,7 @@ import type {
   CanonicalValidationBundle,
   CanonicalReviewBundle,
   DistinctValueProfile,
+  EquivalentPatchPairPreview,
   NormalizationRuleFile,
   ReferenceWorkbookSummary,
   SchemaInventory,
@@ -94,6 +95,12 @@ export const api = {
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
     }),
+  previewXmlPostPatchPair: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+    sendJson<EquivalentPatchPairPreview>("/xml/preview-post-patch-pair", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber,
+    }),
   previewXmlBatch: (productFamily: string, productVariant: string, chunkSequence = 1) =>
     sendJson<BatchXmlPreview>("/xml/preview-batch", "POST", {
       product_family: productFamily,
@@ -102,6 +109,12 @@ export const api = {
     }),
   downloadXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-record", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber,
+    }),
+  downloadXmlPostPatchPair: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+    sendDownload("/xml/download-post-patch-pair", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,

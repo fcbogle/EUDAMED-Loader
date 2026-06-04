@@ -17,6 +17,7 @@ from app.xml_models import (
     BatchXmlChunkSummary,
     BatchXmlPreview,
     CriticalWarningXmlItem,
+    EquivalentPatchPairPreview,
     SingleRecordXmlPreview,
     StorageConditionXmlItem,
     XmlGenerationScopeBundle,
@@ -137,6 +138,8 @@ class DeviceXmlRecord:
         base_quantity: int | None,
         storage_conditions: list[StorageConditionXmlItem],
         critical_warnings: list[CriticalWarningXmlItem],
+        patch_version_override: str | None = None,
+        include_market_infos_in_patch: bool = False,
     ) -> None:
         self.product_family = product_family
         self.product_variant = product_variant
@@ -180,6 +183,8 @@ class DeviceXmlRecord:
         self.base_quantity = base_quantity
         self.storage_conditions = storage_conditions
         self.critical_warnings = critical_warnings
+        self.patch_version_override = patch_version_override
+        self.include_market_infos_in_patch = include_market_infos_in_patch
 
 
 class XmlGenerationService:
@@ -255,6 +260,93 @@ class XmlGenerationService:
             catalogue_number=catalogue_number,
         )
         return preview.file_name, preview.xml.encode("utf-8")
+
+    def preview_post_patch_pair(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> EquivalentPatchPairPreview:
+        record = self._find_validation_record(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        if self._normalized_operation(record.submission_operation) != "POST":
+            raise ValueError(
+                f"Catalogue number {catalogue_number} is not currently classified as a POST record for "
+                f"{product_family} / {product_variant}."
+            )
+
+        post_record = self._to_xml_record(record)
+        patch_record = self._equivalent_first_patch_record(post_record)
+        post_xml_bytes = self._render_push_message(post_record)
+        patch_xml_bytes = self._render_push_message(patch_record)
+        post_file_name = self._operation_file_name(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            operation="POST",
+            catalogue_number=post_record.catalogue_number,
+        )
+        patch_file_name = self._operation_file_name(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            operation="PATCH",
+            catalogue_number=patch_record.catalogue_number,
+        )
+        return EquivalentPatchPairPreview(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            catalogue_number=post_record.catalogue_number,
+            primary_udi_di=post_record.primary_udi_di,
+            post_file_name=post_file_name,
+            post_xml=post_xml_bytes.decode("utf-8"),
+            post_validation=self.xml_validation_service.validate_message(post_xml_bytes),
+            patch_file_name=patch_file_name,
+            patch_xml=patch_xml_bytes.decode("utf-8"),
+            patch_validation=self.xml_validation_service.validate_message(patch_xml_bytes),
+        )
+
+    def download_post_patch_pair(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> tuple[str, bytes]:
+        preview = self.preview_post_patch_pair(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        package_file_name = self._post_patch_pair_package_file_name(
+            product_family=preview.product_family or product_family,
+            product_variant=preview.product_variant or product_variant,
+            catalogue_number=preview.catalogue_number,
+        )
+        buffer = BytesIO()
+        with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
+            archive.writestr(preview.post_file_name, preview.post_xml.encode("utf-8"))
+            archive.writestr(preview.patch_file_name, preview.patch_xml.encode("utf-8"))
+            archive.writestr(
+                "manifest.json",
+                json.dumps(
+                    {
+                        "mode": preview.mode,
+                        "product_family": preview.product_family,
+                        "product_variant": preview.product_variant,
+                        "catalogue_number": preview.catalogue_number,
+                        "primary_udi_di": preview.primary_udi_di,
+                        "post_file_name": preview.post_file_name,
+                        "post_valid": preview.post_validation.valid,
+                        "patch_file_name": preview.patch_file_name,
+                        "patch_valid": preview.patch_validation.valid,
+                    },
+                    indent=2,
+                ),
+            )
+        return package_file_name, buffer.getvalue()
 
     def preview_batch(
         self,
@@ -632,8 +724,10 @@ class XmlGenerationService:
             udidi = etree.Element(self._q(DEVICE_NS, "UDIDIData"))
             udidi.set(self._q(XSI_NS, "type"), "udidi:MDRUDIDIDataType")
         self._append_text(udidi, ENTITY_NS, "state", "REGISTERED")
-        if self._normalized_operation(record.submission_operation) == "PATCH" and record.source_version_marker:
-            self._append_text(udidi, ENTITY_NS, "version", record.source_version_marker)
+        if self._normalized_operation(record.submission_operation) == "PATCH":
+            version_marker = record.patch_version_override or record.source_version_marker
+            if version_marker:
+                self._append_text(udidi, ENTITY_NS, "version", version_marker)
         udidi.append(
             self._di_identifier_element(
                 di_code=record.device_identifier_code,
@@ -676,7 +770,7 @@ class XmlGenerationService:
         if record.critical_warnings:
             udidi.append(self._critical_warnings_element(record.critical_warnings))
         self._append_text(udidi, UDIDI_NS, "numberOfReuses", str(record.number_of_reuses))
-        if record.market_countries and profile != "udidi_patch":
+        if record.market_countries and (profile != "udidi_patch" or record.include_market_infos_in_patch):
             udidi.append(self._market_infos_element(record.market_countries))
         if record.base_quantity is not None:
             self._append_text(udidi, UDIDI_NS, "baseQuantity", str(record.base_quantity))
@@ -713,6 +807,54 @@ class XmlGenerationService:
                 "true" if original else "false",
             )
         return market_infos
+
+    def _equivalent_first_patch_record(self, post_record: DeviceXmlRecord) -> DeviceXmlRecord:
+        return DeviceXmlRecord(
+            product_family=post_record.product_family,
+            product_variant=post_record.product_variant,
+            submission_operation="PATCH",
+            catalogue_number=post_record.catalogue_number,
+            trade_name=post_record.trade_name,
+            primary_udi_di=post_record.primary_udi_di,
+            issuing_entity=post_record.issuing_entity,
+            language_code=post_record.language_code,
+            basic_identifier_code=post_record.basic_identifier_code,
+            basic_identifier_issuing_entity=post_record.basic_identifier_issuing_entity,
+            device_identifier_code=post_record.device_identifier_code,
+            device_identifier_issuing_entity=post_record.device_identifier_issuing_entity,
+            risk_class=post_record.risk_class,
+            model_name=post_record.model_name,
+            manufacturer_srn=post_record.manufacturer_srn,
+            authorised_representative_srn=post_record.authorised_representative_srn,
+            human_tissues_cells=post_record.human_tissues_cells,
+            animal_tissues_cells=post_record.animal_tissues_cells,
+            human_product_check=post_record.human_product_check,
+            medicinal_product_check=post_record.medicinal_product_check,
+            basic_device_type=post_record.basic_device_type,
+            active=post_record.active,
+            administering_medicine=post_record.administering_medicine,
+            implantable=post_record.implantable,
+            measuring_function=post_record.measuring_function,
+            reusable=post_record.reusable,
+            nomenclature_codes=post_record.nomenclature_codes,
+            status_code=post_record.status_code,
+            production_identifier=post_record.production_identifier,
+            reference_number=post_record.reference_number,
+            secondary_identifier_code=post_record.secondary_identifier_code,
+            secondary_identifier_issuing_entity=post_record.secondary_identifier_issuing_entity,
+            sterile=post_record.sterile,
+            sterilization=post_record.sterilization,
+            source_version_marker="2",
+            number_of_reuses=post_record.number_of_reuses,
+            contains_latex=post_record.contains_latex,
+            reprocessed=post_record.reprocessed,
+            market_countries=post_record.market_countries,
+            base_quantity=post_record.base_quantity,
+            storage_conditions=post_record.storage_conditions,
+            critical_warnings=post_record.critical_warnings,
+            patch_version_override="2",
+            include_market_infos_in_patch=True,
+        )
 
     def _storage_conditions_element(self, items: list[StorageConditionXmlItem]) -> XmlElement:
         storage_conditions = etree.Element(self._q(UDIDI_NS, "storageHandlingConditions"))
@@ -838,6 +980,20 @@ class XmlGenerationService:
         )
 
     @classmethod
+    def _operation_file_name(
+        cls,
+        *,
+        product_family: str,
+        product_variant: str,
+        operation: str,
+        catalogue_number: str,
+    ) -> str:
+        return (
+            f"{cls._slugify(product_family)}-{cls._slugify(product_variant)}-{operation.lower()}-"
+            f"{''.join(char if char.isalnum() or char in {'-', '_'} else '-' for char in catalogue_number)}.xml"
+        )
+
+    @classmethod
     def _batch_file_name(
         cls,
         *,
@@ -854,6 +1010,19 @@ class XmlGenerationService:
     @classmethod
     def _batch_package_file_name(cls, *, product_family: str, product_variant: str) -> str:
         return f"{cls._slugify(product_family)}-{cls._slugify(product_variant)}-batch-package.zip"
+
+    @classmethod
+    def _post_patch_pair_package_file_name(
+        cls,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> str:
+        return (
+            f"{cls._slugify(product_family)}-{cls._slugify(product_variant)}-post-patch-pair-"
+            f"{''.join(char if char.isalnum() or char in {'-', '_'} else '-' for char in catalogue_number)}.zip"
+        )
 
     @staticmethod
     def _language_code(value: str) -> str:

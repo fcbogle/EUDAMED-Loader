@@ -16,6 +16,7 @@ import type {
   CanonicalValidationBundle,
   CanonicalReviewBundle,
   DistinctValueProfile,
+  EquivalentPatchPairPreview,
   NormalizationRuleFile,
   ReferenceWorkbookSummary,
   SchemaInventory,
@@ -452,7 +453,8 @@ export function App() {
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
   const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
   const [selectedXmlRecordKey, setSelectedXmlRecordKey] = useState<string | null>(null);
-  const [xmlMode, setXmlMode] = useState<"single" | "batch">("single");
+  const [xmlMode, setXmlMode] = useState<"pair" | "single" | "batch">("pair");
+  const [pairPreviewView, setPairPreviewView] = useState<"post" | "patch">("post");
   const [selectedXmlChunkSequence, setSelectedXmlChunkSequence] = useState<number>(1);
   const [scopeMode] = useState<ScopeMode>("all");
   const [showUnmappedOnly, setShowUnmappedOnly] = useState<boolean>(true);
@@ -463,6 +465,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [xmlPreview, setXmlPreview] = useState<SingleRecordXmlPreview | null>(null);
   const [xmlBatchPreview, setXmlBatchPreview] = useState<BatchXmlPreview | null>(null);
+  const [xmlPairPreview, setXmlPairPreview] = useState<EquivalentPatchPairPreview | null>(null);
   const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
@@ -592,6 +595,7 @@ export function App() {
   useEffect(() => {
     setXmlPreview(null);
     setXmlBatchPreview(null);
+    setXmlPairPreview(null);
   }, [selectedXmlRecordKey, selectedXmlFamily, selectedXmlVariant, selectedXmlChunkSequence, xmlMode]);
 
   useEffect(() => {
@@ -692,6 +696,10 @@ export function App() {
   useEffect(() => {
     setSelectedXmlChunkSequence(1);
   }, [selectedXmlFamily, selectedXmlVariant]);
+
+  useEffect(() => {
+    setPairPreviewView("post");
+  }, [selectedXmlFamily, selectedXmlVariant, selectedXmlRecordKey, xmlMode]);
 
   const selectedRuleFile = rules.find((item) => item.column === selectedColumn);
   const acceptedValues = Array.from(new Set(selectedRuleFile?.rules.map((rule) => rule.normalized) ?? []));
@@ -887,11 +895,30 @@ export function App() {
     selectedXmlVariantRecords.find((record) => record.catalogue_number === selectedXmlRecordKey) ??
     selectedXmlVariantRecords[0] ??
     null;
+  const selectedXmlPairRecord =
+    selectedXmlVariantRecords.find(
+      (record) =>
+        record.catalogue_number === selectedXmlRecordKey && (record.submission_operation ?? "").toUpperCase() === "POST",
+    ) ??
+    selectedXmlVariantRecords.find((record) => (record.submission_operation ?? "").toUpperCase() === "POST") ??
+    null;
   const selectedXmlVariantChunkCount = selectedXmlVariantSummary
     ? Math.max(Math.ceil(selectedXmlVariantSummary.xml_ready_records / 300), 1)
     : 1;
   const xmlPreviewLines =
-    xmlMode === "single"
+    xmlMode === "pair"
+      ? xmlPairPreview
+        ? pairPreviewView === "post"
+          ? xmlPairPreview.post_xml
+          : xmlPairPreview.patch_xml
+        : selectedXmlPairRecord
+          ? [
+              "<!-- Generate paired XML to load the accepted-shape POST and equivalent first PATCH previews -->",
+              `<catalogue-number>${selectedXmlPairRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
+              `<preview-view>${pairPreviewView.toUpperCase()}</preview-view>`,
+            ].join("\n")
+          : "<!-- No XML-ready POST record is currently available for paired POST/PATCH generation for the selected family and variant -->"
+      : xmlMode === "single"
       ? selectedXmlRecord
         ? xmlPreview?.xml ??
           [
@@ -908,7 +935,15 @@ export function App() {
           `<chunk-sequence>${selectedXmlChunkSequence}</chunk-sequence>`,
         ].join("\n");
   const selectedBatchValidation =
-    xmlMode === "single" ? xmlPreview?.validation ?? null : xmlBatchPreview?.selected_chunk_validation ?? null;
+    xmlMode === "pair"
+      ? pairPreviewView === "post"
+        ? xmlPairPreview?.post_validation ?? null
+        : xmlPairPreview?.patch_validation ?? null
+      : xmlMode === "single"
+        ? xmlPreview?.validation ?? null
+        : xmlBatchPreview?.selected_chunk_validation ?? null;
+  const pairPostValidation = xmlPairPreview?.post_validation ?? null;
+  const pairPatchValidation = xmlPairPreview?.patch_validation ?? null;
   const validationStatusLabel = selectedBatchValidation
     ? selectedBatchValidation.valid
       ? "Schema valid"
@@ -1089,7 +1124,17 @@ export function App() {
     setIsGeneratingXml(true);
     setError(null);
     try {
-      if (xmlMode === "single") {
+      if (xmlMode === "pair") {
+        if (!selectedXmlPairRecord?.catalogue_number) {
+          return;
+        }
+        const preview = await api.previewXmlPostPatchPair(
+          selectedXmlFamilySummary.product_family,
+          selectedXmlVariantSummary.product_variant,
+          selectedXmlPairRecord.catalogue_number,
+        );
+        setXmlPairPreview(preview);
+      } else if (xmlMode === "single") {
         if (!selectedXmlRecord?.catalogue_number) {
           return;
         }
@@ -1122,7 +1167,13 @@ export function App() {
     setError(null);
     try {
       const { blob, fileName } =
-        xmlMode === "single" && selectedXmlRecord?.catalogue_number
+        xmlMode === "pair" && selectedXmlPairRecord?.catalogue_number
+          ? await api.downloadXmlPostPatchPair(
+              selectedXmlFamilySummary.product_family,
+              selectedXmlVariantSummary.product_variant,
+              selectedXmlPairRecord.catalogue_number,
+            )
+          : xmlMode === "single" && selectedXmlRecord?.catalogue_number
           ? await api.downloadXmlRecord(
               selectedXmlFamilySummary.product_family,
               selectedXmlVariantSummary.product_variant,
@@ -1137,7 +1188,9 @@ export function App() {
       anchor.href = objectUrl;
       anchor.download =
         fileName ??
-        (xmlMode === "single"
+        (xmlMode === "pair"
+          ? `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlPairRecord?.catalogue_number ?? "pair"}-post-patch-pair.zip`
+          : xmlMode === "single"
           ? xmlPreview?.file_name ??
             `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlRecord?.catalogue_number ?? "record"}.xml`
           : xmlBatchPreview?.package_file_name ??
@@ -2503,9 +2556,13 @@ export function App() {
             </div>
             <div className="summary-card">
               <span className="summary-label">Current mode</span>
-              <strong>{xmlMode === "single" ? "Single XML" : "Variant Batch XML"}</strong>
+              <strong>
+                {xmlMode === "pair" ? "POST + Equivalent PATCH" : xmlMode === "single" ? "Single XML" : "Variant Batch XML"}
+              </strong>
               <p>
-                {xmlMode === "single"
+                {xmlMode === "pair"
+                  ? "Generate an accepted-shape DEVICE.POST and an equivalent first UDI_DI.PATCH for the same device."
+                  : xmlMode === "single"
                   ? "The generic XML path runs per product variant and generates one wrapped `Push` message for an auto-selected sample row."
                   : "Variant Batch XML chunks all XML-ready rows for the selected variant into schema-validated batch files."}
               </p>
@@ -2613,11 +2670,20 @@ export function App() {
             <div className="panel xml-workspace-panel xml-equal-panel xml-middle-panel">
               <div className="section-heading">
                 <div>
-                  <span className="section-kicker">{xmlMode === "single" ? "Single XML" : "Variant Batch XML"}</span>
+                  <span className="section-kicker">
+                    {xmlMode === "pair" ? "POST + Equivalent PATCH" : xmlMode === "single" ? "Single XML" : "Variant Batch XML"}
+                  </span>
                   <h2>Generation Workspace</h2>
                 </div>
               </div>
               <div className="xml-mode-toggle">
+                <button
+                  className={xmlMode === "pair" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                  type="button"
+                  onClick={() => setXmlMode("pair")}
+                >
+                  POST + Equivalent PATCH
+                </button>
                 <button
                   className={xmlMode === "single" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
                   type="button"
@@ -2633,7 +2699,38 @@ export function App() {
                   Variant Batch XML
                 </button>
               </div>
-              {xmlMode === "single" ? (
+              {xmlMode === "pair" ? (
+                selectedXmlPairRecord ? (
+                  <div className="draft-list">
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>{selectedXmlPairRecord.catalogue_number}</strong>
+                        <span className="status-pill ok compact">POST source</span>
+                      </div>
+                      <p className="draft-meta">
+                        {selectedXmlPairRecord.product_family} / {selectedXmlPairRecord.product_variant}
+                      </p>
+                      <p className="panel-copy">{selectedXmlPairRecord.trade_name ?? "No trade name"}</p>
+                      <p className="panel-copy">
+                        UDI-DI {selectedXmlPairRecord.primary_udi_di} · Issuing entity {selectedXmlPairRecord.issuing_entity ?? "Unknown"}
+                      </p>
+                      <p className="panel-copy">
+                        This mode generates an accepted-shape `DEVICE.POST` plus an equivalent first `UDI_DI.PATCH` for the exact same device.
+                      </p>
+                      <div className="family-scope-pill-row">
+                        <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                          POST {pairPostValidation ? (pairPostValidation.valid ? "valid" : "invalid") : "awaiting preview"}
+                        </span>
+                        <span className={pairPatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                          PATCH {pairPatchValidation ? (pairPatchValidation.valid ? "valid" : "invalid") : "awaiting preview"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="panel-copy">No XML-ready POST record is currently available for paired POST/PATCH generation for the selected family and variant.</p>
+                )
+              ) : xmlMode === "single" ? (
                 selectedXmlRecord ? (
                   <div className="draft-list">
                     <div className="draft-card">
@@ -2698,15 +2795,31 @@ export function App() {
                   className="action-button"
                   type="button"
                   onClick={() => void generateXmlPreview()}
-                  disabled={(xmlMode === "single" && !selectedXmlRecord) || !selectedXmlVariantSummary || isGeneratingXml}
+                  disabled={
+                    (xmlMode === "pair" && !selectedXmlPairRecord) ||
+                    (xmlMode === "single" && !selectedXmlRecord) ||
+                    !selectedXmlVariantSummary ||
+                    isGeneratingXml
+                  }
                 >
-                  {isGeneratingXml ? "Generating..." : xmlMode === "single" ? "Generate XML" : "Generate Batch Preview"}
+                  {isGeneratingXml
+                    ? "Generating..."
+                    : xmlMode === "pair"
+                      ? "Generate POST + PATCH"
+                      : xmlMode === "single"
+                        ? "Generate XML"
+                        : "Generate Batch Preview"}
                 </button>
                 <button
                   className="ghost-button"
                   type="button"
                   onClick={() => void generateXmlPreview()}
-                  disabled={(xmlMode === "single" && !selectedXmlRecord) || !selectedXmlVariantSummary || isGeneratingXml}
+                  disabled={
+                    (xmlMode === "pair" && !selectedXmlPairRecord) ||
+                    (xmlMode === "single" && !selectedXmlRecord) ||
+                    !selectedXmlVariantSummary ||
+                    isGeneratingXml
+                  }
                 >
                   Validate Against XSD
                 </button>
@@ -2714,15 +2827,24 @@ export function App() {
                   className="ghost-button"
                   type="button"
                   onClick={() => void downloadXmlRecord()}
-                  disabled={(xmlMode === "single" && !selectedXmlRecord) || !selectedXmlVariantSummary || isGeneratingXml}
+                  disabled={
+                    (xmlMode === "pair" && !selectedXmlPairRecord) ||
+                    (xmlMode === "single" && !selectedXmlRecord) ||
+                    !selectedXmlVariantSummary ||
+                    isGeneratingXml
+                  }
                 >
-                  {xmlMode === "single" ? "Download XML" : "Download Batch Package"}
+                  {xmlMode === "pair" ? "Download Pair Package" : xmlMode === "single" ? "Download XML" : "Download Batch Package"}
                 </button>
               </div>
               <div className="workflow-note">
-                <strong>{xmlMode === "single" ? "Single-record review" : "Variant-batch scope"}</strong>
+                <strong>
+                  {xmlMode === "pair" ? "Paired POST/PATCH review" : xmlMode === "single" ? "Single-record review" : "Variant-batch scope"}
+                </strong>
                 <span>
-                  {xmlMode === "single"
+                  {xmlMode === "pair"
+                    ? "Use one current POST-classified device to compare an accepted-shape POST against an equivalent first PATCH with e:version = 2."
+                    : xmlMode === "single"
                     ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
                     : "Batch generation remains strictly within the selected product variant and only includes XML-ready rows."}
                 </span>
@@ -2733,16 +2855,40 @@ export function App() {
               <div className="section-heading">
                 <div>
                   <span className="section-kicker">Preview</span>
-                  <h2>{xmlMode === "single" ? "Single Record XML Preview" : "Variant Batch XML Preview"}</h2>
+                  <h2>
+                    {xmlMode === "pair" ? "Paired XML Preview" : xmlMode === "single" ? "Single Record XML Preview" : "Variant Batch XML Preview"}
+                  </h2>
                 </div>
               </div>
+              {xmlMode === "pair" ? (
+                <div className="xml-mode-toggle">
+                  <button
+                    className={pairPreviewView === "post" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                    type="button"
+                    onClick={() => setPairPreviewView("post")}
+                  >
+                    View POST
+                  </button>
+                  <button
+                    className={pairPreviewView === "patch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                    type="button"
+                    onClick={() => setPairPreviewView("patch")}
+                  >
+                    View PATCH
+                  </button>
+                </div>
+              ) : null}
               <pre className="xml-preview-block">
                 <code>{xmlPreviewLines}</code>
               </pre>
               <div className="workflow-note">
                 <strong>Preview status</strong>
                 <span>
-                  {xmlMode === "single"
+                  {xmlMode === "pair"
+                    ? xmlPairPreview
+                      ? `Pair preview generated for ${xmlPairPreview.product_family} / ${xmlPairPreview.product_variant} / ${xmlPairPreview.catalogue_number}. Currently showing ${pairPreviewView.toUpperCase()}.`
+                      : "No paired XML preview generated yet for the selected row."
+                    : xmlMode === "single"
                     ? xmlPreview
                       ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
                       : "No XML preview generated yet for the selected row."
@@ -2774,7 +2920,7 @@ export function App() {
                 </div>
                 <div className="draft-card">
                   <div className="draft-card-head">
-                    <strong>Validation output</strong>
+                    <strong>{xmlMode === "pair" ? "Active preview validation" : "Validation output"}</strong>
                     <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
                       {selectedBatchValidation
                         ? selectedBatchValidation.valid
@@ -2799,7 +2945,9 @@ export function App() {
                         </div>
                       ) : (
                         <p className="panel-copy">
-                          {xmlMode === "single"
+                          {xmlMode === "pair"
+                            ? `The generated ${pairPreviewView.toUpperCase()} preview validates cleanly.`
+                            : xmlMode === "single"
                             ? "The generated single-record Push message validates cleanly."
                             : "The generated variant-batch Push message validates cleanly."}
                         </p>
@@ -2807,12 +2955,36 @@ export function App() {
                     </>
                   ) : (
                     <p className="panel-copy">
-                      {xmlMode === "single"
+                      {xmlMode === "pair"
+                        ? "Generate a paired preview to inspect the POST and PATCH schema validation outcomes."
+                        : xmlMode === "single"
                         ? "Generate a single-record preview to inspect the schema validation outcome."
                         : "Generate a variant-batch preview to inspect the schema validation outcome."}
                     </p>
                   )}
                 </div>
+                {xmlMode === "pair" ? (
+                  <>
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>POST validation</strong>
+                        <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                          {pairPostValidation ? (pairPostValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
+                        </span>
+                      </div>
+                      <p className="panel-copy">{pairPostValidation?.schema_path ?? "Generate a pair preview to validate the POST XML."}</p>
+                    </div>
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>PATCH validation</strong>
+                        <span className={pairPatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                          {pairPatchValidation ? (pairPatchValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
+                        </span>
+                      </div>
+                      <p className="panel-copy">{pairPatchValidation?.schema_path ?? "Generate a pair preview to validate the equivalent PATCH XML."}</p>
+                    </div>
+                  </>
+                ) : null}
                 {xmlMode === "batch" && xmlBatchPreview ? (
                   <div className="draft-card">
                     <div className="draft-card-head">

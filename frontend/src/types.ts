@@ -320,6 +320,20 @@ export type SingleRecordXmlPreview = {
   validation: XmlValidationResult;
 };
 
+export type EquivalentPatchPairPreview = {
+  mode: "post_patch_pair";
+  product_family: string | null;
+  product_variant: string | null;
+  catalogue_number: string;
+  primary_udi_di: string;
+  post_file_name: string;
+  post_xml: string;
+  post_validation: XmlValidationResult;
+  patch_file_name: string;
+  patch_xml: string;
+  patch_validation: XmlValidationResult;
+};
+
 export type XmlGenerationSelectionSummary = {
   product_family: string;
   product_variant: string;

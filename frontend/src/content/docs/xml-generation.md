@@ -42,6 +42,11 @@ The `XML Generation` area is where XML-ready canonical data is transformed into 
   - renders a wrapped `Push` message
   - validates the message against the local EUDAMED XSD set
   - allows XML download from the UI
+- the backend also now supports a controlled paired-generation test path for one current `POST` device:
+  - accepted-shape `DEVICE.POST`
+  - equivalent first `UDI_DI.PATCH`
+  - `PATCH` forces `e:version = 2`
+  - `PATCH` reuses the same `marketInfos` content as the paired `POST`
 - the current generic variant-batch path:
   - selects all XML-ready rows inside one selected product variant
   - chunks them into wrapped `Push` message files at up to `300` rows per file
@@ -120,6 +125,23 @@ For the current workbook structure, the application derives submission intent fr
 
 - `Upload(BasicUDI not registered)` => `POST`, version marker `1`
 - `Update(BasicUDI registered)` => `PATCH`, version marker `2`
+
+## Controlled POST/PATCH Pair Test
+
+The backend now includes a dedicated test-generation path for one device that is currently classified as `POST`.
+
+Its purpose is to generate:
+
+- one accepted-shape `DEVICE.POST`
+- one equivalent first `UDI_DI.PATCH`
+
+The paired `PATCH` is intentionally constrained:
+
+- it uses direct `device:UDIDIData`
+- it forces `e:version = 2`
+- it keeps `marketInfos` identical to the paired `POST`
+
+This is a test aid for proving a clean create-then-first-update sequence on the exact same device before broader `PATCH` version-management rules are introduced.
 
 ## Current Generic Projection
 

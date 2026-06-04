@@ -41,6 +41,20 @@ class SingleRecordXmlPreview(BaseModel):
     validation: XmlValidationResult
 
 
+class EquivalentPatchPairPreview(BaseModel):
+    mode: Literal["post_patch_pair"] = "post_patch_pair"
+    product_family: str | None = None
+    product_variant: str | None = None
+    catalogue_number: str
+    primary_udi_di: str
+    post_file_name: str
+    post_xml: str
+    post_validation: XmlValidationResult
+    patch_file_name: str
+    patch_xml: str
+    patch_validation: XmlValidationResult
+
+
 class XmlGenerationSelectionSummary(BaseModel):
     product_family: str
     product_variant: str
