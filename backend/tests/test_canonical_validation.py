@@ -1,8 +1,56 @@
 from __future__ import annotations
 
+from typing import get_args, get_origin
+
+from pydantic import BaseModel
+
+from app.canonical_models import BasicDevice, DeviceRecord, Manufacturer, MarketAvailability
 from app.routers.canonical import canonical_validation
 from app.services.canonical_review import CanonicalReviewService
 from app.services.canonical_validation import CanonicalValidationService
+
+
+def _canonical_paths_for_model(model_class: type[BaseModel], prefix: str) -> set[str]:
+    paths: set[str] = set()
+    for field_name, field_info in model_class.model_fields.items():
+        path = f"{prefix}.{field_name}"
+        paths.add(path)
+
+        annotation = field_info.annotation
+        origin = get_origin(annotation)
+        args = get_args(annotation)
+        nested_model: type[BaseModel] | None = None
+
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            nested_model = annotation
+        elif origin in {list, tuple, set, frozenset}:
+            for arg in args:
+                if isinstance(arg, type) and issubclass(arg, BaseModel):
+                    nested_model = arg
+                    break
+        elif origin is not None:
+            for arg in args:
+                if arg is type(None):
+                    continue
+                if isinstance(arg, type) and issubclass(arg, BaseModel):
+                    nested_model = arg
+                    break
+
+        if nested_model is not None:
+            paths.update(_canonical_paths_for_model(nested_model, path))
+    return paths
+
+
+def _canonical_path_vocabulary() -> set[str]:
+    vocabulary = set()
+    for prefix, model_class in (
+        ("manufacturer", Manufacturer),
+        ("basic_device", BasicDevice),
+        ("device_record", DeviceRecord),
+        ("market_availability", MarketAvailability),
+    ):
+        vocabulary.update(_canonical_paths_for_model(model_class, prefix))
+    return vocabulary
 
 
 def test_canonical_validation_service_builds_multi_family_bundle() -> None:
@@ -63,6 +111,16 @@ def test_canonical_validation_field_set_matches_canonical_review_bundle() -> Non
     }
 
     assert validation_paths == canonical_paths
+
+
+def test_canonical_validation_field_set_uses_declared_canonical_model_paths() -> None:
+    bundle = CanonicalValidationService().build_validation_bundle()
+    canonical_vocabulary = _canonical_path_vocabulary()
+
+    emitted_paths = {field.canonical_path for field in bundle.records[0].fields}
+    invalid_paths = sorted(emitted_paths - canonical_vocabulary)
+
+    assert invalid_paths == []
 
 
 def test_canonical_validation_api_returns_multi_family_payload() -> None:

@@ -584,12 +584,14 @@ class XmlGenerationService:
             animal_tissues_cells=self._bool(self._required(field_map, "basic_device.animal_tissues_cells")),
             human_product_check=self._bool(self._required(field_map, "basic_device.human_product_check")),
             medicinal_product_check=self._bool(self._required(field_map, "basic_device.medicinal_product_check")),
-            basic_device_type=self._required(field_map, "basic_device.type"),
+            basic_device_type=self._required(field_map, "basic_device.device_type"),
             active=self._bool(self._required(field_map, "basic_device.active")),
-            administering_medicine=self._bool(self._required(field_map, "basic_device.administering_medicine")),
+            administering_medicine=self._bool(
+                self._required(field_map, "basic_device.administering_medicinal_product")
+            ),
             implantable=self._bool(self._required(field_map, "basic_device.implantable")),
             measuring_function=self._bool(self._required(field_map, "basic_device.measuring_function")),
-            reusable=self._bool(self._required(field_map, "basic_device.reusable")),
+            reusable=self._bool(self._required(field_map, "basic_device.reusable_surgical_instrument")),
             nomenclature_codes=self._split_codes(self._required(field_map, "basic_device.nomenclature_code")),
             status_code=self._required(field_map, "device_record.status"),
             production_identifier=field_map.get("device_record.production_identifier"),

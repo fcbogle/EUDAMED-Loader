@@ -429,7 +429,7 @@ class CanonicalValidationService:
                 xml_required=True,
             ),
             self._field(
-                canonical_path="basic_device.reusable",
+                canonical_path="basic_device.reusable_surgical_instrument",
                 business_label="Reusable",
                 value=self._normalized_boolean(reference_row.reusable_surgical_instrument),
                 source="basic_udi_reference",
@@ -453,7 +453,7 @@ class CanonicalValidationService:
                 xml_required=True,
             ),
             self._field(
-                canonical_path="basic_device.administering_medicine",
+                canonical_path="basic_device.administering_medicinal_product",
                 business_label="Administering Medicine",
                 value=self._normalized_boolean(reference_row.administering_medicinal_product),
                 source="basic_udi_reference",
@@ -494,7 +494,7 @@ class CanonicalValidationService:
                 required=False,
             ),
             self._field(
-                canonical_path="basic_device.type",
+                canonical_path="basic_device.device_type",
                 business_label="Basic Device Type",
                 value=self._device_type(reference_row.device_type),
                 source="basic_udi_reference",

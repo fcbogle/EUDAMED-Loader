@@ -368,7 +368,7 @@ field_reviews:
       status: accepted_with_note
       rationale: Included in the XML-facing canonical review so medicinal-product applicability remains visible to QMS.
   - mapping:
-      canonical_path: basic_device.type
+      canonical_path: basic_device.device_type
       business_label: Basic Device Type
       classification: derived
       derivation_logic: Resolve from `MDR-Basic!Type`.
@@ -396,7 +396,7 @@ field_reviews:
       status: accepted_with_note
       rationale: Included in the wider XML-facing canonical review.
   - mapping:
-      canonical_path: basic_device.administering_medicine
+      canonical_path: basic_device.administering_medicinal_product
       business_label: Administering Medicine
       classification: derived
       derivation_logic: Resolve from `MDR-Basic!Administers or/and Removes Medicine`.
@@ -438,7 +438,7 @@ field_reviews:
       status: accepted_with_note
       rationale: Included in the wider XML-facing canonical review.
   - mapping:
-      canonical_path: basic_device.reusable
+      canonical_path: basic_device.reusable_surgical_instrument
       business_label: Reusable
       classification: derived
       derivation_logic: Resolve from `MDR-Basic!Reusable`.
