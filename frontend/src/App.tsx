@@ -1009,6 +1009,50 @@ export function App() {
   const selectedSchemaLabel = selectedBatchValidation
     ? formatSchemaPathForInlineNote(selectedBatchValidation.schema_path)
     : null;
+  const xmlModeLabel =
+    xmlMode === "pair"
+      ? "Post + Patch"
+      : xmlMode === "single"
+        ? "Single XML"
+        : xmlMode === "marketInfo"
+          ? "Market Info"
+          : "Batch XML";
+  const xmlModeDescription =
+    xmlMode === "pair"
+      ? "Generate a create/update comparison for one XML-ready device record."
+      : xmlMode === "single"
+        ? "Generate one wrapped Push message for a selected XML-ready device record."
+        : xmlMode === "marketInfo"
+          ? "Generate one standalone MARKET_INFO.PUT message for a selected XML-ready record."
+          : "Generate a chunked batch package for every XML-ready row in the selected variant.";
+  const xmlWorkspaceTitle =
+    xmlMode === "pair"
+      ? "Comparison Workspace"
+      : xmlMode === "single"
+        ? "Single Record Workspace"
+        : xmlMode === "marketInfo"
+          ? "Market Info Workspace"
+          : "Batch Workspace";
+  const activePreviewLabel =
+    xmlMode === "pair"
+      ? pairPreviewView === "post"
+        ? "Post"
+        : "Patch"
+      : xmlMode === "single"
+        ? "Single XML"
+        : xmlMode === "marketInfo"
+          ? "Market Info"
+          : `Batch Chunk ${selectedXmlChunkSequence}`;
+  const activePreviewFileName =
+    xmlMode === "pair"
+      ? pairPreviewView === "post"
+        ? xmlPairPreview?.post_file_name ?? null
+        : xmlPairPreview?.patch_file_name ?? null
+      : xmlMode === "single"
+        ? xmlPreview?.file_name ?? null
+        : xmlMode === "marketInfo"
+          ? xmlMarketInfoPreview?.file_name ?? null
+          : xmlBatchPreview?.selected_chunk_file_name ?? null;
   const profileColumns = sheetProfile?.columns ?? [];
   const highNullColumns = profileColumns.filter((column) => {
     if (!sheetProfile?.data_rows) {
@@ -2632,24 +2676,8 @@ export function App() {
             </div>
             <div className="summary-card">
               <span className="summary-label">Current mode</span>
-              <strong>
-                {xmlMode === "pair"
-                  ? "POST + Equivalent PATCH"
-                  : xmlMode === "single"
-                    ? "Single XML"
-                    : xmlMode === "marketInfo"
-                      ? "MARKET_INFO.PUT"
-                      : "Variant Batch XML"}
-              </strong>
-              <p>
-                {xmlMode === "pair"
-                  ? "Generate an accepted-shape DEVICE.POST and an equivalent first UDI_DI.PATCH for the same device."
-                  : xmlMode === "single"
-                    ? "The generic XML path runs per product variant and generates one wrapped `Push` message for an auto-selected sample row."
-                    : xmlMode === "marketInfo"
-                      ? "Generate a standalone MARKET_INFO.PUT wrapped `Push` message for one XML-ready device record."
-                      : "Variant Batch XML chunks all XML-ready rows for the selected variant into schema-validated batch files."}
-              </p>
+              <strong>{xmlModeLabel}</strong>
+              <p>{xmlModeDescription}</p>
             </div>
           </section>
 
@@ -2750,29 +2778,21 @@ export function App() {
             </div>
           </section>
 
-          <section className="content-grid xml-mode-layout">
-            <div className="panel xml-workspace-panel xml-equal-panel xml-middle-panel">
-              <div className="section-heading">
-                <div>
-                  <span className="section-kicker">
-                    {xmlMode === "pair"
-                      ? "POST + Equivalent PATCH"
-                      : xmlMode === "single"
-                        ? "Single XML"
-                        : xmlMode === "marketInfo"
-                          ? "MARKET_INFO.PUT"
-                          : "Variant Batch XML"}
-                  </span>
-                  <h2>Generation Workspace</h2>
-                </div>
+          <section className="panel xml-full-workspace-panel">
+            <div className="section-heading">
+              <div>
+                <span className="section-kicker">XML Workspace</span>
+                <h2>{xmlWorkspaceTitle}</h2>
               </div>
-              <div className="xml-mode-toggle">
+            </div>
+            <div className="xml-header-band">
+              <div className="xml-mode-toggle xml-top-tabs">
                 <button
                   className={xmlMode === "pair" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
                   type="button"
                   onClick={() => setXmlMode("pair")}
                 >
-                  POST + Equivalent PATCH
+                  Post + Patch
                 </button>
                 <button
                   className={xmlMode === "single" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
@@ -2786,415 +2806,410 @@ export function App() {
                   type="button"
                   onClick={() => setXmlMode("marketInfo")}
                 >
-                  MARKET_INFO.PUT
+                  Market Info
                 </button>
                 <button
                   className={xmlMode === "batch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
                   type="button"
                   onClick={() => setXmlMode("batch")}
                 >
-                  Variant Batch XML
+                  Batch XML
                 </button>
               </div>
-              {xmlMode === "pair" ? (
-                selectedXmlPairRecord ? (
-                  <div className="draft-list">
-                    <div className="draft-card">
-                      <div className="draft-card-head">
-                        <strong>{selectedXmlPairRecord.catalogue_number}</strong>
-                        <span className="status-pill ok compact">POST source</span>
-                      </div>
-                      <p className="draft-meta">
-                        {selectedXmlPairRecord.product_family} / {selectedXmlPairRecord.product_variant}
-                      </p>
-                      <p className="panel-copy">{selectedXmlPairRecord.trade_name ?? "No trade name"}</p>
-                      <p className="panel-copy">
-                        UDI-DI {selectedXmlPairRecord.primary_udi_di} · Issuing entity {selectedXmlPairRecord.issuing_entity ?? "Unknown"}
-                      </p>
-                      <p className="panel-copy">
-                        This mode generates an accepted-shape `DEVICE.POST` plus an equivalent first `UDI_DI.PATCH` for the exact same device.
-                      </p>
-                      <div className="family-scope-pill-row">
-                        <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                          POST {pairPostValidation ? (pairPostValidation.valid ? "valid" : "invalid") : "awaiting preview"}
-                        </span>
-                        <span className={pairPatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                          PATCH {pairPatchValidation ? (pairPatchValidation.valid ? "valid" : "invalid") : "awaiting preview"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="panel-copy">No XML-ready POST record is currently available for paired POST/PATCH generation for the selected family and variant.</p>
-                )
-              ) : xmlMode === "single" ? (
-                selectedXmlRecord ? (
-                  <div className="draft-list">
-                    <div className="draft-card">
-                      <div className="draft-card-head">
-                        <strong>{selectedXmlRecord.catalogue_number}</strong>
-                        <span className="status-pill ok compact">{selectedXmlRecord.submission_operation ?? "No operation"}</span>
-                      </div>
-                      <p className="draft-meta">
-                        {selectedXmlRecord.product_family} / {selectedXmlRecord.product_variant}
-                      </p>
-                      <p className="panel-copy">{selectedXmlRecord.trade_name ?? "No trade name"}</p>
-                      <p className="panel-copy">
-                        UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
-                      </p>
-                      <p className="panel-copy">
-                        Sample row selected automatically from the chosen variant's XML-ready records.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="panel-copy">No XML-ready sample row is currently available for the selected family and variant.</p>
-                )
-              ) : xmlMode === "marketInfo" ? (
-                selectedXmlRecord ? (
-                  <div className="draft-list">
-                    <div className="draft-card">
-                      <div className="draft-card-head">
-                        <strong>{selectedXmlRecord.catalogue_number}</strong>
-                        <span className="status-pill ok compact">MARKET_INFO.PUT</span>
-                      </div>
-                      <p className="draft-meta">
-                        {selectedXmlRecord.product_family} / {selectedXmlRecord.product_variant}
-                      </p>
-                      <p className="panel-copy">{selectedXmlRecord.trade_name ?? "No trade name"}</p>
-                      <p className="panel-copy">
-                        UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
-                      </p>
-                      <p className="panel-copy">
-                        This mode generates a standalone market information update message for the selected XML-ready record using its current marketInfos collection.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="panel-copy">No XML-ready sample row is currently available for MARKET_INFO.PUT generation for the selected family and variant.</p>
-                )
-              ) : selectedXmlVariantSummary ? (
-                <div className="draft-list">
-                  <div className="draft-card">
-                    <div className="draft-card-head">
-                      <strong>{selectedXmlVariantSummary.product_variant}</strong>
-                      <span className="status-pill ok compact">{selectedXmlVariantSummary.submission_operation ?? "No operation"}</span>
-                    </div>
-                    <p className="draft-meta">
-                      {selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}
-                    </p>
-                    <p className="panel-copy">
-                      {selectedXmlVariantSummary.xml_ready_records} XML-ready rows will be grouped into {selectedXmlVariantChunkCount} batch file
-                      {selectedXmlVariantChunkCount === 1 ? "" : "s"} at up to 300 rows per file.
-                    </p>
-                    <p className="panel-copy">
-                      {selectedXmlVariantSummary.xml_blocked_records} row{selectedXmlVariantSummary.xml_blocked_records === 1 ? "" : "s"} remain excluded until resolved.
-                    </p>
-                    <label className="field-label" htmlFor="xml-batch-chunk-sequence">
-                      Preview batch chunk
-                    </label>
-                    <select
-                      id="xml-batch-chunk-sequence"
-                      className="rule-select"
-                      value={selectedXmlChunkSequence}
-                      onChange={(event) => setSelectedXmlChunkSequence(Number(event.target.value))}
-                    >
-                      {Array.from({ length: selectedXmlVariantChunkCount }, (_, index) => index + 1).map((sequence) => (
-                        <option key={sequence} value={sequence}>
-                          Chunk {sequence} of {selectedXmlVariantChunkCount}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              <div className="xml-header-context">
+                <div className="xml-header-context-block">
+                  <span className="summary-label">Purpose</span>
+                  <strong>{xmlModeLabel}</strong>
+                  <p>{xmlModeDescription}</p>
                 </div>
-              ) : (
-                <p className="panel-copy">No XML-ready variant batch is currently available for the selected family and variant.</p>
-              )}
-              <div className="draft-actions-bar">
-                <button
-                  className="action-button"
-                  type="button"
-                  onClick={() => void generateXmlPreview()}
-                  disabled={
-                    (xmlMode === "pair" && !selectedXmlPairRecord) ||
-                    (xmlMode === "single" && !selectedXmlRecord) ||
-                    (xmlMode === "marketInfo" && !selectedXmlRecord) ||
-                    !selectedXmlVariantSummary ||
-                    isGeneratingXml
-                  }
-                >
-                  {isGeneratingXml
-                    ? "Generating..."
-                    : xmlMode === "pair"
-                      ? "Generate POST + PATCH"
-                      : xmlMode === "single"
-                        ? "Generate XML"
-                        : xmlMode === "marketInfo"
-                          ? "Generate MARKET_INFO.PUT"
-                        : "Generate Batch Preview"}
-                </button>
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => void generateXmlPreview()}
-                  disabled={
-                    (xmlMode === "pair" && !selectedXmlPairRecord) ||
-                    (xmlMode === "single" && !selectedXmlRecord) ||
-                    (xmlMode === "marketInfo" && !selectedXmlRecord) ||
-                    !selectedXmlVariantSummary ||
-                    isGeneratingXml
-                  }
-                >
-                  Validate Against XSD
-                </button>
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => void downloadXmlRecord()}
-                  disabled={
-                    (xmlMode === "pair" && !selectedXmlPairRecord) ||
-                    (xmlMode === "single" && !selectedXmlRecord) ||
-                    (xmlMode === "marketInfo" && !selectedXmlRecord) ||
-                    !selectedXmlVariantSummary ||
-                    isGeneratingXml
-                  }
-                >
-                  {xmlMode === "pair"
-                    ? "Download Pair Package"
-                    : xmlMode === "single"
-                      ? "Download XML"
-                      : xmlMode === "marketInfo"
-                        ? "Download MARKET_INFO.PUT"
-                        : "Download Batch Package"}
-                </button>
-              </div>
-              <div className="workflow-note">
-                <strong>
-                  {xmlMode === "pair"
-                    ? "Paired POST/PATCH review"
-                    : xmlMode === "single"
-                      ? "Single-record review"
-                      : xmlMode === "marketInfo"
-                        ? "Standalone market-info review"
-                        : "Variant-batch scope"}
-                </strong>
-                <span>
-                  {xmlMode === "pair"
-                    ? "Use one current POST-classified device to compare an accepted-shape POST against an equivalent first PATCH with e:version = 2."
-                    : xmlMode === "single"
-                      ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
-                      : xmlMode === "marketInfo"
-                        ? "Use one XML-ready record to inspect the standalone MARKET_INFO.PUT wrapper and its current marketInfos collection."
-                        : "Batch generation remains strictly within the selected product variant and only includes XML-ready rows."}
-                </span>
+                <div className="xml-header-context-block">
+                  <span className="summary-label">Schema Set</span>
+                  <strong>Message.xsd envelope</strong>
+                  <p>{selectedSchemaLabel ?? "Wrapped EUDAMED service-message validation will appear after preview generation."}</p>
+                </div>
+                <div className="xml-header-context-block">
+                  <span className="summary-label">Current Scope</span>
+                  <strong>{selectedXmlFamilySummary?.product_family ?? "No family selected"}</strong>
+                  <p>{selectedXmlVariantSummary?.product_variant ?? "No variant selected"}</p>
+                </div>
               </div>
             </div>
-
-            <div className="panel xml-preview-panel xml-equal-panel xml-middle-panel">
-              <div className="section-heading">
-                <div>
-                  <span className="section-kicker">Preview</span>
-                  <h2>
-                    {xmlMode === "pair"
-                      ? "Paired XML Preview"
-                      : xmlMode === "single"
-                        ? "Single Record XML Preview"
-                        : xmlMode === "marketInfo"
-                          ? "MARKET_INFO.PUT Preview"
-                          : "Variant Batch XML Preview"}
-                  </h2>
-                </div>
-              </div>
-              {xmlMode === "pair" ? (
-                <div className="xml-mode-toggle">
-                  <button
-                    className={pairPreviewView === "post" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                    type="button"
-                    onClick={() => setPairPreviewView("post")}
-                  >
-                    View POST
-                  </button>
-                  <button
-                    className={pairPreviewView === "patch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                    type="button"
-                    onClick={() => setPairPreviewView("patch")}
-                  >
-                    View PATCH
-                  </button>
-                </div>
-              ) : null}
-              <pre className="xml-preview-block">
-                <code>{xmlPreviewLines}</code>
-              </pre>
-              <div className="workflow-note">
-                <strong>Preview status</strong>
-                <span>
-                  {xmlMode === "pair"
-                    ? xmlPairPreview
-                      ? `Pair preview generated for ${xmlPairPreview.product_family} / ${xmlPairPreview.product_variant} / ${xmlPairPreview.catalogue_number}. Currently showing ${pairPreviewView.toUpperCase()}.`
-                      : "No paired XML preview generated yet for the selected row."
-                    : xmlMode === "single"
-                      ? xmlPreview
-                        ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
-                        : "No XML preview generated yet for the selected row."
-                      : xmlMode === "marketInfo"
-                        ? xmlMarketInfoPreview
-                          ? `MARKET_INFO.PUT preview generated for ${xmlMarketInfoPreview.product_family} / ${xmlMarketInfoPreview.product_variant} / ${xmlMarketInfoPreview.catalogue_number}.`
-                          : "No MARKET_INFO.PUT preview generated yet for the selected row."
-                    : xmlBatchPreview
-                      ? `Batch preview generated for ${xmlBatchPreview.product_family} / ${xmlBatchPreview.product_variant}, chunk ${xmlBatchPreview.selected_chunk_sequence}.`
-                      : "No batch XML preview generated yet for the selected variant."}
-                </span>
-              </div>
-            </div>
-          </section>
-
-          <section className="content-grid xml-mode-layout">
-            <div className="panel xml-equal-panel xml-bottom-panel xml-validation-bottom-panel">
-              <div className="section-heading">
-                <div>
-                  <span className="section-kicker">Validation</span>
-                  <h2>XSD Validation Workspace</h2>
-                </div>
-              </div>
-              <div className="draft-list">
-                <div className="draft-card">
-                  <div className="draft-card-head">
-                    <strong>Schema target</strong>
-                    <span className="status-pill ok compact">Message.xsd</span>
+            <div className="xml-focus-layout">
+              <div className="xml-preview-surface">
+                <div className="section-heading xml-preview-heading">
+                  <div>
+                    <span className="section-kicker">Preview</span>
+                    <h2>
+                      {xmlMode === "pair"
+                        ? "Post + Patch Preview"
+                        : xmlMode === "single"
+                          ? "Single Record XML Preview"
+                          : xmlMode === "marketInfo"
+                            ? "Market Info Preview"
+                            : "Batch XML Preview"}
+                    </h2>
                   </div>
-                  <p className="panel-copy">
-                    Generated XML is validated against the wrapped EUDAMED service-message schema set rooted at `Message.xsd`.
-                  </p>
+                  {xmlMode === "pair" ? (
+                    <div className="xml-mode-toggle xml-sub-tabs xml-compare-toggle">
+                      <button
+                        className={pairPreviewView === "post" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
+                        type="button"
+                        onClick={() => setPairPreviewView("post")}
+                      >
+                        Post
+                      </button>
+                      <button
+                        className={pairPreviewView === "patch" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
+                        type="button"
+                        onClick={() => setPairPreviewView("patch")}
+                      >
+                        Patch
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
-                <div className="draft-card">
-                  <div className="draft-card-head">
-                    <strong>{xmlMode === "pair" ? "Active preview validation" : "Validation output"}</strong>
+                <div className="xml-preview-meta">
+                  <div className="xml-preview-meta-block">
+                    <span className="summary-label">Active view</span>
+                    <strong>{activePreviewLabel}</strong>
+                  </div>
+                  <div className="xml-preview-meta-block">
+                    <span className="summary-label">Validation</span>
                     <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                      {selectedBatchValidation
-                        ? selectedBatchValidation.valid
-                          ? "Schema valid"
-                        : "Schema invalid"
-                        : "Awaiting preview"}
+                      {validationStatusLabel}
                     </span>
                   </div>
-                  {selectedBatchValidation ? (
-                    <>
-                      <p className="panel-copy">{selectedBatchValidation.schema_path}</p>
-                      {selectedBatchValidation.errors.length ? (
-                        <div className="roadmap-list">
-                          {selectedBatchValidation.errors.slice(0, 5).map((issue, index) => (
-                            <div className="roadmap-item" key={`${issue.line ?? 0}-${issue.column ?? 0}-${index}`}>
-                              <strong>
-                                Line {issue.line ?? "?"}, column {issue.column ?? "?"}
-                              </strong>
-                              <p>{issue.message}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="panel-copy">
-                          {xmlMode === "pair"
-                            ? `The generated ${pairPreviewView.toUpperCase()} preview validates cleanly.`
-                            : xmlMode === "single"
-                              ? "The generated single-record Push message validates cleanly."
-                              : xmlMode === "marketInfo"
-                                ? "The generated MARKET_INFO.PUT Push message validates cleanly."
-                                : "The generated variant-batch Push message validates cleanly."}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="panel-copy">
-                      {xmlMode === "pair"
-                        ? "Generate a paired preview to inspect the POST and PATCH schema validation outcomes."
+                  <div className="xml-preview-meta-block">
+                    <span className="summary-label">Schema</span>
+                    <strong>{selectedSchemaLabel ?? "Message.xsd pending"}</strong>
+                  </div>
+                  <div className="xml-preview-meta-block">
+                    <span className="summary-label">File</span>
+                    <strong>{activePreviewFileName ?? "Not generated yet"}</strong>
+                  </div>
+                </div>
+                <pre className="xml-preview-block">
+                  <code>{xmlPreviewLines}</code>
+                </pre>
+                <div className="workflow-note">
+                  <strong>Preview status</strong>
+                  <span>
+                    {xmlMode === "pair"
+                      ? xmlPairPreview
+                        ? `Pair preview generated for ${xmlPairPreview.product_family} / ${xmlPairPreview.product_variant} / ${xmlPairPreview.catalogue_number}. Currently showing ${pairPreviewView.toUpperCase()}.`
+                        : "No paired XML preview generated yet for the selected row."
+                      : xmlMode === "single"
+                        ? xmlPreview
+                          ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
+                          : "No XML preview generated yet for the selected row."
+                        : xmlMode === "marketInfo"
+                          ? xmlMarketInfoPreview
+                            ? `MARKET_INFO.PUT preview generated for ${xmlMarketInfoPreview.product_family} / ${xmlMarketInfoPreview.product_variant} / ${xmlMarketInfoPreview.catalogue_number}.`
+                            : "No MARKET_INFO.PUT preview generated yet for the selected row."
+                          : xmlBatchPreview
+                            ? `Batch preview generated for ${xmlBatchPreview.product_family} / ${xmlBatchPreview.product_variant}, chunk ${xmlBatchPreview.selected_chunk_sequence}.`
+                            : "No batch XML preview generated yet for the selected variant."}
+                  </span>
+                </div>
+              </div>
+
+              <div className="xml-sidebar-surface">
+                <div className="draft-actions-bar xml-actions-bar">
+                  <button
+                    className="action-button"
+                    type="button"
+                    onClick={() => void generateXmlPreview()}
+                    disabled={
+                      (xmlMode === "pair" && !selectedXmlPairRecord) ||
+                      (xmlMode === "single" && !selectedXmlRecord) ||
+                      (xmlMode === "marketInfo" && !selectedXmlRecord) ||
+                      !selectedXmlVariantSummary ||
+                      isGeneratingXml
+                    }
+                  >
+                    {isGeneratingXml
+                      ? "Generating..."
+                      : xmlMode === "pair"
+                        ? "Generate Post + Patch"
                         : xmlMode === "single"
-                          ? "Generate a single-record preview to inspect the schema validation outcome."
+                          ? "Generate XML"
                           : xmlMode === "marketInfo"
-                            ? "Generate a MARKET_INFO.PUT preview to inspect the schema validation outcome."
-                            : "Generate a variant-batch preview to inspect the schema validation outcome."}
-                    </p>
-                  )}
+                            ? "Generate Market Info"
+                            : "Generate Batch Preview"}
+                  </button>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => void generateXmlPreview()}
+                    disabled={
+                      (xmlMode === "pair" && !selectedXmlPairRecord) ||
+                      (xmlMode === "single" && !selectedXmlRecord) ||
+                      (xmlMode === "marketInfo" && !selectedXmlRecord) ||
+                      !selectedXmlVariantSummary ||
+                      isGeneratingXml
+                    }
+                  >
+                    Validate Against XSD
+                  </button>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => void downloadXmlRecord()}
+                    disabled={
+                      (xmlMode === "pair" && !selectedXmlPairRecord) ||
+                      (xmlMode === "single" && !selectedXmlRecord) ||
+                      (xmlMode === "marketInfo" && !selectedXmlRecord) ||
+                      !selectedXmlVariantSummary ||
+                      isGeneratingXml
+                    }
+                  >
+                    {xmlMode === "pair"
+                      ? "Download Pair Package"
+                      : xmlMode === "single"
+                        ? "Download XML"
+                        : xmlMode === "marketInfo"
+                          ? "Download Market Info"
+                          : "Download Batch Package"}
+                  </button>
                 </div>
                 {xmlMode === "pair" ? (
-                  <>
-                    <div className="draft-card">
-                      <div className="draft-card-head">
-                        <strong>POST validation</strong>
-                        <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                          {pairPostValidation ? (pairPostValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
-                        </span>
-                      </div>
-                      <p className="panel-copy">{pairPostValidation?.schema_path ?? "Generate a pair preview to validate the POST XML."}</p>
-                    </div>
-                    <div className="draft-card">
-                      <div className="draft-card-head">
-                        <strong>PATCH validation</strong>
-                        <span className={pairPatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                          {pairPatchValidation ? (pairPatchValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
-                        </span>
-                      </div>
-                      <p className="panel-copy">{pairPatchValidation?.schema_path ?? "Generate a pair preview to validate the equivalent PATCH XML."}</p>
-                    </div>
-                  </>
-                ) : null}
-                {xmlMode === "batch" && xmlBatchPreview ? (
-                  <div className="draft-card">
-                    <div className="draft-card-head">
-                      <strong>Batch chunk summary</strong>
-                      <span className="status-pill ok compact">
-                        {xmlBatchPreview.chunk_count} chunk{xmlBatchPreview.chunk_count === 1 ? "" : "s"}
-                      </span>
-                    </div>
-                    <p className="panel-copy">
-                      Selected file: {xmlBatchPreview.selected_chunk_file_name} · {xmlBatchPreview.selected_chunk_record_count} rows
-                    </p>
-                    <div className="roadmap-list">
-                      {xmlBatchPreview.chunks.slice(0, 6).map((chunk) => (
-                        <div className="roadmap-item" key={chunk.file_name}>
-                          <strong>{chunk.file_name}</strong>
-                          <p>
-                            {chunk.record_count} rows · {chunk.first_catalogue_number ?? "?"} to {chunk.last_catalogue_number ?? "?"}
-                          </p>
+                  selectedXmlPairRecord ? (
+                    <div className="draft-list xml-record-stack">
+                      <div className="draft-card xml-record-card">
+                        <div className="draft-card-head">
+                          <strong>{selectedXmlPairRecord.catalogue_number}</strong>
+                          <span className="status-pill ok compact">Post source</span>
                         </div>
-                      ))}
+                        <p className="draft-meta">
+                          {selectedXmlPairRecord.product_family} / {selectedXmlPairRecord.product_variant}
+                        </p>
+                        <p className="panel-copy">{selectedXmlPairRecord.trade_name ?? "No trade name"}</p>
+                        <p className="panel-copy">
+                          UDI-DI {selectedXmlPairRecord.primary_udi_di} · Issuing entity {selectedXmlPairRecord.issuing_entity ?? "Unknown"}
+                        </p>
+                        <p className="panel-copy">
+                          Compare an accepted-shape create message with the equivalent first update message for the same device record.
+                        </p>
+                        <div className="family-scope-pill-row xml-status-row">
+                          <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                            Post {pairPostValidation ? (pairPostValidation.valid ? "valid" : "invalid") : "awaiting preview"}
+                          </span>
+                          <span className={pairPatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                            Patch {pairPatchValidation ? (pairPatchValidation.valid ? "valid" : "invalid") : "awaiting preview"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="panel-copy">No XML-ready POST record is currently available for paired POST/PATCH generation for the selected family and variant.</p>
+                  )
+                ) : xmlMode === "single" ? (
+                  selectedXmlRecord ? (
+                    <div className="draft-list xml-record-stack">
+                      <div className="draft-card xml-record-card">
+                        <div className="draft-card-head">
+                          <strong>{selectedXmlRecord.catalogue_number}</strong>
+                          <span className="status-pill ok compact">{selectedXmlRecord.submission_operation ?? "No operation"}</span>
+                        </div>
+                        <p className="draft-meta">
+                          {selectedXmlRecord.product_family} / {selectedXmlRecord.product_variant}
+                        </p>
+                        <p className="panel-copy">{selectedXmlRecord.trade_name ?? "No trade name"}</p>
+                        <p className="panel-copy">
+                          UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
+                        </p>
+                        <p className="panel-copy">
+                          Review one XML-ready sample row before moving to batch generation.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="panel-copy">No XML-ready sample row is currently available for the selected family and variant.</p>
+                  )
+                ) : xmlMode === "marketInfo" ? (
+                  selectedXmlRecord ? (
+                    <div className="draft-list xml-record-stack">
+                      <div className="draft-card xml-record-card">
+                        <div className="draft-card-head">
+                          <strong>{selectedXmlRecord.catalogue_number}</strong>
+                          <span className="status-pill ok compact">Market info</span>
+                        </div>
+                        <p className="draft-meta">
+                          {selectedXmlRecord.product_family} / {selectedXmlRecord.product_variant}
+                        </p>
+                        <p className="panel-copy">{selectedXmlRecord.trade_name ?? "No trade name"}</p>
+                        <p className="panel-copy">
+                          UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
+                        </p>
+                        <p className="panel-copy">
+                          Review a standalone market information update message using the record's current `marketInfos` collection.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="panel-copy">No XML-ready sample row is currently available for MARKET_INFO.PUT generation for the selected family and variant.</p>
+                  )
+                ) : selectedXmlVariantSummary ? (
+                  <div className="draft-list xml-record-stack">
+                    <div className="draft-card xml-record-card">
+                      <div className="draft-card-head">
+                        <strong>{selectedXmlVariantSummary.product_variant}</strong>
+                        <span className="status-pill ok compact">{selectedXmlVariantSummary.submission_operation ?? "No operation"}</span>
+                      </div>
+                      <p className="draft-meta">
+                        {selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}
+                      </p>
+                      <p className="panel-copy">
+                        {selectedXmlVariantSummary.xml_ready_records} XML-ready rows will be grouped into {selectedXmlVariantChunkCount} batch file
+                        {selectedXmlVariantChunkCount === 1 ? "" : "s"} at up to 300 rows per file.
+                      </p>
+                      <p className="panel-copy">
+                        {selectedXmlVariantSummary.xml_blocked_records} row{selectedXmlVariantSummary.xml_blocked_records === 1 ? "" : "s"} remain excluded until resolved.
+                      </p>
+                      <label className="field-label" htmlFor="xml-batch-chunk-sequence">
+                        Preview batch chunk
+                      </label>
+                      <select
+                        id="xml-batch-chunk-sequence"
+                        className="rule-select"
+                        value={selectedXmlChunkSequence}
+                        onChange={(event) => setSelectedXmlChunkSequence(Number(event.target.value))}
+                      >
+                        {Array.from({ length: selectedXmlVariantChunkCount }, (_, index) => index + 1).map((sequence) => (
+                          <option key={sequence} value={sequence}>
+                            Chunk {sequence} of {selectedXmlVariantChunkCount}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="panel xml-equal-panel xml-bottom-panel xml-handoff-bottom-panel">
-              <div className="section-heading">
-                <div>
-                  <span className="section-kicker">Guide</span>
-                  <h2>Recommended XML Workflow</h2>
+                ) : (
+                  <p className="panel-copy">No XML-ready variant batch is currently available for the selected family and variant.</p>
+                )}
+                <div className="workflow-note">
+                  <strong>
+                    {xmlMode === "pair"
+                      ? "Paired POST/PATCH review"
+                      : xmlMode === "single"
+                        ? "Single-record review"
+                        : xmlMode === "marketInfo"
+                          ? "Standalone market-info review"
+                          : "Variant-batch scope"}
+                  </strong>
+                  <span>
+                    {xmlMode === "pair"
+                      ? "Use one current POST-classified device to compare an accepted-shape POST against an equivalent first PATCH with e:version = 2."
+                      : xmlMode === "single"
+                        ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
+                        : xmlMode === "marketInfo"
+                          ? "Use one XML-ready record to inspect the standalone MARKET_INFO.PUT wrapper and its current marketInfos collection."
+                          : "Batch generation remains strictly within the selected product variant and only includes XML-ready rows."}
+                  </span>
                 </div>
-              </div>
-              <div className="roadmap-list">
-                <div className="roadmap-item">
-                  <strong>1. Validate Canonical</strong>
-                  <p>Confirm the selected family and variant have XML-ready rows before entering XML generation.</p>
-                </div>
-                <div className="roadmap-item">
-                  <strong>2. Select Product Family And Variant</strong>
-                  <p>Choose the exact product variant that will own the XML generation scope.</p>
-                </div>
-                <div className="roadmap-item">
-                  <strong>3. Generate Single XML</strong>
-                  <p>Start with one XML-ready record to confirm payload shape and mapped values.</p>
-                </div>
-                <div className="roadmap-item">
-                  <strong>4. Validate Against Schema</strong>
-                  <p>Validate the wrapped Push message before any download or later variant-batch run.</p>
-                </div>
-                <div className="roadmap-item">
-                  <strong>5. Download XML Output</strong>
-                  <p>Download either the reviewed single-record file or the selected variant batch package.</p>
-                </div>
-                <div className="roadmap-item">
-                  <strong>6. Review Variant Batch</strong>
-                  <p>Use batch preview for the same selected variant only, with no mixed-family or mixed-variant XML payloads.</p>
+                <div className="draft-list xml-validation-stack">
+                  <div className="draft-card">
+                    <div className="draft-card-head">
+                      <strong>Schema target</strong>
+                      <span className="status-pill ok compact">Message.xsd</span>
+                    </div>
+                    <p className="panel-copy">
+                      Generated XML is validated against the wrapped EUDAMED service-message schema set rooted at `Message.xsd`.
+                    </p>
+                  </div>
+                  <div className="draft-card">
+                    <div className="draft-card-head">
+                      <strong>{xmlMode === "pair" ? "Active preview validation" : "Validation output"}</strong>
+                      <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                        {selectedBatchValidation
+                          ? selectedBatchValidation.valid
+                            ? "Schema valid"
+                            : "Schema invalid"
+                          : "Awaiting preview"}
+                      </span>
+                    </div>
+                    {selectedBatchValidation ? (
+                      <>
+                        <p className="panel-copy">{selectedBatchValidation.schema_path}</p>
+                        {selectedBatchValidation.errors.length ? (
+                          <div className="roadmap-list">
+                            {selectedBatchValidation.errors.slice(0, 5).map((issue, index) => (
+                              <div className="roadmap-item" key={`${issue.line ?? 0}-${issue.column ?? 0}-${index}`}>
+                                <strong>
+                                  Line {issue.line ?? "?"}, column {issue.column ?? "?"}
+                                </strong>
+                                <p>{issue.message}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="panel-copy">
+                            {xmlMode === "pair"
+                              ? `The generated ${pairPreviewView.toUpperCase()} preview validates cleanly.`
+                              : xmlMode === "single"
+                                ? "The generated single-record Push message validates cleanly."
+                                : xmlMode === "marketInfo"
+                                  ? "The generated MARKET_INFO.PUT Push message validates cleanly."
+                                  : "The generated variant-batch Push message validates cleanly."}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="panel-copy">
+                        {xmlMode === "pair"
+                          ? "Generate a paired preview to inspect the POST and PATCH schema validation outcomes."
+                          : xmlMode === "single"
+                            ? "Generate a single-record preview to inspect the schema validation outcome."
+                            : xmlMode === "marketInfo"
+                              ? "Generate a MARKET_INFO.PUT preview to inspect the schema validation outcome."
+                              : "Generate a variant-batch preview to inspect the schema validation outcome."}
+                      </p>
+                    )}
+                  </div>
+                  {xmlMode === "pair" ? (
+                    <>
+                      <div className="draft-card">
+                        <div className="draft-card-head">
+                          <strong>POST validation</strong>
+                          <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                            {pairPostValidation ? (pairPostValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
+                          </span>
+                        </div>
+                        <p className="panel-copy">{pairPostValidation?.schema_path ?? "Generate a pair preview to validate the POST XML."}</p>
+                      </div>
+                      <div className="draft-card">
+                        <div className="draft-card-head">
+                          <strong>PATCH validation</strong>
+                          <span className={pairPatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                            {pairPatchValidation ? (pairPatchValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
+                          </span>
+                        </div>
+                        <p className="panel-copy">{pairPatchValidation?.schema_path ?? "Generate a pair preview to validate the equivalent PATCH XML."}</p>
+                      </div>
+                    </>
+                  ) : null}
+                  {xmlMode === "batch" && xmlBatchPreview ? (
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>Batch chunk summary</strong>
+                        <span className="status-pill ok compact">
+                          {xmlBatchPreview.chunk_count} chunk{xmlBatchPreview.chunk_count === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <p className="panel-copy">
+                        Selected file: {xmlBatchPreview.selected_chunk_file_name} · {xmlBatchPreview.selected_chunk_record_count} rows
+                      </p>
+                      <div className="roadmap-list">
+                        {xmlBatchPreview.chunks.slice(0, 6).map((chunk) => (
+                          <div className="roadmap-item" key={chunk.file_name}>
+                            <strong>{chunk.file_name}</strong>
+                            <p>
+                              {chunk.record_count} rows · {chunk.first_catalogue_number ?? "?"} to {chunk.last_catalogue_number ?? "?"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>

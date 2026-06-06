@@ -122,6 +122,28 @@ The following questions should be explicitly answered by QMS or the business own
 - Is the first-equivalent `PATCH` only a technical regression scenario, or should it become part of a real business workflow?
 - Which update scenarios are important enough to become named regression tests in the project?
 
+## Open Requirement: Record-Level PATCH Targeting
+
+One additional open requirement sits behind any future standalone `PATCH` workflow:
+
+- does the intended operating model require users to generate or inspect update messages for individually selected UDI-DI records across the full validated population, rather than only through family/variant-scoped review and batch workflows?
+
+This matters because the current XML workspace is variant-scoped. It supports:
+
+- representative single-record review
+- paired `POST` / equivalent `PATCH` comparison
+- variant-scoped batch generation
+
+It does **not** yet provide direct access to every potential update target across the full current dataset of more than 8,000 distinct UDI-DI records.
+
+If QMS confirms that direct record-level targeting is required, the likely UI consequence is:
+
+- searchable selection by `UDI-DI`
+- searchable selection by `catalogue_number`
+- possibly additional search by trade name or related business reference
+
+If QMS does **not** confirm this requirement, then the current family/variant-scoped XML workflow may remain sufficient and no large record-search UI should be added.
+
 ## Recommended Test Matrix
 
 ### 1. Technical baseline
