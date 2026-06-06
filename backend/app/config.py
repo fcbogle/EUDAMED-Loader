@@ -21,6 +21,7 @@ class Settings(BaseModel):
     eudamed_max_batch_records: int
     eudamed_post_service_id: str
     eudamed_patch_service_id: str
+    eudamed_market_info_service_id: str
     eudamed_post_profile: str
     eudamed_patch_profile: str
 
@@ -67,6 +68,7 @@ def get_settings() -> Settings:
         eudamed_max_batch_records=int(os.getenv("EUDAMED_MAX_BATCH_RECORDS", "300")),
         eudamed_post_service_id=os.getenv("EUDAMED_POST_SERVICE_ID", legacy_service_id or "DEVICE"),
         eudamed_patch_service_id=os.getenv("EUDAMED_PATCH_SERVICE_ID", legacy_service_id or "UDI_DI"),
+        eudamed_market_info_service_id=os.getenv("EUDAMED_MARKET_INFO_SERVICE_ID", "MARKET_INFO"),
         eudamed_post_profile=os.getenv("EUDAMED_POST_PROFILE", "device_post"),
         eudamed_patch_profile=os.getenv("EUDAMED_PATCH_PROFILE", "udidi_patch"),
     )

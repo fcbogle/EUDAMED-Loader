@@ -7,7 +7,7 @@ from uuid import uuid4
 import lxml.etree as etree
 
 from app.config import Settings
-from app.services.xml_projection import DeviceXmlRecord
+from app.services.xml_projection import DeviceXmlRecord, MarketInfoXmlRecord
 from app.xml_models import CriticalWarningXmlItem, StorageConditionXmlItem
 
 XmlElement = Any
@@ -21,6 +21,7 @@ ENTITY_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/v1"
 COMMON_DEVICE_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/CommonDevice/v1"
 LANGUAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/LanguageSpecific/v1"
 MARKET_INFO_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/MktInfo/MarketInfo/v1"
+MKTINFO_NS = "https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/MktInfo/v1"
 XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
 
 NSMAP = {
@@ -32,6 +33,7 @@ NSMAP = {
     "e": ENTITY_NS,
     "commondi": COMMON_DEVICE_NS,
     "lsn": LANGUAGE_NS,
+    "mktinfo": MKTINFO_NS,
     "marketinfo": MARKET_INFO_NS,
     "xsi": XSI_NS,
 }
@@ -43,6 +45,36 @@ class EudamedMessageRenderer:
 
     def render_message(self, record: DeviceXmlRecord) -> bytes:
         return self.render_message_records([record])
+
+    def render_market_info_message(self, record: MarketInfoXmlRecord) -> bytes:
+        root = etree.Element(self._q(MESSAGE_NS, "Push"), nsmap=NSMAP)
+        root.set("version", self.settings.eudamed_message_schema_version)
+
+        self._append_text(root, MESSAGE_NS, "correlationID", str(uuid4()))
+        self._append_text(root, MESSAGE_NS, "creationDateTime", datetime.now(UTC).replace(microsecond=0).isoformat())
+        self._append_text(root, MESSAGE_NS, "messageID", str(uuid4()))
+        root.append(
+            self._endpoint_element(
+                tag_name="recipient",
+                node_actor_code="EUDAMED",
+                service_operation="PUT",
+                service_id=self.settings.eudamed_market_info_service_id,
+            )
+        )
+
+        payload = etree.SubElement(root, self._q(MESSAGE_NS, "payload"))
+        payload.append(self._market_info_payload(record))
+
+        root.append(
+            self._endpoint_element(
+                tag_name="sender",
+                node_actor_code=record.manufacturer_srn,
+                service_operation="PUT",
+                service_id=self.settings.eudamed_market_info_service_id,
+            )
+        )
+
+        return etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True)
 
     def render_message_records(self, records: list[DeviceXmlRecord]) -> bytes:
         root = etree.Element(self._q(MESSAGE_NS, "Push"), nsmap=NSMAP)
@@ -213,6 +245,33 @@ class EudamedMessageRenderer:
 
     def _market_infos_element(self, items: list[tuple[str, bool]]) -> XmlElement:
         market_infos = etree.Element(self._q(UDIDI_NS, "marketInfos"))
+        self._append_text(market_infos, ENTITY_NS, "state", "REGISTERED")
+        for country_code, original in items:
+            market_info = etree.SubElement(market_infos, self._q(MARKET_INFO_NS, "marketInfo"))
+            self._append_text(market_info, MARKET_INFO_NS, "country", country_code)
+            self._append_text(
+                market_info,
+                MARKET_INFO_NS,
+                "originalPlacedOnTheMarket",
+                "true" if original else "false",
+            )
+        return market_infos
+
+    def _market_info_payload(self, record: MarketInfoXmlRecord) -> XmlElement:
+        payload = etree.Element(self._q(MKTINFO_NS, "DTXMarketInfo"))
+        payload.append(
+            self._di_identifier_element(
+                di_code=record.device_identifier_code,
+                issuing_entity_code=record.device_identifier_issuing_entity,
+                tag_name="uDIDIIdentifier",
+                namespace=MARKET_INFO_NS,
+            )
+        )
+        payload.append(self._market_infos_wrapper_element(record.market_countries))
+        return payload
+
+    def _market_infos_wrapper_element(self, items: list[tuple[str, bool]]) -> XmlElement:
+        market_infos = etree.Element(self._q(MARKET_INFO_NS, "marketInfos"))
         self._append_text(market_infos, ENTITY_NS, "state", "REGISTERED")
         for country_code, original in items:
             market_info = etree.SubElement(market_infos, self._q(MARKET_INFO_NS, "marketInfo"))

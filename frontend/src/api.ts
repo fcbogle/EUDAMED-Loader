@@ -5,6 +5,7 @@ import type {
   CanonicalReviewBundle,
   DistinctValueProfile,
   EquivalentPatchPairPreview,
+  MarketInfoPutPreview,
   NormalizationRuleFile,
   ReferenceWorkbookSummary,
   SchemaInventory,
@@ -101,6 +102,12 @@ export const api = {
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
     }),
+  previewXmlMarketInfoPut: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+    sendJson<MarketInfoPutPreview>("/xml/preview-market-info-put", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber,
+    }),
   previewXmlBatch: (productFamily: string, productVariant: string, chunkSequence = 1) =>
     sendJson<BatchXmlPreview>("/xml/preview-batch", "POST", {
       product_family: productFamily,
@@ -115,6 +122,12 @@ export const api = {
     }),
   downloadXmlPostPatchPair: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-post-patch-pair", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber,
+    }),
+  downloadXmlMarketInfoPut: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+    sendDownload("/xml/download-market-info-put", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,

@@ -12,6 +12,7 @@ from app.xml_models import (
     BatchXmlChunkSummary,
     BatchXmlPreview,
     EquivalentPatchPairPreview,
+    MarketInfoPutPreview,
     SingleRecordXmlPreview,
     XmlGenerationScopeBundle,
     XmlGenerationSelectionSummary,
@@ -142,6 +143,49 @@ class XmlGenerationService:
             patch_xml=patch_xml_bytes.decode("utf-8"),
             patch_validation=self.xml_validation_service.validate_message(patch_xml_bytes),
         )
+
+    def preview_market_info_put(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> MarketInfoPutPreview:
+        record = self.selector.find_xml_ready_record(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        market_info_record = self.projection_builder.build_market_info_record(record)
+        xml_bytes = self.renderer.render_market_info_message(market_info_record)
+        validation = self.xml_validation_service.validate_message(xml_bytes)
+        return MarketInfoPutPreview(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            catalogue_number=market_info_record.catalogue_number,
+            primary_udi_di=market_info_record.primary_udi_di,
+            file_name=self.package_builder.market_info_file_name(
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                catalogue_number=market_info_record.catalogue_number,
+            ),
+            xml=xml_bytes.decode("utf-8"),
+            validation=validation,
+        )
+
+    def download_market_info_put(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> tuple[str, bytes]:
+        preview = self.preview_market_info_put(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        return preview.file_name, preview.xml.encode("utf-8")
 
     def download_post_patch_pair(
         self,

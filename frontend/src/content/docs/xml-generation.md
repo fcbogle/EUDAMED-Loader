@@ -8,6 +8,7 @@ It supports three review modes:
 - single-record XML
 - paired `POST` plus equivalent first `PATCH`
 - variant-batch XML
+- standalone `MARKET_INFO.PUT`
 
 ## Current Implementation
 
@@ -20,6 +21,7 @@ Selection then branches by mode:
 
 - single-record mode also requires a `Catalogue Number`
 - paired `POST`/`PATCH` mode also requires a `Catalogue Number`
+- `MARKET_INFO.PUT` mode also requires a `Catalogue Number`
 - batch mode generates all XML-ready records for the selected variant
 
 The current scaffold supports:
@@ -27,6 +29,7 @@ The current scaffold supports:
 - single-record preview/download
 - variant-batch preview/download
 - paired `POST` + equivalent first `PATCH` preview/download for one XML-ready POST-classified device
+- standalone `MARKET_INFO.PUT` preview/download for one XML-ready selected record
 - local XSD validation against `data/schemas/service/Message.xsd`
 
 ## Current Service Profiles
@@ -50,6 +53,13 @@ Equivalent first `PATCH` test path:
 - intentionally emits the same `marketInfos` structure in both messages for test comparison, even though later standalone market-information maintenance may move to a separate service flow
 - is generated only when the selected device is currently classified as `POST`
 
+Standalone `MARKET_INFO.PUT`:
+
+- service `MARKET_INFO.PUT`
+- payload root `mktinfo:DTXMarketInfo`
+- uses `uDIDIIdentifier` to target one UDI-DI record
+- renders the market-info collection as a standalone service payload
+
 ## Paired POST/PATCH Output
 
 The paired review path is intended to compare the first update message against the equivalent initial create message for the same device.
@@ -67,6 +77,16 @@ Current paired output includes:
 - independent local XSD validation results for both messages
 - a downloadable `.zip` containing both XML files and a manifest
 
+## MarketInfo PUT Output
+
+The standalone market-info path is intended to isolate the market-information collection for one selected UDI-DI record.
+
+Current standalone market-info output includes:
+
+- one `MARKET_INFO.PUT` XML preview
+- local XSD validation result
+- a downloadable `.xml`
+
 ## Important Note
 
 The XML layer currently consumes a typed XML projection built from validation records. Most field names now align with the declared Pydantic canonical model, but some compatibility fields, derived values, and XML-specific aggregated structures still sit between the canonical layer and the final XSD-facing payload.
@@ -78,3 +98,4 @@ The XML layer currently consumes a typed XML projection built from validation re
 - downloadable `.xml`
 - downloadable batch `.zip`
 - downloadable paired `POST`/`PATCH` `.zip`
+- downloadable standalone `MARKET_INFO.PUT` `.xml`

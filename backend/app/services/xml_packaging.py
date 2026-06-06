@@ -70,6 +70,18 @@ class XmlPackageBuilder:
         )
 
     @staticmethod
+    def market_info_file_name(
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> str:
+        return (
+            f"{XmlPackageBuilder._slugify(product_family)}-{XmlPackageBuilder._slugify(product_variant)}-"
+            f"market-info-put-{XmlPackageBuilder._safe_catalogue_number(catalogue_number)}.xml"
+        )
+
+    @staticmethod
     def _slugify(token: str) -> str:
         normalized = token.lower().replace(" / ", "-").replace("/", "-")
         return "".join(char if char.isalnum() or char in {"-", "_"} else "-" for char in normalized).strip("-")

@@ -55,6 +55,17 @@ class EquivalentPatchPairPreview(BaseModel):
     patch_validation: XmlValidationResult
 
 
+class MarketInfoPutPreview(BaseModel):
+    mode: Literal["market_info_put"] = "market_info_put"
+    product_family: str | None = None
+    product_variant: str | None = None
+    catalogue_number: str
+    primary_udi_di: str
+    file_name: str
+    xml: str
+    validation: XmlValidationResult
+
+
 class XmlGenerationSelectionSummary(BaseModel):
     product_family: str
     product_variant: str

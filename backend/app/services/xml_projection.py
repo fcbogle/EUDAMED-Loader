@@ -95,6 +95,18 @@ class DeviceXmlRecord:
     include_market_infos_in_patch: bool = False
 
 
+@dataclass(frozen=True)
+class MarketInfoXmlRecord:
+    product_family: str
+    product_variant: str
+    catalogue_number: str
+    primary_udi_di: str
+    manufacturer_srn: str
+    device_identifier_code: str
+    device_identifier_issuing_entity: str
+    market_countries: list[tuple[str, bool]]
+
+
 class DeviceXmlProjectionBuilder:
     def build_device_record(self, record: CanonicalValidationRecord) -> DeviceXmlRecord:
         field_map = {field.canonical_path: field.value for field in record.fields}
@@ -206,6 +218,27 @@ class DeviceXmlProjectionBuilder:
             critical_warnings=post_record.critical_warnings,
             patch_version_override="2",
             include_market_infos_in_patch=True,
+        )
+
+    def build_market_info_record(self, record: CanonicalValidationRecord) -> MarketInfoXmlRecord:
+        field_map = {field.canonical_path: field.value for field in record.fields}
+        device_identifier_issuing_entity, device_identifier_code = self._split_di_identifier(
+            self._required(field_map, "device_record.identifier")
+        )
+        market_countries = self._market_country_items(record)
+        if not market_countries:
+            raise ValueError(
+                f"Catalogue number {record.catalogue_number} has no market-info items available for MARKET_INFO.PUT generation."
+            )
+        return MarketInfoXmlRecord(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            catalogue_number=self._required(field_map, "device_record.catalogue_number"),
+            primary_udi_di=self._required(field_map, "device_record.primary_udi_di"),
+            manufacturer_srn=self._required(field_map, "manufacturer.manufacturer_srn"),
+            device_identifier_code=device_identifier_code,
+            device_identifier_issuing_entity=device_identifier_issuing_entity,
+            market_countries=market_countries,
         )
 
     @staticmethod

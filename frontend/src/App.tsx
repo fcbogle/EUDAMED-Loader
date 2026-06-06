@@ -4,10 +4,12 @@ import { api } from "./api";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
 import canonicalDocumentation from "./content/docs/canonical.md?raw";
 import canonicalValidationDocumentation from "./content/docs/canonical-validation.md?raw";
+import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
 import eudamedServiceContractFindingsDocumentation from "./content/docs/eudamed-service-contract-findings.md?raw";
 import projectStructureDocumentation from "./content/docs/project-structure.md?raw";
 import roadmapDocumentation from "./content/docs/roadmap.md?raw";
 import softwareEngineeringPatternsDocumentation from "./content/docs/software-engineering-patterns.md?raw";
+import testingScenariosDocumentation from "./content/docs/testing-scenarios.md?raw";
 import workbooksDocumentation from "./content/docs/workbooks.md?raw";
 import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import xmlSampleComparisonDocumentation from "./content/docs/xml-sample-comparison.md?raw";
@@ -17,6 +19,7 @@ import type {
   CanonicalReviewBundle,
   DistinctValueProfile,
   EquivalentPatchPairPreview,
+  MarketInfoPutPreview,
   NormalizationRuleFile,
   ReferenceWorkbookSummary,
   SchemaInventory,
@@ -64,7 +67,9 @@ type DocumentationSection = {
     | "workbooks"
     | "canonical"
     | "canonicalValidation"
+    | "dataInterpretation"
     | "eudamedServiceContractFindings"
+    | "testingScenarios"
     | "xml"
     | "xmlSampleComparison"
     | "roadmap"
@@ -72,6 +77,12 @@ type DocumentationSection = {
     | "softwareEngineeringPatterns";
   title: string;
   markdown: string;
+};
+
+type DocumentationGroup = {
+  id: "project" | "dataCanonical" | "xmlService" | "verification";
+  title: string;
+  sectionIds: DocumentationSection["id"][];
 };
 
 type CanonicalMappingRow = {
@@ -453,7 +464,7 @@ export function App() {
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
   const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
   const [selectedXmlRecordKey, setSelectedXmlRecordKey] = useState<string | null>(null);
-  const [xmlMode, setXmlMode] = useState<"pair" | "single" | "batch">("pair");
+  const [xmlMode, setXmlMode] = useState<"pair" | "single" | "marketInfo" | "batch">("pair");
   const [pairPreviewView, setPairPreviewView] = useState<"post" | "patch">("post");
   const [selectedXmlChunkSequence, setSelectedXmlChunkSequence] = useState<number>(1);
   const [scopeMode] = useState<ScopeMode>("all");
@@ -466,6 +477,7 @@ export function App() {
   const [xmlPreview, setXmlPreview] = useState<SingleRecordXmlPreview | null>(null);
   const [xmlBatchPreview, setXmlBatchPreview] = useState<BatchXmlPreview | null>(null);
   const [xmlPairPreview, setXmlPairPreview] = useState<EquivalentPatchPairPreview | null>(null);
+  const [xmlMarketInfoPreview, setXmlMarketInfoPreview] = useState<MarketInfoPutPreview | null>(null);
   const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
@@ -477,6 +489,11 @@ export function App() {
       id: "architecturePosition",
       title: "Architecture Position",
       markdown: architecturePositionDocumentation,
+    },
+    {
+      id: "roadmap",
+      title: "Roadmap",
+      markdown: roadmapDocumentation,
     },
     {
       id: "workbooks",
@@ -494,6 +511,11 @@ export function App() {
       markdown: canonicalValidationDocumentation,
     },
     {
+      id: "dataInterpretation",
+      title: "Data Interpretation",
+      markdown: dataInterpretationDocumentation,
+    },
+    {
       id: "xml",
       title: "XML Generation",
       markdown: xmlGenerationDocumentation,
@@ -509,14 +531,36 @@ export function App() {
       markdown: eudamedServiceContractFindingsDocumentation,
     },
     {
-      id: "roadmap",
-      title: "Roadmap",
-      markdown: roadmapDocumentation,
+      id: "testingScenarios",
+      title: "Testing Scenarios",
+      markdown: testingScenariosDocumentation,
     },
     {
       id: "softwareEngineeringPatterns",
       title: "Software Engineering Patterns",
       markdown: softwareEngineeringPatternsDocumentation,
+    },
+  ];
+  const documentationGroups: DocumentationGroup[] = [
+    {
+      id: "project",
+      title: "Project",
+      sectionIds: ["projectStructure", "architecturePosition", "roadmap"],
+    },
+    {
+      id: "dataCanonical",
+      title: "Data And Canonical Interpretation",
+      sectionIds: ["workbooks", "canonical", "canonicalValidation", "dataInterpretation"],
+    },
+    {
+      id: "xmlService",
+      title: "XML And Service Design",
+      sectionIds: ["xml", "xmlSampleComparison", "eudamedServiceContractFindings"],
+    },
+    {
+      id: "verification",
+      title: "Verification And Decision Support",
+      sectionIds: ["testingScenarios", "softwareEngineeringPatterns"],
     },
   ];
   const selectedDocumentationSection =
@@ -596,6 +640,7 @@ export function App() {
     setXmlPreview(null);
     setXmlBatchPreview(null);
     setXmlPairPreview(null);
+    setXmlMarketInfoPreview(null);
   }, [selectedXmlRecordKey, selectedXmlFamily, selectedXmlVariant, selectedXmlChunkSequence, xmlMode]);
 
   useEffect(() => {
@@ -927,6 +972,16 @@ export function App() {
             `<udi-di>${selectedXmlRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
           ].join("\n")
         : "<!-- No XML-ready record is currently available for the selected family and variant -->"
+      : xmlMode === "marketInfo"
+      ? selectedXmlRecord
+        ? xmlMarketInfoPreview?.xml ??
+          [
+            "<!-- Generate XML to load the MARKET_INFO.PUT Push message preview -->",
+            `<catalogue-number>${selectedXmlRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
+            `<udi-di>${selectedXmlRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
+            "<service>MARKET_INFO.PUT</service>",
+          ].join("\n")
+        : "<!-- No XML-ready record is currently available for MARKET_INFO.PUT generation for the selected family and variant -->"
       : xmlBatchPreview?.selected_chunk_xml ??
         [
           "<!-- Generate XML to preview the selected variant batch -->",
@@ -941,6 +996,8 @@ export function App() {
         : xmlPairPreview?.patch_validation ?? null
       : xmlMode === "single"
         ? xmlPreview?.validation ?? null
+        : xmlMode === "marketInfo"
+          ? xmlMarketInfoPreview?.validation ?? null
         : xmlBatchPreview?.selected_chunk_validation ?? null;
   const pairPostValidation = xmlPairPreview?.post_validation ?? null;
   const pairPatchValidation = xmlPairPreview?.patch_validation ?? null;
@@ -1144,6 +1201,16 @@ export function App() {
           selectedXmlRecord.catalogue_number,
         );
         setXmlPreview(preview);
+      } else if (xmlMode === "marketInfo") {
+        if (!selectedXmlRecord?.catalogue_number) {
+          return;
+        }
+        const preview = await api.previewXmlMarketInfoPut(
+          selectedXmlFamilySummary.product_family,
+          selectedXmlVariantSummary.product_variant,
+          selectedXmlRecord.catalogue_number,
+        );
+        setXmlMarketInfoPreview(preview);
       } else {
         const preview = await api.previewXmlBatch(
           selectedXmlFamilySummary.product_family,
@@ -1179,6 +1246,12 @@ export function App() {
               selectedXmlVariantSummary.product_variant,
               selectedXmlRecord.catalogue_number,
             )
+          : xmlMode === "marketInfo" && selectedXmlRecord?.catalogue_number
+          ? await api.downloadXmlMarketInfoPut(
+              selectedXmlFamilySummary.product_family,
+              selectedXmlVariantSummary.product_variant,
+              selectedXmlRecord.catalogue_number,
+            )
           : await api.downloadXmlBatch(
               selectedXmlFamilySummary.product_family,
               selectedXmlVariantSummary.product_variant,
@@ -1193,6 +1266,9 @@ export function App() {
           : xmlMode === "single"
           ? xmlPreview?.file_name ??
             `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlRecord?.catalogue_number ?? "record"}.xml`
+          : xmlMode === "marketInfo"
+          ? xmlMarketInfoPreview?.file_name ??
+            `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlRecord?.catalogue_number ?? "record"}-market-info-put.xml`
           : xmlBatchPreview?.package_file_name ??
             `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-batch-package.zip`);
       document.body.appendChild(anchor);
@@ -2557,14 +2633,22 @@ export function App() {
             <div className="summary-card">
               <span className="summary-label">Current mode</span>
               <strong>
-                {xmlMode === "pair" ? "POST + Equivalent PATCH" : xmlMode === "single" ? "Single XML" : "Variant Batch XML"}
+                {xmlMode === "pair"
+                  ? "POST + Equivalent PATCH"
+                  : xmlMode === "single"
+                    ? "Single XML"
+                    : xmlMode === "marketInfo"
+                      ? "MARKET_INFO.PUT"
+                      : "Variant Batch XML"}
               </strong>
               <p>
                 {xmlMode === "pair"
                   ? "Generate an accepted-shape DEVICE.POST and an equivalent first UDI_DI.PATCH for the same device."
                   : xmlMode === "single"
-                  ? "The generic XML path runs per product variant and generates one wrapped `Push` message for an auto-selected sample row."
-                  : "Variant Batch XML chunks all XML-ready rows for the selected variant into schema-validated batch files."}
+                    ? "The generic XML path runs per product variant and generates one wrapped `Push` message for an auto-selected sample row."
+                    : xmlMode === "marketInfo"
+                      ? "Generate a standalone MARKET_INFO.PUT wrapped `Push` message for one XML-ready device record."
+                      : "Variant Batch XML chunks all XML-ready rows for the selected variant into schema-validated batch files."}
               </p>
             </div>
           </section>
@@ -2671,7 +2755,13 @@ export function App() {
               <div className="section-heading">
                 <div>
                   <span className="section-kicker">
-                    {xmlMode === "pair" ? "POST + Equivalent PATCH" : xmlMode === "single" ? "Single XML" : "Variant Batch XML"}
+                    {xmlMode === "pair"
+                      ? "POST + Equivalent PATCH"
+                      : xmlMode === "single"
+                        ? "Single XML"
+                        : xmlMode === "marketInfo"
+                          ? "MARKET_INFO.PUT"
+                          : "Variant Batch XML"}
                   </span>
                   <h2>Generation Workspace</h2>
                 </div>
@@ -2690,6 +2780,13 @@ export function App() {
                   onClick={() => setXmlMode("single")}
                 >
                   Single XML
+                </button>
+                <button
+                  className={xmlMode === "marketInfo" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                  type="button"
+                  onClick={() => setXmlMode("marketInfo")}
+                >
+                  MARKET_INFO.PUT
                 </button>
                 <button
                   className={xmlMode === "batch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
@@ -2753,6 +2850,29 @@ export function App() {
                 ) : (
                   <p className="panel-copy">No XML-ready sample row is currently available for the selected family and variant.</p>
                 )
+              ) : xmlMode === "marketInfo" ? (
+                selectedXmlRecord ? (
+                  <div className="draft-list">
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>{selectedXmlRecord.catalogue_number}</strong>
+                        <span className="status-pill ok compact">MARKET_INFO.PUT</span>
+                      </div>
+                      <p className="draft-meta">
+                        {selectedXmlRecord.product_family} / {selectedXmlRecord.product_variant}
+                      </p>
+                      <p className="panel-copy">{selectedXmlRecord.trade_name ?? "No trade name"}</p>
+                      <p className="panel-copy">
+                        UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
+                      </p>
+                      <p className="panel-copy">
+                        This mode generates a standalone market information update message for the selected XML-ready record using its current marketInfos collection.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="panel-copy">No XML-ready sample row is currently available for MARKET_INFO.PUT generation for the selected family and variant.</p>
+                )
               ) : selectedXmlVariantSummary ? (
                 <div className="draft-list">
                   <div className="draft-card">
@@ -2798,6 +2918,7 @@ export function App() {
                   disabled={
                     (xmlMode === "pair" && !selectedXmlPairRecord) ||
                     (xmlMode === "single" && !selectedXmlRecord) ||
+                    (xmlMode === "marketInfo" && !selectedXmlRecord) ||
                     !selectedXmlVariantSummary ||
                     isGeneratingXml
                   }
@@ -2808,6 +2929,8 @@ export function App() {
                       ? "Generate POST + PATCH"
                       : xmlMode === "single"
                         ? "Generate XML"
+                        : xmlMode === "marketInfo"
+                          ? "Generate MARKET_INFO.PUT"
                         : "Generate Batch Preview"}
                 </button>
                 <button
@@ -2817,6 +2940,7 @@ export function App() {
                   disabled={
                     (xmlMode === "pair" && !selectedXmlPairRecord) ||
                     (xmlMode === "single" && !selectedXmlRecord) ||
+                    (xmlMode === "marketInfo" && !selectedXmlRecord) ||
                     !selectedXmlVariantSummary ||
                     isGeneratingXml
                   }
@@ -2830,23 +2954,38 @@ export function App() {
                   disabled={
                     (xmlMode === "pair" && !selectedXmlPairRecord) ||
                     (xmlMode === "single" && !selectedXmlRecord) ||
+                    (xmlMode === "marketInfo" && !selectedXmlRecord) ||
                     !selectedXmlVariantSummary ||
                     isGeneratingXml
                   }
                 >
-                  {xmlMode === "pair" ? "Download Pair Package" : xmlMode === "single" ? "Download XML" : "Download Batch Package"}
+                  {xmlMode === "pair"
+                    ? "Download Pair Package"
+                    : xmlMode === "single"
+                      ? "Download XML"
+                      : xmlMode === "marketInfo"
+                        ? "Download MARKET_INFO.PUT"
+                        : "Download Batch Package"}
                 </button>
               </div>
               <div className="workflow-note">
                 <strong>
-                  {xmlMode === "pair" ? "Paired POST/PATCH review" : xmlMode === "single" ? "Single-record review" : "Variant-batch scope"}
+                  {xmlMode === "pair"
+                    ? "Paired POST/PATCH review"
+                    : xmlMode === "single"
+                      ? "Single-record review"
+                      : xmlMode === "marketInfo"
+                        ? "Standalone market-info review"
+                        : "Variant-batch scope"}
                 </strong>
                 <span>
                   {xmlMode === "pair"
                     ? "Use one current POST-classified device to compare an accepted-shape POST against an equivalent first PATCH with e:version = 2."
                     : xmlMode === "single"
-                    ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
-                    : "Batch generation remains strictly within the selected product variant and only includes XML-ready rows."}
+                      ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
+                      : xmlMode === "marketInfo"
+                        ? "Use one XML-ready record to inspect the standalone MARKET_INFO.PUT wrapper and its current marketInfos collection."
+                        : "Batch generation remains strictly within the selected product variant and only includes XML-ready rows."}
                 </span>
               </div>
             </div>
@@ -2856,7 +2995,13 @@ export function App() {
                 <div>
                   <span className="section-kicker">Preview</span>
                   <h2>
-                    {xmlMode === "pair" ? "Paired XML Preview" : xmlMode === "single" ? "Single Record XML Preview" : "Variant Batch XML Preview"}
+                    {xmlMode === "pair"
+                      ? "Paired XML Preview"
+                      : xmlMode === "single"
+                        ? "Single Record XML Preview"
+                        : xmlMode === "marketInfo"
+                          ? "MARKET_INFO.PUT Preview"
+                          : "Variant Batch XML Preview"}
                   </h2>
                 </div>
               </div>
@@ -2889,9 +3034,13 @@ export function App() {
                       ? `Pair preview generated for ${xmlPairPreview.product_family} / ${xmlPairPreview.product_variant} / ${xmlPairPreview.catalogue_number}. Currently showing ${pairPreviewView.toUpperCase()}.`
                       : "No paired XML preview generated yet for the selected row."
                     : xmlMode === "single"
-                    ? xmlPreview
-                      ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
-                      : "No XML preview generated yet for the selected row."
+                      ? xmlPreview
+                        ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
+                        : "No XML preview generated yet for the selected row."
+                      : xmlMode === "marketInfo"
+                        ? xmlMarketInfoPreview
+                          ? `MARKET_INFO.PUT preview generated for ${xmlMarketInfoPreview.product_family} / ${xmlMarketInfoPreview.product_variant} / ${xmlMarketInfoPreview.catalogue_number}.`
+                          : "No MARKET_INFO.PUT preview generated yet for the selected row."
                     : xmlBatchPreview
                       ? `Batch preview generated for ${xmlBatchPreview.product_family} / ${xmlBatchPreview.product_variant}, chunk ${xmlBatchPreview.selected_chunk_sequence}.`
                       : "No batch XML preview generated yet for the selected variant."}
@@ -2948,8 +3097,10 @@ export function App() {
                           {xmlMode === "pair"
                             ? `The generated ${pairPreviewView.toUpperCase()} preview validates cleanly.`
                             : xmlMode === "single"
-                            ? "The generated single-record Push message validates cleanly."
-                            : "The generated variant-batch Push message validates cleanly."}
+                              ? "The generated single-record Push message validates cleanly."
+                              : xmlMode === "marketInfo"
+                                ? "The generated MARKET_INFO.PUT Push message validates cleanly."
+                                : "The generated variant-batch Push message validates cleanly."}
                         </p>
                       )}
                     </>
@@ -2958,8 +3109,10 @@ export function App() {
                       {xmlMode === "pair"
                         ? "Generate a paired preview to inspect the POST and PATCH schema validation outcomes."
                         : xmlMode === "single"
-                        ? "Generate a single-record preview to inspect the schema validation outcome."
-                        : "Generate a variant-batch preview to inspect the schema validation outcome."}
+                          ? "Generate a single-record preview to inspect the schema validation outcome."
+                          : xmlMode === "marketInfo"
+                            ? "Generate a MARKET_INFO.PUT preview to inspect the schema validation outcome."
+                            : "Generate a variant-batch preview to inspect the schema validation outcome."}
                     </p>
                   )}
                 </div>
@@ -3064,19 +3217,30 @@ export function App() {
                 application is structured.
               </p>
               <div className="documentation-toc">
-                {documentationSections.map((section) => (
-                  <button
-                    key={section.id}
-                    className={
-                      activeDocumentationSection === section.id
-                        ? "documentation-toc-link active"
-                        : "documentation-toc-link"
-                    }
-                    type="button"
-                    onClick={() => setActiveDocumentationSection(section.id)}
-                  >
-                    {section.title}
-                  </button>
+                {documentationGroups.map((group) => (
+                  <div className="documentation-toc-group" key={group.id}>
+                    <div className="documentation-toc-group-title">{group.title}</div>
+                    {group.sectionIds.map((sectionId) => {
+                      const section = documentationSections.find((entry) => entry.id === sectionId);
+                      if (!section) {
+                        return null;
+                      }
+                      return (
+                        <button
+                          key={section.id}
+                          className={
+                            activeDocumentationSection === section.id
+                              ? "documentation-toc-link active"
+                              : "documentation-toc-link"
+                          }
+                          type="button"
+                          onClick={() => setActiveDocumentationSection(section.id)}
+                        >
+                          {section.title}
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))}
               </div>
             </aside>

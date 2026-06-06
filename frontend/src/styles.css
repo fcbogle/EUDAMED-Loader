@@ -1048,6 +1048,25 @@ th {
   margin-top: 16px;
 }
 
+.documentation-toc-group {
+  display: grid;
+  gap: 8px;
+}
+
+.documentation-toc-group + .documentation-toc-group {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(76, 111, 122, 0.12);
+}
+
+.documentation-toc-group-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5f7a84;
+}
+
 .documentation-toc-link {
   width: 100%;
   padding: 10px 12px;
