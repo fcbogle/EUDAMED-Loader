@@ -17,7 +17,6 @@ from app.validation_models import (
     DeferredValidationScopeSummary,
     FamilyValidationSummary,
     MarketAvailabilityItemPreview,
-    MatchStatus,
     SourceFieldCoverageEntry,
     SourceFieldCoverageStatus,
     SourceFieldCoverageSummary,
@@ -429,14 +428,6 @@ class CanonicalValidationService:
                 xml_required=True,
             ),
             self._field(
-                canonical_path="basic_device.reusable_surgical_instrument",
-                business_label="Reusable",
-                value=self._normalized_boolean(reference_row.reusable_surgical_instrument),
-                source="basic_udi_reference",
-                source_detail="BasicUDIs.xlsx!Reusable surgical instrument",
-                xml_required=True,
-            ),
-            self._field(
                 canonical_path="basic_device.active",
                 business_label="Active Device",
                 value=self._normalized_boolean(reference_row.active_device),
@@ -447,14 +438,6 @@ class CanonicalValidationService:
             self._field(
                 canonical_path="basic_device.administering_medicinal_product",
                 business_label="Administering Medicinal Product",
-                value=self._normalized_boolean(reference_row.administering_medicinal_product),
-                source="basic_udi_reference",
-                source_detail="BasicUDIs.xlsx!Device intended to administer and/or remove medicinal product",
-                xml_required=True,
-            ),
-            self._field(
-                canonical_path="basic_device.administering_medicinal_product",
-                business_label="Administering Medicine",
                 value=self._normalized_boolean(reference_row.administering_medicinal_product),
                 source="basic_udi_reference",
                 source_detail="BasicUDIs.xlsx!Device intended to administer and/or remove medicinal product",
@@ -492,14 +475,6 @@ class CanonicalValidationService:
                 source_detail="BasicUDIs.xlsx!Version",
                 review_note="Preserved as workbook metadata until QMS confirms whether it should populate a true EUDAMED entity-version field.",
                 required=False,
-            ),
-            self._field(
-                canonical_path="basic_device.device_type",
-                business_label="Basic Device Type",
-                value=self._device_type(reference_row.device_type),
-                source="basic_udi_reference",
-                source_detail="BasicUDIs.xlsx!Is it a System or Procedure Pack which is a Device in itself?",
-                xml_required=True,
             ),
             self._field(
                 canonical_path="device_record.basic_device_ref",

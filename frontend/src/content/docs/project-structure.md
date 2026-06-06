@@ -1,4 +1,8 @@
-# Project Structure
+# Project Overview
+
+## Project Creator
+
+This project was created by Frank C Bogle, Head of Enterprise Solutions, Blatchford Mobility UK, as an analysis-first workspace for understanding source workbook data, shaping a canonical regulatory model, and preparing reliable EUDAMED XML generation workflows before any live submission capability is added.
 
 ## Main Directories
 

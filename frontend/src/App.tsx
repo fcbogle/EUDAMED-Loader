@@ -470,7 +470,7 @@ export function App() {
   const documentationSections: DocumentationSection[] = [
     {
       id: "projectStructure",
-      title: "Project Structure",
+      title: "Project Overview",
       markdown: projectStructureDocumentation,
     },
     {

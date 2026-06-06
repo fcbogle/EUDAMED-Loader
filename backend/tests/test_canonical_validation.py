@@ -123,6 +123,14 @@ def test_canonical_validation_field_set_uses_declared_canonical_model_paths() ->
     assert invalid_paths == []
 
 
+def test_canonical_validation_emits_unique_canonical_paths_per_record() -> None:
+    bundle = CanonicalValidationService().build_validation_bundle()
+
+    emitted_paths = [field.canonical_path for field in bundle.records[0].fields]
+
+    assert len(emitted_paths) == len(set(emitted_paths))
+
+
 def test_canonical_validation_api_returns_multi_family_payload() -> None:
     payload = canonical_validation()
 

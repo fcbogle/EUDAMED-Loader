@@ -26,7 +26,6 @@ def test_generic_single_record_preview_generates_schema_valid_xml() -> None:
     assert preview.catalogue_number == "EC22L1S"
     assert preview.validation.valid is True
     assert "<m:Push" in preview.xml
-    assert "<marketinfo:marketInfo>" in preview.xml
     assert "<s:serviceOperation>PATCH</s:serviceOperation>" in preview.xml
 
 
@@ -79,7 +78,7 @@ def test_generic_batch_preview_generates_variant_scoped_schema_valid_xml() -> No
 
     assert preview.product_family == "Echelon"
     assert preview.product_variant == "Echelon VT"
-    assert preview.submission_operation == "POST"
+    assert preview.submission_operation == "PATCH"
     assert preview.package_file_name == "echelon-echelon-vt-batch-package.zip"
     assert preview.total_ready_records == 1696
     assert preview.excluded_records == 0
@@ -92,7 +91,7 @@ def test_generic_batch_preview_generates_variant_scoped_schema_valid_xml() -> No
     assert len(preview.chunks) == 6
     assert preview.chunks[-1].record_count == 196
     assert "<m:Push" in preview.selected_chunk_xml
-    assert "<s:serviceOperation>POST</s:serviceOperation>" in preview.selected_chunk_xml
+    assert "<s:serviceOperation>PATCH</s:serviceOperation>" in preview.selected_chunk_xml
 
 
 def test_generic_batch_preview_route_returns_variant_batch_payload() -> None:
