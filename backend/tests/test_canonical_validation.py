@@ -54,6 +54,7 @@ def _canonical_path_vocabulary() -> set[str]:
 
 
 def test_canonical_validation_service_builds_multi_family_bundle() -> None:
+    CanonicalValidationService.clear_cache()
     bundle = CanonicalValidationService().build_validation_bundle()
 
     assert bundle.family_scope == "In-scope non-accessories families"
@@ -100,6 +101,7 @@ def test_canonical_validation_service_builds_multi_family_bundle() -> None:
 
 
 def test_canonical_validation_field_set_matches_canonical_review_bundle() -> None:
+    CanonicalValidationService.clear_cache()
     bundle = CanonicalValidationService().build_validation_bundle()
     review_bundle = CanonicalReviewService().load_review_bundle()
 
@@ -114,6 +116,7 @@ def test_canonical_validation_field_set_matches_canonical_review_bundle() -> Non
 
 
 def test_canonical_validation_field_set_uses_declared_canonical_model_paths() -> None:
+    CanonicalValidationService.clear_cache()
     bundle = CanonicalValidationService().build_validation_bundle()
     canonical_vocabulary = _canonical_path_vocabulary()
 
@@ -124,6 +127,7 @@ def test_canonical_validation_field_set_uses_declared_canonical_model_paths() ->
 
 
 def test_canonical_validation_emits_unique_canonical_paths_per_record() -> None:
+    CanonicalValidationService.clear_cache()
     bundle = CanonicalValidationService().build_validation_bundle()
 
     emitted_paths = [field.canonical_path for field in bundle.records[0].fields]
@@ -142,6 +146,7 @@ def test_canonical_validation_api_returns_multi_family_payload() -> None:
 
 
 def test_canonical_validation_recognizes_alternate_udi_di_header_variants() -> None:
+    CanonicalValidationService.clear_cache()
     bundle = CanonicalValidationService().build_validation_bundle()
 
     target = next(
@@ -158,6 +163,7 @@ def test_canonical_validation_recognizes_alternate_udi_di_header_variants() -> N
 
 
 def test_canonical_validation_uses_legacy_tracekey_srn_fallback_for_all_products() -> None:
+    CanonicalValidationService.clear_cache()
     bundle = CanonicalValidationService().build_validation_bundle()
 
     echelon_target = next(
@@ -197,3 +203,12 @@ def test_canonical_validation_uses_legacy_tracekey_srn_fallback_for_all_products
     assert non_echelon_ar_field.value == "DE-AR-000006292"
     assert non_echelon_ar_field.source == "legacy_basic_udi_reference"
     assert "Manufacturer SRN is not populated for XML generation." not in non_echelon_target.xml_blockers
+
+
+def test_canonical_validation_reuses_cached_bundle_when_inputs_do_not_change() -> None:
+    CanonicalValidationService.clear_cache()
+
+    first = CanonicalValidationService().build_validation_bundle()
+    second = CanonicalValidationService().build_validation_bundle()
+
+    assert first is second

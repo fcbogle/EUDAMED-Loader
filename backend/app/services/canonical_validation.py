@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
 
 from openpyxl import load_workbook
 
@@ -97,12 +98,22 @@ class SourceRow:
 
 
 class CanonicalValidationService:
+    _cache_lock = Lock()
+    _cached_signature: tuple[tuple[str, int, int], ...] | None = None
+    _cached_bundle: CanonicalValidationBundle | None = None
+
     def __init__(self) -> None:
         self.settings = get_settings()
         self.normalization_repository = NormalizationRepository()
         self.reference_service = BasicUdiReferenceService()
 
     def build_validation_bundle(self) -> CanonicalValidationBundle:
+        signature = self._cache_signature()
+        cache_owner = type(self)
+        with cache_owner._cache_lock:
+            if cache_owner._cached_signature == signature and cache_owner._cached_bundle is not None:
+                return cache_owner._cached_bundle
+
         variant_mappings = self.reference_service.list_variant_mappings()
         reference_rows = self.reference_service.rows_by_device_model()
         mapping_lookup = {(mapping.workbook, mapping.sheet): mapping for mapping in variant_mappings}
@@ -177,7 +188,7 @@ class CanonicalValidationService:
             else 0
         )
 
-        return CanonicalValidationBundle(
+        bundle = CanonicalValidationBundle(
             family_scope="In-scope non-accessories families",
             scope_note=(
                 "Canonical validation now runs across the in-scope non-accessories product families using "
@@ -208,6 +219,37 @@ class CanonicalValidationService:
             deferred_scope_summaries=deferred_scope_summaries,
             records=records,
         )
+        with cache_owner._cache_lock:
+            cache_owner._cached_signature = signature
+            cache_owner._cached_bundle = bundle
+        return bundle
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        with cls._cache_lock:
+            cls._cached_signature = None
+            cls._cached_bundle = None
+
+    def _cache_signature(self) -> tuple[tuple[str, int, int], ...]:
+        return tuple(
+            sorted(
+                self._path_signature(path)
+                for path in self._cache_dependency_paths()
+            )
+        )
+
+    def _cache_dependency_paths(self) -> list[Path]:
+        paths = list(self.settings.excel_dir.glob("*.xlsx"))
+        paths.extend(self.settings.normalization_dir.glob("*.yaml"))
+        paths.extend(self.settings.canonical_mapping_dir.glob("*.yaml"))
+        paths.append(self.settings.basic_udi_reference_workbook)
+        paths.append(self.settings.legacy_basic_udi_reference_workbook)
+        return [path for path in paths if path.exists()]
+
+    @staticmethod
+    def _path_signature(path: Path) -> tuple[str, int, int]:
+        stat = path.stat()
+        return (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
 
     def _build_record(
         self,

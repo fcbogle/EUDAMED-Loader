@@ -479,6 +479,10 @@ export function App() {
   const [xmlPairPreview, setXmlPairPreview] = useState<EquivalentPatchPairPreview | null>(null);
   const [xmlMarketInfoPreview, setXmlMarketInfoPreview] = useState<MarketInfoPutPreview | null>(null);
   const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
+  const [isLoadingStartup, setIsLoadingStartup] = useState<boolean>(true);
+  const [isLoadingCanonicalReview, setIsLoadingCanonicalReview] = useState<boolean>(false);
+  const [isLoadingCanonicalValidation, setIsLoadingCanonicalValidation] = useState<boolean>(false);
+  const [isLoadingSchemas, setIsLoadingSchemas] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
       id: "projectStructure",
@@ -567,54 +571,123 @@ export function App() {
     documentationSections.find((section) => section.id === activeDocumentationSection) ??
     documentationSections[0];
 
+  function initializeCanonicalValidationState(canonicalValidationData: CanonicalValidationBundle): void {
+    setCanonicalValidation(canonicalValidationData);
+    setSelectedValidationRecordKey(
+      canonicalValidationData.sample_records[0]?.catalogue_number ??
+        canonicalValidationData.records[0]?.catalogue_number ??
+        null,
+    );
+    setSelectedValidationFamily(canonicalValidationData.family_summaries[0]?.product_family ?? null);
+    setSelectedValidationVariant(canonicalValidationData.variant_summaries[0]?.product_variant ?? null);
+    setSelectedXmlFamily(canonicalValidationData.family_summaries[0]?.product_family ?? null);
+    setSelectedXmlVariant(canonicalValidationData.variant_summaries[0]?.product_variant ?? null);
+    setSelectedXmlRecordKey(
+      canonicalValidationData.records.find((record) => record.xml_readiness.status === "complete")?.catalogue_number ?? null,
+    );
+  }
+
+  async function loadCanonicalReviewBundle(): Promise<void> {
+    if (canonicalReview || isLoadingCanonicalReview) {
+      return;
+    }
+    setIsLoadingCanonicalReview(true);
+    try {
+      const canonicalData = await api.canonicalReview();
+      setCanonicalReview(canonicalData);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to load canonical review.");
+    } finally {
+      setIsLoadingCanonicalReview(false);
+    }
+  }
+
+  async function loadCanonicalValidationBundle(): Promise<void> {
+    if (canonicalValidation || isLoadingCanonicalValidation) {
+      return;
+    }
+    setIsLoadingCanonicalValidation(true);
+    try {
+      const canonicalValidationData = await api.canonicalValidation();
+      initializeCanonicalValidationState(canonicalValidationData);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to load canonical validation.");
+    } finally {
+      setIsLoadingCanonicalValidation(false);
+    }
+  }
+
+  async function loadSchemaInventory(): Promise<void> {
+    if (schemas || isLoadingSchemas) {
+      return;
+    }
+    setIsLoadingSchemas(true);
+    try {
+      const schemaData = await api.schemas();
+      setSchemas(schemaData);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to load schema inventory.");
+    } finally {
+      setIsLoadingSchemas(false);
+    }
+  }
+
+  function renderLoadingPanel(title: string, message: string): JSX.Element {
+    return (
+      <section className="tab-stack">
+        <section className="panel">
+          <div className="section-heading">
+            <div>
+              <span className="section-kicker">Loading</span>
+              <h2>{title}</h2>
+            </div>
+          </div>
+          <p className="panel-copy">{message}</p>
+        </section>
+      </section>
+    );
+  }
+
   useEffect(() => {
     void Promise.all([
       api.workbooks(),
       api.referenceWorkbooks(),
       api.sheets(),
       api.normalizationRules(),
-      api.canonicalReview(),
-      api.canonicalValidation(),
-      api.schemas(),
       api.distinctValues(selectedColumn),
     ])
-      .then(([
-        workbookData,
-        referenceWorkbookData,
-        sheetData,
-        ruleData,
-        canonicalData,
-        canonicalValidationData,
-        schemaData,
-        distinctData,
-      ]) => {
+      .then(([workbookData, referenceWorkbookData, sheetData, ruleData, distinctData]) => {
         setWorkbooks(workbookData);
         setReferenceWorkbooks(referenceWorkbookData);
         setSheets(sheetData);
         setRules(ruleData);
-        setCanonicalReview(canonicalData);
-        setCanonicalValidation(canonicalValidationData);
-        setSelectedValidationRecordKey(
-          canonicalValidationData.sample_records[0]?.catalogue_number ??
-            canonicalValidationData.records[0]?.catalogue_number ??
-            null,
-        );
-        setSelectedValidationFamily(canonicalValidationData.family_summaries[0]?.product_family ?? null);
-        setSelectedValidationVariant(canonicalValidationData.variant_summaries[0]?.product_variant ?? null);
-        setSelectedXmlFamily(canonicalValidationData.family_summaries[0]?.product_family ?? null);
-        setSelectedXmlVariant(canonicalValidationData.variant_summaries[0]?.product_variant ?? null);
-        setSelectedXmlRecordKey(
-          canonicalValidationData.records.find((record) => record.xml_readiness.status === "complete")?.catalogue_number ?? null,
-        );
-        setSchemas(schemaData);
         setDistinctValues(distinctData);
         const firstVisibleWorkbook = workbookData.find((workbook) => workbook.in_scope_for_variant_mapping);
         const firstVisibleSheet =
           sheetData.find((sheet) => sheet.workbook === firstVisibleWorkbook?.workbook) ?? sheetData[0] ?? null;
         setSelectedSheet(firstVisibleSheet);
       })
-      .catch((requestError: Error) => setError(requestError.message));
+      .catch((requestError: Error) => setError(requestError.message))
+      .finally(() => setIsLoadingStartup(false));
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "canonical" && !canonicalReview) {
+      void loadCanonicalReviewBundle();
+    }
+  }, [activeTab, canonicalReview]);
+
+  useEffect(() => {
+    if ((activeTab === "canonicalValidation" || activeTab === "xml") && !canonicalValidation) {
+      void loadCanonicalValidationBundle();
+    }
+  }, [activeTab, canonicalValidation]);
+
+  useEffect(() => {
+    if (activeTab === "workbooks" && !schemas) {
+      void loadSchemaInventory();
+    }
+  }, [activeTab, schemas]);
 
   useEffect(() => {
     if (!selectedSheet) {
@@ -2076,6 +2149,12 @@ export function App() {
       ) : null}
 
       {activeTab === "canonical" ? (
+        isLoadingCanonicalReview ? (
+          renderLoadingPanel(
+            "Loading canonical review",
+            "Preparing the current mapping review bundle and reference-aligned entity summary.",
+          )
+        ) : (
         <section className="tab-stack">
           <section className="summary-grid">
             <div className="summary-card">
@@ -2271,9 +2350,16 @@ export function App() {
             </details>
           </section>
         </section>
+        )
       ) : null}
 
       {activeTab === "canonicalValidation" ? (
+        isLoadingCanonicalValidation ? (
+          renderLoadingPanel(
+            "Loading canonical validation",
+            "Reading in-scope workbook rows and assembling completeness and XML-readiness results.",
+          )
+        ) : (
         <section className="tab-stack">
           <section className="summary-grid">
             <div className="summary-card">
@@ -2654,9 +2740,16 @@ export function App() {
           </section>
 
         </section>
+        )
       ) : null}
 
       {activeTab === "xml" ? (
+        isLoadingCanonicalValidation ? (
+          renderLoadingPanel(
+            "Loading XML workspace",
+            "Preparing validated device records required for XML preview and batch generation.",
+          )
+        ) : (
         <section className="tab-stack">
           <section className="summary-grid">
             <div className="summary-card">
@@ -3215,6 +3308,7 @@ export function App() {
             </div>
           </section>
         </section>
+        )
       ) : null}
 
       {activeTab === "documentation" ? (
