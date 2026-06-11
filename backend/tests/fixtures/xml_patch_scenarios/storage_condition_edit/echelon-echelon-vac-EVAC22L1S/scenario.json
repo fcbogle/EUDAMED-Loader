@@ -1,0 +1,24 @@
+{
+  "scenario_id": "storage_condition_edit",
+  "baseline_fixture": "equivalent_baseline/echelon-echelon-vac-EVAC22L1S",
+  "product_family": "Echelon",
+  "product_variant": "Echelon VAC",
+  "catalogue_number": "EVAC22L1S",
+  "target_xpath_hint": "udidi:storageHandlingConditions/commondi:condition",
+  "operation": "edit",
+  "required_inputs": {
+    "updated_conditions": [
+      {
+        "condition_code": "SHC006",
+        "replacement_comment": "Minus 10"
+      },
+      {
+        "condition_code": "SHC007",
+        "replacement_comment": "Plus 45"
+      }
+    ]
+  },
+  "patch_version": "4",
+  "generated_patch_file": "echelon-echelon-vac-patch-storage-condition-EVAC22L1S.xml",
+  "status": "generated"
+}

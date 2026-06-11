@@ -1,0 +1,14 @@
+{
+  "scenario_id": "secondary_identifier_add",
+  "baseline_fixture": "equivalent_baseline/echelon-echelon-vac-EVAC22L1S",
+  "product_family": "Echelon",
+  "product_variant": "Echelon VAC",
+  "catalogue_number": "EVAC22L1S",
+  "target_xpath_hint": "udidi:secondaryIdentifier",
+  "operation": "add",
+  "required_inputs": {
+    "new_secondary_identifier_issuing_entity": null,
+    "new_secondary_identifier_di_code": null
+  },
+  "status": "awaiting_user_values"
+}

@@ -288,6 +288,26 @@ function titleCaseToken(value: string): string {
     .join(" ");
 }
 
+function basicUdiMatchLabel(matchStatus: string | null | undefined): string {
+  if (matchStatus === "matched") {
+    return "Matched in BasicUDIs.xlsx";
+  }
+  if (matchStatus === "excluded") {
+    return "Excluded from Basic UDI mapping";
+  }
+  if (matchStatus === "unmatched") {
+    return "Unmatched in BasicUDIs.xlsx";
+  }
+  return "Basic UDI mapping unknown";
+}
+
+function basicUdiMatchPillClass(matchStatus: string | null | undefined): string {
+  if (matchStatus === "matched") {
+    return "status-pill ok compact";
+  }
+  return "status-pill warn compact";
+}
+
 function formatSchemaPathForInlineNote(schemaPath: string): string {
   const normalizedPath = schemaPath.replace(/\\/g, "/");
   const dataIndex = normalizedPath.indexOf("data/");
@@ -672,7 +692,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === "canonical" && !canonicalReview) {
+    if ((activeTab === "workbooks" || activeTab === "canonical") && !canonicalReview) {
       void loadCanonicalReviewBundle();
     }
   }, [activeTab, canonicalReview]);
@@ -2584,6 +2604,10 @@ export function App() {
                       <strong>{selectedValidationRecord.product_variant}</strong>
                       <span>product variant</span>
                     </div>
+                    <div className="queue-chip">
+                      <strong>{basicUdiMatchLabel(selectedValidationRecord.reference_match_status)}</strong>
+                      <span>basic UDI match</span>
+                    </div>
                   </div>
                   <div className="workflow-note validation-record-note">
                     <strong>{selectedValidationRecord.trade_name}</strong>
@@ -3080,6 +3104,11 @@ export function App() {
                         <p className="panel-copy">
                           UDI-DI {selectedXmlPairRecord.primary_udi_di} · Issuing entity {selectedXmlPairRecord.issuing_entity ?? "Unknown"}
                         </p>
+                        <div className="family-scope-pill-row xml-status-row">
+                          <span className={basicUdiMatchPillClass(selectedXmlPairRecord.reference_match_status)}>
+                            {basicUdiMatchLabel(selectedXmlPairRecord.reference_match_status)}
+                          </span>
+                        </div>
                         <p className="panel-copy">
                           Compare an accepted-shape create message with the equivalent first update message for the same device record.
                         </p>
@@ -3111,6 +3140,11 @@ export function App() {
                         <p className="panel-copy">
                           UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
                         </p>
+                        <div className="family-scope-pill-row xml-status-row">
+                          <span className={basicUdiMatchPillClass(selectedXmlRecord.reference_match_status)}>
+                            {basicUdiMatchLabel(selectedXmlRecord.reference_match_status)}
+                          </span>
+                        </div>
                         <p className="panel-copy">
                           Review one XML-ready sample row before moving to batch generation.
                         </p>
@@ -3134,6 +3168,11 @@ export function App() {
                         <p className="panel-copy">
                           UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
                         </p>
+                        <div className="family-scope-pill-row xml-status-row">
+                          <span className={basicUdiMatchPillClass(selectedXmlRecord.reference_match_status)}>
+                            {basicUdiMatchLabel(selectedXmlRecord.reference_match_status)}
+                          </span>
+                        </div>
                         <p className="panel-copy">
                           Review a standalone market information update message using the record's current `marketInfos` collection.
                         </p>

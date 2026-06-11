@@ -1,0 +1,16 @@
+{
+  "scenario_id": "warning_add",
+  "baseline_fixture": "equivalent_baseline/echelon-echelon-vac-EVAC22L1S",
+  "product_family": "Echelon",
+  "product_variant": "Echelon VAC",
+  "catalogue_number": "EVAC22L1S",
+  "target_xpath_hint": "udidi:criticalWarnings/commondi:warning",
+  "operation": "add",
+  "required_inputs": {
+    "new_warning_code": "CW011",
+    "new_warning_comment": null
+  },
+  "patch_version": "5",
+  "generated_patch_file": "echelon-echelon-vac-patch-warning-EVAC22L1S.xml",
+  "status": "generated"
+}
