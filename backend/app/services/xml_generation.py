@@ -13,6 +13,7 @@ from app.xml_models import (
     BatchXmlPreview,
     EquivalentPatchPairPreview,
     MarketInfoPutPreview,
+    PatchScenarioXmlPreview,
     SingleRecordXmlPreview,
     XmlGenerationScopeBundle,
     XmlGenerationSelectionSummary,
@@ -28,6 +29,10 @@ class XmlGenerationService:
         self.projection_builder = DeviceXmlProjectionBuilder()
         self.renderer = EudamedMessageRenderer(self.settings)
         self.package_builder = XmlPackageBuilder()
+
+    @property
+    def project_root(self):
+        return self.settings.schema_dir.parents[1]
 
     def generation_scope(self) -> XmlGenerationScopeBundle:
         bundle = self.validation_service.build_validation_bundle()
@@ -185,6 +190,80 @@ class XmlGenerationService:
             product_variant=product_variant,
             catalogue_number=catalogue_number,
         )
+        return preview.file_name, preview.xml.encode("utf-8")
+
+    def preview_patch_scenario_fixture(
+        self,
+        *,
+        family_id: str,
+        scenario_id: str,
+    ) -> PatchScenarioXmlPreview:
+        scenario_dir = (
+            self.project_root
+            / "backend"
+            / "tests"
+            / "fixtures"
+            / "xml_patch_scenarios"
+            / scenario_id
+            / family_id
+        )
+        scenario_file = scenario_dir / "scenario.json"
+        if not scenario_file.exists():
+            raise ValueError(f"PATCH scenario fixture {scenario_id!r} for family {family_id!r} was not found.")
+
+        import json
+
+        scenario = json.loads(scenario_file.read_text(encoding="utf-8"))
+        generated_file = scenario.get("generated_patch_file")
+        if not generated_file:
+            raise ValueError(
+                f"PATCH scenario fixture {scenario_id!r} for family {family_id!r} does not yet declare a generated PATCH XML file."
+            )
+
+        xml_path = scenario_dir / generated_file
+        if not xml_path.exists():
+            raise ValueError(f"Generated PATCH XML file {generated_file!r} was not found for scenario {scenario_id!r}.")
+
+        baseline_fixture = str(scenario.get("baseline_fixture") or "")
+        if not baseline_fixture:
+            raise ValueError(f"PATCH scenario fixture {scenario_id!r} does not declare a baseline fixture.")
+        manifest_path = (
+            self.project_root
+            / "backend"
+            / "tests"
+            / "fixtures"
+            / "xml_patch_scenarios"
+            / baseline_fixture
+            / "manifest.json"
+        )
+        if not manifest_path.exists():
+            raise ValueError(f"Baseline manifest for PATCH scenario {scenario_id!r} was not found.")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+        xml_text = xml_path.read_text(encoding="utf-8")
+        xml_bytes = xml_text.encode("utf-8")
+        validation = self.xml_validation_service.validate_message(xml_bytes)
+        return PatchScenarioXmlPreview(
+            family_id=family_id,
+            scenario_id=scenario_id,
+            fixture_status=scenario.get("status", "unknown"),
+            product_family=scenario.get("product_family"),
+            product_variant=scenario.get("product_variant"),
+            catalogue_number=scenario.get("catalogue_number") or manifest["catalogue_number"],
+            primary_udi_di=manifest["primary_udi_di"],
+            baseline_fixture=baseline_fixture,
+            file_name=generated_file,
+            xml=xml_text,
+            validation=validation,
+        )
+
+    def download_patch_scenario_fixture(
+        self,
+        *,
+        family_id: str,
+        scenario_id: str,
+    ) -> tuple[str, bytes]:
+        preview = self.preview_patch_scenario_fixture(family_id=family_id, scenario_id=scenario_id)
         return preview.file_name, preview.xml.encode("utf-8")
 
     def download_post_patch_pair(

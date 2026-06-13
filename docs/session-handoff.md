@@ -2,93 +2,136 @@
 
 ## Current Objective
 
-Continue design work for EUDAMED `marketInfo` update handling without guessing the contract shape.
+Continue the XML workspace split between:
+
+- `EUDAMED Testing`
+- `EUDAMED Generation`
+
+and build out controlled PATCH scenario handling without overstating EUDAMED acceptance.
 
 ## Completed In This Session
 
-- Simplified and shortened the main documentation set.
-- Removed contradictory XML wording from docs.
-- Added a guard test to ensure emitted validation `canonical_path` values exist on the declared canonical models.
-- Cleaned up three canonical-path mismatches so the new test passes.
+- Added a Documentation note for the agreed `EUDAMED Testing` / `EUDAMED Generation` UI direction.
+- Renamed the main XML workspace in the frontend from `XML Generation` to `EUDAMED Testing`.
+- Added a new top-level `EUDAMED Generation` tab for accepted-only XML patterns.
+- Added a `Patch XML` pill inside `EUDAMED Testing`.
+- Introduced the two UI status labels:
+  - `EUDAMED Candidate`
+  - `EUDAMED Accepted`
+- Seeded the initial PATCH scenario registry with:
+  - `trade_name_edit`
+  - `warning_add`
+  - `storage_condition_edit`
+- Wired `Patch XML` to fixture-backed preview and download using the existing XML files under `backend/tests/fixtures/xml_patch_scenarios/...`
+- Kept `Post + Patch` as the only accepted pattern visible in `EUDAMED Generation`
 
 ## Code Changes Made
 
-Updated canonical path vocabulary to use declared business-model names instead of XML-facing aliases:
+Frontend:
 
-- `basic_device.type` -> `basic_device.device_type`
-- `basic_device.administering_medicine` -> `basic_device.administering_medicinal_product`
-- `basic_device.reusable` -> `basic_device.reusable_surgical_instrument`
+- `frontend/src/App.tsx`
+- `frontend/src/api.ts`
+- `frontend/src/types.ts`
+- `frontend/src/content/docs/eudamed-testing-generation-ui.md`
 
-Files changed:
+Backend:
 
-- `backend/app/services/canonical_validation.py`
+- `backend/app/routers/xml_generation.py`
 - `backend/app/services/xml_generation.py`
-- `config/canonical_mapping/basic_device.yaml`
-- `backend/tests/test_canonical_validation.py`
-- `README.md`
-- `frontend/src/content/docs/*.md`
-- `docs/xml_samples/README.md`
+- `backend/app/xml_models.py`
 
-## Test Status
+## Current UI Behavior
 
-Guard test added:
+### EUDAMED Testing
 
-- `backend/tests/test_canonical_validation.py`
+Top-level area for review and comparison work.
 
-Targeted command run:
+Current pills:
 
-```bash
-../.venv/bin/python -m pytest -q backend/tests/test_canonical_validation.py -k 'declared_canonical_model_paths or field_set_matches_canonical_review_bundle'
-```
+- `Post + Patch`
+- `Single XML`
+- `Market Info`
+- `Patch XML`
+- `Batch XML`
 
-Result:
+`Patch XML` now:
 
-- `2 passed, 4 deselected`
+- shows one candidate PATCH scenario at a time
+- remains anchored to the accepted baseline family `echelon-echelon-vac-EVAC22L1S`
+- loads the existing fixture XML for preview
+- validates that fixture XML against the local schema set
+- supports download of the fixture XML
+- allows the user to switch the displayed status between `EUDAMED Candidate` and `EUDAMED Accepted` in the UI
+
+Important limitation:
+
+- PATCH scenario status is currently UI state only
+- it is not yet persisted anywhere
+
+### EUDAMED Generation
+
+Top-level area for accepted-only XML generation.
+
+Current state:
+
+- only `Post + Patch` is surfaced here
+- PATCH scenarios do not yet appear here, even if the UI label is switched to `EUDAMED Accepted`
 
 ## Confirmed Design Facts
 
-- The application is a preparation/review tool, not a live submission system yet.
+- The application is still a preparation/review tool, not a live submission system.
 - Current XML baseline remains:
   - `POST -> DEVICE.POST`
   - `PATCH -> UDI_DI.PATCH`
 - Equivalent first `PATCH` should keep `marketInfos` identical to the equivalent `POST`.
+- Candidate PATCH scenarios should remain tied to the same baseline device family and not be treated as freeform XML editing.
+- Only `EUDAMED Accepted` patterns should be available in the operational generation area.
 
-## Confirmed Market-Info Service Facts
+## Fixture-Backed PATCH Scenario Facts
 
-Official source found:
+Current supported fixture-backed candidate scenarios:
 
-- `DTX for EOs - services definition.pdf`
-- URL: `https://webgate.ec.europa.eu/eudamed-help/en/files/DTX%20for%20EOs%20-%20services%20definition.pdf`
+- `trade_name_edit`
+- `warning_add`
+- `storage_condition_edit`
 
-Confirmed from that source:
+Current excluded scenario:
 
-- market information update is a distinct service
-- service name: `Update of Market information`
-- service ID: `MARKET_INFO`
-- message type: `Push`
-- operation type: `PUT`
-- payload entity: `DTXMarketInfo`
+- `secondary_identifier_add`
+  - still incomplete
+  - no generated XML file declared
+  - status remains effectively pending
 
-Important rules noted:
+## Test Status
 
-- this is distinct from `UDI_DI.PATCH`
-- first EU market country cannot be changed through the market-info update service
-- if first EU market country must change, use the UDI-DI update service instead
+Commands run:
+
+```bash
+cd frontend && npm run build
+../.venv/bin/python -m pytest -q backend/tests/test_echelon_xml_generation.py -q
+```
+
+Results:
+
+- frontend production build passed
+- targeted backend XML generation tests passed
 
 ## Still Missing
 
-- The actual official sample XML files:
+- persistence for PATCH scenario status (`EUDAMED Candidate` / `EUDAMED Accepted`)
+- accepted/candidate status storage model for baseline families and PATCH scenarios
+- automatic promotion of accepted PATCH scenarios into `EUDAMED Generation`
+- true scenario generation from live device/canonical data instead of fixture-backed XML
+- broader PATCH scenario support beyond the first three candidate fixtures
+- externally confirmed EUDAMED acceptance for the three candidate PATCH scenarios
+- official sample XML files:
   - `SAMPLE_DTX_UDI_007.01.xml`
   - `SAMPLE_DTX_UDI_007.02.xml`
 
-Only references to those sample filenames were found, not the files themselves.
-
 ## Recommended Next Step
 
-Use the official `MARKET_INFO` service definition to draft a repo-specific design note covering:
+Implement persistence for baseline-family and PATCH-scenario status so that:
 
-- service configuration values
-- likely payload scope
-- which fields stay in `UDI_DI.PATCH`
-- which fields belong in `MARKET_INFO.PUT`
-- validation rules for a future market-info update mode
+- `Post + Patch` remains stored as `EUDAMED Accepted`
+- candidate PATCH scenarios can be promoted after real testing
+- `EUDAMED Generation` can filter from stored accepted patterns rather than temporary UI state

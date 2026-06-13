@@ -143,6 +143,39 @@ def download_xml_market_info_put(payload: dict[str, str]) -> Response:
     return Response(content=xml_bytes, media_type="application/xml", headers=headers)
 
 
+@router.post("/xml/preview-patch-scenario")
+def preview_xml_patch_scenario(payload: dict[str, str]) -> dict:
+    family_id = payload.get("family_id")
+    scenario_id = payload.get("scenario_id")
+    if not family_id or not scenario_id:
+        raise HTTPException(status_code=400, detail="family_id and scenario_id are required.")
+    try:
+        preview = XmlGenerationService().preview_patch_scenario_fixture(
+            family_id=family_id,
+            scenario_id=scenario_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return preview.model_dump(mode="json")
+
+
+@router.post("/xml/download-patch-scenario")
+def download_xml_patch_scenario(payload: dict[str, str]) -> Response:
+    family_id = payload.get("family_id")
+    scenario_id = payload.get("scenario_id")
+    if not family_id or not scenario_id:
+        raise HTTPException(status_code=400, detail="family_id and scenario_id are required.")
+    try:
+        file_name, xml_bytes = XmlGenerationService().download_patch_scenario_fixture(
+            family_id=family_id,
+            scenario_id=scenario_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
+    return Response(content=xml_bytes, media_type="application/xml", headers=headers)
+
+
 @router.post("/xml/preview-batch")
 def preview_xml_batch(payload: dict[str, str | int] | None = None) -> dict:
     data = payload or {}

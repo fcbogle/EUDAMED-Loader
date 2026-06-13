@@ -345,6 +345,21 @@ export type MarketInfoPutPreview = {
   validation: XmlValidationResult;
 };
 
+export type PatchScenarioXmlPreview = {
+  mode: "patch_scenario";
+  family_id: string;
+  scenario_id: string;
+  fixture_status: string;
+  product_family: string | null;
+  product_variant: string | null;
+  catalogue_number: string;
+  primary_udi_di: string;
+  baseline_fixture: string;
+  file_name: string;
+  xml: string;
+  validation: XmlValidationResult;
+};
+
 export type XmlGenerationSelectionSummary = {
   product_family: string;
   product_variant: string;

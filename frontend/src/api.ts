@@ -7,6 +7,7 @@ import type {
   EquivalentPatchPairPreview,
   MarketInfoPutPreview,
   NormalizationRuleFile,
+  PatchScenarioXmlPreview,
   ReferenceWorkbookSummary,
   SchemaInventory,
   SheetProfile,
@@ -108,6 +109,11 @@ export const api = {
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
     }),
+  previewXmlPatchScenario: (familyId: string, scenarioId: string) =>
+    sendJson<PatchScenarioXmlPreview>("/xml/preview-patch-scenario", "POST", {
+      family_id: familyId,
+      scenario_id: scenarioId,
+    }),
   previewXmlBatch: (productFamily: string, productVariant: string, chunkSequence = 1) =>
     sendJson<BatchXmlPreview>("/xml/preview-batch", "POST", {
       product_family: productFamily,
@@ -131,6 +137,11 @@ export const api = {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
+    }),
+  downloadXmlPatchScenario: (familyId: string, scenarioId: string) =>
+    sendDownload("/xml/download-patch-scenario", "POST", {
+      family_id: familyId,
+      scenario_id: scenarioId,
     }),
   downloadXmlBatch: (productFamily: string, productVariant: string) =>
     sendDownload("/xml/download-batch", "POST", {
