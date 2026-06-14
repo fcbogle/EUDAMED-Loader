@@ -14,6 +14,17 @@ def xml_generation_scope() -> dict:
     return scope.model_dump(mode="json")
 
 
+@router.get("/xml/testing-anchor")
+def xml_testing_registered_device_anchor(family_id: str) -> dict:
+    if not family_id:
+        raise HTTPException(status_code=400, detail="family_id is required.")
+    try:
+        anchor = XmlGenerationService().testing_registered_device_anchor(family_id=family_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return anchor.model_dump(mode="json")
+
+
 @router.post("/xml/preview-record")
 def preview_xml_record(payload: dict[str, str]) -> dict:
     product_family = payload.get("product_family")

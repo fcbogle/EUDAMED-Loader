@@ -7,6 +7,8 @@ from app.routers.xml_generation import (
     download_xml_market_info_put,
     download_xml_batch,
     download_xml_record,
+    preview_xml_patch_scenario,
+    xml_testing_registered_device_anchor,
     preview_xml_market_info_put,
     preview_xml_batch,
     preview_xml_record,
@@ -70,6 +72,8 @@ def test_market_info_put_preview_generates_schema_valid_xml() -> None:
     assert preview.catalogue_number == "EC22L1S"
     assert preview.primary_udi_di == "05050649030109"
     assert preview.validation.valid is True
+    assert preview.registered_device_anchor.catalogue_number == "EC22L1S"
+    assert preview.registered_device_anchor.primary_udi_di == "05050649030109"
     assert "<mktinfo:DTXMarketInfo>" in preview.xml
     assert "<s:serviceID>MARKET_INFO</s:serviceID>" in preview.xml
     assert "<s:serviceOperation>PUT</s:serviceOperation>" in preview.xml
@@ -87,6 +91,7 @@ def test_market_info_put_routes_return_payloads() -> None:
 
     assert payload["mode"] == "market_info_put"
     assert payload["validation"]["valid"] is True
+    assert payload["registered_device_anchor"]["catalogue_number"] == "EC22L1S"
 
     response = download_xml_market_info_put(
         {
@@ -174,3 +179,29 @@ def test_generic_batch_download_route_returns_zip_package() -> None:
         assert "manifest.json" in names
         assert "echelon-echelon-vt-batch-01-of-06.xml" in names
         assert "echelon-echelon-vt-batch-06-of-06.xml" in names
+
+
+def test_testing_registered_device_anchor_route_returns_fixture_anchor() -> None:
+    payload = xml_testing_registered_device_anchor("echelon-echelon-vac-EVAC22L1S")
+
+    assert payload["family_id"] == "echelon-echelon-vac-EVAC22L1S"
+    assert payload["baseline_fixture"] == "equivalent_baseline/echelon-echelon-vac-EVAC22L1S"
+    assert payload["product_family"] == "Echelon"
+    assert payload["product_variant"] == "Echelon VAC"
+    assert payload["catalogue_number"] == "EVAC22L1S"
+    assert payload["primary_udi_di"] == "05050649062025"
+    assert payload["eudamed_status"] == "EUDAMED Accepted"
+
+
+def test_patch_scenario_preview_includes_registered_device_anchor() -> None:
+    payload = preview_xml_patch_scenario(
+        {
+            "family_id": "echelon-echelon-vac-EVAC22L1S",
+            "scenario_id": "trade_name_edit",
+        }
+    )
+
+    assert payload["mode"] == "patch_scenario"
+    assert payload["catalogue_number"] == "EVAC22L1S"
+    assert payload["registered_device_anchor"]["catalogue_number"] == "EVAC22L1S"
+    assert payload["registered_device_anchor"]["primary_udi_di"] == "05050649062025"

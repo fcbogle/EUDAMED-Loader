@@ -326,6 +326,7 @@ export type EquivalentPatchPairPreview = {
   product_variant: string | null;
   catalogue_number: string;
   primary_udi_di: string;
+  registered_device_anchor: RegisteredDeviceAnchor;
   post_file_name: string;
   post_xml: string;
   post_validation: XmlValidationResult;
@@ -340,9 +341,24 @@ export type MarketInfoPutPreview = {
   product_variant: string | null;
   catalogue_number: string;
   primary_udi_di: string;
+  registered_device_anchor: RegisteredDeviceAnchor;
   file_name: string;
   xml: string;
   validation: XmlValidationResult;
+};
+
+export type RegisteredDeviceAnchor = {
+  family_id: string;
+  baseline_fixture: string;
+  product_family: string;
+  product_variant: string;
+  catalogue_number: string;
+  primary_udi_di: string;
+  post_file_name: string;
+  patch_file_name: string;
+  post_valid: boolean;
+  patch_valid: boolean;
+  eudamed_status: string;
 };
 
 export type PatchScenarioXmlPreview = {
@@ -354,6 +370,7 @@ export type PatchScenarioXmlPreview = {
   product_variant: string | null;
   catalogue_number: string;
   primary_udi_di: string;
+  registered_device_anchor: RegisteredDeviceAnchor;
   baseline_fixture: string;
   file_name: string;
   xml: string;

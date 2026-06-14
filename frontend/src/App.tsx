@@ -23,6 +23,7 @@ import type {
   MarketInfoPutPreview,
   NormalizationRuleFile,
   PatchScenarioXmlPreview,
+  RegisteredDeviceAnchor,
   ReferenceWorkbookSummary,
   SchemaInventory,
   SheetProfile,
@@ -72,6 +73,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     baselineFamilyId: "echelon-echelon-vac-EVAC22L1S",
   },
 ];
+const TESTING_BASELINE_FAMILY_ID = PATCH_SCENARIOS[0]?.baselineFamilyId ?? "";
 
 type DraftAction = {
   column: string;
@@ -543,6 +545,7 @@ export function App() {
   const [xmlPairPreview, setXmlPairPreview] = useState<EquivalentPatchPairPreview | null>(null);
   const [xmlMarketInfoPreview, setXmlMarketInfoPreview] = useState<MarketInfoPutPreview | null>(null);
   const [xmlPatchPreview, setXmlPatchPreview] = useState<PatchScenarioXmlPreview | null>(null);
+  const [testingAnchor, setTestingAnchor] = useState<RegisteredDeviceAnchor | null>(null);
   const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
   const [isLoadingStartup, setIsLoadingStartup] = useState<boolean>(true);
   const [isLoadingCanonicalReview, setIsLoadingCanonicalReview] = useState<boolean>(false);
@@ -891,6 +894,18 @@ export function App() {
   }, [selectedXmlFamily, selectedXmlVariant, selectedXmlRecordKey, xmlMode]);
 
   useEffect(() => {
+    if (!TESTING_BASELINE_FAMILY_ID) {
+      return;
+    }
+    api
+      .testingRegisteredDeviceAnchor(TESTING_BASELINE_FAMILY_ID)
+      .then((anchor) => setTestingAnchor(anchor))
+      .catch((requestError) => {
+        setError(requestError instanceof Error ? requestError.message : "Failed to load testing anchor.");
+      });
+  }, []);
+
+  useEffect(() => {
     if (activeTab === "generation" && xmlMode !== "pair") {
       setXmlMode("pair");
     }
@@ -1103,6 +1118,11 @@ export function App() {
   const selectedPatchScenario =
     PATCH_SCENARIOS.find((scenario) => scenario.id === selectedPatchScenarioId) ?? PATCH_SCENARIOS[0];
   const selectedPatchScenarioStatus = patchScenarioStatuses[selectedPatchScenario.id];
+  const selectedTestingAnchor =
+    xmlPatchPreview?.registered_device_anchor ??
+    xmlPairPreview?.registered_device_anchor ??
+    xmlMarketInfoPreview?.registered_device_anchor ??
+    testingAnchor;
   const acceptedXmlModes = [
     {
       id: "pair",
@@ -1117,13 +1137,14 @@ export function App() {
         ? pairPreviewView === "post"
           ? xmlPairPreview.post_xml
           : xmlPairPreview.patch_xml
-        : selectedXmlPairRecord
+        : selectedTestingAnchor
           ? [
               "<!-- Generate paired XML to load the accepted-shape POST and equivalent first PATCH previews -->",
-              `<catalogue-number>${selectedXmlPairRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
+              `<catalogue-number>${selectedTestingAnchor.catalogue_number}</catalogue-number>`,
+              `<udi-di>${selectedTestingAnchor.primary_udi_di}</udi-di>`,
               `<preview-view>${pairPreviewView.toUpperCase()}</preview-view>`,
             ].join("\n")
-          : "<!-- No XML-ready POST record is currently available for paired POST/PATCH generation for the selected family and variant -->"
+          : "<!-- No registered testing anchor is currently available for paired POST/PATCH generation -->"
       : xmlMode === "single"
       ? selectedXmlRecord
         ? xmlPreview?.xml ??
@@ -1134,15 +1155,15 @@ export function App() {
           ].join("\n")
         : "<!-- No XML-ready record is currently available for the selected family and variant -->"
       : xmlMode === "marketInfo"
-      ? selectedXmlRecord
+      ? selectedTestingAnchor
         ? xmlMarketInfoPreview?.xml ??
           [
             "<!-- Generate XML to load the MARKET_INFO.PUT Push message preview -->",
-            `<catalogue-number>${selectedXmlRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
-            `<udi-di>${selectedXmlRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
+            `<catalogue-number>${selectedTestingAnchor?.catalogue_number ?? "PENDING"}</catalogue-number>`,
+            `<udi-di>${selectedTestingAnchor?.primary_udi_di ?? "PENDING"}</udi-di>`,
             "<service>MARKET_INFO.PUT</service>",
           ].join("\n")
-        : "<!-- No XML-ready record is currently available for MARKET_INFO.PUT generation for the selected family and variant -->"
+        : "<!-- No registered testing anchor is currently available for MARKET_INFO.PUT generation -->"
       : xmlMode === "patch"
       ? xmlPatchPreview?.xml ??
         [
@@ -1401,7 +1422,7 @@ export function App() {
   }
 
   async function generateXmlPreview(): Promise<void> {
-    if (xmlMode !== "patch" && (!selectedXmlFamilySummary || !selectedXmlVariantSummary)) {
+    if ((xmlMode === "single" || xmlMode === "batch") && (!selectedXmlFamilySummary || !selectedXmlVariantSummary)) {
       return;
     }
     setIsGeneratingXml(true);
@@ -1409,13 +1430,13 @@ export function App() {
     setXmlActionMessage(null);
     try {
       if (xmlMode === "pair") {
-        if (!selectedXmlPairRecord?.catalogue_number) {
+        if (!selectedTestingAnchor) {
           return;
         }
         const preview = await api.previewXmlPostPatchPair(
-          selectedXmlFamilySummary.product_family,
-          selectedXmlVariantSummary.product_variant,
-          selectedXmlPairRecord.catalogue_number,
+          selectedTestingAnchor.product_family,
+          selectedTestingAnchor.product_variant,
+          selectedTestingAnchor.catalogue_number,
         );
         setXmlPairPreview(preview);
       } else if (xmlMode === "single") {
@@ -1429,13 +1450,13 @@ export function App() {
         );
         setXmlPreview(preview);
       } else if (xmlMode === "marketInfo") {
-        if (!selectedXmlRecord?.catalogue_number) {
+        if (!selectedTestingAnchor) {
           return;
         }
         const preview = await api.previewXmlMarketInfoPut(
-          selectedXmlFamilySummary.product_family,
-          selectedXmlVariantSummary.product_variant,
-          selectedXmlRecord.catalogue_number,
+          selectedTestingAnchor.product_family,
+          selectedTestingAnchor.product_variant,
+          selectedTestingAnchor.catalogue_number,
         );
         setXmlMarketInfoPreview(preview);
       } else if (xmlMode === "patch") {
@@ -1460,7 +1481,7 @@ export function App() {
   }
 
   async function downloadXmlRecord(): Promise<void> {
-    if (xmlMode !== "patch" && (!selectedXmlFamilySummary || !selectedXmlVariantSummary)) {
+    if ((xmlMode === "single" || xmlMode === "batch") && (!selectedXmlFamilySummary || !selectedXmlVariantSummary)) {
       return;
     }
     setIsGeneratingXml(true);
@@ -1468,11 +1489,11 @@ export function App() {
     setXmlActionMessage("Preparing download...");
     try {
       const downloadResult =
-        xmlMode === "pair" && selectedXmlPairRecord?.catalogue_number
+        xmlMode === "pair" && selectedTestingAnchor
           ? await api.downloadXmlPostPatchPair(
-              selectedXmlFamilySummary.product_family,
-              selectedXmlVariantSummary.product_variant,
-              selectedXmlPairRecord.catalogue_number,
+              selectedTestingAnchor.product_family,
+              selectedTestingAnchor.product_variant,
+              selectedTestingAnchor.catalogue_number,
             )
           : xmlMode === "single" && selectedXmlRecord?.catalogue_number
           ? await api.downloadXmlRecord(
@@ -1480,11 +1501,11 @@ export function App() {
               selectedXmlVariantSummary.product_variant,
               selectedXmlRecord.catalogue_number,
             )
-          : xmlMode === "marketInfo" && selectedXmlRecord?.catalogue_number
+          : xmlMode === "marketInfo" && selectedTestingAnchor
           ? await api.downloadXmlMarketInfoPut(
-              selectedXmlFamilySummary.product_family,
-              selectedXmlVariantSummary.product_variant,
-              selectedXmlRecord.catalogue_number,
+              selectedTestingAnchor.product_family,
+              selectedTestingAnchor.product_variant,
+              selectedTestingAnchor.catalogue_number,
             )
           : xmlMode === "patch"
           ? await api.downloadXmlPatchScenario(
@@ -1504,14 +1525,14 @@ export function App() {
       }
       const resolvedFileName =
         fileName ??
-        (xmlMode === "pair"
-          ? `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlPairRecord?.catalogue_number ?? "pair"}-post-patch-pair.zip`
+        (xmlMode === "pair" && selectedTestingAnchor
+          ? `${selectedTestingAnchor.product_family}-${selectedTestingAnchor.product_variant}-${selectedTestingAnchor.catalogue_number}-post-patch-pair.zip`
           : xmlMode === "single"
             ? xmlPreview?.file_name ??
               `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlRecord?.catalogue_number ?? "record"}.xml`
-            : xmlMode === "marketInfo"
+          : xmlMode === "marketInfo"
               ? xmlMarketInfoPreview?.file_name ??
-                `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlRecord?.catalogue_number ?? "record"}-market-info-put.xml`
+                `${selectedTestingAnchor?.product_family ?? "device"}-${selectedTestingAnchor?.product_variant ?? "variant"}-${selectedTestingAnchor?.catalogue_number ?? "record"}-market-info-put.xml`
               : xmlMode === "patch"
                 ? xmlPatchPreview?.file_name ??
                   `${selectedPatchScenario.baselineFamilyId}-${selectedPatchScenario.id}.xml`
@@ -3055,11 +3076,11 @@ export function App() {
                   Post + Patch
                 </button>
                 <button
-                  className={xmlMode === "single" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                  className={xmlMode === "patch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
                   type="button"
-                  onClick={() => setXmlMode("single")}
+                  onClick={() => setXmlMode("patch")}
                 >
-                  Single XML
+                  Patch XML
                 </button>
                 <button
                   className={xmlMode === "marketInfo" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
@@ -3068,12 +3089,13 @@ export function App() {
                 >
                   Market Info
                 </button>
+                <span className="xml-mode-divider" aria-hidden="true" />
                 <button
-                  className={xmlMode === "patch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                  className={xmlMode === "single" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
                   type="button"
-                  onClick={() => setXmlMode("patch")}
+                  onClick={() => setXmlMode("single")}
                 >
-                  Patch XML
+                  Single XML
                 </button>
                 <button
                   className={xmlMode === "batch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
@@ -3096,11 +3118,57 @@ export function App() {
                 </div>
                 <div className="xml-header-context-block">
                   <span className="summary-label">Current Scope</span>
-                  <strong>{selectedXmlFamilySummary?.product_family ?? "No family selected"}</strong>
-                  <p>{selectedXmlVariantSummary?.product_variant ?? "No variant selected"}</p>
+                  <strong>
+                    {xmlMode === "pair" || xmlMode === "marketInfo" || xmlMode === "patch"
+                      ? selectedTestingAnchor?.product_family ?? "No testing anchor"
+                      : selectedXmlFamilySummary?.product_family ?? "No family selected"}
+                  </strong>
+                  <p>
+                    {xmlMode === "pair" || xmlMode === "marketInfo" || xmlMode === "patch"
+                      ? selectedTestingAnchor?.product_variant ?? "No anchor variant"
+                      : selectedXmlVariantSummary?.product_variant ?? "No variant selected"}
+                  </p>
                 </div>
               </div>
             </div>
+            {xmlMode === "pair" || xmlMode === "marketInfo" || xmlMode === "patch" ? (
+              <div className="xml-anchor-panel">
+                <div className="xml-anchor-header">
+                  <div>
+                    <span className="section-kicker">Registered Device Anchor</span>
+                    <h3>Shared Testing Device</h3>
+                  </div>
+                  <span className="status-pill ok compact">
+                    {selectedTestingAnchor?.eudamed_status ?? "Loading anchor"}
+                  </span>
+                </div>
+                {selectedTestingAnchor ? (
+                  <div className="queue-summary xml-anchor-summary">
+                    <div className="queue-chip">
+                      <strong>{selectedTestingAnchor.product_family}</strong>
+                      <span>product family</span>
+                    </div>
+                    <div className="queue-chip">
+                      <strong>{selectedTestingAnchor.product_variant}</strong>
+                      <span>product variant</span>
+                    </div>
+                    <div className="queue-chip">
+                      <strong>{selectedTestingAnchor.catalogue_number}</strong>
+                      <span>catalogue number</span>
+                    </div>
+                    <div className="queue-chip">
+                      <strong>{selectedTestingAnchor.primary_udi_di}</strong>
+                      <span>primary UDI-DI</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="panel-copy">The accepted baseline device anchor has not loaded yet.</p>
+                )}
+                <p className="panel-copy">
+                  `Post + Patch`, `Market Info`, and all `Patch XML` scenarios are tied to this same registered device.
+                </p>
+              </div>
+            ) : null}
             <div className="xml-focus-layout">
               <div className="xml-preview-surface">
                 <div className="section-heading xml-preview-heading">
@@ -3113,7 +3181,9 @@ export function App() {
                           ? "Single Record XML Preview"
                           : xmlMode === "marketInfo"
                             ? "Market Info Preview"
-                            : "Batch XML Preview"}
+                            : xmlMode === "patch"
+                              ? "Patch XML Preview"
+                              : "Batch XML Preview"}
                     </h2>
                   </div>
                   {xmlMode === "pair" ? (
@@ -3164,7 +3234,7 @@ export function App() {
                     {xmlMode === "pair"
                       ? xmlPairPreview
                         ? `Pair preview generated for ${xmlPairPreview.product_family} / ${xmlPairPreview.product_variant} / ${xmlPairPreview.catalogue_number}. Currently showing ${pairPreviewView.toUpperCase()}.`
-                        : "No paired XML preview generated yet for the selected row."
+                        : "No paired XML preview generated yet for the registered testing anchor."
                       : xmlMode === "single"
                         ? xmlPreview
                           ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
@@ -3172,7 +3242,7 @@ export function App() {
                         : xmlMode === "marketInfo"
                           ? xmlMarketInfoPreview
                             ? `MARKET_INFO.PUT preview generated for ${xmlMarketInfoPreview.product_family} / ${xmlMarketInfoPreview.product_variant} / ${xmlMarketInfoPreview.catalogue_number}.`
-                            : "No MARKET_INFO.PUT preview generated yet for the selected row."
+                            : "No MARKET_INFO.PUT preview generated yet for the registered testing anchor."
                           : xmlMode === "patch"
                             ? xmlPatchPreview
                               ? `Fixture-backed PATCH scenario preview loaded for ${xmlPatchPreview.product_family} / ${xmlPatchPreview.product_variant} / ${xmlPatchPreview.catalogue_number}.`
@@ -3191,10 +3261,10 @@ export function App() {
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      (xmlMode === "pair" && !selectedXmlPairRecord) ||
+                      (xmlMode === "pair" && !selectedTestingAnchor) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
-                      (xmlMode === "marketInfo" && !selectedXmlRecord) ||
-                      (xmlMode !== "patch" && !selectedXmlVariantSummary) ||
+                      (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
+                      ((xmlMode === "single" || xmlMode === "batch") && !selectedXmlVariantSummary) ||
                       isGeneratingXml
                     }
                   >
@@ -3215,10 +3285,10 @@ export function App() {
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      (xmlMode === "pair" && !selectedXmlPairRecord) ||
+                      (xmlMode === "pair" && !selectedTestingAnchor) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
-                      (xmlMode === "marketInfo" && !selectedXmlRecord) ||
-                      (xmlMode !== "patch" && !selectedXmlVariantSummary) ||
+                      (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
+                      ((xmlMode === "single" || xmlMode === "batch") && !selectedXmlVariantSummary) ||
                       isGeneratingXml
                     }
                   >
@@ -3229,10 +3299,10 @@ export function App() {
                     type="button"
                     onClick={() => void downloadXmlRecord()}
                     disabled={
-                      (xmlMode === "pair" && !selectedXmlPairRecord) ||
+                      (xmlMode === "pair" && !selectedTestingAnchor) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
-                      (xmlMode === "marketInfo" && !selectedXmlRecord) ||
-                      (xmlMode !== "patch" && !selectedXmlVariantSummary) ||
+                      (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
+                      ((xmlMode === "single" || xmlMode === "batch") && !selectedXmlVariantSummary) ||
                       isGeneratingXml
                     }
                   >
@@ -3249,28 +3319,20 @@ export function App() {
                   {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
                 </div>
                 {xmlMode === "pair" ? (
-                  selectedXmlPairRecord ? (
+                  selectedTestingAnchor ? (
                     <div className="draft-list xml-record-stack">
                       <div className="draft-card xml-record-card">
                         <div className="draft-card-head">
-                          <strong>{selectedXmlPairRecord.catalogue_number}</strong>
-                          <span className="status-pill ok compact">Post source</span>
+                          <strong>{selectedTestingAnchor.catalogue_number}</strong>
+                          <span className="status-pill ok compact">Registered device</span>
                         </div>
                         <p className="draft-meta">
-                          {selectedXmlPairRecord.product_family} / {selectedXmlPairRecord.product_variant}
+                          {selectedTestingAnchor.product_family} / {selectedTestingAnchor.product_variant}
                         </p>
-                        <p className="panel-copy">{selectedXmlPairRecord.trade_name ?? "No trade name"}</p>
                         <p className="panel-copy">
-                          UDI-DI {selectedXmlPairRecord.primary_udi_di} · Issuing entity {selectedXmlPairRecord.issuing_entity ?? "Unknown"}
+                          UDI-DI {selectedTestingAnchor.primary_udi_di} · Accepted baseline {selectedTestingAnchor.post_file_name}
                         </p>
-                        <div className="family-scope-pill-row xml-status-row">
-                          <span className={basicUdiMatchPillClass(selectedXmlPairRecord.reference_match_status)}>
-                            {basicUdiMatchLabel(selectedXmlPairRecord.reference_match_status)}
-                          </span>
-                        </div>
-                        <p className="panel-copy">
-                          Compare an accepted-shape create message with the equivalent first update message for the same device record.
-                        </p>
+                        <p className="panel-copy">Compare the accepted baseline create message with the equivalent first update message for the same registered device.</p>
                         <div className="family-scope-pill-row xml-status-row">
                           <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
                             Post {pairPostValidation ? (pairPostValidation.valid ? "valid" : "invalid") : "awaiting preview"}
@@ -3282,7 +3344,7 @@ export function App() {
                       </div>
                     </div>
                   ) : (
-                    <p className="panel-copy">No XML-ready POST record is currently available for paired POST/PATCH generation for the selected family and variant.</p>
+                    <p className="panel-copy">No registered testing anchor is currently available for paired POST/PATCH generation.</p>
                   )
                 ) : xmlMode === "single" ? (
                   selectedXmlRecord ? (
@@ -3313,32 +3375,24 @@ export function App() {
                     <p className="panel-copy">No XML-ready sample row is currently available for the selected family and variant.</p>
                   )
                 ) : xmlMode === "marketInfo" ? (
-                  selectedXmlRecord ? (
+                  selectedTestingAnchor ? (
                     <div className="draft-list xml-record-stack">
                       <div className="draft-card xml-record-card">
                         <div className="draft-card-head">
-                          <strong>{selectedXmlRecord.catalogue_number}</strong>
+                          <strong>{selectedTestingAnchor.catalogue_number}</strong>
                           <span className="status-pill ok compact">Market info</span>
                         </div>
                         <p className="draft-meta">
-                          {selectedXmlRecord.product_family} / {selectedXmlRecord.product_variant}
+                          {selectedTestingAnchor.product_family} / {selectedTestingAnchor.product_variant}
                         </p>
-                        <p className="panel-copy">{selectedXmlRecord.trade_name ?? "No trade name"}</p>
                         <p className="panel-copy">
-                          UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
+                          UDI-DI {selectedTestingAnchor.primary_udi_di} · Registered device anchor
                         </p>
-                        <div className="family-scope-pill-row xml-status-row">
-                          <span className={basicUdiMatchPillClass(selectedXmlRecord.reference_match_status)}>
-                            {basicUdiMatchLabel(selectedXmlRecord.reference_match_status)}
-                          </span>
-                        </div>
-                        <p className="panel-copy">
-                          Review a standalone market information update message using the record's current `marketInfos` collection.
-                        </p>
+                        <p className="panel-copy">Review a standalone market information update message against the same registered device used for `Post + Patch` and the candidate patch scenarios.</p>
                       </div>
                     </div>
                   ) : (
-                    <p className="panel-copy">No XML-ready sample row is currently available for MARKET_INFO.PUT generation for the selected family and variant.</p>
+                    <p className="panel-copy">No registered testing anchor is currently available for MARKET_INFO.PUT generation.</p>
                   )
                 ) : xmlMode === "patch" ? (
                   <div className="draft-list xml-record-stack">
@@ -3356,7 +3410,7 @@ export function App() {
                       </label>
                       <select
                         id="patch-scenario-selector"
-                        className="rule-select"
+                        className="rule-select patch-select"
                         value={selectedPatchScenario.id}
                         onChange={(event) => setSelectedPatchScenarioId(event.target.value as PatchScenarioId)}
                       >
@@ -3371,7 +3425,7 @@ export function App() {
                       </label>
                       <select
                         id="patch-scenario-status"
-                        className="rule-select"
+                        className="rule-select patch-select"
                         value={selectedPatchScenarioStatus}
                         onChange={(event) =>
                           setPatchScenarioStatuses((current) => ({

@@ -8,6 +8,7 @@ import type {
   MarketInfoPutPreview,
   NormalizationRuleFile,
   PatchScenarioXmlPreview,
+  RegisteredDeviceAnchor,
   ReferenceWorkbookSummary,
   SchemaInventory,
   SheetProfile,
@@ -91,6 +92,8 @@ export const api = {
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
   canonicalValidation: () => getJson<CanonicalValidationBundle>("/canonical-validation"),
   xmlGenerationScope: () => getJson<XmlGenerationScopeBundle>("/xml/scope"),
+  testingRegisteredDeviceAnchor: (familyId: string) =>
+    getJson<RegisteredDeviceAnchor>(`/xml/testing-anchor?family_id=${encodeURIComponent(familyId)}`),
   previewXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendJson<SingleRecordXmlPreview>("/xml/preview-record", "POST", {
       product_family: productFamily,

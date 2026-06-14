@@ -2,45 +2,103 @@
 
 ## Purpose
 
-This tab generates XML previews and downloads from XML-ready validation records.
-It supports three review modes:
+The current XML UI now serves two related but distinct purposes:
 
-- single-record XML
-- paired `POST` plus equivalent first `PATCH`
-- variant-batch XML
-- standalone `MARKET_INFO.PUT`
+- `EUDAMED Testing`
+- `EUDAMED Generation`
 
-## Current Implementation
+`EUDAMED Testing` is used for preview, comparison, validation, and external testing support.
 
-All XML generation starts from:
+`EUDAMED Generation` is used for accepted-only generation patterns intended for real upload preparation.
+
+## Current Mode Split
+
+Inside `EUDAMED Testing`, the XML modes are now split into two groups.
+
+### Shared Registered-Device Testing Modes
+
+- `Post + Patch`
+- `Patch XML`
+- `Market Info`
+
+These modes are tied to the same registered device anchor for the current testing family.
+
+They are intended to model the state after successful device registration, where several follow-on XML operations should all relate to the same registered device.
+
+### General XML Tools
+
+- `Single XML`
+- `Batch XML`
+
+These modes are not tied to the registered device anchor.
+
+They remain general XML generation tools driven from the broader XML-ready validation selection model.
+
+## Current Selection Model
+
+### Shared Registered-Device Testing Modes
+
+`Post + Patch`, `Patch XML`, and `Market Info` use the shared registered device anchor.
+
+Current anchor family:
+
+- `echelon-echelon-vac-EVAC22L1S`
+
+This means those testing modes operate from one known registered device identity rather than from whichever current XML-ready row is selected in the broader variant scope.
+
+### General XML Tools
+
+`Single XML` and `Batch XML` still start from:
 
 - `Product Family`
 - `Product Variant`
 
 Selection then branches by mode:
 
-- single-record mode also requires a `Catalogue Number`
-- paired `POST`/`PATCH` mode also requires a `Catalogue Number`
-- `MARKET_INFO.PUT` mode also requires a `Catalogue Number`
-- batch mode generates all XML-ready records for the selected variant
+- `Single XML` also requires one selected XML-ready record
+- `Batch XML` generates all XML-ready records for the selected variant
 
-The current scaffold supports:
+## Current Supported Outputs
 
-- single-record preview/download
-- variant-batch preview/download
-- paired `POST` + equivalent first `PATCH` preview/download for one XML-ready POST-classified device
-- standalone `MARKET_INFO.PUT` preview/download for one XML-ready selected record
-- local XSD validation against `data/schemas/service/Message.xsd`
+### Post + Patch
+
+- accepted baseline `POST` preview
+- equivalent first `PATCH` preview
+- independent local XSD validation for both messages
+- downloadable `.zip` containing both XML files and a manifest
+
+### Patch XML
+
+- fixture-backed candidate PATCH scenario preview
+- local XSD validation result
+- downloadable `.xml`
+
+### Market Info
+
+- standalone `MARKET_INFO.PUT` preview
+- local XSD validation result
+- downloadable `.xml`
+
+### Single XML
+
+- one selected XML-ready record preview
+- local XSD validation result
+- downloadable `.xml`
+
+### Batch XML
+
+- selected variant batch preview
+- per-chunk validation result
+- downloadable `.zip`
 
 ## Current Service Profiles
 
-Default `POST`:
+Accepted baseline `POST`:
 
 - service `DEVICE.POST`
 - payload root `device:Device`
-- includes `MDRBasicUDI` and `MDRUDIDIData`
 
-Default `PATCH`:
+Accepted baseline `PATCH`:
 
 - service `UDI_DI.PATCH`
 - payload root `device:UDIDIData`
@@ -50,52 +108,20 @@ Equivalent first `PATCH` test path:
 - uses `UDI_DI.PATCH`
 - forces `e:version = 2`
 - keeps `marketInfos` identical to the equivalent `POST`
-- intentionally emits the same `marketInfos` structure in both messages for test comparison, even though later standalone market-information maintenance may move to a separate service flow
-- is generated only when the selected device is currently classified as `POST`
 
 Standalone `MARKET_INFO.PUT`:
 
 - service `MARKET_INFO.PUT`
 - payload root `mktinfo:DTXMarketInfo`
 - uses `uDIDIIdentifier` to target one UDI-DI record
-- renders the market-info collection as a standalone service payload
-
-## Paired POST/PATCH Output
-
-The paired review path is intended to compare the first update message against the equivalent initial create message for the same device.
-
-For the current test path, `marketInfos` handling is deliberately conservative:
-
-- the `POST` includes the current `marketInfos` structure
-- the equivalent first `PATCH` repeats that same `marketInfos` structure unchanged
-- this makes structural comparison easier while the future `MARKET_INFO` service contract is still being finalized
-
-Current paired output includes:
-
-- a `POST` XML preview
-- a `PATCH` XML preview
-- independent local XSD validation results for both messages
-- a downloadable `.zip` containing both XML files and a manifest
-
-## MarketInfo PUT Output
-
-The standalone market-info path is intended to isolate the market-information collection for one selected UDI-DI record.
-
-Current standalone market-info output includes:
-
-- one `MARKET_INFO.PUT` XML preview
-- local XSD validation result
-- a downloadable `.xml`
 
 ## Important Note
 
-The XML layer currently consumes a typed XML projection built from validation records. Most field names now align with the declared Pydantic canonical model, but some compatibility fields, derived values, and XML-specific aggregated structures still sit between the canonical layer and the final XSD-facing payload.
+The XML layer still consumes a typed XML projection built from validation records and fixture-backed scenario inputs.
 
-## Current Output
+Some XML generation paths are now intentionally more conservative than others:
 
-- XML preview
-- schema validation result
-- downloadable `.xml`
-- downloadable batch `.zip`
-- downloadable paired `POST`/`PATCH` `.zip`
-- downloadable standalone `MARKET_INFO.PUT` `.xml`
+- shared-device testing paths are anchored to one known registered device
+- general XML tools still operate over broader XML-ready canonical validation scope
+
+This is deliberate and matches the current staged testing approach.

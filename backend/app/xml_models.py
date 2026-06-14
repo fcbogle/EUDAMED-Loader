@@ -41,12 +41,27 @@ class SingleRecordXmlPreview(BaseModel):
     validation: XmlValidationResult
 
 
+class RegisteredDeviceAnchor(BaseModel):
+    family_id: str
+    baseline_fixture: str
+    product_family: str
+    product_variant: str
+    catalogue_number: str
+    primary_udi_di: str
+    post_file_name: str
+    patch_file_name: str
+    post_valid: bool
+    patch_valid: bool
+    eudamed_status: str
+
+
 class EquivalentPatchPairPreview(BaseModel):
     mode: Literal["post_patch_pair"] = "post_patch_pair"
     product_family: str | None = None
     product_variant: str | None = None
     catalogue_number: str
     primary_udi_di: str
+    registered_device_anchor: RegisteredDeviceAnchor
     post_file_name: str
     post_xml: str
     post_validation: XmlValidationResult
@@ -61,6 +76,7 @@ class MarketInfoPutPreview(BaseModel):
     product_variant: str | None = None
     catalogue_number: str
     primary_udi_di: str
+    registered_device_anchor: RegisteredDeviceAnchor
     file_name: str
     xml: str
     validation: XmlValidationResult
@@ -75,6 +91,7 @@ class PatchScenarioXmlPreview(BaseModel):
     product_variant: str | None = None
     catalogue_number: str
     primary_udi_di: str
+    registered_device_anchor: RegisteredDeviceAnchor
     baseline_fixture: str
     file_name: str
     xml: str

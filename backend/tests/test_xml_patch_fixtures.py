@@ -11,6 +11,7 @@ FIXTURE_ROOT = (
     / "equivalent_baseline"
     / "echelon-echelon-vac-EVAC22L1S"
 )
+SCENARIO_ROOT = Path(__file__).resolve().parent / "fixtures" / "xml_patch_scenarios"
 
 
 def test_equivalent_baseline_fixture_contains_proven_post_patch_pair() -> None:
@@ -32,3 +33,17 @@ def test_equivalent_baseline_fixture_contains_proven_post_patch_pair() -> None:
     assert "<e:version>2</e:version>" in patch_xml
     assert "<commondi:DICode>05050649062025</commondi:DICode>" in post_xml
     assert "<commondi:DICode>05050649062025</commondi:DICode>" in patch_xml
+
+
+def test_generated_patch_scenarios_share_the_same_registered_device_anchor() -> None:
+    manifest = json.loads((FIXTURE_ROOT / "manifest.json").read_text(encoding="utf-8"))
+    scenario_ids = ["trade_name_edit", "warning_add", "storage_condition_edit", "secondary_identifier_add"]
+
+    for scenario_id in scenario_ids:
+        scenario = json.loads(
+            (SCENARIO_ROOT / scenario_id / "echelon-echelon-vac-EVAC22L1S" / "scenario.json").read_text(encoding="utf-8")
+        )
+        assert scenario["baseline_fixture"] == "equivalent_baseline/echelon-echelon-vac-EVAC22L1S"
+        assert scenario["product_family"] == manifest["product_family"]
+        assert scenario["product_variant"] == manifest["product_variant"]
+        assert scenario["catalogue_number"] == manifest["catalogue_number"]

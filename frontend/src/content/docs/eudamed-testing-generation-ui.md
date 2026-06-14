@@ -2,24 +2,27 @@
 
 ## Purpose
 
-This note captures the current UI direction for separating XML testing from XML generation that is intended for real EUDAMED use.
+This note describes the current UI direction for separating:
 
-The goal is to keep candidate XML patterns available for review and experimentation without making them appear operationally ready for upload preparation.
+- XML patterns being tested or reviewed
+- XML patterns considered ready for actual EUDAMED upload preparation
 
-## Agreed Top-Level Areas
+The goal is to keep candidate XML patterns available for review and external testing without making them appear operationally ready.
 
-Two top-level areas should exist:
+## Top-Level Areas
+
+Two top-level areas now exist:
 
 - `EUDAMED Testing`
 - `EUDAMED Generation`
 
-`EUDAMED Testing` is the workspace for comparison, candidate scenario review, XML preview, and shape validation.
+`EUDAMED Testing` is the workspace for comparison, candidate scenario review, preview, validation, and export.
 
-`EUDAMED Generation` is the workspace for generation patterns that are considered ready for actual EUDAMED upload preparation.
+`EUDAMED Generation` is the workspace for accepted-only XML generation patterns.
 
 ## Status Labels
 
-Only two status labels are currently required:
+Only two status labels are currently used:
 
 - `EUDAMED Candidate`
 - `EUDAMED Accepted`
@@ -27,111 +30,122 @@ Only two status labels are currently required:
 Intended meaning:
 
 - `EUDAMED Candidate`
-  - pattern is available for XML review and external testing
-  - pattern is not yet confirmed as accepted by EUDAMED
+  - available for local review and external EUDAMED testing
+  - not yet confirmed as accepted by EUDAMED
 - `EUDAMED Accepted`
-  - pattern has user-confirmed evidence of EUDAMED acceptance
-  - pattern may be used in operational XML generation flows
+  - user-confirmed as accepted by EUDAMED
+  - suitable for operational generation workflows
 
-Status should be user-editable in the UI.
+Current UI behavior:
 
-Default rule:
-
-- new PATCH scenarios start as `EUDAMED Candidate`
-
-Initial known accepted rule:
-
-- the current `Post + Patch` pair starts as `EUDAMED Accepted`
+- PATCH scenario status is user-editable in the UI
+- the accepted baseline `Post + Patch` pair is treated as `EUDAMED Accepted`
+- the three active PATCH scenarios start as `EUDAMED Candidate`
 
 ## EUDAMED Testing Workspace
 
-The existing `XML Generation` area should be renamed to `EUDAMED Testing`.
+The former `XML Generation` area is now `EUDAMED Testing`.
 
-Initial pill set:
+Current pill order:
 
 - `Post + Patch`
-- `Single XML`
-- `Market Info`
-- `Batch XML`
 - `Patch XML`
+- `Market Info`
+- divider
+- `Single XML`
+- `Batch XML`
 
-This workspace may show both candidate and accepted patterns.
+This layout intentionally separates:
 
-Its purpose is:
+- shared registered-device testing tools
+- general XML tools
 
-- XML comparison
-- candidate PATCH scenario review
-- preview and diff inspection
-- schema validation
-- export for external testing
+### Shared Registered-Device Testing Group
+
+These three modes now relate to the same registered device:
+
+- `Post + Patch`
+- `Patch XML`
+- `Market Info`
+
+They use a shared `Registered Device Anchor`, currently surfaced in the UI only for these three modes.
+
+The anchor panel is intended to show that all three XML patterns relate to the same registered device after successful POST registration.
+
+### General XML Tools
+
+These two modes remain general XML generation/review tools:
+
+- `Single XML`
+- `Batch XML`
+
+They do not use the registered device anchor.
+
+They still work from the broader XML-ready validation selection model:
+
+- `Product Family`
+- `Product Variant`
+- and, for single-record generation, one selected record
 
 ## Patch XML Scope
 
-`Patch XML` should be introduced inside `EUDAMED Testing`, not as a separate top-level area.
+`Patch XML` is part of `EUDAMED Testing`, not a separate top-level area.
 
-First-release scope should remain narrow:
+Current scope remains deliberately narrow:
 
-- one record at a time
-- one PATCH scenario at a time
-- scenario-driven generation
+- one candidate PATCH scenario at a time
+- fixture-backed preview and download
 - no freeform PATCH editing
 
-Initial scenarios:
+Active candidate scenarios:
 
 - `trade_name_edit`
 - `warning_add`
 - `storage_condition_edit`
 
-The design should be easy to extend with additional scenarios later.
+Inactive scenario:
 
-Recommended implementation direction:
+- `secondary_identifier_add`
+  - still incomplete
+  - not currently surfaced as an active generated scenario
 
-- define PATCH scenarios from configuration or manifests
-- keep the UI driven by scenario metadata rather than hardcoded per-scenario screens
+Current implementation direction:
+
+- scenario-driven UI
+- scenario metadata rather than per-scenario hardcoded screens
+- one shared registered-device base per fixture family
 
 ## EUDAMED Generation Workspace
 
-`EUDAMED Generation` should be a separate top-level area alongside `EUDAMED Testing`.
+`EUDAMED Generation` is a separate top-level area alongside `EUDAMED Testing`.
 
-This workspace should expose only `EUDAMED Accepted` patterns.
+This workspace exposes only `EUDAMED Accepted` XML patterns.
 
-Initial expectation:
+Current state:
 
 - `Post + Patch` is available here
-- candidate PATCH scenarios are not available here until the user marks them `EUDAMED Accepted`
+- candidate PATCH scenarios are not yet available here
 
 ## Visibility Rule
 
-The current operating rule should be:
+Current operating rule:
 
-- `EUDAMED Testing` can show both `EUDAMED Candidate` and `EUDAMED Accepted`
-- `EUDAMED Generation` should show only `EUDAMED Accepted`
+- `EUDAMED Testing` may show both `EUDAMED Candidate` and `EUDAMED Accepted`
+- `EUDAMED Generation` shows only `EUDAMED Accepted`
 
-If the accepted-only workspace looks sparse initially, use a short explanatory note rather than showing disabled candidate options.
-
-Suggested note:
+Suggested user message remains:
 
 `Only EUDAMED Accepted XML patterns are available here. Use EUDAMED Testing to review and promote candidate patterns.`
 
 ## Why This Split
 
-This split keeps the application aligned with the current project phase:
+This keeps the UI aligned with the current project phase:
 
 - the application is still a preparation and review tool
 - several PATCH scenarios are still candidate patterns rather than operationally proven flows
-- local schema validity and fixture comparison do not by themselves prove EUDAMED acceptance
+- local schema validity and fixture comparison do not prove EUDAMED acceptance by themselves
 
-The UI should therefore make a clear distinction between:
+The interface should therefore make a clear distinction between:
 
-- XML patterns being tested or reviewed
-- XML patterns ready for real EUDAMED upload preparation
-
-## Immediate Next Step
-
-The next implementation step should be to introduce the structural UI split before expanding PATCH generation logic:
-
-1. Rename `XML Generation` to `EUDAMED Testing`
-2. Add the new top-level `EUDAMED Generation` area
-3. Add the `Patch XML` pill inside `EUDAMED Testing`
-4. Surface `EUDAMED Candidate` and `EUDAMED Accepted` status labels in the UI
-5. Restrict `EUDAMED Generation` to accepted patterns only
+- XML patterns under test
+- XML patterns ready for real upload preparation

@@ -428,6 +428,11 @@ select {
   color: #002a3a;
 }
 
+.patch-select {
+  padding: 7px 10px;
+  font-size: 0.82rem;
+}
+
 input[type="search"] {
   padding: 10px 12px;
   border-radius: 12px;
@@ -729,6 +734,13 @@ th {
   padding: 7px 10px;
   font-size: 0.78rem;
   white-space: nowrap;
+}
+
+.xml-mode-divider {
+  width: 1px;
+  min-height: 28px;
+  align-self: center;
+  background: rgba(76, 111, 122, 0.24);
 }
 
 .save-message {
@@ -1355,6 +1367,34 @@ th {
 
 .xml-equal-panel {
   min-width: 0;
+}
+
+.xml-anchor-panel {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid rgba(76, 111, 122, 0.2);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  display: grid;
+  gap: 12px;
+}
+
+.xml-anchor-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.xml-anchor-header h3 {
+  margin: 4px 0 0;
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: 1.05rem;
+  color: #002a3a;
+}
+
+.xml-anchor-summary {
+  margin-top: 0;
 }
 
 .xml-top-panel {
