@@ -327,6 +327,16 @@ function titleCaseToken(value: string): string {
     .join(" ");
 }
 
+function slugifyFixtureFamilyId(
+  productFamily: string | null | undefined,
+  productVariant: string | null | undefined,
+  catalogueNumber: string | null | undefined,
+): string {
+  return [productFamily ?? "", productVariant ?? "", catalogueNumber ?? ""]
+    .map((value) => value.trim().toLowerCase().replace(/\s+/g, "-"))
+    .join("-");
+}
+
 function basicUdiMatchLabel(matchStatus: string | null | undefined): string {
   if (matchStatus === "matched") {
     return "Matched in BasicUDIs.xlsx";
@@ -1112,17 +1122,69 @@ export function App() {
     ) ??
     selectedXmlVariantRecords.find((record) => (record.submission_operation ?? "").toUpperCase() === "POST") ??
     null;
+  const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
   const selectedXmlVariantChunkCount = selectedXmlVariantSummary
     ? Math.max(Math.ceil(selectedXmlVariantSummary.xml_ready_records / 300), 1)
     : 1;
   const selectedPatchScenario =
     PATCH_SCENARIOS.find((scenario) => scenario.id === selectedPatchScenarioId) ?? PATCH_SCENARIOS[0];
   const selectedPatchScenarioStatus = patchScenarioStatuses[selectedPatchScenario.id];
-  const selectedTestingAnchor =
-    xmlPatchPreview?.registered_device_anchor ??
+  const selectedPairAnchor =
     xmlPairPreview?.registered_device_anchor ??
+    (selectedXmlPairRecord
+      ? {
+          family_id: slugifyFixtureFamilyId(
+            selectedXmlPairRecord.product_family,
+            selectedXmlPairRecord.product_variant,
+            selectedXmlPairRecord.catalogue_number,
+          ),
+          baseline_fixture: `selection/${slugifyFixtureFamilyId(
+            selectedXmlPairRecord.product_family,
+            selectedXmlPairRecord.product_variant,
+            selectedXmlPairRecord.catalogue_number,
+          )}`,
+          product_family: selectedXmlPairRecord.product_family,
+          product_variant: selectedXmlPairRecord.product_variant,
+          catalogue_number: selectedXmlPairRecord.catalogue_number,
+          primary_udi_di: selectedXmlPairRecord.primary_udi_di ?? "Pending",
+          post_file_name: "Pending preview",
+          patch_file_name: "Pending preview",
+          post_valid: false,
+          patch_valid: false,
+          eudamed_status: "Selection target",
+        }
+      : null);
+  const selectedMarketInfoAnchor =
     xmlMarketInfoPreview?.registered_device_anchor ??
-    testingAnchor;
+    (selectedXmlMarketInfoRecord
+      ? {
+          family_id: slugifyFixtureFamilyId(
+            selectedXmlMarketInfoRecord.product_family,
+            selectedXmlMarketInfoRecord.product_variant,
+            selectedXmlMarketInfoRecord.catalogue_number,
+          ),
+          baseline_fixture: `selection/${slugifyFixtureFamilyId(
+            selectedXmlMarketInfoRecord.product_family,
+            selectedXmlMarketInfoRecord.product_variant,
+            selectedXmlMarketInfoRecord.catalogue_number,
+          )}`,
+          product_family: selectedXmlMarketInfoRecord.product_family,
+          product_variant: selectedXmlMarketInfoRecord.product_variant,
+          catalogue_number: selectedXmlMarketInfoRecord.catalogue_number,
+          primary_udi_di: selectedXmlMarketInfoRecord.primary_udi_di ?? "Pending",
+          post_file_name: "Pending preview",
+          patch_file_name: "Pending preview",
+          post_valid: false,
+          patch_valid: false,
+          eudamed_status: "Selection target",
+        }
+      : null);
+  const selectedTestingAnchor =
+    xmlMode === "pair"
+      ? selectedPairAnchor
+      : xmlMode === "marketInfo"
+        ? selectedMarketInfoAnchor
+        : xmlPatchPreview?.registered_device_anchor ?? testingAnchor;
   const acceptedXmlModes = [
     {
       id: "pair",
@@ -1137,14 +1199,14 @@ export function App() {
         ? pairPreviewView === "post"
           ? xmlPairPreview.post_xml
           : xmlPairPreview.patch_xml
-        : selectedTestingAnchor
+        : selectedXmlPairRecord
           ? [
               "<!-- Generate paired XML to load the accepted-shape POST and equivalent first PATCH previews -->",
-              `<catalogue-number>${selectedTestingAnchor.catalogue_number}</catalogue-number>`,
-              `<udi-di>${selectedTestingAnchor.primary_udi_di}</udi-di>`,
+              `<catalogue-number>${selectedXmlPairRecord.catalogue_number}</catalogue-number>`,
+              `<udi-di>${selectedXmlPairRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
               `<preview-view>${pairPreviewView.toUpperCase()}</preview-view>`,
             ].join("\n")
-          : "<!-- No registered testing anchor is currently available for paired POST/PATCH generation -->"
+          : "<!-- No POST-classified XML-ready record is currently available for paired POST/PATCH generation -->"
       : xmlMode === "single"
       ? selectedXmlRecord
         ? xmlPreview?.xml ??
@@ -1155,15 +1217,15 @@ export function App() {
           ].join("\n")
         : "<!-- No XML-ready record is currently available for the selected family and variant -->"
       : xmlMode === "marketInfo"
-      ? selectedTestingAnchor
+      ? selectedXmlMarketInfoRecord
         ? xmlMarketInfoPreview?.xml ??
           [
             "<!-- Generate XML to load the MARKET_INFO.PUT Push message preview -->",
-            `<catalogue-number>${selectedTestingAnchor?.catalogue_number ?? "PENDING"}</catalogue-number>`,
-            `<udi-di>${selectedTestingAnchor?.primary_udi_di ?? "PENDING"}</udi-di>`,
+            `<catalogue-number>${selectedXmlMarketInfoRecord.catalogue_number}</catalogue-number>`,
+            `<udi-di>${selectedXmlMarketInfoRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
             "<service>MARKET_INFO.PUT</service>",
           ].join("\n")
-        : "<!-- No registered testing anchor is currently available for MARKET_INFO.PUT generation -->"
+        : "<!-- No XML-ready record is currently available for MARKET_INFO.PUT generation -->"
       : xmlMode === "patch"
       ? xmlPatchPreview?.xml ??
         [
@@ -1430,13 +1492,13 @@ export function App() {
     setXmlActionMessage(null);
     try {
       if (xmlMode === "pair") {
-        if (!selectedTestingAnchor) {
+        if (!selectedXmlPairRecord?.catalogue_number) {
           return;
         }
         const preview = await api.previewXmlPostPatchPair(
-          selectedTestingAnchor.product_family,
-          selectedTestingAnchor.product_variant,
-          selectedTestingAnchor.catalogue_number,
+          selectedXmlPairRecord.product_family,
+          selectedXmlPairRecord.product_variant,
+          selectedXmlPairRecord.catalogue_number,
         );
         setXmlPairPreview(preview);
       } else if (xmlMode === "single") {
@@ -1450,13 +1512,13 @@ export function App() {
         );
         setXmlPreview(preview);
       } else if (xmlMode === "marketInfo") {
-        if (!selectedTestingAnchor) {
+        if (!selectedXmlMarketInfoRecord?.catalogue_number) {
           return;
         }
         const preview = await api.previewXmlMarketInfoPut(
-          selectedTestingAnchor.product_family,
-          selectedTestingAnchor.product_variant,
-          selectedTestingAnchor.catalogue_number,
+          selectedXmlMarketInfoRecord.product_family,
+          selectedXmlMarketInfoRecord.product_variant,
+          selectedXmlMarketInfoRecord.catalogue_number,
         );
         setXmlMarketInfoPreview(preview);
       } else if (xmlMode === "patch") {
@@ -1489,11 +1551,11 @@ export function App() {
     setXmlActionMessage("Preparing download...");
     try {
       const downloadResult =
-        xmlMode === "pair" && selectedTestingAnchor
+        xmlMode === "pair" && selectedXmlPairRecord?.catalogue_number
           ? await api.downloadXmlPostPatchPair(
-              selectedTestingAnchor.product_family,
-              selectedTestingAnchor.product_variant,
-              selectedTestingAnchor.catalogue_number,
+              selectedXmlPairRecord.product_family,
+              selectedXmlPairRecord.product_variant,
+              selectedXmlPairRecord.catalogue_number,
             )
           : xmlMode === "single" && selectedXmlRecord?.catalogue_number
           ? await api.downloadXmlRecord(
@@ -1501,11 +1563,11 @@ export function App() {
               selectedXmlVariantSummary.product_variant,
               selectedXmlRecord.catalogue_number,
             )
-          : xmlMode === "marketInfo" && selectedTestingAnchor
+          : xmlMode === "marketInfo" && selectedXmlMarketInfoRecord?.catalogue_number
           ? await api.downloadXmlMarketInfoPut(
-              selectedTestingAnchor.product_family,
-              selectedTestingAnchor.product_variant,
-              selectedTestingAnchor.catalogue_number,
+              selectedXmlMarketInfoRecord.product_family,
+              selectedXmlMarketInfoRecord.product_variant,
+              selectedXmlMarketInfoRecord.catalogue_number,
             )
           : xmlMode === "patch"
           ? await api.downloadXmlPatchScenario(
@@ -1525,14 +1587,14 @@ export function App() {
       }
       const resolvedFileName =
         fileName ??
-        (xmlMode === "pair" && selectedTestingAnchor
-          ? `${selectedTestingAnchor.product_family}-${selectedTestingAnchor.product_variant}-${selectedTestingAnchor.catalogue_number}-post-patch-pair.zip`
+        (xmlMode === "pair" && selectedXmlPairRecord
+          ? `${selectedXmlPairRecord.product_family}-${selectedXmlPairRecord.product_variant}-${selectedXmlPairRecord.catalogue_number}-post-patch-pair.zip`
           : xmlMode === "single"
             ? xmlPreview?.file_name ??
               `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlRecord?.catalogue_number ?? "record"}.xml`
           : xmlMode === "marketInfo"
               ? xmlMarketInfoPreview?.file_name ??
-                `${selectedTestingAnchor?.product_family ?? "device"}-${selectedTestingAnchor?.product_variant ?? "variant"}-${selectedTestingAnchor?.catalogue_number ?? "record"}-market-info-put.xml`
+                `${selectedXmlMarketInfoRecord?.product_family ?? "device"}-${selectedXmlMarketInfoRecord?.product_variant ?? "variant"}-${selectedXmlMarketInfoRecord?.catalogue_number ?? "record"}-market-info-put.xml`
               : xmlMode === "patch"
                 ? xmlPatchPreview?.file_name ??
                   `${selectedPatchScenario.baselineFamilyId}-${selectedPatchScenario.id}.xml`
