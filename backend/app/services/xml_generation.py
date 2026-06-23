@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from app.config import get_settings
 from app.services.canonical_validation import CanonicalValidationService
 from app.services.xml_packaging import XmlPackageBuilder
@@ -12,7 +14,10 @@ from app.xml_models import (
     BatchXmlChunkSummary,
     BatchXmlPreview,
     EquivalentPatchPairPreview,
+    GeneratedPatchScenarioPreview,
     MarketInfoPutPreview,
+    PatchScenarioContext,
+    PatchScenarioFieldDelta,
     PatchScenarioXmlPreview,
     RegisteredDeviceAnchor,
     SingleRecordXmlPreview,
@@ -65,6 +70,93 @@ class XmlGenerationService:
             baseline_fixture=baseline_fixture,
             manifest=manifest,
         )
+
+    def preview_generated_patch_scenario(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+        scenario_id: str,
+        patch_version: str,
+        scenario_inputs: dict[str, Any] | None = None,
+    ) -> GeneratedPatchScenarioPreview:
+        scenario_data = scenario_inputs or {}
+        normalized_version = self._validate_patch_version(patch_version)
+        post_source_record = self.selector.find_post_record(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        post_record = self.projection_builder.build_device_record(post_source_record)
+        baseline_patch_record = self.projection_builder.build_equivalent_first_patch(post_record)
+        registered_device_anchor = self._registered_device_anchor_from_pair(post_record, baseline_patch_record)
+
+        baseline_patch_xml_bytes = self.renderer.render_message(baseline_patch_record)
+        baseline_patch_validation = self.xml_validation_service.validate_message(baseline_patch_xml_bytes)
+
+        derived_patch_record, scenario_label, field_deltas = self._build_generated_patch_scenario(
+            baseline_patch_record=baseline_patch_record,
+            scenario_id=scenario_id,
+            patch_version=normalized_version,
+            scenario_inputs=scenario_data,
+        )
+        derived_patch_xml_bytes = self.renderer.render_message(derived_patch_record)
+        derived_patch_validation = self.xml_validation_service.validate_message(derived_patch_xml_bytes)
+        derived_patch_file_name = self._scenario_patch_file_name(
+            product_family=post_record.product_family,
+            product_variant=post_record.product_variant,
+            catalogue_number=post_record.catalogue_number,
+            scenario_id=scenario_id,
+        )
+
+        return GeneratedPatchScenarioPreview(
+            scenario_id=scenario_id,
+            scenario_label=scenario_label,
+            product_family=post_record.product_family,
+            product_variant=post_record.product_variant,
+            catalogue_number=post_record.catalogue_number,
+            primary_udi_di=post_record.primary_udi_di,
+            registered_device_anchor=registered_device_anchor,
+            context=PatchScenarioContext(
+                scenario_id=scenario_id,
+                scenario_label=scenario_label,
+                product_family=post_record.product_family,
+                product_variant=post_record.product_variant,
+                catalogue_number=post_record.catalogue_number,
+                primary_udi_di=post_record.primary_udi_di,
+                parent_post_version="1",
+                baseline_patch_version=baseline_patch_record.patch_version_override or "2",
+                proposed_patch_version=normalized_version,
+            ),
+            field_deltas=field_deltas,
+            baseline_patch_file_name=registered_device_anchor.patch_file_name,
+            baseline_patch_xml=baseline_patch_xml_bytes.decode("utf-8"),
+            baseline_patch_validation=baseline_patch_validation,
+            derived_patch_file_name=derived_patch_file_name,
+            derived_patch_xml=derived_patch_xml_bytes.decode("utf-8"),
+            derived_patch_validation=derived_patch_validation,
+        )
+
+    def download_generated_patch_scenario(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+        scenario_id: str,
+        patch_version: str,
+        scenario_inputs: dict[str, Any] | None = None,
+    ) -> tuple[str, bytes]:
+        preview = self.preview_generated_patch_scenario(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+            scenario_id=scenario_id,
+            patch_version=patch_version,
+            scenario_inputs=scenario_inputs,
+        )
+        return preview.derived_patch_file_name, preview.derived_patch_xml.encode("utf-8")
 
     def preview_single_record(
         self,
@@ -355,6 +447,197 @@ class XmlGenerationService:
             post_valid=bool(manifest.get("post_valid", False)),
             patch_valid=bool(manifest.get("patch_valid", False)),
             eudamed_status="EUDAMED Accepted",
+        )
+
+    def _registered_device_anchor_from_pair(
+        self,
+        post_record,
+        baseline_patch_record,
+    ) -> RegisteredDeviceAnchor:
+        family_id = self._slugify_fixture_family_id(
+            post_record.product_family,
+            post_record.product_variant,
+            post_record.catalogue_number,
+        )
+        return RegisteredDeviceAnchor(
+            family_id=family_id,
+            baseline_fixture=f"selection/{family_id}",
+            product_family=post_record.product_family,
+            product_variant=post_record.product_variant,
+            catalogue_number=post_record.catalogue_number,
+            primary_udi_di=post_record.primary_udi_di,
+            post_file_name=self.package_builder.operation_file_name(
+                product_family=post_record.product_family,
+                product_variant=post_record.product_variant,
+                operation="POST",
+                catalogue_number=post_record.catalogue_number,
+            ),
+            patch_file_name=self.package_builder.operation_file_name(
+                product_family=baseline_patch_record.product_family,
+                product_variant=baseline_patch_record.product_variant,
+                operation="PATCH",
+                catalogue_number=baseline_patch_record.catalogue_number,
+            ),
+            post_valid=True,
+            patch_valid=True,
+            eudamed_status="EUDAMED Accepted",
+        )
+
+    def _build_generated_patch_scenario(
+        self,
+        *,
+        baseline_patch_record,
+        scenario_id: str,
+        patch_version: str,
+        scenario_inputs: dict[str, Any],
+    ) -> tuple[Any, str, list[PatchScenarioFieldDelta]]:
+        if scenario_id == "trade_name_edit":
+            new_trade_name = self._required_string_input(scenario_inputs, "new_trade_name")
+            derived_record = self.projection_builder.build_trade_name_edit_patch(
+                baseline_patch_record,
+                new_trade_name=new_trade_name,
+                patch_version=patch_version,
+            )
+            return (
+                derived_record,
+                "Trade Name Edit",
+                [
+                    PatchScenarioFieldDelta(
+                        field_key="patch_version",
+                        label="PATCH Version",
+                        target_xpath_hint="e:version",
+                        before_value=baseline_patch_record.patch_version_override or "2",
+                        after_value=patch_version,
+                    ),
+                    PatchScenarioFieldDelta(
+                        field_key="trade_name",
+                        label="Trade Name",
+                        target_xpath_hint="udidi:tradeNames/lsn:name/lsn:textValue",
+                        before_value=baseline_patch_record.trade_name,
+                        after_value=new_trade_name,
+                    ),
+                ],
+            )
+        if scenario_id == "warning_add":
+            new_warning_code = self._required_string_input(scenario_inputs, "new_warning_code")
+            new_warning_comment = self._optional_string_input(scenario_inputs, "new_warning_comment")
+            derived_record = self.projection_builder.build_warning_add_patch(
+                baseline_patch_record,
+                new_warning_code=new_warning_code,
+                new_warning_comment=new_warning_comment,
+                patch_version=patch_version,
+            )
+            return (
+                derived_record,
+                "Critical Warnings",
+                [
+                    PatchScenarioFieldDelta(
+                        field_key="patch_version",
+                        label="PATCH Version",
+                        target_xpath_hint="e:version",
+                        before_value=baseline_patch_record.patch_version_override or "2",
+                        after_value=patch_version,
+                    ),
+                    PatchScenarioFieldDelta(
+                        field_key="critical_warning_add",
+                        label="Added Critical Warning",
+                        target_xpath_hint="udidi:criticalWarnings/commondi:warning",
+                        before_value=None,
+                        after_value=(
+                            f"{new_warning_code} ({new_warning_comment})"
+                            if new_warning_comment
+                            else new_warning_code
+                        ),
+                    ),
+                ],
+            )
+        if scenario_id == "storage_condition_edit":
+            raw_updates = scenario_inputs.get("updated_conditions")
+            if not isinstance(raw_updates, list) or not raw_updates:
+                raise ValueError("updated_conditions must contain at least one condition update.")
+            condition_updates: dict[str, str] = {}
+            for item in raw_updates:
+                if not isinstance(item, dict):
+                    raise ValueError("Each updated_conditions item must be an object.")
+                code = self._required_string_input(item, "condition_code")
+                replacement_comment = self._required_string_input(item, "replacement_comment")
+                condition_updates[code] = replacement_comment
+            baseline_by_code = {item.code: item.comment for item in baseline_patch_record.storage_conditions}
+            missing_codes = sorted(code for code in condition_updates if code not in baseline_by_code)
+            if missing_codes:
+                raise ValueError(
+                    f"Unknown storage condition codes for scenario editing: {', '.join(missing_codes)}."
+                )
+            derived_record = self.projection_builder.build_storage_condition_edit_patch(
+                baseline_patch_record,
+                condition_updates=condition_updates,
+                patch_version=patch_version,
+            )
+            field_deltas = [
+                PatchScenarioFieldDelta(
+                    field_key="patch_version",
+                    label="PATCH Version",
+                    target_xpath_hint="e:version",
+                    before_value=baseline_patch_record.patch_version_override or "2",
+                    after_value=patch_version,
+                )
+            ]
+            for code, replacement_comment in condition_updates.items():
+                field_deltas.append(
+                    PatchScenarioFieldDelta(
+                        field_key=f"storage_condition_{code}",
+                        label=f"Storage Condition {code}",
+                        target_xpath_hint="udidi:storageHandlingConditions/commondi:condition/commondi:comments/lsn:name/lsn:textValue",
+                        before_value=baseline_by_code.get(code),
+                        after_value=replacement_comment,
+                    )
+                )
+            return derived_record, "Storage Condition Edit", field_deltas
+        raise ValueError(f"Unsupported generated PATCH scenario {scenario_id!r}.")
+
+    @staticmethod
+    def _validate_patch_version(patch_version: str) -> str:
+        normalized = str(patch_version).strip()
+        if not normalized:
+            raise ValueError("patch_version is required.")
+        try:
+            parsed = int(normalized)
+        except ValueError as exc:
+            raise ValueError("patch_version must be an integer.") from exc
+        if parsed <= 2:
+            raise ValueError("patch_version must be greater than the baseline first PATCH version 2.")
+        return str(parsed)
+
+    @staticmethod
+    def _required_string_input(payload: dict[str, Any], key: str) -> str:
+        value = payload.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{key} is required.")
+        return value.strip()
+
+    @staticmethod
+    def _optional_string_input(payload: dict[str, Any], key: str) -> str | None:
+        value = payload.get(key)
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError(f"{key} must be a string when provided.")
+        normalized = value.strip()
+        return normalized or None
+
+    def _scenario_patch_file_name(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+        scenario_id: str,
+    ) -> str:
+        return (
+            f"{self.package_builder._slugify(product_family)}-"
+            f"{self.package_builder._slugify(product_variant)}-"
+            f"patch-{scenario_id.replace('_', '-')}-"
+            f"{self.package_builder._safe_catalogue_number(catalogue_number)}.xml"
         )
 
     def _validate_patch_scenario_identity(

@@ -97,6 +97,16 @@ Current scope remains deliberately narrow:
 - fixture-backed preview and download
 - no freeform PATCH editing
 
+Target redesign direction:
+
+- build on the existing generated `Post + Patch` pair for the selected variant
+- treat the first child `PATCH` from that pair as the baseline scenario source
+- require the user to enter the version integer for each scenario PATCH draft
+- show business-field before/after comparison
+- show toggle-based XML comparison between:
+  - baseline first `PATCH`
+  - derived scenario `PATCH`
+
 Active candidate scenarios:
 
 - `trade_name_edit`
@@ -113,7 +123,35 @@ Current implementation direction:
 
 - scenario-driven UI
 - scenario metadata rather than per-scenario hardcoded screens
-- one shared registered-device base per fixture family
+- one selected parent `POST` plus baseline first `PATCH` per variant
+- explicit, user-supplied scenario PATCH version input
+
+## PATCH Version Rule
+
+The current intended version model is:
+
+- baseline `POST` is version `1`
+- baseline equivalent first `PATCH` is version `2`
+- every later scenario PATCH draft requires a user-entered integer version
+
+The user should provide the scenario PATCH version because the user can inspect the current version state in the EUDAMED playground.
+
+The UI should therefore:
+
+- display the baseline first `PATCH` version
+- collect the proposed scenario PATCH version as an explicit input
+- never silently auto-increment it
+
+## PATCH Comparison Direction
+
+The future `Patch XML` workspace should be comparison-driven rather than fixture-driven.
+
+Expected comparison areas:
+
+- parent `POST` and baseline first `PATCH` context
+- scenario-specific editable fields only
+- before/after business values
+- toggle-based XML comparison between baseline and derived scenario PATCH
 
 ## EUDAMED Generation Workspace
 

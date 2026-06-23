@@ -32,6 +32,12 @@ Equivalent first PATCH test path:
 - forces `e:version = 2`
 - keeps `marketInfos` identical to the equivalent `POST`
 
+Scenario-derived later PATCH path:
+
+- inherits from the proven first child `PATCH`
+- requires an explicit user-supplied `e:version` integer
+- should not silently auto-increment version in local generation logic
+
 ## Working Interpretation
 
 - local XSD validity is necessary but not sufficient

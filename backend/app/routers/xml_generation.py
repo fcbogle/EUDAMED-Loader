@@ -8,6 +8,28 @@ from app.services.xml_generation import XmlGenerationService
 router = APIRouter(tags=["xml-generation"])
 
 
+def _parse_generated_patch_payload(payload: dict) -> tuple[str, str, str, str, str, dict]:
+    product_family = payload.get("product_family")
+    product_variant = payload.get("product_variant")
+    catalogue_number = payload.get("catalogue_number")
+    scenario_id = payload.get("scenario_id")
+    patch_version = payload.get("patch_version")
+    scenario_inputs = payload.get("scenario_inputs") or {}
+    if not product_family or not product_variant or not catalogue_number or not scenario_id or patch_version is None:
+        raise HTTPException(
+            status_code=400,
+            detail="product_family, product_variant, catalogue_number, scenario_id, and patch_version are required.",
+        )
+    return (
+        str(product_family),
+        str(product_variant),
+        str(catalogue_number),
+        str(scenario_id),
+        str(patch_version),
+        scenario_inputs if isinstance(scenario_inputs, dict) else {},
+    )
+
+
 @router.get("/xml/scope")
 def xml_generation_scope() -> dict:
     scope = XmlGenerationService().generation_scope()
@@ -170,6 +192,25 @@ def preview_xml_patch_scenario(payload: dict[str, str]) -> dict:
     return preview.model_dump(mode="json")
 
 
+@router.post("/xml/preview-generated-patch-scenario")
+def preview_generated_patch_scenario(payload: dict) -> dict:
+    product_family, product_variant, catalogue_number, scenario_id, patch_version, scenario_inputs = (
+        _parse_generated_patch_payload(payload)
+    )
+    try:
+        preview = XmlGenerationService().preview_generated_patch_scenario(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+            scenario_id=scenario_id,
+            patch_version=patch_version,
+            scenario_inputs=scenario_inputs,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return preview.model_dump(mode="json")
+
+
 @router.post("/xml/download-patch-scenario")
 def download_xml_patch_scenario(payload: dict[str, str]) -> Response:
     family_id = payload.get("family_id")
@@ -180,6 +221,26 @@ def download_xml_patch_scenario(payload: dict[str, str]) -> Response:
         file_name, xml_bytes = XmlGenerationService().download_patch_scenario_fixture(
             family_id=family_id,
             scenario_id=scenario_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
+    return Response(content=xml_bytes, media_type="application/xml", headers=headers)
+
+
+@router.post("/xml/download-generated-patch-scenario")
+def download_generated_patch_scenario(payload: dict) -> Response:
+    product_family, product_variant, catalogue_number, scenario_id, patch_version, scenario_inputs = (
+        _parse_generated_patch_payload(payload)
+    )
+    try:
+        file_name, xml_bytes = XmlGenerationService().download_generated_patch_scenario(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+            scenario_id=scenario_id,
+            patch_version=patch_version,
+            scenario_inputs=scenario_inputs,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

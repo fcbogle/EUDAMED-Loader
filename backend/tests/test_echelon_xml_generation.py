@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from io import BytesIO
+from types import SimpleNamespace
 from zipfile import ZipFile
 
 from app.routers.xml_generation import (
+    download_generated_patch_scenario,
     download_xml_market_info_put,
     download_xml_batch,
     download_xml_record,
+    preview_generated_patch_scenario,
     preview_xml_patch_scenario,
     xml_testing_registered_device_anchor,
     preview_xml_market_info_put,
@@ -14,6 +17,7 @@ from app.routers.xml_generation import (
     preview_xml_record,
 )
 from app.services.xml_generation import XmlGenerationService
+from app.services.xml_selection import ValidationRecordSelector
 
 
 def test_generic_single_record_preview_generates_schema_valid_xml() -> None:
@@ -205,3 +209,140 @@ def test_patch_scenario_preview_includes_registered_device_anchor() -> None:
     assert payload["catalogue_number"] == "EVAC22L1S"
     assert payload["registered_device_anchor"]["catalogue_number"] == "EVAC22L1S"
     assert payload["registered_device_anchor"]["primary_udi_di"] == "05050649062025"
+
+
+def test_generated_trade_name_patch_scenario_reuses_post_patch_baseline() -> None:
+    preview = XmlGenerationService().preview_generated_patch_scenario(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+        scenario_id="trade_name_edit",
+        patch_version="3",
+        scenario_inputs={
+            "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
+        },
+    )
+
+    assert preview.mode == "generated_patch_scenario"
+    assert preview.context.parent_post_version == "1"
+    assert preview.context.baseline_patch_version == "2"
+    assert preview.context.proposed_patch_version == "3"
+    assert preview.registered_device_anchor.catalogue_number == preview.catalogue_number
+    assert preview.baseline_patch_validation.valid is True
+    assert preview.derived_patch_validation.valid is True
+    assert "<e:version>2</e:version>" in preview.baseline_patch_xml
+    assert "<e:version>3</e:version>" in preview.derived_patch_xml
+    assert "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED" in preview.derived_patch_xml
+    assert any(delta.field_key == "trade_name" for delta in preview.field_deltas)
+
+
+def test_generated_warning_patch_scenario_adds_one_warning() -> None:
+    preview = XmlGenerationService().preview_generated_patch_scenario(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+        scenario_id="warning_add",
+        patch_version="5",
+        scenario_inputs={
+            "new_warning_code": "CW011",
+            "new_warning_comment": None,
+        },
+    )
+
+    assert "<e:version>5</e:version>" in preview.derived_patch_xml
+    assert "<commondi:warningValue>CW011</commondi:warningValue>" in preview.derived_patch_xml
+    assert preview.derived_patch_validation.valid is True
+
+
+def test_generated_storage_condition_patch_scenario_updates_comments() -> None:
+    preview = XmlGenerationService().preview_generated_patch_scenario(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+        scenario_id="storage_condition_edit",
+        patch_version="4",
+        scenario_inputs={
+            "updated_conditions": [
+                {
+                    "condition_code": "SHC006",
+                    "replacement_comment": "Minus 10",
+                },
+                {
+                    "condition_code": "SHC007",
+                    "replacement_comment": "Plus 45",
+                },
+            ]
+        },
+    )
+
+    assert "<e:version>4</e:version>" in preview.derived_patch_xml
+    assert "Minus 10" in preview.derived_patch_xml
+    assert "Plus 45" in preview.derived_patch_xml
+    assert preview.derived_patch_validation.valid is True
+
+
+def test_generated_patch_scenario_route_returns_comparison_payload() -> None:
+    payload = preview_generated_patch_scenario(
+        {
+            "product_family": "Echelon",
+            "product_variant": "Echelon VAC",
+            "catalogue_number": "EVAC22L1S",
+            "scenario_id": "trade_name_edit",
+            "patch_version": 3,
+            "scenario_inputs": {
+                "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
+            },
+        }
+    )
+
+    assert payload["mode"] == "generated_patch_scenario"
+    assert payload["context"]["baseline_patch_version"] == "2"
+    assert payload["context"]["proposed_patch_version"] == "3"
+    assert payload["derived_patch_validation"]["valid"] is True
+
+
+def test_generated_patch_scenario_download_route_returns_xml_file() -> None:
+    response = download_generated_patch_scenario(
+        {
+            "product_family": "Echelon",
+            "product_variant": "Echelon VAC",
+            "catalogue_number": "EVAC22L1S",
+            "scenario_id": "trade_name_edit",
+            "patch_version": 3,
+            "scenario_inputs": {
+                "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
+            },
+        }
+    )
+
+    assert response.media_type == "application/xml"
+    assert 'filename="echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.xml"' in response.headers["Content-Disposition"]
+    assert b"<e:version>3</e:version>" in response.body
+
+
+def test_post_record_selector_requires_exact_catalogue_number_for_variant_post_lineage() -> None:
+    validation_bundle = XmlGenerationService().validation_service.build_validation_bundle()
+    variant_post_records = [
+        record
+        for record in validation_bundle.records
+        if record.product_family == "Echelon"
+        and record.product_variant == "Echelon VAC"
+        and record.xml_readiness.status == "complete"
+        and (record.submission_operation or "").upper() == "POST"
+    ]
+    assert variant_post_records
+
+    baseline_record = variant_post_records[0]
+    alternate_record = baseline_record.model_copy(update={"catalogue_number": "EVAC22L1S-ALT"})
+    selector = ValidationRecordSelector(XmlGenerationService().validation_service)
+    selector.validation_service.build_validation_bundle = lambda: SimpleNamespace(
+        records=[alternate_record, baseline_record]
+    )
+
+    selected = selector.find_post_record(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number=baseline_record.catalogue_number,
+    )
+
+    assert selected.catalogue_number == baseline_record.catalogue_number

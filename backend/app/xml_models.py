@@ -98,6 +98,45 @@ class PatchScenarioXmlPreview(BaseModel):
     validation: XmlValidationResult
 
 
+class PatchScenarioFieldDelta(BaseModel):
+    field_key: str
+    label: str
+    target_xpath_hint: str
+    before_value: str | None = None
+    after_value: str | None = None
+
+
+class PatchScenarioContext(BaseModel):
+    scenario_id: str
+    scenario_label: str
+    product_family: str
+    product_variant: str
+    catalogue_number: str
+    primary_udi_di: str
+    parent_post_version: str
+    baseline_patch_version: str
+    proposed_patch_version: str
+
+
+class GeneratedPatchScenarioPreview(BaseModel):
+    mode: Literal["generated_patch_scenario"] = "generated_patch_scenario"
+    scenario_id: str
+    scenario_label: str
+    product_family: str
+    product_variant: str
+    catalogue_number: str
+    primary_udi_di: str
+    registered_device_anchor: RegisteredDeviceAnchor
+    context: PatchScenarioContext
+    field_deltas: list[PatchScenarioFieldDelta] = Field(default_factory=list)
+    baseline_patch_file_name: str
+    baseline_patch_xml: str
+    baseline_patch_validation: XmlValidationResult
+    derived_patch_file_name: str
+    derived_patch_xml: str
+    derived_patch_validation: XmlValidationResult
+
+
 class XmlGenerationSelectionSummary(BaseModel):
     product_family: str
     product_variant: str

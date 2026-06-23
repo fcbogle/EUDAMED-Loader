@@ -25,6 +25,12 @@ These modes are tied to the same registered device anchor for the current testin
 
 They are intended to model the state after successful device registration, where several follow-on XML operations should all relate to the same registered device.
 
+Current direction for `Patch XML` is more specific:
+
+- reuse the existing generated `Post + Patch` pair for the selected variant
+- treat the first child `PATCH` from that pair as the baseline scenario source
+- derive approved scenario PATCH drafts from that baseline
+
 ### General XML Tools
 
 - `Single XML`
@@ -69,9 +75,21 @@ Selection then branches by mode:
 
 ### Patch XML
 
+Current implementation:
+
 - fixture-backed candidate PATCH scenario preview
 - local XSD validation result
 - downloadable `.xml`
+
+Target implementation:
+
+- selected variant resolves one parent `POST`
+- existing generated `Post + Patch` pair provides the baseline first `PATCH`
+- user enters the version integer for the scenario PATCH draft
+- user edits only approved scenario fields
+- UI shows before/after business-field comparison
+- UI shows toggle-based XML comparison between baseline and derived PATCH
+- generated candidate PATCH XML remains downloadable and locally validated
 
 ### Market Info
 
@@ -109,6 +127,13 @@ Equivalent first `PATCH` test path:
 - forces `e:version = 2`
 - keeps `marketInfos` identical to the equivalent `POST`
 
+Scenario-derived later `PATCH` path:
+
+- starts from the proven first child `PATCH`
+- preserves the parent POST / baseline PATCH identity chain
+- requires a user-supplied `e:version` integer
+- changes only scenario-approved fields
+
 Standalone `MARKET_INFO.PUT`:
 
 - service `MARKET_INFO.PUT`
@@ -117,7 +142,9 @@ Standalone `MARKET_INFO.PUT`:
 
 ## Important Note
 
-The XML layer still consumes a typed XML projection built from validation records and fixture-backed scenario inputs.
+The XML layer still consumes a typed XML projection built from validation records and fixture-backed scenario inputs today.
+
+The next intended step is to shift `Patch XML` from fixture-backed scenario input toward generated scenario drafts built on the existing `Post + Patch` pair.
 
 Some XML generation paths are now intentionally more conservative than others:
 

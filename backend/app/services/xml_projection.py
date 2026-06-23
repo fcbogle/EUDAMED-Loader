@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.validation_models import CanonicalValidationRecord
 from app.xml_models import CriticalWarningXmlItem, StorageConditionXmlItem
@@ -218,6 +218,59 @@ class DeviceXmlProjectionBuilder:
             critical_warnings=post_record.critical_warnings,
             patch_version_override="2",
             include_market_infos_in_patch=True,
+        )
+
+    @staticmethod
+    def build_trade_name_edit_patch(
+        baseline_patch_record: DeviceXmlRecord,
+        *,
+        new_trade_name: str,
+        patch_version: str,
+    ) -> DeviceXmlRecord:
+        return replace(
+            baseline_patch_record,
+            trade_name=new_trade_name,
+            source_version_marker=patch_version,
+            patch_version_override=patch_version,
+        )
+
+    @staticmethod
+    def build_warning_add_patch(
+        baseline_patch_record: DeviceXmlRecord,
+        *,
+        new_warning_code: str,
+        new_warning_comment: str | None,
+        patch_version: str,
+    ) -> DeviceXmlRecord:
+        return replace(
+            baseline_patch_record,
+            critical_warnings=[
+                *baseline_patch_record.critical_warnings,
+                CriticalWarningXmlItem(code=new_warning_code, comment=new_warning_comment),
+            ],
+            source_version_marker=patch_version,
+            patch_version_override=patch_version,
+        )
+
+    @staticmethod
+    def build_storage_condition_edit_patch(
+        baseline_patch_record: DeviceXmlRecord,
+        *,
+        condition_updates: dict[str, str],
+        patch_version: str,
+    ) -> DeviceXmlRecord:
+        updated_conditions = [
+            StorageConditionXmlItem(
+                code=item.code,
+                comment=condition_updates.get(item.code, item.comment),
+            )
+            for item in baseline_patch_record.storage_conditions
+        ]
+        return replace(
+            baseline_patch_record,
+            storage_conditions=updated_conditions,
+            source_version_marker=patch_version,
+            patch_version_override=patch_version,
         )
 
     def build_market_info_record(self, record: CanonicalValidationRecord) -> MarketInfoXmlRecord:

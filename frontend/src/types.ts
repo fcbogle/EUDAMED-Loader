@@ -377,6 +377,45 @@ export type PatchScenarioXmlPreview = {
   validation: XmlValidationResult;
 };
 
+export type PatchScenarioFieldDelta = {
+  field_key: string;
+  label: string;
+  target_xpath_hint: string;
+  before_value: string | null;
+  after_value: string | null;
+};
+
+export type PatchScenarioContext = {
+  scenario_id: string;
+  scenario_label: string;
+  product_family: string;
+  product_variant: string;
+  catalogue_number: string;
+  primary_udi_di: string;
+  parent_post_version: string;
+  baseline_patch_version: string;
+  proposed_patch_version: string;
+};
+
+export type GeneratedPatchScenarioPreview = {
+  mode: "generated_patch_scenario";
+  scenario_id: string;
+  scenario_label: string;
+  product_family: string;
+  product_variant: string;
+  catalogue_number: string;
+  primary_udi_di: string;
+  registered_device_anchor: RegisteredDeviceAnchor;
+  context: PatchScenarioContext;
+  field_deltas: PatchScenarioFieldDelta[];
+  baseline_patch_file_name: string;
+  baseline_patch_xml: string;
+  baseline_patch_validation: XmlValidationResult;
+  derived_patch_file_name: string;
+  derived_patch_xml: string;
+  derived_patch_validation: XmlValidationResult;
+};
+
 export type XmlGenerationSelectionSummary = {
   product_family: string;
   product_variant: string;

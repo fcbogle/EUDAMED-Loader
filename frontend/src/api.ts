@@ -5,6 +5,7 @@ import type {
   CanonicalReviewBundle,
   DistinctValueProfile,
   EquivalentPatchPairPreview,
+  GeneratedPatchScenarioPreview,
   MarketInfoPutPreview,
   NormalizationRuleFile,
   PatchScenarioXmlPreview,
@@ -117,6 +118,22 @@ export const api = {
       family_id: familyId,
       scenario_id: scenarioId,
     }),
+  previewGeneratedPatchScenario: (
+    productFamily: string,
+    productVariant: string,
+    catalogueNumber: string,
+    scenarioId: string,
+    patchVersion: string,
+    scenarioInputs: unknown,
+  ) =>
+    sendJson<GeneratedPatchScenarioPreview>("/xml/preview-generated-patch-scenario", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber,
+      scenario_id: scenarioId,
+      patch_version: patchVersion,
+      scenario_inputs: scenarioInputs,
+    }),
   previewXmlBatch: (productFamily: string, productVariant: string, chunkSequence = 1) =>
     sendJson<BatchXmlPreview>("/xml/preview-batch", "POST", {
       product_family: productFamily,
@@ -145,6 +162,22 @@ export const api = {
     sendDownload("/xml/download-patch-scenario", "POST", {
       family_id: familyId,
       scenario_id: scenarioId,
+    }),
+  downloadGeneratedPatchScenario: (
+    productFamily: string,
+    productVariant: string,
+    catalogueNumber: string,
+    scenarioId: string,
+    patchVersion: string,
+    scenarioInputs: unknown,
+  ) =>
+    sendDownload("/xml/download-generated-patch-scenario", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber,
+      scenario_id: scenarioId,
+      patch_version: patchVersion,
+      scenario_inputs: scenarioInputs,
     }),
   downloadXmlBatch: (productFamily: string, productVariant: string) =>
     sendDownload("/xml/download-batch", "POST", {

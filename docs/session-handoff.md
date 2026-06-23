@@ -10,11 +10,58 @@ Continue refining the XML workspaces so the UI clearly separates:
 while evolving `Patch XML` from static fixture review toward a controlled scenario-based testing workflow that:
 
 - lets the user select any product variant
-- establishes one testing anchor record for that selected variant
-- uses that same anchor record for all PATCH scenario tests for that variant
+- establishes one baseline `POST` parent record for that selected variant
+- builds on the existing generated `Post + Patch` pair for that parent record
+- uses the proven first child `PATCH` from that pair as the baseline for later PATCH scenario tests
 - supports before/after review for approved operational PATCH scenarios
+- uses toggle-based baseline-versus-derived PATCH XML comparison
+- requires the user to provide the `e:version` integer for each scenario PATCH draft
 - evolves batch generation toward explicit `POST Batch` and scenario-driven `PATCH Batch` workflows
 - does not overstate EUDAMED acceptance
+
+## Latest Confirmed Decisions
+
+The current design direction is now explicitly:
+
+- `POST` version `1`
+- equivalent first child `PATCH` version `2`
+- later scenario PATCH drafts inherit from that proven first `PATCH`
+- the user enters the version integer for each scenario PATCH draft based on the current EUDAMED playground state
+
+The practical workflow model is:
+
+- select product family and variant
+- resolve any available `POST` record for that variant
+- use the existing generated `Post + Patch` pair as the baseline chain
+- derive approved scenario PATCH drafts from the baseline first `PATCH`
+- expose business-field before/after comparison
+- expose toggle-based XML comparison between:
+  - baseline first `PATCH`
+  - derived scenario `PATCH`
+
+Initial generated scenario scope should align with the already generated fixture-backed tests:
+
+- `Trade Name Edit`
+- `Critical Warnings`
+- `Storage Condition Edit`
+
+Deferred scenario:
+
+- `Secondary Identifier Add`
+  - still incomplete
+  - no generated XML fixture yet
+
+Observed fixture deltas confirm that current candidate scenarios differ from the baseline first `PATCH` only in:
+
+- `Trade Name Edit`
+  - `e:version`
+  - `udidi:tradeNames/.../lsn:textValue`
+- `Critical Warnings`
+  - `e:version`
+  - one added `udidi:criticalWarnings/commondi:warning`
+- `Storage Condition Edit`
+  - `e:version`
+  - selected `udidi:storageHandlingConditions/.../lsn:textValue` comment values
 
 ## Completed In Recent Sessions
 
@@ -141,23 +188,26 @@ The intended direction is to evolve `Patch XML` into a controlled scenario-based
 The user should be able to:
 
 - select any product family and product variant
-- have the UI resolve one concrete testing record for that variant
-- use that same record as the testing anchor for all PATCH scenarios for that variant
+- have the UI resolve one concrete `POST` parent record for that variant
+- use the existing generated `Post + Patch` pair for that same record as the baseline chain
 - choose from a whitelist of confirmed operational PATCH scenarios
-- see a before/after view
+- enter the version integer for the scenario PATCH draft
+- see a before/after business-field view
+- see a toggle-based XML comparison between baseline first `PATCH` and derived scenario `PATCH`
 - edit only the fields allowed for the chosen scenario
 - generate a new candidate PATCH XML for review, validation, and download
 
 ### Recommended Anchor Model
 
-The preferred model is now a `variant-scoped testing anchor`.
+The preferred model is now a `variant-scoped POST parent with baseline PATCH chain`.
 
 This means:
 
 - the user selects a product family and variant
-- the application resolves one concrete device record for that variant
-- that record becomes the active testing anchor
-- all PATCH scenario drafts for that testing session use that same record
+- the application resolves one available `POST` record for that variant
+- that record becomes the active parent baseline
+- the application reuses the existing generated `Post + Patch` pair for that parent
+- all PATCH scenario drafts for that testing session derive from the same baseline first `PATCH`
 - if the user changes variant, the testing anchor changes too
 - changing variant should clear any unsaved PATCH draft scenario state tied to the previous variant
 
@@ -176,23 +226,31 @@ This is preferred over a manual lock/unlock workflow because it keeps the user f
 and toward:
 
 - selection of one approved operational scenario type
+- reuse of the existing generated first child `PATCH` as the baseline
+- explicit user-supplied PATCH version input
 - controlled field editing for that scenario only
-- generation of a new candidate PATCH XML from the selected anchor record plus user-provided change values
+- generation of a new candidate PATCH XML from the baseline first `PATCH` plus user-provided change values
 
 ### Example Target Workflow
 
 Example for `Trade Name Edit`:
 
 1. User selects product family and variant.
-2. Application resolves one device record for that variant as the testing anchor.
+2. Application resolves one available `POST` record for that variant.
+3. Application reuses the existing generated `Post + Patch` pair for that same record.
+4. The baseline child `PATCH` remains version `2`.
 3. User opens `Patch XML`.
 4. User chooses `Trade Name Edit` from a scenario dropdown.
-5. UI shows:
+5. User enters the next PATCH version integer based on the EUDAMED playground state.
+6. UI shows:
    - current trade name
    - new trade name input
+   - baseline PATCH version `2`
+   - proposed scenario PATCH version
    - before / after comparison
-6. Backend generates a new candidate PATCH XML targeting that same device record.
-7. UI shows XML preview, local XSD validation, and download.
+   - toggle-based XML comparison between baseline and derived PATCH
+7. Backend generates a new candidate PATCH XML targeting that same device record lineage.
+8. UI shows XML preview, local XSD validation, and download.
 
 ### Why This Direction Was Chosen
 
@@ -217,7 +275,9 @@ The initial approved operational scenario list should stay narrow, for example:
 
 Preferred first implementation strategy:
 
-- generate from one known baseline anchor record plus controlled scenario-specific overrides
+- build on the existing generated `Post + Patch` pair
+- treat the baseline first child `PATCH` as the scenario derivation source
+- apply controlled scenario-specific overrides plus a user-supplied version integer
 
 Preferred first implementation does **not** require:
 
@@ -415,34 +475,51 @@ PATCH scenario generation and PATCH batch generation will need explicit handling
 
 Current note to retain:
 
-- `version` should not be treated as a universally fixed rule across all PATCH scenarios
-- correct version behavior may depend on the state of the target testing environment and what EUDAMED already knows about the registered device record
-- local XML generation logic should therefore keep version handling explicit and reviewable
-- version increment/update behavior should be confirmed against the actual testing environment before being hardened into operational rules
+- baseline `POST` is version `1`
+- baseline equivalent first `PATCH` is version `2`
+- later scenario PATCH drafts must require a user-entered integer version
+- the user enters that value based on the current EUDAMED playground state
+- local XML generation logic should therefore never silently auto-increment version for scenario drafts
+- version handling must stay explicit and reviewable in both backend payloads and the `Patch XML` UI
 
 ## Recommended Next Step
 
-Design and implement the first controlled scenario-authoring version of `Patch XML`, starting with `Trade Name Edit`, so that:
+Design and implement the generated scenario-authoring version of `Patch XML` by building on the existing `Post + Patch` pair rather than replacing it.
 
-- the user can select any product family and product variant
-- the UI resolves one concrete testing anchor record for that variant
-- the same testing anchor is used across PATCH scenarios for that variant
-- `Patch XML` can show before / after values for one approved scenario
-- the backend can generate a new candidate PATCH XML from that selected anchor record plus user input
-- changing product variant clears unsaved draft PATCH scenario state
+Recommended delivery sequence:
 
-Then evolve the XML mode set toward:
+1. Backend
+   - formalize the existing generated `Post + Patch` pair as:
+     - parent `POST`
+     - baseline first child `PATCH`
+     - protected identity fields
+   - resolve any available `POST` record for the selected variant
+   - derive supported scenario PATCH drafts from the baseline first `PATCH`
+   - require user-supplied PATCH version input
+   - return:
+     - parent POST summary
+     - baseline PATCH summary
+     - field-level before/after comparison
+     - baseline PATCH XML
+     - derived scenario PATCH XML
+     - validation result
 
-- `Post + Patch`
-- scenario-based `Patch XML`
-- `POST Batch`
-- scenario-driven `PATCH Batch`
+2. Frontend
+   - redesign `Patch XML` into a comparison workspace
+   - show:
+     - parent POST context
+     - baseline first PATCH context
+     - shared PATCH version input
+     - scenario-specific inputs
+     - before/after business-field comparison
+     - toggle-based XML comparison
+   - clear unsaved scenario state when the selected variant changes
 
-and decide whether `Single XML` should remain only as an engineering/debugging tool.
+3. Transition
+   - keep fixture-backed PATCH scenario preview as a reference path during transition
+   - keep candidate scenario status conservative until real EUDAMED confirmation exists
 
-After that, implement persistence for baseline-family and PATCH-scenario status so that:
-
-- the accepted baseline `Post + Patch` remains stored as `EUDAMED Accepted`
-- candidate PATCH scenarios can be promoted only after real EUDAMED testing
-- `EUDAMED Generation` can filter from stored accepted patterns rather than temporary UI state
-- future variant-scoped testing anchor families can be introduced without losing the single-record PATCH testing model
+4. Later
+   - add persistence for baseline-family and PATCH-scenario status
+   - evolve batch modes toward explicit `POST Batch` and scenario-driven `PATCH Batch`
+   - decide whether `Single XML` should remain only as an engineering/debugging tool

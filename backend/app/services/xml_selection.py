@@ -29,6 +29,28 @@ class ValidationRecordSelector:
             f"{product_family} / {product_variant}."
         )
 
+    def find_post_record(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> CanonicalValidationRecord:
+        bundle = self.validation_service.build_validation_bundle()
+        for record in bundle.records:
+            if (
+                record.product_family == product_family
+                and record.product_variant == product_variant
+                and record.catalogue_number == catalogue_number
+                and record.xml_readiness.status == "complete"
+                and (record.submission_operation or "").upper() == "POST"
+            ):
+                return record
+        raise ValueError(
+            f"Catalogue number {catalogue_number} is not an XML-ready POST record for "
+            f"{product_family} / {product_variant}."
+        )
+
     @staticmethod
     def xml_ready_variant_records(
         records: list[CanonicalValidationRecord],
