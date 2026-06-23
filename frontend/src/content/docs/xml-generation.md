@@ -21,13 +21,14 @@ Inside `EUDAMED Testing`, the XML modes are now split into two groups.
 - `Patch XML`
 - `Market Info`
 
-These modes are tied to the same registered device anchor for the current testing family.
+These modes are tied to the same registered device anchor for the current selected testing record.
 
 They are intended to model the state after successful device registration, where several follow-on XML operations should all relate to the same registered device.
 
-Current direction for `Patch XML` is more specific:
+Current `Patch XML` behavior is now more specific:
 
-- reuse the existing generated `Post + Patch` pair for the selected variant
+- require a reviewed `Post + Patch` pair for the selected record
+- reuse the existing generated `Post + Patch` pair for that same selected record
 - treat the first child `PATCH` from that pair as the baseline scenario source
 - derive approved scenario PATCH drafts from that baseline
 
@@ -46,11 +47,7 @@ They remain general XML generation tools driven from the broader XML-ready valid
 
 `Post + Patch`, `Patch XML`, and `Market Info` use the shared registered device anchor.
 
-Current anchor family:
-
-- `echelon-echelon-vac-EVAC22L1S`
-
-This means those testing modes operate from one known registered device identity rather than from whichever current XML-ready row is selected in the broader variant scope.
+These testing modes now operate from the currently selected XML-ready parent `POST` record rather than from the old fixed Echelon VAC fixture anchor.
 
 ### General XML Tools
 
@@ -77,17 +74,12 @@ Selection then branches by mode:
 
 Current implementation:
 
-- fixture-backed candidate PATCH scenario preview
-- local XSD validation result
-- downloadable `.xml`
-
-Target implementation:
-
-- selected variant resolves one parent `POST`
+- selected record resolves one parent `POST`
+- `Post + Patch` must be generated and reviewed first for that exact record
 - existing generated `Post + Patch` pair provides the baseline first `PATCH`
 - user enters the version integer for the scenario PATCH draft
 - user edits only approved scenario fields
-- UI shows before/after business-field comparison
+- UI shows before/after business-field comparison before generation
 - UI shows toggle-based XML comparison between baseline and derived PATCH
 - generated candidate PATCH XML remains downloadable and locally validated
 
@@ -142,13 +134,13 @@ Standalone `MARKET_INFO.PUT`:
 
 ## Important Note
 
-The XML layer still consumes a typed XML projection built from validation records and fixture-backed scenario inputs today.
+The XML layer now consumes a typed XML projection built from validation records and generated scenario inputs.
 
-The next intended step is to shift `Patch XML` from fixture-backed scenario input toward generated scenario drafts built on the existing `Post + Patch` pair.
+`Patch XML` no longer depends on fixture-backed scenario XML for the active scenarios.
 
 Some XML generation paths are now intentionally more conservative than others:
 
-- shared-device testing paths are anchored to one known registered device
+- shared-device testing paths are anchored to the selected reviewed baseline pair
 - general XML tools still operate over broader XML-ready canonical validation scope
 
 This is deliberate and matches the current staged testing approach.

@@ -94,15 +94,16 @@ They still work from the broader XML-ready validation selection model:
 Current scope remains deliberately narrow:
 
 - one candidate PATCH scenario at a time
-- fixture-backed preview and download
+- generated preview and download
 - no freeform PATCH editing
+- strict dependency on a reviewed `Post + Patch` pair for the exact selected record
 
-Target redesign direction:
+Current redesign direction now implemented:
 
-- build on the existing generated `Post + Patch` pair for the selected variant
+- build on the existing generated `Post + Patch` pair for the selected record
 - treat the first child `PATCH` from that pair as the baseline scenario source
 - require the user to enter the version integer for each scenario PATCH draft
-- show business-field before/after comparison
+- show business-field before/after comparison before generation
 - show toggle-based XML comparison between:
   - baseline first `PATCH`
   - derived scenario `PATCH`
@@ -123,8 +124,10 @@ Current implementation direction:
 
 - scenario-driven UI
 - scenario metadata rather than per-scenario hardcoded screens
-- one selected parent `POST` plus baseline first `PATCH` per variant
+- one selected parent `POST` plus baseline first `PATCH` per selected record
 - explicit, user-supplied scenario PATCH version input
+- exact lineage preserved through `catalogue_number`
+- scenario drafting blocked until `Post + Patch` has been generated and reviewed for that same record
 
 ## PATCH Version Rule
 
@@ -144,9 +147,9 @@ The UI should therefore:
 
 ## PATCH Comparison Direction
 
-The future `Patch XML` workspace should be comparison-driven rather than fixture-driven.
+The current `Patch XML` workspace is now comparison-driven rather than fixture-driven.
 
-Expected comparison areas:
+Current comparison areas:
 
 - parent `POST` and baseline first `PATCH` context
 - scenario-specific editable fields only
