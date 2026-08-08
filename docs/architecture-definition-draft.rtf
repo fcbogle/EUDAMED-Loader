@@ -1,0 +1,257 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Arial;}{\f1 Courier New;}}
+\viewkind4\uc1\pard\sa180\sl276\slmult1\f0\fs22
+\pard\sa220\b\fs34 Architecture Definition Document Draft\b0\fs22\par
+\pard\sa220\b\fs28 Purpose Of This Draft\b0\fs22\par
+\pard\sa180 This draft assembles the sections of the Architecture Definition Document that can be populated from the current project documentation and implemented design. It is intended as source material for the formal ADD, not as the final controlled architecture document.\par
+\pard\sa220\b\fs28 Scope\b0\fs22\par
+\pard\sa180 This project is an analysis-first, schema-aware preparation application for EUDAMED regulatory data. The current scope is limited to \f1 MDR\f0  device data held across multiple Excel workbooks, authoritative Basic UDI reference data, local EUDAMED XSD/schema files, canonical interpretation, validation, and controlled XML preview/download workflows.\par
+\pard\sa180 Current in-scope capabilities include:\par
+\pard\li720\fi-360 \'95\tab source workbook inventory and profiling\par
+\pard\li720\fi-360 \'95\tab reference-data-assisted product variant linkage\par
+\pard\li720\fi-360 \'95\tab canonical mapping review\par
+\pard\li720\fi-360 \'95\tab canonical validation and XML readiness analysis\par
+\pard\li720\fi-360 \'95\tab XML preview, local XSD validation, and download\par
+\pard\li720\fi-360 \'95\tab controlled baseline \f1 POST\f0  / \f1 PATCH\f0  and scenario-derived later \f1 PATCH\f0  review\par
+\pard\sa180 Current out-of-scope capabilities include:\par
+\pard\li720\fi-360 \'95\tab live EUDAMED submission\par
+\pard\li720\fi-360 \'95\tab M2M / AS4 / eDelivery transport\par
+\pard\li720\fi-360 \'95\tab submission history and response management\par
+\pard\li720\fi-360 \'95\tab database-backed persistence\par
+\pard\li720\fi-360 \'95\tab operational audit history beyond current in-memory review workflows\par
+\pard\sa220\b\fs28 Business Context\b0\fs22\par
+\pard\sa180 The business currently relies on multiple Excel workbooks as source evidence for device and regulatory data. These workbooks vary in structure, completeness, and consistency. The authoritative variant reference source is \f1 BasicUDIs.xlsx\f0 , while a legacy tracekey workbook still contributes supplemental SRN enrichment.\par
+\pard\sa180 The immediate business need is not direct live submission. The current need is to create a controlled digital preparation layer that can:\par
+\pard\li720\fi-360 \'95\tab understand workbook structure and content\par
+\pard\li720\fi-360 \'95\tab expose data quality and readiness issues early\par
+\pard\li720\fi-360 \'95\tab interpret workbook content as stable regulatory meaning\par
+\pard\li720\fi-360 \'95\tab align source data to EUDAMED-oriented schema and message expectations\par
+\pard\li720\fi-360 \'95\tab support safe XML review and packaging before later submission support is introduced\par
+\pard\sa180 This work is intended to reduce manual interpretation risk and build a path toward repeatable EUDAMED preparation rather than a one-off spreadsheet transformation utility.\par
+\pard\sa220\b\fs28 Architecture Vision Summary\b0\fs22\par
+\pard\sa180 The target direction is a schema-aware regulatory data preparation platform with clear separation between:\par
+\pard\li720\fi-360 \'95\tab workbook/source parsing\par
+\pard\li720\fi-360 \'95\tab source profiling\par
+\pard\li720\fi-360 \'95\tab canonical regulatory modeling\par
+\pard\li720\fi-360 \'95\tab mapping definitions\par
+\pard\li720\fi-360 \'95\tab business-rule-based validation\par
+\pard\li720\fi-360 \'95\tab XML generation and validation\par
+\pard\li720\fi-360 \'95\tab future submission history and audit\par
+\pard\li720\fi-360 \'95\tab future M2M / transport integration\par
+\pard\sa180 The current implemented flow is:\par
+\pard\sa180 \f1 Excel review -> Canonical review -> Canonical validation -> XML preview/download\f0 \par
+\pard\sa180 The near-term intent is to mature the preparation layer so that XML generation is built on validated, traceable, canonicalized data. The longer-term intent is to support manual submission preparation first, then later extend toward automated integration.\par
+\pard\sa220\b\fs28 Architecture Principles\b0\fs22\par
+\pard\sa180 The current documentation supports these working principles:\par
+\pard\li720\fi-360 Do not build a one-off Excel-to-XML script.\par
+\pard\li720\fi-360 Keep parsing, canonical interpretation, validation, and XML generation separate.\par
+\pard\li720\fi-360 Use source workbooks as evidence, not as the target operating model.\par
+\pard\li720\fi-360 Keep XML profiles explicit by scenario.\par
+\pard\li720\fi-360 Prefer conservative review and testing workflows over premature automation.\par
+\pard\li720\fi-360 Delay delivery and integration logic until preparation and submission objects are properly defined.\par
+\pard\li720\fi-360 Keep documentation aligned with the implemented workflow.\par
+\pard\sa220\b\fs28 Stakeholders, Actors, Roles And Responsibilities\b0\fs22\par
+\pard\sa220\b\fs24 Business Sponsor\b0\fs22\par
+\pard\sa180 Owns the business case and expected outcomes. Approves scope, priorities, and phased delivery, and ensures the solution addresses the business need for EUDAMED preparation capability.\par
+\pard\sa220\b\fs24 Regulatory Affairs Lead\b0\fs22\par
+\pard\sa180 Owns regulatory correctness. Confirms source-data interpretation, canonical expectations, mapping decisions, validation expectations, and whether XML patterns are suitable for testing or operational use.\par
+\pard\sa220\b\fs24 Regulatory Operations User\b0\fs22\par
+\pard\sa180 Uses the preparation workflow. Reviews validation findings, baseline \f1 POST\f0  / \f1 PATCH\f0  output, scenario \f1 PATCH\f0  changes, and prepares XML packages for later manual submission activity.\par
+\pard\sa220\b\fs24 Product Data / Source Data Owner\b0\fs22\par
+\pard\sa180 Owns source-data meaning. Explains workbook fields, resolves missing or inconsistent values, and confirms intended product, market, storage, and warning semantics.\par
+\pard\sa220\b\fs24 Solution Architect\b0\fs22\par
+\pard\sa180 Owns the target architecture. Preserves separation of concerns, manages long-term platform direction, and prevents the solution from collapsing into a fragile point utility.\par
+\pard\sa220\b\fs24 Engineering\b0\fs22\par
+\pard\sa180 Builds and maintains the backend and frontend services that profile workbooks, interpret canonical data, validate readiness, and render XML review workflows.\par
+\pard\sa220\b\fs24 Quality / Compliance\b0\fs22\par
+\pard\sa180 Reviews traceability, control points, and evidence expectations to ensure the platform supports regulated preparation practices.\par
+\pard\sa220\b\fs24 IT / Platform / Integration Owner\b0\fs22\par
+\pard\sa180 Supports deployment direction, supportability, and future persistence and integration concerns.\par
+\pard\sa220\b\fs28 Baseline Business Capability\b0\fs22\par
+\pard\sa180 Before this project matures, business capability remains spreadsheet-led and heavily dependent on manual interpretation. The business can store and review device data in Excel and manually inspect schema assets, but it cannot yet consistently prepare EUDAMED submission data through a governed digital workflow.\par
+\pard\sa180 Baseline limitations include:\par
+\pard\li720\fi-360 \'95\tab fragmented workbook structure and naming\par
+\pard\li720\fi-360 \'95\tab limited traceability from source values to regulatory meaning\par
+\pard\li720\fi-360 \'95\tab limited early visibility of completeness and consistency issues\par
+\pard\li720\fi-360 \'95\tab no governed platform workflow for controlled XML package preparation\par
+\pard\li720\fi-360 \'95\tab no structured handling of later \f1 PATCH\f0  change scenarios\par
+\pard\li720\fi-360 \'95\tab no submission history, manual upload tracking, or automated integration\par
+\pard\sa220\b\fs28 Target Business Capability\b0\fs22\par
+\pard\sa180 The intended business capability is a platform-led EUDAMED preparation workflow that can:\par
+\pard\li720\fi-360 \'95\tab profile and interpret workbook data consistently\par
+\pard\li720\fi-360 \'95\tab expose quality and readiness issues before XML generation\par
+\pard\li720\fi-360 \'95\tab map workbook fields into a stable canonical regulatory model\par
+\pard\li720\fi-360 \'95\tab validate records against EUDAMED-oriented expectations\par
+\pard\li720\fi-360 \'95\tab generate and review baseline \f1 POST\f0  / \f1 PATCH\f0  XML in a controlled manner\par
+\pard\li720\fi-360 \'95\tab derive approved later \f1 PATCH\f0  scenarios from a reviewed baseline chain\par
+\pard\li720\fi-360 \'95\tab prepare XML packages safely for later manual upload activity\par
+\pard\li720\fi-360 \'95\tab provide the foundation for future submission tracking and automated delivery\par
+\pard\sa220\b\fs28 Baseline Application Architecture\b0\fs22\par
+\pard\sa180 The current application is a Python/React web application consisting of:\par
+\pard\li720\fi-360 \'95\tab a FastAPI backend\par
+\pard\li720\fi-360 \'95\tab a React/TypeScript/Vite frontend\par
+\pard\li720\fi-360 \'95\tab local configuration for normalization and canonical mapping review artifacts\par
+\pard\li720\fi-360 \'95\tab local workbook, reference, and schema data sources\par
+\pard\sa180 Current major application capabilities are grouped into:\par
+\pard\li720\fi-360 \'95\tab workbook profiling\par
+\pard\li720\fi-360 \'95\tab canonical review\par
+\pard\li720\fi-360 \'95\tab canonical validation\par
+\pard\li720\fi-360 \'95\tab XML generation / review\par
+\pard\sa180 The XML workspace is currently split between:\par
+\pard\li720\fi-360 \'95\tab \f1 EUDAMED Testing\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 EUDAMED Generation\f0 \par
+\pard\sa180 Within \f1 EUDAMED Testing\f0 , the current modes are:\par
+\pard\li720\fi-360 \'95\tab \f1 Post + Patch\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 Patch XML\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 Market Info\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 Single XML\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 Batch XML\f0 \par
+\pard\sa180 The most mature controlled testing path is now:\par
+\pard\li720\fi-360 \'95\tab select one XML-ready parent \f1 POST\f0  record\par
+\pard\li720\fi-360 \'95\tab generate and review baseline \f1 Post + Patch\f0 \par
+\pard\li720\fi-360 \'95\tab derive approved scenario \f1 PATCH\f0  drafts from that reviewed first child \f1 PATCH\f0 \par
+\pard\sa220\b\fs28 Target Application Architecture\b0\fs22\par
+\pard\sa180 The target application architecture is evolving toward a clearer separation of preparation, submission, delivery, and history concerns.\par
+\pard\sa180 Target application responsibilities are expected to include:\par
+\pard\li720\fi-360 \'95\tab source ingestion and profiling\par
+\pard\li720\fi-360 \'95\tab canonical interpretation and mapping\par
+\pard\li720\fi-360 \'95\tab validation and rule execution\par
+\pard\li720\fi-360 \'95\tab XML package generation and schema validation\par
+\pard\li720\fi-360 \'95\tab manual submission support\par
+\pard\li720\fi-360 \'95\tab submission history and audit\par
+\pard\li720\fi-360 \'95\tab later transport integration\par
+\pard\sa180 The current codebase is primarily in the preparation layer, with an initial XML assembly slice that should later be formalized into a distinct submission layer.\par
+\pard\sa220\b\fs28 Baseline Data Architecture\b0\fs22\par
+\pard\sa180 The current data architecture is evidence-driven and file-backed.\par
+\pard\sa180 Primary data sources:\par
+\pard\li720\fi-360 \'95\tab source Excel workbooks under \f1 data/source_excel/\f0 \par
+\pard\li720\fi-360 \'95\tab authoritative Basic UDI reference workbook under \f1 data/basic_udi_reference/BasicUDIs.xlsx\f0 \par
+\pard\li720\fi-360 \'95\tab legacy SRN fallback workbook\par
+\pard\li720\fi-360 \'95\tab local EUDAMED schema pack under \f1 data/schemas/\f0 \par
+\pard\sa180 Current logical interpretation layers:\par
+\pard\li720\fi-360 \'95\tab source workbook rows\par
+\pard\li720\fi-360 \'95\tab variant linkage to authoritative reference data\par
+\pard\li720\fi-360 \'95\tab canonical mapping review\par
+\pard\li720\fi-360 \'95\tab canonical validation / XML-facing contract\par
+\pard\li720\fi-360 \'95\tab typed XML projection\par
+\pard\sa180 Current core domain concepts documented in the canonical layer include:\par
+\pard\li720\fi-360 \'95\tab \f1 Manufacturer\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 BasicDevice\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 DeviceRecord\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 MarketAvailability\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 StorageCondition\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 CriticalWarning\f0 \par
+\pard\sa180 Known current limitation:\par
+\pard\li720\fi-360 \'95\tab canonical and XML-facing field names are close but not yet perfectly normalized, with some alias drift between review, validation, and XML layers\par
+\pard\sa220\b\fs28 Target Data Architecture\b0\fs22\par
+\pard\sa180 The target data architecture should formalize a stable canonical regulatory model and isolate it from workbook-specific field naming. It should support:\par
+\pard\li720\fi-360 \'95\tab source-to-canonical mapping definitions\par
+\pard\li720\fi-360 \'95\tab normalized business-rule evaluation\par
+\pard\li720\fi-360 \'95\tab explicit schema-facing transformation\par
+\pard\li720\fi-360 \'95\tab later persistence of submission artifacts and state\par
+\pard\sa180 Near-term target direction is to reduce naming drift between canonical models and XML-facing paths while keeping XML profile logic explicit by scenario.\par
+\pard\sa220\b\fs28 Baseline Technology Architecture\b0\fs22\par
+\pard\sa180 Current technology stack:\par
+\pard\li720\fi-360 \'95\tab Python 3.11\par
+\pard\li720\fi-360 \'95\tab FastAPI\par
+\pard\li720\fi-360 \'95\tab Pydantic\par
+\pard\li720\fi-360 \'95\tab React\par
+\pard\li720\fi-360 \'95\tab TypeScript\par
+\pard\li720\fi-360 \'95\tab Vite\par
+\pard\li720\fi-360 \'95\tab \f1 openpyxl\f0  for Excel handling\par
+\pard\li720\fi-360 \'95\tab \f1 lxml\f0  for XML/XSD handling\par
+\pard\li720\fi-360 \'95\tab local file-backed configuration and schema assets\par
+\pard\sa180 Deployment direction documented so far:\par
+\pard\li720\fi-360 \'95\tab Docker/container-first\par
+\pard\li720\fi-360 \'95\tab Azure Container Apps or Azure Container Services preferred over a managed Python runtime\par
+\pard\sa220\b\fs28 Target Technology Architecture\b0\fs22\par
+\pard\sa180 The technology direction remains container-based and modular. The backend is expected to remain Python-based, while the frontend remains React/TypeScript-based. The target architecture is expected to add:\par
+\pard\li720\fi-360 \'95\tab persistence\par
+\pard\li720\fi-360 \'95\tab explicit submission-domain storage\par
+\pard\li720\fi-360 \'95\tab operational workflow state\par
+\pard\li720\fi-360 \'95\tab later delivery/integration adapters\par
+\pard\sa180 Detailed runtime topology, security architecture, and operational support design still require further input.\par
+\pard\sa220\b\fs28 Integration And External Interface Architecture\b0\fs22\par
+\pard\sa180 Current external interface focus is schema and message alignment, not live submission.\par
+\pard\sa180 Implemented XML service profiles include:\par
+\pard\li720\fi-360 \'95\tab \f1 DEVICE.POST\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 UDI_DI.PATCH\f0 \par
+\pard\li720\fi-360 \'95\tab \f1 MARKET_INFO.PUT\f0 \par
+\pard\sa180 Current XML behavior includes:\par
+\pard\li720\fi-360 \'95\tab baseline \f1 POST\f0 \par
+\pard\li720\fi-360 \'95\tab equivalent first child \f1 PATCH\f0  with \f1 e:version = 2\f0 \par
+\pard\li720\fi-360 \'95\tab scenario-derived later \f1 PATCH\f0  from that reviewed baseline\par
+\pard\li720\fi-360 \'95\tab local XSD validation against the bundled schema set\par
+\pard\sa180 Current \f1 Patch XML\f0  control model includes:\par
+\pard\li720\fi-360 \'95\tab exact parent-record lineage through \f1 catalogue_number\f0 \par
+\pard\li720\fi-360 \'95\tab reviewed baseline pair gating\par
+\pard\li720\fi-360 \'95\tab explicit user-entered later \f1 PATCH\f0  version\par
+\pard\li720\fi-360 \'95\tab scenario-specific field changes only\par
+\pard\sa180 Future integration direction includes:\par
+\pard\li720\fi-360 \'95\tab manual upload preparation and tracking\par
+\pard\li720\fi-360 \'95\tab later AS4 / eDelivery / M2M integration\par
+\pard\sa220\b\fs28 Constraints And Assumptions\b0\fs22\par
+\pard\sa180 Documented constraints include:\par
+\pard\li720\fi-360 \'95\tab \f1 MDR\f0  only in current scope\par
+\pard\li720\fi-360 \'95\tab accessories workbook visible but excluded from active mapping\par
+\pard\li720\fi-360 \'95\tab \f1 BasicUDIs.xlsx\f0  is authoritative for variant linkage\par
+\pard\li720\fi-360 \'95\tab legacy tracekey workbook still supplies SRN fallback data\par
+\pard\li720\fi-360 \'95\tab current XML work is limited to preview, validation, and download\par
+\pard\li720\fi-360 \'95\tab no live EUDAMED submission is implemented\par
+\pard\sa180 Documented assumptions include:\par
+\pard\li720\fi-360 \'95\tab local schema validity is necessary but not sufficient for operational acceptance\par
+\pard\li720\fi-360 \'95\tab scenario \f1 PATCH\f0  drafting should remain conservative and controlled\par
+\pard\li720\fi-360 \'95\tab the solution should be extensible toward later submission support\par
+\pard\sa220\b\fs28 Risks And Issues\b0\fs22\par
+\pard\sa180 Current documented risks and issues include:\par
+\pard\li720\fi-360 \'95\tab workbook inconsistency and naming variation\par
+\pard\li720\fi-360 \'95\tab canonical-to-XML field-name drift\par
+\pard\li720\fi-360 \'95\tab lack of persistence for status and review state\par
+\pard\li720\fi-360 \'95\tab incomplete scenario coverage\par
+\pard\li720\fi-360 \'95\tab no manual upload state tracking yet\par
+\pard\li720\fi-360 \'95\tab no database-backed history or audit model yet\par
+\pard\li720\fi-360 \'95\tab future operational ambiguity if \f1 Single XML\f0  and generic \f1 Batch XML\f0  are not redesigned with clearer intent\par
+\pard\sa220\b\fs28 Transition Architecture And Roadmap\b0\fs22\par
+\pard\sa180 Current phased direction remains:\par
+\pard\li720\fi-360 data and schema discovery\par
+\pard\li720\fi-360 canonical model proposal\par
+\pard\li720\fi-360 mapping and validation\par
+\pard\li720\fi-360 XML package generation\par
+\pard\li720\fi-360 manual submission support\par
+\pard\li720\fi-360 future M2M transport\par
+\pard\sa180 Near-term roadmap items already documented include:\par
+\pard\li720\fi-360 \'95\tab reduce field-name drift\par
+\pard\li720\fi-360 \'95\tab harden workbook parsing\par
+\pard\li720\fi-360 \'95\tab keep XML profiles explicit by scenario\par
+\pard\li720\fi-360 \'95\tab define submission-domain models\par
+\pard\li720\fi-360 \'95\tab add manual upload workflow support after XML review\par
+\pard\li720\fi-360 \'95\tab add persistence and later delivery adapters\par
+\pard\sa220\b\fs28 Architecture Decisions And Rationale\b0\fs22\par
+\pard\sa180 Current major decisions reflected in the documentation include:\par
+\pard\li720\fi-360 \'95\tab the project is a preparation and review application first, not a live submission platform\par
+\pard\li720\fi-360 \'95\tab workbook parsing, canonical interpretation, validation, and XML generation remain separate\par
+\pard\li720\fi-360 \'95\tab XML testing and accepted generation are separated in the UI\par
+\pard\li720\fi-360 \'95\tab later scenario \f1 PATCH\f0  drafts must derive from a reviewed baseline \f1 Post + Patch\f0  chain\par
+\pard\li720\fi-360 \'95\tab scenario \f1 PATCH\f0  generation must target the exact selected parent record\par
+\pard\li720\fi-360 \'95\tab \f1 Patch XML\f0  should not be a freeform XML editor\par
+\pard\sa220\b\fs28 Dependencies\b0\fs22\par
+\pard\sa180 Known dependencies include:\par
+\pard\li720\fi-360 \'95\tab source Excel workbook quality and consistency\par
+\pard\li720\fi-360 \'95\tab authoritative Basic UDI reference workbook\par
+\pard\li720\fi-360 \'95\tab local EUDAMED schema pack\par
+\pard\li720\fi-360 \'95\tab continued regulatory clarification on scenario suitability and later operational acceptance\par
+\pard\sa220\b\fs28 Open Questions\b0\fs22\par
+\pard\sa180 Current open questions include:\par
+\pard\li720\fi-360 \'95\tab whether accepted scenario \f1 PATCH\f0  patterns should later appear in \f1 EUDAMED Generation\f0 \par
+\pard\li720\fi-360 \'95\tab how baseline review and scenario acceptance state should be persisted\par
+\pard\li720\fi-360 \'95\tab whether \f1 Single XML\f0  remains a long-term mode\par
+\pard\li720\fi-360 \'95\tab how \f1 POST Batch\f0  and scenario-driven \f1 PATCH Batch\f0  should be introduced\par
+\pard\li720\fi-360 \'95\tab what audit, retention, and security controls will be required in later phases\par
+\pard\sa220\b\fs28 Sections Still Requiring Additional Input\b0\fs22\par
+\pard\sa180 The following ADD areas are only partially supported by current documentation and require further stakeholder input:\par
+\pard\li720\fi-360 \'95\tab security architecture\par
+\pard\li720\fi-360 \'95\tab audit and retention architecture\par
+\pard\li720\fi-360 \'95\tab detailed deployment/runtime topology\par
+\pard\li720\fi-360 \'95\tab operational support model\par
+\pard\li720\fi-360 \'95\tab future integration architecture in implementation detail\par
+}

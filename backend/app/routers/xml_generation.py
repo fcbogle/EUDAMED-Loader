@@ -36,17 +36,6 @@ def xml_generation_scope() -> dict:
     return scope.model_dump(mode="json")
 
 
-@router.get("/xml/testing-anchor")
-def xml_testing_registered_device_anchor(family_id: str) -> dict:
-    if not family_id:
-        raise HTTPException(status_code=400, detail="family_id is required.")
-    try:
-        anchor = XmlGenerationService().testing_registered_device_anchor(family_id=family_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return anchor.model_dump(mode="json")
-
-
 @router.post("/xml/preview-record")
 def preview_xml_record(payload: dict[str, str]) -> dict:
     product_family = payload.get("product_family")
@@ -176,22 +165,6 @@ def download_xml_market_info_put(payload: dict[str, str]) -> Response:
     return Response(content=xml_bytes, media_type="application/xml", headers=headers)
 
 
-@router.post("/xml/preview-patch-scenario")
-def preview_xml_patch_scenario(payload: dict[str, str]) -> dict:
-    family_id = payload.get("family_id")
-    scenario_id = payload.get("scenario_id")
-    if not family_id or not scenario_id:
-        raise HTTPException(status_code=400, detail="family_id and scenario_id are required.")
-    try:
-        preview = XmlGenerationService().preview_patch_scenario_fixture(
-            family_id=family_id,
-            scenario_id=scenario_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return preview.model_dump(mode="json")
-
-
 @router.post("/xml/preview-generated-patch-scenario")
 def preview_generated_patch_scenario(payload: dict) -> dict:
     product_family, product_variant, catalogue_number, scenario_id, patch_version, scenario_inputs = (
@@ -209,23 +182,6 @@ def preview_generated_patch_scenario(payload: dict) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return preview.model_dump(mode="json")
-
-
-@router.post("/xml/download-patch-scenario")
-def download_xml_patch_scenario(payload: dict[str, str]) -> Response:
-    family_id = payload.get("family_id")
-    scenario_id = payload.get("scenario_id")
-    if not family_id or not scenario_id:
-        raise HTTPException(status_code=400, detail="family_id and scenario_id are required.")
-    try:
-        file_name, xml_bytes = XmlGenerationService().download_patch_scenario_fixture(
-            family_id=family_id,
-            scenario_id=scenario_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
-    return Response(content=xml_bytes, media_type="application/xml", headers=headers)
 
 
 @router.post("/xml/download-generated-patch-scenario")

@@ -114,12 +114,6 @@ Active candidate scenarios:
 - `warning_add`
 - `storage_condition_edit`
 
-Inactive scenario:
-
-- `secondary_identifier_add`
-  - still incomplete
-  - not currently surfaced as an active generated scenario
-
 Current implementation direction:
 
 - scenario-driven UI
@@ -184,7 +178,7 @@ This keeps the UI aligned with the current project phase:
 
 - the application is still a preparation and review tool
 - several PATCH scenarios are still candidate patterns rather than operationally proven flows
-- local schema validity and fixture comparison do not prove EUDAMED acceptance by themselves
+- local schema validity and internal comparison do not prove EUDAMED acceptance by themselves
 
 The interface should therefore make a clear distinction between:
 

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Architecture Definition Document Draft</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 36px; line-height: 1.45; color: #111; }
+h1, h2, h3 { color: #0b3040; }
+h1 { font-size: 26px; margin-top: 0; }
+h2 { font-size: 20px; margin-top: 24px; }
+h3 { font-size: 16px; margin-top: 18px; }
+p, li { font-size: 11pt; }
+ul, ol { margin: 8px 0 12px 24px; }
+code { font-family: Menlo, Consolas, monospace; background: #f3f5f7; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>Architecture Definition Document Draft</h1>
+<h2>Purpose Of This Draft</h2>
+<p>This draft assembles the sections of the Architecture Definition Document that can be populated from the current project documentation and implemented design. It is intended as source material for the formal ADD, not as the final controlled architecture document.</p>
+<h2>Scope</h2>
+<p>This project is an analysis-first, schema-aware preparation application for EUDAMED regulatory data. The current scope is limited to <code>MDR</code> device data held across multiple Excel workbooks, authoritative Basic UDI reference data, local EUDAMED XSD/schema files, canonical interpretation, validation, and controlled XML preview/download workflows.</p>
+<p>Current in-scope capabilities include:</p>
+<ul><li>source workbook inventory and profiling</li><li>reference-data-assisted product variant linkage</li><li>canonical mapping review</li><li>canonical validation and XML readiness analysis</li><li>XML preview, local XSD validation, and download</li><li>controlled baseline <code>POST</code> / <code>PATCH</code> and scenario-derived later <code>PATCH</code> review</li></ul>
+<p>Current out-of-scope capabilities include:</p>
+<ul><li>live EUDAMED submission</li><li>M2M / AS4 / eDelivery transport</li><li>submission history and response management</li><li>database-backed persistence</li><li>operational audit history beyond current in-memory review workflows</li></ul>
+<h2>Business Context</h2>
+<p>The business currently relies on multiple Excel workbooks as source evidence for device and regulatory data. These workbooks vary in structure, completeness, and consistency. The authoritative variant reference source is <code>BasicUDIs.xlsx</code>, while a legacy tracekey workbook still contributes supplemental SRN enrichment.</p>
+<p>The immediate business need is not direct live submission. The current need is to create a controlled digital preparation layer that can:</p>
+<ul><li>understand workbook structure and content</li><li>expose data quality and readiness issues early</li><li>interpret workbook content as stable regulatory meaning</li><li>align source data to EUDAMED-oriented schema and message expectations</li><li>support safe XML review and packaging before later submission support is introduced</li></ul>
+<p>This work is intended to reduce manual interpretation risk and build a path toward repeatable EUDAMED preparation rather than a one-off spreadsheet transformation utility.</p>
+<h2>Architecture Vision Summary</h2>
+<p>The target direction is a schema-aware regulatory data preparation platform with clear separation between:</p>
+<ul><li>workbook/source parsing</li><li>source profiling</li><li>canonical regulatory modeling</li><li>mapping definitions</li><li>business-rule-based validation</li><li>XML generation and validation</li><li>future submission history and audit</li><li>future M2M / transport integration</li></ul>
+<p>The current implemented flow is:</p>
+<p><code>Excel review -&gt; Canonical review -&gt; Canonical validation -&gt; XML preview/download</code></p>
+<p>The near-term intent is to mature the preparation layer so that XML generation is built on validated, traceable, canonicalized data. The longer-term intent is to support manual submission preparation first, then later extend toward automated integration.</p>
+<h2>Architecture Principles</h2>
+<p>The current documentation supports these working principles:</p>
+<ol><li>Do not build a one-off Excel-to-XML script.</li><li>Keep parsing, canonical interpretation, validation, and XML generation separate.</li><li>Use source workbooks as evidence, not as the target operating model.</li><li>Keep XML profiles explicit by scenario.</li><li>Prefer conservative review and testing workflows over premature automation.</li><li>Delay delivery and integration logic until preparation and submission objects are properly defined.</li><li>Keep documentation aligned with the implemented workflow.</li></ol>
+<h2>Stakeholders, Actors, Roles And Responsibilities</h2>
+<h3>Business Sponsor</h3>
+<p>Owns the business case and expected outcomes. Approves scope, priorities, and phased delivery, and ensures the solution addresses the business need for EUDAMED preparation capability.</p>
+<h3>Regulatory Affairs Lead</h3>
+<p>Owns regulatory correctness. Confirms source-data interpretation, canonical expectations, mapping decisions, validation expectations, and whether XML patterns are suitable for testing or operational use.</p>
+<h3>Regulatory Operations User</h3>
+<p>Uses the preparation workflow. Reviews validation findings, baseline <code>POST</code> / <code>PATCH</code> output, scenario <code>PATCH</code> changes, and prepares XML packages for later manual submission activity.</p>
+<h3>Product Data / Source Data Owner</h3>
+<p>Owns source-data meaning. Explains workbook fields, resolves missing or inconsistent values, and confirms intended product, market, storage, and warning semantics.</p>
+<h3>Solution Architect</h3>
+<p>Owns the target architecture. Preserves separation of concerns, manages long-term platform direction, and prevents the solution from collapsing into a fragile point utility.</p>
+<h3>Engineering</h3>
+<p>Builds and maintains the backend and frontend services that profile workbooks, interpret canonical data, validate readiness, and render XML review workflows.</p>
+<h3>Quality / Compliance</h3>
+<p>Reviews traceability, control points, and evidence expectations to ensure the platform supports regulated preparation practices.</p>
+<h3>IT / Platform / Integration Owner</h3>
+<p>Supports deployment direction, supportability, and future persistence and integration concerns.</p>
+<h2>Baseline Business Capability</h2>
+<p>Before this project matures, business capability remains spreadsheet-led and heavily dependent on manual interpretation. The business can store and review device data in Excel and manually inspect schema assets, but it cannot yet consistently prepare EUDAMED submission data through a governed digital workflow.</p>
+<p>Baseline limitations include:</p>
+<ul><li>fragmented workbook structure and naming</li><li>limited traceability from source values to regulatory meaning</li><li>limited early visibility of completeness and consistency issues</li><li>no governed platform workflow for controlled XML package preparation</li><li>no structured handling of later <code>PATCH</code> change scenarios</li><li>no submission history, manual upload tracking, or automated integration</li></ul>
+<h2>Target Business Capability</h2>
+<p>The intended business capability is a platform-led EUDAMED preparation workflow that can:</p>
+<ul><li>profile and interpret workbook data consistently</li><li>expose quality and readiness issues before XML generation</li><li>map workbook fields into a stable canonical regulatory model</li><li>validate records against EUDAMED-oriented expectations</li><li>generate and review baseline <code>POST</code> / <code>PATCH</code> XML in a controlled manner</li><li>derive approved later <code>PATCH</code> scenarios from a reviewed baseline chain</li><li>prepare XML packages safely for later manual upload activity</li><li>provide the foundation for future submission tracking and automated delivery</li></ul>
+<h2>Baseline Application Architecture</h2>
+<p>The current application is a Python/React web application consisting of:</p>
+<ul><li>a FastAPI backend</li><li>a React/TypeScript/Vite frontend</li><li>local configuration for normalization and canonical mapping review artifacts</li><li>local workbook, reference, and schema data sources</li></ul>
+<p>Current major application capabilities are grouped into:</p>
+<ul><li>workbook profiling</li><li>canonical review</li><li>canonical validation</li><li>XML generation / review</li></ul>
+<p>The XML workspace is currently split between:</p>
+<ul><li><code>EUDAMED Testing</code></li><li><code>EUDAMED Generation</code></li></ul>
+<p>Within <code>EUDAMED Testing</code>, the current modes are:</p>
+<ul><li><code>Post + Patch</code></li><li><code>Patch XML</code></li><li><code>Market Info</code></li><li><code>Single XML</code></li><li><code>Batch XML</code></li></ul>
+<p>The most mature controlled testing path is now:</p>
+<ul><li>select one XML-ready parent <code>POST</code> record</li><li>generate and review baseline <code>Post + Patch</code></li><li>derive approved scenario <code>PATCH</code> drafts from that reviewed first child <code>PATCH</code></li></ul>
+<h2>Target Application Architecture</h2>
+<p>The target application architecture is evolving toward a clearer separation of preparation, submission, delivery, and history concerns.</p>
+<p>Target application responsibilities are expected to include:</p>
+<ul><li>source ingestion and profiling</li><li>canonical interpretation and mapping</li><li>validation and rule execution</li><li>XML package generation and schema validation</li><li>manual submission support</li><li>submission history and audit</li><li>later transport integration</li></ul>
+<p>The current codebase is primarily in the preparation layer, with an initial XML assembly slice that should later be formalized into a distinct submission layer.</p>
+<h2>Baseline Data Architecture</h2>
+<p>The current data architecture is evidence-driven and file-backed.</p>
+<p>Primary data sources:</p>
+<ul><li>source Excel workbooks under <code>data/source_excel/</code></li><li>authoritative Basic UDI reference workbook under <code>data/basic_udi_reference/BasicUDIs.xlsx</code></li><li>legacy SRN fallback workbook</li><li>local EUDAMED schema pack under <code>data/schemas/</code></li></ul>
+<p>Current logical interpretation layers:</p>
+<ul><li>source workbook rows</li><li>variant linkage to authoritative reference data</li><li>canonical mapping review</li><li>canonical validation / XML-facing contract</li><li>typed XML projection</li></ul>
+<p>Current core domain concepts documented in the canonical layer include:</p>
+<ul><li><code>Manufacturer</code></li><li><code>BasicDevice</code></li><li><code>DeviceRecord</code></li><li><code>MarketAvailability</code></li><li><code>StorageCondition</code></li><li><code>CriticalWarning</code></li></ul>
+<p>Known current limitation:</p>
+<ul><li>canonical and XML-facing field names are close but not yet perfectly normalized, with some alias drift between review, validation, and XML layers</li></ul>
+<h2>Target Data Architecture</h2>
+<p>The target data architecture should formalize a stable canonical regulatory model and isolate it from workbook-specific field naming. It should support:</p>
+<ul><li>source-to-canonical mapping definitions</li><li>normalized business-rule evaluation</li><li>explicit schema-facing transformation</li><li>later persistence of submission artifacts and state</li></ul>
+<p>Near-term target direction is to reduce naming drift between canonical models and XML-facing paths while keeping XML profile logic explicit by scenario.</p>
+<h2>Baseline Technology Architecture</h2>
+<p>Current technology stack:</p>
+<ul><li>Python 3.11</li><li>FastAPI</li><li>Pydantic</li><li>React</li><li>TypeScript</li><li>Vite</li><li><code>openpyxl</code> for Excel handling</li><li><code>lxml</code> for XML/XSD handling</li><li>local file-backed configuration and schema assets</li></ul>
+<p>Deployment direction documented so far:</p>
+<ul><li>Docker/container-first</li><li>Azure Container Apps or Azure Container Services preferred over a managed Python runtime</li></ul>
+<h2>Target Technology Architecture</h2>
+<p>The technology direction remains container-based and modular. The backend is expected to remain Python-based, while the frontend remains React/TypeScript-based. The target architecture is expected to add:</p>
+<ul><li>persistence</li><li>explicit submission-domain storage</li><li>operational workflow state</li><li>later delivery/integration adapters</li></ul>
+<p>Detailed runtime topology, security architecture, and operational support design still require further input.</p>
+<h2>Integration And External Interface Architecture</h2>
+<p>Current external interface focus is schema and message alignment, not live submission.</p>
+<p>Implemented XML service profiles include:</p>
+<ul><li><code>DEVICE.POST</code></li><li><code>UDI_DI.PATCH</code></li><li><code>MARKET_INFO.PUT</code></li></ul>
+<p>Current XML behavior includes:</p>
+<ul><li>baseline <code>POST</code></li><li>equivalent first child <code>PATCH</code> with <code>e:version = 2</code></li><li>scenario-derived later <code>PATCH</code> from that reviewed baseline</li><li>local XSD validation against the bundled schema set</li></ul>
+<p>Current <code>Patch XML</code> control model includes:</p>
+<ul><li>exact parent-record lineage through <code>catalogue_number</code></li><li>reviewed baseline pair gating</li><li>explicit user-entered later <code>PATCH</code> version</li><li>scenario-specific field changes only</li></ul>
+<p>Future integration direction includes:</p>
+<ul><li>manual upload preparation and tracking</li><li>later AS4 / eDelivery / M2M integration</li></ul>
+<h2>Constraints And Assumptions</h2>
+<p>Documented constraints include:</p>
+<ul><li><code>MDR</code> only in current scope</li><li>accessories workbook visible but excluded from active mapping</li><li><code>BasicUDIs.xlsx</code> is authoritative for variant linkage</li><li>legacy tracekey workbook still supplies SRN fallback data</li><li>current XML work is limited to preview, validation, and download</li><li>no live EUDAMED submission is implemented</li></ul>
+<p>Documented assumptions include:</p>
+<ul><li>local schema validity is necessary but not sufficient for operational acceptance</li><li>scenario <code>PATCH</code> drafting should remain conservative and controlled</li><li>the solution should be extensible toward later submission support</li></ul>
+<h2>Risks And Issues</h2>
+<p>Current documented risks and issues include:</p>
+<ul><li>workbook inconsistency and naming variation</li><li>canonical-to-XML field-name drift</li><li>lack of persistence for status and review state</li><li>incomplete scenario coverage</li><li>no manual upload state tracking yet</li><li>no database-backed history or audit model yet</li><li>future operational ambiguity if <code>Single XML</code> and generic <code>Batch XML</code> are not redesigned with clearer intent</li></ul>
+<h2>Transition Architecture And Roadmap</h2>
+<p>Current phased direction remains:</p>
+<ol><li>data and schema discovery</li><li>canonical model proposal</li><li>mapping and validation</li><li>XML package generation</li><li>manual submission support</li><li>future M2M transport</li></ol>
+<p>Near-term roadmap items already documented include:</p>
+<ul><li>reduce field-name drift</li><li>harden workbook parsing</li><li>keep XML profiles explicit by scenario</li><li>define submission-domain models</li><li>add manual upload workflow support after XML review</li><li>add persistence and later delivery adapters</li></ul>
+<h2>Architecture Decisions And Rationale</h2>
+<p>Current major decisions reflected in the documentation include:</p>
+<ul><li>the project is a preparation and review application first, not a live submission platform</li><li>workbook parsing, canonical interpretation, validation, and XML generation remain separate</li><li>XML testing and accepted generation are separated in the UI</li><li>later scenario <code>PATCH</code> drafts must derive from a reviewed baseline <code>Post + Patch</code> chain</li><li>scenario <code>PATCH</code> generation must target the exact selected parent record</li><li><code>Patch XML</code> should not be a freeform XML editor</li></ul>
+<h2>Dependencies</h2>
+<p>Known dependencies include:</p>
+<ul><li>source Excel workbook quality and consistency</li><li>authoritative Basic UDI reference workbook</li><li>local EUDAMED schema pack</li><li>continued regulatory clarification on scenario suitability and later operational acceptance</li></ul>
+<h2>Open Questions</h2>
+<p>Current open questions include:</p>
+<ul><li>whether accepted scenario <code>PATCH</code> patterns should later appear in <code>EUDAMED Generation</code></li><li>how baseline review and scenario acceptance state should be persisted</li><li>whether <code>Single XML</code> remains a long-term mode</li><li>how <code>POST Batch</code> and scenario-driven <code>PATCH Batch</code> should be introduced</li><li>what audit, retention, and security controls will be required in later phases</li></ul>
+<h2>Sections Still Requiring Additional Input</h2>
+<p>The following ADD areas are only partially supported by current documentation and require further stakeholder input:</p>
+<ul><li>security architecture</li><li>audit and retention architecture</li><li>detailed deployment/runtime topology</li><li>operational support model</li><li>future integration architecture in implementation detail</li></ul>
+</body>
+</html>

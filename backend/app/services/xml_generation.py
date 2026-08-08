@@ -18,7 +18,6 @@ from app.xml_models import (
     MarketInfoPutPreview,
     PatchScenarioContext,
     PatchScenarioFieldDelta,
-    PatchScenarioXmlPreview,
     RegisteredDeviceAnchor,
     SingleRecordXmlPreview,
     XmlGenerationScopeBundle,
@@ -61,14 +60,6 @@ class XmlGenerationService:
             ),
             total_xml_ready_records=bundle.xml_ready_records,
             families=families,
-        )
-
-    def testing_registered_device_anchor(self, *, family_id: str) -> RegisteredDeviceAnchor:
-        baseline_fixture, manifest = self._load_patch_baseline_manifest(family_id=family_id)
-        return self._registered_device_anchor_from_manifest(
-            family_id=family_id,
-            baseline_fixture=baseline_fixture,
-            manifest=manifest,
         )
 
     def preview_generated_patch_scenario(
@@ -240,7 +231,7 @@ class XmlGenerationService:
         registered_device_anchor = RegisteredDeviceAnchor(
             family_id=self._slugify_fixture_family_id(record.product_family, record.product_variant, post_record.catalogue_number),
             baseline_fixture=(
-                f"equivalent_baseline/"
+                f"selection/"
                 f"{self._slugify_fixture_family_id(record.product_family, record.product_variant, post_record.catalogue_number)}"
             ),
             product_family=record.product_family,
@@ -294,7 +285,7 @@ class XmlGenerationService:
             primary_udi_di=market_info_record.primary_udi_di,
             registered_device_anchor=RegisteredDeviceAnchor(
                 family_id=fixture_family_id,
-                baseline_fixture=f"equivalent_baseline/{fixture_family_id}",
+                baseline_fixture=f"selection/{fixture_family_id}",
                 product_family=record.product_family,
                 product_variant=record.product_variant,
                 catalogue_number=market_info_record.catalogue_number,
@@ -337,117 +328,6 @@ class XmlGenerationService:
             catalogue_number=catalogue_number,
         )
         return preview.file_name, preview.xml.encode("utf-8")
-
-    def preview_patch_scenario_fixture(
-        self,
-        *,
-        family_id: str,
-        scenario_id: str,
-    ) -> PatchScenarioXmlPreview:
-        scenario_dir = (
-            self.project_root
-            / "backend"
-            / "tests"
-            / "fixtures"
-            / "xml_patch_scenarios"
-            / scenario_id
-            / family_id
-        )
-        scenario_file = scenario_dir / "scenario.json"
-        if not scenario_file.exists():
-            raise ValueError(f"PATCH scenario fixture {scenario_id!r} for family {family_id!r} was not found.")
-
-        import json
-
-        scenario = json.loads(scenario_file.read_text(encoding="utf-8"))
-        generated_file = scenario.get("generated_patch_file")
-        if not generated_file:
-            raise ValueError(
-                f"PATCH scenario fixture {scenario_id!r} for family {family_id!r} does not yet declare a generated PATCH XML file."
-            )
-
-        xml_path = scenario_dir / generated_file
-        if not xml_path.exists():
-            raise ValueError(f"Generated PATCH XML file {generated_file!r} was not found for scenario {scenario_id!r}.")
-
-        baseline_fixture, manifest = self._load_patch_baseline_manifest(family_id=family_id)
-        registered_device_anchor = self._registered_device_anchor_from_manifest(
-            family_id=family_id,
-            baseline_fixture=baseline_fixture,
-            manifest=manifest,
-        )
-        self._validate_patch_scenario_identity(
-            scenario=scenario,
-            registered_device_anchor=registered_device_anchor,
-            scenario_id=scenario_id,
-        )
-
-        xml_text = xml_path.read_text(encoding="utf-8")
-        xml_bytes = xml_text.encode("utf-8")
-        validation = self.xml_validation_service.validate_message(xml_bytes)
-        return PatchScenarioXmlPreview(
-            family_id=family_id,
-            scenario_id=scenario_id,
-            fixture_status=scenario.get("status", "unknown"),
-            product_family=scenario.get("product_family"),
-            product_variant=scenario.get("product_variant"),
-            catalogue_number=scenario.get("catalogue_number") or manifest["catalogue_number"],
-            primary_udi_di=manifest["primary_udi_di"],
-            registered_device_anchor=registered_device_anchor,
-            baseline_fixture=baseline_fixture,
-            file_name=generated_file,
-            xml=xml_text,
-            validation=validation,
-        )
-
-    def download_patch_scenario_fixture(
-        self,
-        *,
-        family_id: str,
-        scenario_id: str,
-    ) -> tuple[str, bytes]:
-        preview = self.preview_patch_scenario_fixture(family_id=family_id, scenario_id=scenario_id)
-        return preview.file_name, preview.xml.encode("utf-8")
-
-    def _load_patch_baseline_manifest(self, *, family_id: str) -> tuple[str, dict]:
-        baseline_fixture = f"equivalent_baseline/{family_id}"
-        manifest_path = (
-            self.project_root
-            / "backend"
-            / "tests"
-            / "fixtures"
-            / "xml_patch_scenarios"
-            / baseline_fixture
-            / "manifest.json"
-        )
-        if not manifest_path.exists():
-            raise ValueError(f"Baseline manifest for fixture family {family_id!r} was not found.")
-
-        import json
-
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        return baseline_fixture, manifest
-
-    def _registered_device_anchor_from_manifest(
-        self,
-        *,
-        family_id: str,
-        baseline_fixture: str,
-        manifest: dict,
-    ) -> RegisteredDeviceAnchor:
-        return RegisteredDeviceAnchor(
-            family_id=family_id,
-            baseline_fixture=baseline_fixture,
-            product_family=manifest["product_family"],
-            product_variant=manifest["product_variant"],
-            catalogue_number=manifest["catalogue_number"],
-            primary_udi_di=manifest["primary_udi_di"],
-            post_file_name=manifest["post_file_name"],
-            patch_file_name=manifest["patch_file_name"],
-            post_valid=bool(manifest.get("post_valid", False)),
-            patch_valid=bool(manifest.get("patch_valid", False)),
-            eudamed_status="EUDAMED Accepted",
-        )
 
     def _registered_device_anchor_from_pair(
         self,
@@ -639,34 +519,6 @@ class XmlGenerationService:
             f"patch-{scenario_id.replace('_', '-')}-"
             f"{self.package_builder._safe_catalogue_number(catalogue_number)}.xml"
         )
-
-    def _validate_patch_scenario_identity(
-        self,
-        *,
-        scenario: dict,
-        registered_device_anchor: RegisteredDeviceAnchor,
-        scenario_id: str,
-    ) -> None:
-        if scenario.get("baseline_fixture") != registered_device_anchor.baseline_fixture:
-            raise ValueError(
-                f"PATCH scenario fixture {scenario_id!r} is not anchored to baseline fixture "
-                f"{registered_device_anchor.baseline_fixture!r}."
-            )
-        if scenario.get("product_family") != registered_device_anchor.product_family:
-            raise ValueError(
-                f"PATCH scenario fixture {scenario_id!r} does not match baseline product family "
-                f"{registered_device_anchor.product_family!r}."
-            )
-        if scenario.get("product_variant") != registered_device_anchor.product_variant:
-            raise ValueError(
-                f"PATCH scenario fixture {scenario_id!r} does not match baseline product variant "
-                f"{registered_device_anchor.product_variant!r}."
-            )
-        if scenario.get("catalogue_number") != registered_device_anchor.catalogue_number:
-            raise ValueError(
-                f"PATCH scenario fixture {scenario_id!r} does not match baseline catalogue number "
-                f"{registered_device_anchor.catalogue_number!r}."
-            )
 
     def _slugify_fixture_family_id(self, product_family: str, product_variant: str, catalogue_number: str) -> str:
         return "-".join(

@@ -8,7 +8,6 @@ import type {
   GeneratedPatchScenarioPreview,
   MarketInfoPutPreview,
   NormalizationRuleFile,
-  PatchScenarioXmlPreview,
   RegisteredDeviceAnchor,
   ReferenceWorkbookSummary,
   SchemaInventory,
@@ -93,8 +92,6 @@ export const api = {
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
   canonicalValidation: () => getJson<CanonicalValidationBundle>("/canonical-validation"),
   xmlGenerationScope: () => getJson<XmlGenerationScopeBundle>("/xml/scope"),
-  testingRegisteredDeviceAnchor: (familyId: string) =>
-    getJson<RegisteredDeviceAnchor>(`/xml/testing-anchor?family_id=${encodeURIComponent(familyId)}`),
   previewXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendJson<SingleRecordXmlPreview>("/xml/preview-record", "POST", {
       product_family: productFamily,
@@ -112,11 +109,6 @@ export const api = {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
-    }),
-  previewXmlPatchScenario: (familyId: string, scenarioId: string) =>
-    sendJson<PatchScenarioXmlPreview>("/xml/preview-patch-scenario", "POST", {
-      family_id: familyId,
-      scenario_id: scenarioId,
     }),
   previewGeneratedPatchScenario: (
     productFamily: string,
@@ -157,11 +149,6 @@ export const api = {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
-    }),
-  downloadXmlPatchScenario: (familyId: string, scenarioId: string) =>
-    sendDownload("/xml/download-patch-scenario", "POST", {
-      family_id: familyId,
-      scenario_id: scenarioId,
     }),
   downloadGeneratedPatchScenario: (
     productFamily: string,

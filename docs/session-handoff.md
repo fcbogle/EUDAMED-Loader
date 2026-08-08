@@ -9,9 +9,9 @@ Continue refining the XML workspaces so the UI clearly separates:
 
 while keeping `Patch XML` as a controlled testing workflow that:
 
-- requires a reviewed `Post + Patch` baseline for the exact selected record
+- requires a reviewed `Post + Patch` baseline in the current session before scenario generation unlocks
 - derives later scenario `PATCH` drafts from that proven first child `PATCH`
-- preserves device lineage by carrying the selected parent record identity through scenario generation
+- preserves device lineage by carrying the chosen parent `POST` record identity through scenario generation
 - shows explicit before/after business comparison before XML generation
 - shows toggle-based comparison between baseline and derived `PATCH` XML
 - requires the user to enter the `e:version` integer for each later scenario draft
@@ -23,8 +23,12 @@ while keeping `Patch XML` as a controlled testing workflow that:
 - Equivalent first child `PATCH` remains version `2`.
 - Later scenario `PATCH` drafts inherit from that first proven `PATCH`.
 - The user must enter the next scenario `PATCH` version explicitly based on the EUDAMED playground state.
-- `Patch XML` must not unlock until `Post + Patch` has been generated and reviewed for the same selected catalogue number in the current session.
-- Scenario generation must target the exact selected parent record, not just the first `POST` row in the variant.
+- `Patch XML` remains accessible as a workspace, but scenario generation and download stay blocked until `Post + Patch` has been generated and reviewed for the matching parent record in the current session.
+- For the current increment, parent `POST` selection is:
+  - the exact selected record if that record is an XML-ready `POST`
+  - otherwise the first available XML-ready `POST` in the selected variant
+- Deriving later scenario `PATCH` drafts from the reviewed first child `PATCH` is acceptable for the initial testing phase.
+- Workbook-drift detection or workbook-refreshed scenario regeneration can be considered later, after initial testing.
 
 ## Current Implemented Behavior
 
@@ -52,7 +56,9 @@ General XML tools:
 
 ### Post + Patch
 
-- Uses the currently selected XML-ready `POST` record.
+- Uses the parent `POST` record determined by current selection logic:
+  - the exact selected record if it is an XML-ready `POST`
+  - otherwise the first available XML-ready `POST` in the selected variant
 - Generates:
   - one baseline `POST`
   - one equivalent first child `PATCH`
@@ -65,12 +71,12 @@ Current implementation is generated, not fixture-backed.
 
 It now:
 
-- uses the exact selected `POST` parent record identified by:
+- uses the current parent `POST` selection identified by:
   - `product_family`
   - `product_variant`
   - `catalogue_number`
-- requires the user to generate and review `Post + Patch` first for that same record
-- blocks scenario drafting until that reviewed baseline pair exists in the current session
+- requires the user to generate and review `Post + Patch` first for that parent record
+- keeps the `Patch XML` workspace visible, but blocks scenario generation and download until that reviewed baseline pair exists in the current session
 - derives scenario drafts from the baseline first child `PATCH`
 - supports the active scenarios:
   - `trade_name_edit`
@@ -86,6 +92,7 @@ It now:
 
 Important limitation:
 
+- baseline-pair review state is in-memory only for the current session
 - PATCH scenario status remains UI state only
 - it is not persisted
 
@@ -102,11 +109,11 @@ Important limitation:
 
 ## Current PATCH Workflow
 
-1. Select product family, variant, and the XML-ready record to use as the parent `POST`.
+1. Select product family, variant, and the XML-ready record to review.
 2. Open `Post + Patch` and generate the baseline pair.
 3. Review the baseline `POST` and equivalent first `PATCH`.
 4. Open `Patch XML`.
-5. Confirm the same parent catalogue number is shown and the baseline pair is marked reviewed.
+5. Confirm the parent catalogue number shown in `Patch XML` and confirm the baseline pair is marked reviewed.
 6. Choose one approved scenario type.
 7. Enter the next `PATCH` version integer.
 8. Enter only the scenario-specific change values.
@@ -120,15 +127,16 @@ Important limitation:
 ## Implemented Guardrails
 
 - Generated scenario `PATCH` preview/download now require `catalogue_number` in the request contract.
-- Backend record selection now resolves an exact XML-ready `POST` record for:
+- Backend generated-scenario preview/download resolve an exact XML-ready `POST` record for:
   - family
   - variant
   - catalogue number
-- `Patch XML` stays blocked unless the reviewed baseline pair in memory matches the same:
+- `Patch XML` scenario generation stays blocked unless the reviewed baseline pair in memory matches the same:
   - product family
   - product variant
   - catalogue number
-- The UI no longer allows random scenario drafting from a variant without a reviewed baseline pair.
+- If the currently selected XML-ready row is not itself a `POST`, the current UI still falls back to the first available XML-ready `POST` in the selected variant.
+- The UI no longer allows scenario generation from a variant without a reviewed baseline pair.
 
 ## Current Scenario Scope
 
@@ -138,18 +146,13 @@ Active generated scenarios:
 - `Critical Warnings`
 - `Storage Condition Edit`
 
-Deferred / inactive scenario:
-
-- `Secondary Identifier Add`
-  - still incomplete
-  - not exposed as an active generated scenario
-
 ## Current XML Facts
 
 - Accepted testing baseline remains:
   - `POST -> DEVICE.POST`
   - `PATCH -> UDI_DI.PATCH`
 - Scenario-derived later `PATCH` payloads are built from the baseline first child `PATCH`.
+- This is intentional for the initial testing phase so scenario changes remain narrow and traceable against one reviewed baseline.
 - Non-scenario fields should stay aligned with the reviewed baseline pair.
 - Expected scenario deltas are limited to:
   - `e:version`
@@ -161,27 +164,31 @@ Deferred / inactive scenario:
 
 The current docs now need to describe:
 
-- generated `Patch XML`, not fixture-backed `Patch XML`
-- exact parent-record lineage
+- generated `Patch XML`
+- current parent-record lineage
 - reviewed baseline-pair gating
 - before/after comparison as a current feature, not a future idea
+- baseline-first scenario derivation for the initial testing phase
 
 Files refreshed in this pass:
 
 - `docs/session-handoff.md`
 - `frontend/src/content/docs/xml-generation.md`
 - `frontend/src/content/docs/eudamed-testing-generation-ui.md`
+- `frontend/src/content/docs/eudamed-service-contract-findings.md`
 
 ## Still Missing
 
 - persistence for PATCH scenario status (`EUDAMED Candidate` / `EUDAMED Accepted`)
 - persistence for baseline-family acceptance state
+- persistence for baseline-pair review / existence state
 - automatic promotion of accepted PATCH scenarios into `EUDAMED Generation`
 - explicit `POST Batch` / `PATCH Batch` redesign
 - scenario-driven `PATCH Batch` generation
 - broader scenario library beyond the current three active generated scenarios
-- completion of `secondary_identifier_add`
 - external confirmation that candidate scenarios are operationally accepted by EUDAMED
+- workbook-drift detection between the reviewed baseline pair and newer workbook state
+- any later decision on workbook-refreshed scenario PATCH regeneration
 
 ## Recommended Next Step
 

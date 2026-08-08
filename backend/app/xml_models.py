@@ -82,22 +82,6 @@ class MarketInfoPutPreview(BaseModel):
     validation: XmlValidationResult
 
 
-class PatchScenarioXmlPreview(BaseModel):
-    mode: Literal["patch_scenario"] = "patch_scenario"
-    family_id: str
-    scenario_id: str
-    fixture_status: str
-    product_family: str | None = None
-    product_variant: str | None = None
-    catalogue_number: str
-    primary_udi_di: str
-    registered_device_anchor: RegisteredDeviceAnchor
-    baseline_fixture: str
-    file_name: str
-    xml: str
-    validation: XmlValidationResult
-
-
 class PatchScenarioFieldDelta(BaseModel):
     field_key: str
     label: str

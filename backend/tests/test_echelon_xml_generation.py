@@ -10,8 +10,6 @@ from app.routers.xml_generation import (
     download_xml_batch,
     download_xml_record,
     preview_generated_patch_scenario,
-    preview_xml_patch_scenario,
-    xml_testing_registered_device_anchor,
     preview_xml_market_info_put,
     preview_xml_batch,
     preview_xml_record,
@@ -184,33 +182,6 @@ def test_generic_batch_download_route_returns_zip_package() -> None:
         assert "echelon-echelon-vt-batch-01-of-06.xml" in names
         assert "echelon-echelon-vt-batch-06-of-06.xml" in names
 
-
-def test_testing_registered_device_anchor_route_returns_fixture_anchor() -> None:
-    payload = xml_testing_registered_device_anchor("echelon-echelon-vac-EVAC22L1S")
-
-    assert payload["family_id"] == "echelon-echelon-vac-EVAC22L1S"
-    assert payload["baseline_fixture"] == "equivalent_baseline/echelon-echelon-vac-EVAC22L1S"
-    assert payload["product_family"] == "Echelon"
-    assert payload["product_variant"] == "Echelon VAC"
-    assert payload["catalogue_number"] == "EVAC22L1S"
-    assert payload["primary_udi_di"] == "05050649062025"
-    assert payload["eudamed_status"] == "EUDAMED Accepted"
-
-
-def test_patch_scenario_preview_includes_registered_device_anchor() -> None:
-    payload = preview_xml_patch_scenario(
-        {
-            "family_id": "echelon-echelon-vac-EVAC22L1S",
-            "scenario_id": "trade_name_edit",
-        }
-    )
-
-    assert payload["mode"] == "patch_scenario"
-    assert payload["catalogue_number"] == "EVAC22L1S"
-    assert payload["registered_device_anchor"]["catalogue_number"] == "EVAC22L1S"
-    assert payload["registered_device_anchor"]["primary_udi_di"] == "05050649062025"
-
-
 def test_generated_trade_name_patch_scenario_reuses_post_patch_baseline() -> None:
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
@@ -234,6 +205,29 @@ def test_generated_trade_name_patch_scenario_reuses_post_patch_baseline() -> Non
     assert "<e:version>3</e:version>" in preview.derived_patch_xml
     assert "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED" in preview.derived_patch_xml
     assert any(delta.field_key == "trade_name" for delta in preview.field_deltas)
+
+
+def test_generated_trade_name_patch_scenario_preserves_registered_device_identity() -> None:
+    preview = XmlGenerationService().preview_generated_patch_scenario(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+        scenario_id="trade_name_edit",
+        patch_version="3",
+        scenario_inputs={
+            "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
+        },
+    )
+
+    assert preview.registered_device_anchor.catalogue_number == "EVAC22L1S"
+    assert preview.registered_device_anchor.primary_udi_di == "05050649062025"
+    assert preview.context.catalogue_number == "EVAC22L1S"
+    assert preview.context.primary_udi_di == "05050649062025"
+    assert "<commondi:DICode>05050649062025</commondi:DICode>" in preview.baseline_patch_xml
+    assert "<commondi:DICode>05050649062025</commondi:DICode>" in preview.derived_patch_xml
+    assert "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS" in preview.baseline_patch_xml
+    assert "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED" in preview.derived_patch_xml
+    assert all(delta.field_key in {"patch_version", "trade_name"} for delta in preview.field_deltas)
 
 
 def test_generated_warning_patch_scenario_adds_one_warning() -> None:

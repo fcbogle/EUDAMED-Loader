@@ -136,7 +136,7 @@ Standalone `MARKET_INFO.PUT`:
 
 The XML layer now consumes a typed XML projection built from validation records and generated scenario inputs.
 
-`Patch XML` no longer depends on fixture-backed scenario XML for the active scenarios.
+`Patch XML` is generated dynamically from the reviewed baseline pair for the selected record.
 
 Some XML generation paths are now intentionally more conservative than others:
 
