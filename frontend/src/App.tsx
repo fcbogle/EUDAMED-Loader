@@ -798,7 +798,13 @@ export function App() {
   }, [activeTab, canonicalReview]);
 
   useEffect(() => {
-    if ((activeTab === "canonicalValidation" || activeTab === "xml" || activeTab === "generation") && !canonicalValidation) {
+    if (
+      (activeTab === "workbooks" ||
+        activeTab === "canonicalValidation" ||
+        activeTab === "xml" ||
+        activeTab === "generation") &&
+      !canonicalValidation
+    ) {
       void loadCanonicalValidationBundle();
     }
   }, [activeTab, canonicalValidation]);
@@ -1288,6 +1294,7 @@ export function App() {
       : xmlMode === "marketInfo"
         ? selectedMarketInfoAnchor
         : xmlPatchPreview?.registered_device_anchor ?? selectedPairAnchor;
+  const isPairWorkspaceReady = Boolean(selectedPairRequestArgs);
   const acceptedXmlModes = [
     {
       id: "pair",
@@ -1989,21 +1996,34 @@ export function App() {
               </div>
             </div>
             <p className="panel-copy">
-              Detals of HTTP Post versus Patch update, reflecting current EUDAMED registration, by Product Family
+              Details of HTTP Post versus Patch update, reflecting current EUDAMED registration, by product family.
             </p>
             <div className="family-scope-grid">
-              {familyWorkbookSummaries.map((family) => (
-                <div className="family-scope-card" key={family.family}>
+              {!canonicalValidation && isLoadingCanonicalValidation ? (
+                <div className="family-scope-card">
                   <div className="family-scope-head">
-                    <span className="summary-label">{family.family}</span>
-                    <strong>{family.rows}</strong>
+                    <span className="summary-label">Registration Scope</span>
+                    <strong>Loading</strong>
                   </div>
                   <div className="family-scope-pill-row">
-                    <span className="status-pill ok compact">{family.postVariants} POST variants</span>
-                    <span className="status-pill warn compact">{family.patchVariants} PATCH variants</span>
+                    <span className="status-pill ok compact">Loading POST variants</span>
+                    <span className="status-pill warn compact">Loading PATCH variants</span>
                   </div>
                 </div>
-              ))}
+              ) : (
+                familyWorkbookSummaries.map((family) => (
+                  <div className="family-scope-card" key={family.family}>
+                    <div className="family-scope-head">
+                      <span className="summary-label">{family.family}</span>
+                      <strong>{family.rows}</strong>
+                    </div>
+                    <div className="family-scope-pill-row">
+                      <span className="status-pill ok compact">{family.postVariants} POST variants</span>
+                      <span className="status-pill warn compact">{family.patchVariants} PATCH variants</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </section>
 
@@ -3493,7 +3513,7 @@ export function App() {
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      (xmlMode === "pair" && !selectedTestingAnchor) ||
+                      (xmlMode === "pair" && !isPairWorkspaceReady) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && !isPatchScenarioReady) ||
@@ -3518,7 +3538,7 @@ export function App() {
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      (xmlMode === "pair" && !selectedTestingAnchor) ||
+                      (xmlMode === "pair" && !isPairWorkspaceReady) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && !isPatchScenarioReady) ||
@@ -3533,7 +3553,7 @@ export function App() {
                     type="button"
                     onClick={() => void downloadXmlRecord()}
                     disabled={
-                      (xmlMode === "pair" && !selectedTestingAnchor) ||
+                      (xmlMode === "pair" && !isPairWorkspaceReady) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && !hasReviewedPatchBaselinePair) ||
