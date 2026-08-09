@@ -5,6 +5,11 @@ from functools import lru_cache
 from pathlib import Path
 
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 class Settings(BaseModel):
@@ -18,6 +23,9 @@ class Settings(BaseModel):
     canonical_mapping_dir: Path
     reports_dir: Path
     eudamed_message_schema_version: str
+    eudamed_manufacturer_srn_override: str | None
+    eudamed_authorised_representative_srn_override: str | None
+    eudamed_suppress_authorised_representative: bool
     eudamed_max_batch_records: int
     eudamed_post_service_id: str
     eudamed_patch_service_id: str
@@ -36,9 +44,16 @@ def _path_setting(project_root: Path, env_name: str, default: Path) -> Path:
     return candidate
 
 
+def _bool_setting(env_name: str, default: bool = False) -> bool:
+    raw = os.getenv(env_name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    project_root = Path(__file__).resolve().parents[2]
+    project_root = PROJECT_ROOT
     basic_udi_reference_dir = _path_setting(
         project_root,
         "EUDAMED_BASIC_UDI_REFERENCE_DIR",
@@ -64,7 +79,15 @@ def get_settings() -> Settings:
         normalization_dir=project_root / "config" / "normalization",
         canonical_mapping_dir=project_root / "config" / "canonical_mapping",
         reports_dir=project_root / "docs" / "reports",
-        eudamed_message_schema_version=os.getenv("EUDAMED_MESSAGE_SCHEMA_VERSION", "3.0.30"),
+        eudamed_message_schema_version=os.getenv("EUDAMED_MESSAGE_SCHEMA_VERSION", "3.0.32"),
+        eudamed_manufacturer_srn_override=os.getenv("EUDAMED_MANUFACTURER_SRN_OVERRIDE") or None,
+        eudamed_authorised_representative_srn_override=(
+            os.getenv("EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE") or None
+        ),
+        eudamed_suppress_authorised_representative=_bool_setting(
+            "EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE",
+            False,
+        ),
         eudamed_max_batch_records=int(os.getenv("EUDAMED_MAX_BATCH_RECORDS", "300")),
         eudamed_post_service_id=os.getenv("EUDAMED_POST_SERVICE_ID", legacy_service_id or "DEVICE"),
         eudamed_patch_service_id=os.getenv("EUDAMED_PATCH_SERVICE_ID", legacy_service_id or "UDI_DI"),

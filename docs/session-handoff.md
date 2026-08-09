@@ -19,6 +19,28 @@ while keeping `Patch XML` as a controlled testing workflow that:
 
 ## Latest Confirmed Decisions
 
+- As of Sunday, August 9, 2026, the live EUDAMED Playground validator rejected `m:Push version="3.0.30"` and required `3.0.32` instead.
+- The repo has therefore been hotfixed to default `EUDAMED_MESSAGE_SCHEMA_VERSION` to `3.0.32` for current Playground testing.
+- The bundled local `MessageType.xsd` fixed `m:Push@version` value has also been hotfixed from `3.0.30` to `3.0.32` so local validation and tests remain aligned with current Playground behavior.
+- This is intentionally captured as a reversible config decision because the public EUDAMED technical documentation page still showed XSD version `3.0.30` at the time of testing.
+- Playground upload testing on Sunday, August 9, 2026 also revealed an actor mismatch guard:
+  - generated XML carried `UK-MF-000048777`
+  - logged-in Playground actor was `UK-MF-000033261`
+  - EUDAMED rejected the upload because `MFActorCode` / sender actor must match the submitting actor
+- The repo now supports a testing-only override via `EUDAMED_MANUFACTURER_SRN_OVERRIDE` so Playground XML can be aligned to the logged-in actor without rewriting the underlying source/reference data.
+- Playground testing then revealed a second actor-reference issue:
+  - generated XML carried `ARActorCode` `DE-AR-000006292`
+  - Playground could not resolve that actor in the current environment
+- The repo now supports `EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE=true` so `ARActorCode` can be omitted for controlled Playground testing when the referenced AR is not available there.
+- Search results in Playground then identified the current AR actor for the logged-in manufacturer context as `DE-AR-000031681` (`Blatchford Europe GmbH`).
+- The repo now supports `EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE` so Playground XML can carry a valid AR actor without mutating the underlying legacy reference data.
+- On Sunday, August 9, 2026, a `DEVICE.POST` upload then succeeded in Playground using this working actor combination:
+- On Sunday, August 9, 2026, a `DEVICE.POST` upload succeeded in Playground using this working actor combination:
+  - `EUDAMED_MESSAGE_SCHEMA_VERSION=3.0.32`
+  - `EUDAMED_MANUFACTURER_SRN_OVERRIDE=UK-MF-000033261`
+  - `EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE=DE-AR-000031681`
+  - `EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE=false`
+- On Sunday, August 9, 2026, the baseline equivalent first-child `UDI_DI.PATCH` from the generated `Post + Patch` pair also succeeded in Playground with `e:version = 2`.
 - Baseline `POST` remains version `1`.
 - Equivalent first child `PATCH` remains version `2`.
 - Later scenario `PATCH` drafts inherit from that first proven `PATCH`.
@@ -63,7 +85,8 @@ General XML tools:
   - one baseline `POST`
   - one equivalent first child `PATCH`
 - Validates both locally against the schema set.
-- Provides download as a pair package.
+- Provides explicit separate `POST` and `PATCH` ZIP downloads after preparation from one download action.
+- As of Sunday, August 9, 2026, the baseline `POST` and equivalent first-child `PATCH` have both been accepted successfully in Playground for at least one tested device lineage.
 
 ### Patch XML
 
@@ -151,6 +174,9 @@ Active generated scenarios:
 - Accepted testing baseline remains:
   - `POST -> DEVICE.POST`
   - `PATCH -> UDI_DI.PATCH`
+- The first confirmed accepted Playground baseline pair was proven on Sunday, August 9, 2026:
+  - `DEVICE.POST` -> `SUCCESS`
+  - `UDI_DI.PATCH` with `e:version = 2` -> `SUCCESS`
 - Scenario-derived later `PATCH` payloads are built from the baseline first child `PATCH`.
 - This is intentional for the initial testing phase so scenario changes remain narrow and traceable against one reviewed baseline.
 - Non-scenario fields should stay aligned with the reviewed baseline pair.
@@ -176,6 +202,29 @@ Files refreshed in this pass:
 - `frontend/src/content/docs/xml-generation.md`
 - `frontend/src/content/docs/eudamed-testing-generation-ui.md`
 - `frontend/src/content/docs/eudamed-service-contract-findings.md`
+
+## Current Schema-Version Note
+
+- Local default message schema version is now `3.0.32`.
+- Previous repo default was `3.0.30`.
+- Local bundled `data/schemas/service/Message/MessageType.xsd` fixed value is also now `3.0.32`.
+- Previous bundled fixed value was `3.0.30`.
+- Optional testing override now exists:
+  - `EUDAMED_MANUFACTURER_SRN_OVERRIDE`
+  - intended for Playground actor alignment only
+  - should remain easy to remove or change later
+- Optional testing suppression now exists:
+  - `EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE`
+  - intended for Playground-only compatibility when the AR actor is not resolvable there
+  - should remain easy to remove or change later
+- Optional testing override now also exists:
+  - `EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE`
+  - intended to point XML generation at a Playground-valid AR SRN such as `DE-AR-000031681`
+  - preferred over suppression when EUDAMED business rules require an AR for the submitting manufacturer
+- Reason for temporary/default switch:
+  - actual Playground validation error `E-I-40000` on Sunday, August 9, 2026 required `m:Push@version="3.0.32"`
+- Public technical documentation observed during the same session still stated `v 3.0.30` for the published `XSD schemas.zip`.
+- Treat this as a controlled operational hotfix until the local schema pack is fully refreshed, the published documentation catches up, or a later EUDAMED validator change requires another version adjustment.
 
 ## Still Missing
 

@@ -791,6 +791,8 @@ th {
   border-radius: 999px;
   border: 1px solid rgba(0, 68, 90, 0.18);
   cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .action-button {
@@ -806,6 +808,28 @@ th {
 .ghost-button.compact {
   padding: 6px 10px;
   font-size: 0.8rem;
+}
+
+a.action-button,
+a.action-button:visited {
+  color: #ffffff;
+}
+
+a.ghost-button,
+a.ghost-button:visited {
+  color: #00445a;
+}
+
+.action-button:hover,
+.action-button:focus-visible {
+  background: #003547;
+  box-shadow: 0 8px 18px rgba(0, 68, 90, 0.16);
+}
+
+.ghost-button:hover,
+.ghost-button:focus-visible {
+  background: rgba(0, 68, 90, 0.06);
+  border-color: rgba(0, 68, 90, 0.24);
 }
 
 .draft-heading {

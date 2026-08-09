@@ -566,6 +566,74 @@ class XmlGenerationService:
             manifest=manifest,
         )
 
+    def download_post_package(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> tuple[str, bytes]:
+        preview = self.preview_post_patch_pair(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        package_file_name = self.package_builder.operation_package_file_name(
+            product_family=preview.product_family or product_family,
+            product_variant=preview.product_variant or product_variant,
+            operation="POST",
+            catalogue_number=preview.catalogue_number,
+        )
+        manifest = {
+            "mode": preview.mode,
+            "message_type": "DEVICE.POST",
+            "product_family": preview.product_family,
+            "product_variant": preview.product_variant,
+            "catalogue_number": preview.catalogue_number,
+            "primary_udi_di": preview.primary_udi_di,
+            "file_name": preview.post_file_name,
+            "valid": preview.post_validation.valid,
+        }
+        return self.package_builder.build_archive(
+            package_file_name=package_file_name,
+            members=[(preview.post_file_name, preview.post_xml.encode("utf-8"))],
+            manifest=manifest,
+        )
+
+    def download_patch_package(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> tuple[str, bytes]:
+        preview = self.preview_post_patch_pair(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        package_file_name = self.package_builder.operation_package_file_name(
+            product_family=preview.product_family or product_family,
+            product_variant=preview.product_variant or product_variant,
+            operation="PATCH",
+            catalogue_number=preview.catalogue_number,
+        )
+        manifest = {
+            "mode": preview.mode,
+            "message_type": "UDI_DI.PATCH",
+            "product_family": preview.product_family,
+            "product_variant": preview.product_variant,
+            "catalogue_number": preview.catalogue_number,
+            "primary_udi_di": preview.primary_udi_di,
+            "file_name": preview.patch_file_name,
+            "valid": preview.patch_validation.valid,
+        }
+        return self.package_builder.build_archive(
+            package_file_name=package_file_name,
+            members=[(preview.patch_file_name, preview.patch_xml.encode("utf-8"))],
+            manifest=manifest,
+        )
+
     def preview_batch(
         self,
         *,

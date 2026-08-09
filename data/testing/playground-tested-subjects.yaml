@@ -1,0 +1,32 @@
+tested_subjects:
+  - subject_id: "echelon|echelon-vac|EVAC22L1S"
+    product_family: "Echelon"
+    product_variant: "Echelon VAC"
+    catalogue_number: "EVAC22L1S"
+    primary_udi_di: "05050649062025"
+    basic_udi_di: "5050649ECHELONVACNL"
+
+    source_reference:
+      workbook: "Template for Echelon family EUDAMED.xlsx"
+      sheet: "Echelon VAC"
+      row_index: 3
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: true
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: true
+
+    test_events:
+      - message_type: "DEVICE.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-09T20:52:02+02:00"
+        transaction_id: "5174249e-e84a-4786-8f53-7c176c013aa6"
+        submission_id: "cdf34da9-da6a-4a11-abc1-df95612ff907"
+
+      - message_type: "UDI_DI.PATCH"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-09T20:59:45+02:00"
+        transaction_id: "349eb9f9-6445-4f52-a130-aed9f9c80dad"
+        submission_id: "ccccc754-313c-496e-b4b2-b402df7f9645"

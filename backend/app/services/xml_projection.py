@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from app.config import get_settings
 from app.validation_models import CanonicalValidationRecord
 from app.xml_models import CriticalWarningXmlItem, StorageConditionXmlItem
 
@@ -108,6 +109,9 @@ class MarketInfoXmlRecord:
 
 
 class DeviceXmlProjectionBuilder:
+    def __init__(self) -> None:
+        self.settings = get_settings()
+
     def build_device_record(self, record: CanonicalValidationRecord) -> DeviceXmlRecord:
         field_map = {field.canonical_path: field.value for field in record.fields}
         basic_issuing_entity, basic_identifier_code = self._split_di_identifier(
@@ -124,6 +128,12 @@ class DeviceXmlProjectionBuilder:
                 secondary_identifier
             )
         language_value = field_map.get("device_record.language")
+        manufacturer_srn = self._resolved_manufacturer_srn(
+            self._required(field_map, "manufacturer.manufacturer_srn")
+        )
+        authorised_representative_srn = self._resolved_authorised_representative_srn(
+            field_map.get("basic_device.authorised_representative_srn")
+        )
         return DeviceXmlRecord(
             product_family=record.product_family,
             product_variant=record.product_variant,
@@ -139,8 +149,8 @@ class DeviceXmlProjectionBuilder:
             device_identifier_issuing_entity=device_issuing_entity,
             risk_class=self._risk_class(self._required(field_map, "basic_device.risk_class")),
             model_name=self._required(field_map, "basic_device.device_model"),
-            manufacturer_srn=self._required(field_map, "manufacturer.manufacturer_srn"),
-            authorised_representative_srn=field_map.get("basic_device.authorised_representative_srn"),
+            manufacturer_srn=manufacturer_srn,
+            authorised_representative_srn=authorised_representative_srn,
             human_tissues_cells=self._bool(self._required(field_map, "basic_device.human_tissues_cells")),
             animal_tissues_cells=self._bool(self._required(field_map, "basic_device.animal_tissues_cells")),
             human_product_check=self._bool(self._required(field_map, "basic_device.human_product_check")),
@@ -283,16 +293,32 @@ class DeviceXmlProjectionBuilder:
             raise ValueError(
                 f"Catalogue number {record.catalogue_number} has no market-info items available for MARKET_INFO.PUT generation."
             )
+        manufacturer_srn = self._resolved_manufacturer_srn(
+            self._required(field_map, "manufacturer.manufacturer_srn")
+        )
         return MarketInfoXmlRecord(
             product_family=record.product_family,
             product_variant=record.product_variant,
             catalogue_number=self._required(field_map, "device_record.catalogue_number"),
             primary_udi_di=self._required(field_map, "device_record.primary_udi_di"),
-            manufacturer_srn=self._required(field_map, "manufacturer.manufacturer_srn"),
+            manufacturer_srn=manufacturer_srn,
             device_identifier_code=device_identifier_code,
             device_identifier_issuing_entity=device_identifier_issuing_entity,
             market_countries=market_countries,
         )
+
+    def _resolved_manufacturer_srn(self, source_manufacturer_srn: str) -> str:
+        return self.settings.eudamed_manufacturer_srn_override or source_manufacturer_srn
+
+    def _resolved_authorised_representative_srn(
+        self,
+        source_authorised_representative_srn: str | None,
+    ) -> str | None:
+        if self.settings.eudamed_suppress_authorised_representative:
+            return None
+        if self.settings.eudamed_authorised_representative_srn_override:
+            return self.settings.eudamed_authorised_representative_srn_override
+        return source_authorised_representative_srn
 
     @staticmethod
     def _required(values: dict[str, str | None], key: str) -> str:

@@ -62,6 +62,13 @@ type SelectionAnchorInput = {
   primary_udi_di: string | null;
 };
 
+type PreparedPairDownloads = {
+  postFileName: string;
+  postUrl: string;
+  patchFileName: string;
+  patchUrl: string;
+};
+
 const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
   {
     id: "trade_name_edit",
@@ -584,6 +591,7 @@ export function App() {
   const [xmlPairPreview, setXmlPairPreview] = useState<EquivalentPatchPairPreview | null>(null);
   const [xmlMarketInfoPreview, setXmlMarketInfoPreview] = useState<MarketInfoPutPreview | null>(null);
   const [xmlPatchPreview, setXmlPatchPreview] = useState<GeneratedPatchScenarioPreview | null>(null);
+  const [preparedPairDownloads, setPreparedPairDownloads] = useState<PreparedPairDownloads | null>(null);
   const [patchPreviewView, setPatchPreviewView] = useState<"baseline" | "derived">("derived");
   const [patchVersionInput, setPatchVersionInput] = useState<string>("3");
   const [patchTradeNameInput, setPatchTradeNameInput] = useState<string>("");
@@ -705,6 +713,16 @@ export function App() {
     setSelectedXmlRecordKey(
       canonicalValidationData.records.find((record) => record.xml_readiness.status === "complete")?.catalogue_number ?? null,
     );
+  }
+
+  function clearPreparedPairDownloads(): void {
+    setPreparedPairDownloads((current) => {
+      if (current) {
+        URL.revokeObjectURL(current.postUrl);
+        URL.revokeObjectURL(current.patchUrl);
+      }
+      return null;
+    });
   }
 
   async function loadCanonicalReviewBundle(): Promise<void> {
@@ -841,7 +859,10 @@ export function App() {
     setXmlPairPreview(null);
     setXmlMarketInfoPreview(null);
     setXmlPatchPreview(null);
+    clearPreparedPairDownloads();
   }, [selectedXmlRecordKey, selectedXmlFamily, selectedXmlVariant, selectedXmlChunkSequence]);
+
+  useEffect(() => () => clearPreparedPairDownloads(), []);
 
   useEffect(() => {
     if (!canonicalValidation?.family_summaries.length) {
@@ -1698,14 +1719,50 @@ export function App() {
     setError(null);
     setXmlActionMessage("Preparing download...");
     try {
-        const downloadResult =
-        xmlMode === "pair" && selectedPairRequestArgs
-          ? await api.downloadXmlPostPatchPair(
-              selectedPairRequestArgs.product_family,
-              selectedPairRequestArgs.product_variant,
-              selectedPairRequestArgs.catalogue_number,
-            )
-          : xmlMode === "single" && selectedXmlRecord?.catalogue_number
+      if (xmlMode === "pair" && selectedPairRequestArgs) {
+        clearPreparedPairDownloads();
+        const [postDownload, patchDownload] = await Promise.all([
+          api.downloadXmlPostPackage(
+            selectedPairRequestArgs.product_family,
+            selectedPairRequestArgs.product_variant,
+            selectedPairRequestArgs.catalogue_number,
+          ),
+          api.downloadXmlPatchPackage(
+            selectedPairRequestArgs.product_family,
+            selectedPairRequestArgs.product_variant,
+            selectedPairRequestArgs.catalogue_number,
+          ),
+        ]);
+
+        const resolvedPostFileName =
+          postDownload.fileName ??
+          (selectedXmlPairRecord
+            ? `${selectedXmlPairRecord.product_family}-${selectedXmlPairRecord.product_variant}-${selectedXmlPairRecord.catalogue_number}-post.zip`
+            : "post-package.zip");
+        const resolvedPatchFileName =
+          patchDownload.fileName ??
+          (selectedXmlPairRecord
+            ? `${selectedXmlPairRecord.product_family}-${selectedXmlPairRecord.product_variant}-${selectedXmlPairRecord.catalogue_number}-patch.zip`
+            : "patch-package.zip");
+
+        if (postDownload.blob && patchDownload.blob) {
+          setPreparedPairDownloads({
+            postFileName: resolvedPostFileName,
+            postUrl: URL.createObjectURL(postDownload.blob),
+            patchFileName: resolvedPatchFileName,
+            patchUrl: URL.createObjectURL(patchDownload.blob),
+          });
+          setXmlActionMessage(
+            `POST and PATCH ZIPs are ready below. Use the explicit download buttons to save each file.`,
+          );
+        } else {
+          setXmlActionMessage("POST and PATCH ZIPs could not be prepared.");
+        }
+        return;
+      }
+
+      const downloadResult =
+        xmlMode === "single" && selectedXmlRecord?.catalogue_number
           ? await api.downloadXmlRecord(
               selectedXmlFamilySummary.product_family,
               selectedXmlVariantSummary.product_variant,
@@ -1739,9 +1796,7 @@ export function App() {
       }
       const resolvedFileName =
         fileName ??
-        (xmlMode === "pair" && selectedXmlPairRecord
-          ? `${selectedXmlPairRecord.product_family}-${selectedXmlPairRecord.product_variant}-${selectedXmlPairRecord.catalogue_number}-post-patch-pair.zip`
-          : xmlMode === "single"
+        (xmlMode === "single"
             ? xmlPreview?.file_name ??
               `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedXmlRecord?.catalogue_number ?? "record"}.xml`
           : xmlMode === "marketInfo"
@@ -3562,7 +3617,7 @@ export function App() {
                     }
                   >
                     {xmlMode === "pair"
-                      ? "Download Pair Package"
+                      ? "Download POST + PATCH ZIPs"
                       : xmlMode === "single"
                         ? "Download XML"
                         : xmlMode === "marketInfo"
@@ -3573,6 +3628,35 @@ export function App() {
                   </button>
                   {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
                 </div>
+                {xmlMode === "pair" && preparedPairDownloads ? (
+                  <div className="draft-list xml-record-stack">
+                    <div className="draft-card xml-record-card">
+                      <div className="draft-card-head">
+                        <strong>Prepared Pair Downloads</strong>
+                        <span className="status-pill ok compact">Ready</span>
+                      </div>
+                      <p className="panel-copy">
+                        Save each ZIP explicitly. This avoids browser blocking of multiple automatic downloads.
+                      </p>
+                      <div className="draft-actions-bar xml-actions-bar">
+                        <a
+                          className="ghost-button"
+                          href={preparedPairDownloads.postUrl}
+                          download={preparedPairDownloads.postFileName}
+                        >
+                          Download POST ZIP
+                        </a>
+                        <a
+                          className="ghost-button"
+                          href={preparedPairDownloads.patchUrl}
+                          download={preparedPairDownloads.patchFileName}
+                        >
+                          Download PATCH ZIP
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
                 {xmlMode === "pair" ? (
                   selectedTestingAnchor ? (
                     <div className="draft-list xml-record-stack">

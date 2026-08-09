@@ -4,6 +4,7 @@ from io import BytesIO
 from types import SimpleNamespace
 from zipfile import ZipFile
 
+from app.config import get_settings
 from app.routers.xml_generation import (
     download_generated_patch_scenario,
     download_xml_market_info_put,
@@ -59,6 +60,23 @@ def test_generic_preview_route_returns_single_record_payload() -> None:
     assert payload["product_variant"] == "Echelon"
     assert payload["catalogue_number"] == "EC22L1S"
     assert payload["validation"]["valid"] is True
+
+
+def test_single_record_preview_can_override_manufacturer_srn_for_playground(monkeypatch) -> None:
+    monkeypatch.setenv("EUDAMED_MANUFACTURER_SRN_OVERRIDE", "UK-MF-000033261")
+    get_settings.cache_clear()
+    try:
+        preview = XmlGenerationService().preview_post_patch_pair(
+            product_family="Elan",
+            product_variant="Elan IC",
+            catalogue_number="ELANIC22L1S",
+        )
+    finally:
+        monkeypatch.delenv("EUDAMED_MANUFACTURER_SRN_OVERRIDE", raising=False)
+        get_settings.cache_clear()
+
+    assert "<basicudi:MFActorCode>UK-MF-000033261</basicudi:MFActorCode>" in preview.post_xml
+    assert "<s:nodeActorCode>UK-MF-000033261</s:nodeActorCode>" in preview.post_xml
 
 
 def test_market_info_put_preview_generates_schema_valid_xml() -> None:

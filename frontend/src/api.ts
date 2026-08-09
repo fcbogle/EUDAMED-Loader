@@ -144,6 +144,18 @@ export const api = {
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
     }),
+  downloadXmlPostPackage: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+    sendDownload("/xml/download-post-package", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber,
+    }),
+  downloadXmlPatchPackage: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+    sendDownload("/xml/download-patch-package", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber,
+    }),
   downloadXmlMarketInfoPut: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-market-info-put", "POST", {
       product_family: productFamily,

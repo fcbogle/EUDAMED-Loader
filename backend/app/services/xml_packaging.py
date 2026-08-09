@@ -70,6 +70,19 @@ class XmlPackageBuilder:
         )
 
     @staticmethod
+    def operation_package_file_name(
+        *,
+        product_family: str,
+        product_variant: str,
+        operation: str,
+        catalogue_number: str,
+    ) -> str:
+        return (
+            f"{XmlPackageBuilder._slugify(product_family)}-{XmlPackageBuilder._slugify(product_variant)}-"
+            f"{operation.lower()}-{XmlPackageBuilder._safe_catalogue_number(catalogue_number)}.zip"
+        )
+
+    @staticmethod
     def market_info_file_name(
         *,
         product_family: str,
