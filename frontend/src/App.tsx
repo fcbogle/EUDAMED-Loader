@@ -18,6 +18,7 @@ import type {
   BatchXmlPreview,
   CanonicalValidationBundle,
   CanonicalReviewBundle,
+  CriticalWarningCodeOption,
   DistinctValueProfile,
   EquivalentPatchPairPreview,
   GeneratedPatchScenarioPreview,
@@ -80,7 +81,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     id: "warning_add",
     label: "Critical Warnings",
     target: "udidi:criticalWarnings",
-    summary: "Candidate PATCH shape that appends one additional warning to the accepted baseline PATCH family.",
+    summary: "Candidate PATCH shape that replaces the current warning set with the selected warning while keeping the baseline device identity unchanged.",
   },
   {
     id: "storage_condition_edit",
@@ -342,25 +343,8 @@ function titleCaseToken(value: string): string {
     .join(" ");
 }
 
-function slugifyFixtureFamilyId(
-  productFamily: string | null | undefined,
-  productVariant: string | null | undefined,
-  catalogueNumber: string | null | undefined,
-): string {
-  return [productFamily ?? "", productVariant ?? "", catalogueNumber ?? ""]
-    .map((value) => value.trim().toLowerCase().replace(/\s+/g, "-"))
-    .join("-");
-}
-
 function buildSelectionAnchor(record: SelectionAnchorInput): RegisteredDeviceAnchor {
-  const familyId = slugifyFixtureFamilyId(
-    record.product_family,
-    record.product_variant,
-    record.catalogue_number,
-  );
   return {
-    family_id: familyId,
-    baseline_fixture: `selection/${familyId}`,
     product_family: record.product_family,
     product_variant: record.product_variant,
     catalogue_number: record.catalogue_number,
@@ -586,6 +570,7 @@ export function App() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [xmlActionMessage, setXmlActionMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [criticalWarningCodeOptions, setCriticalWarningCodeOptions] = useState<CriticalWarningCodeOption[]>([]);
   const [xmlPreview, setXmlPreview] = useState<SingleRecordXmlPreview | null>(null);
   const [xmlBatchPreview, setXmlBatchPreview] = useState<BatchXmlPreview | null>(null);
   const [xmlPairPreview, setXmlPairPreview] = useState<EquivalentPatchPairPreview | null>(null);
@@ -595,7 +580,7 @@ export function App() {
   const [patchPreviewView, setPatchPreviewView] = useState<"baseline" | "derived">("derived");
   const [patchVersionInput, setPatchVersionInput] = useState<string>("3");
   const [patchTradeNameInput, setPatchTradeNameInput] = useState<string>("");
-  const [patchWarningCodeInput, setPatchWarningCodeInput] = useState<string>("CW011");
+  const [patchWarningCodeInput, setPatchWarningCodeInput] = useState<string>("");
   const [patchWarningCommentInput, setPatchWarningCommentInput] = useState<string>("");
   const [patchStorageConditionInputs, setPatchStorageConditionInputs] = useState<Record<string, string>>({
     SHC006: "",
@@ -793,13 +778,15 @@ export function App() {
       api.sheets(),
       api.normalizationRules(),
       api.distinctValues(selectedColumn),
+      api.criticalWarningCodes(),
     ])
-      .then(([workbookData, referenceWorkbookData, sheetData, ruleData, distinctData]) => {
+      .then(([workbookData, referenceWorkbookData, sheetData, ruleData, distinctData, criticalWarningCodes]) => {
         setWorkbooks(workbookData);
         setReferenceWorkbooks(referenceWorkbookData);
         setSheets(sheetData);
         setRules(ruleData);
         setDistinctValues(distinctData);
+        setCriticalWarningCodeOptions(criticalWarningCodes);
         const firstVisibleWorkbook = workbookData.find((workbook) => workbook.in_scope_for_variant_mapping);
         const firstVisibleSheet =
           sheetData.find((sheet) => sheet.workbook === firstVisibleWorkbook?.workbook) ?? sheetData[0] ?? null;
@@ -969,20 +956,27 @@ export function App() {
 
   useEffect(() => {
     setPatchPreviewView("derived");
-    setPatchVersionInput("3");
+    const latestSuccessfulVersion = Number(xmlPairPreview?.latest_successful_patch_state?.version ?? "2");
+    setPatchVersionInput(
+      Number.isInteger(latestSuccessfulVersion) && latestSuccessfulVersion >= 2
+        ? String(latestSuccessfulVersion + 1)
+        : "3",
+    );
     setXmlPatchPreview(null);
-    if (selectedXmlPairRecord) {
+    if (xmlPairPreview?.latest_successful_patch_state) {
+      setPatchTradeNameInput(xmlPairPreview.latest_successful_patch_state.trade_name ?? "");
+    } else if (selectedXmlPairRecord) {
       setPatchTradeNameInput(selectedXmlPairRecord.trade_name ?? "");
     } else {
       setPatchTradeNameInput("");
     }
-    setPatchWarningCodeInput("CW011");
+    setPatchWarningCodeInput("");
     setPatchWarningCommentInput("");
     setPatchStorageConditionInputs({
       SHC006: "",
       SHC007: "",
     });
-  }, [selectedXmlFamily, selectedXmlVariant, selectedPatchScenarioId, selectedXmlRecordKey]);
+  }, [selectedXmlFamily, selectedXmlVariant, selectedPatchScenarioId, selectedXmlRecordKey, xmlPairPreview]);
 
   useEffect(() => {
     if (activeTab === "generation" && xmlMode !== "pair") {
@@ -1224,12 +1218,51 @@ export function App() {
   const selectedPatchScenario =
     PATCH_SCENARIOS.find((scenario) => scenario.id === selectedPatchScenarioId) ?? PATCH_SCENARIOS[0];
   const selectedPatchScenarioStatus = patchScenarioStatuses[selectedPatchScenario.id];
+  const selectedLatestPatchState = xmlPairPreview?.latest_successful_patch_state ?? null;
+  const selectedPatchWarningCodes = selectedLatestPatchState
+    ? selectedLatestPatchState.critical_warnings.map((item) => item.code).filter((value) => value)
+    : (selectedXmlPairRecord?.critical_warning_items ?? [])
+        .map((item) => item.normalized_code?.trim() || item.item_type?.trim() || "")
+        .filter((value) => value);
+  const selectedPatchWarningDescriptions = selectedLatestPatchState
+    ? selectedLatestPatchState.critical_warnings
+        .map((item) => item.comment?.trim() || "")
+        .filter((value) => value)
+    : (selectedXmlPairRecord?.critical_warning_items ?? [])
+        .map((item) => item.description?.trim() || "")
+        .filter((value) => value);
   const selectedPatchStorageConditionMap = new Map(
-    (selectedXmlPairRecord?.storage_condition_items ?? [])
-      .filter((item) => item.normalized_code)
-      .map((item) => [item.normalized_code ?? "", item.description ?? "None"]),
+    selectedLatestPatchState
+      ? selectedLatestPatchState.storage_conditions.map((item) => [item.code, item.comment ?? "None"])
+      : (selectedXmlPairRecord?.storage_condition_items ?? [])
+          .filter((item) => item.normalized_code)
+          .map((item) => [item.normalized_code ?? "", item.description ?? "None"]),
   );
-  const patchDraftComparisonRows: PatchScenarioComparisonRow[] = selectedXmlPairRecord
+  const selectedCurrentTradeName =
+    selectedLatestPatchState?.trade_name ?? selectedXmlPairRecord?.trade_name ?? null;
+  const matchesSelectedPatchPreview = Boolean(
+    xmlPatchPreview &&
+      selectedPairRequestArgs &&
+      xmlPatchPreview.catalogue_number === selectedPairRequestArgs.catalogue_number &&
+      xmlPatchPreview.product_family === selectedPairRequestArgs.product_family &&
+      xmlPatchPreview.product_variant === selectedPairRequestArgs.product_variant &&
+      xmlPatchPreview.scenario_id === selectedPatchScenario.id,
+  );
+  const currentAcceptedPatchVersion =
+    matchesSelectedPatchPreview && xmlPatchPreview
+      ? Number(xmlPatchPreview.context.baseline_patch_version)
+      : 2;
+  const currentAcceptedPatchLabel =
+    matchesSelectedPatchPreview && xmlPatchPreview
+      ? xmlPatchPreview.context.base_state_label
+      : "Baseline first PATCH version 2";
+  const patchDraftComparisonRows: PatchScenarioComparisonRow[] = matchesSelectedPatchPreview && xmlPatchPreview
+    ? xmlPatchPreview.field_deltas.map((delta) => ({
+        label: delta.label,
+        before: delta.before_value ?? "None",
+        after: delta.after_value ?? "None",
+      }))
+    : selectedXmlPairRecord
     ? selectedPatchScenario.id === "trade_name_edit"
       ? [
           {
@@ -1239,7 +1272,7 @@ export function App() {
           },
           {
             label: "Trade Name",
-            before: selectedXmlPairRecord.trade_name ?? "None",
+            before: selectedCurrentTradeName ?? "None",
             after: patchTradeNameInput.trim() || "Pending input",
           },
         ]
@@ -1252,7 +1285,7 @@ export function App() {
             },
             {
               label: "Critical Warning",
-              before: "No new warning added",
+              before: selectedPatchWarningCodes.join(", ") || "None",
               after: patchWarningCodeInput.trim()
                 ? patchWarningCommentInput.trim()
                   ? `${patchWarningCodeInput.trim()} (${patchWarningCommentInput.trim()})`
@@ -1278,14 +1311,15 @@ export function App() {
             },
           ]
     : [];
+  const selectedWarningRequiresComment = patchWarningCodeInput.trim().toUpperCase() === "CW999";
   const isPatchScenarioReady =
     hasReviewedPatchBaselinePair &&
     Number.isInteger(Number(patchVersionInput)) &&
-    Number(patchVersionInput) > 2 &&
+    Number(patchVersionInput) > currentAcceptedPatchVersion &&
     (selectedPatchScenario.id === "trade_name_edit"
       ? Boolean(patchTradeNameInput.trim())
       : selectedPatchScenario.id === "warning_add"
-        ? Boolean(patchWarningCodeInput.trim())
+        ? Boolean(patchWarningCodeInput.trim()) && (!selectedWarningRequiresComment || Boolean(patchWarningCommentInput.trim()))
         : Object.values(patchStorageConditionInputs).some((value) => value.trim()));
   const patchScenarioReadinessMessage = !selectedXmlPairRecord?.catalogue_number
     ? "Generate the baseline Post + Patch pair for an XML-ready POST record first."
@@ -1293,16 +1327,18 @@ export function App() {
       ? "Generate and review Post + Patch for this exact selected record before drafting a scenario PATCH."
     : !patchVersionInput.trim()
       ? "Enter the next PATCH version integer."
-      : !Number.isInteger(Number(patchVersionInput)) || Number(patchVersionInput) <= 2
-        ? "PATCH version must be an integer greater than 2."
+      : !Number.isInteger(Number(patchVersionInput)) || Number(patchVersionInput) <= currentAcceptedPatchVersion
+        ? `PATCH version must be an integer greater than ${currentAcceptedPatchVersion}.`
         : selectedPatchScenario.id === "trade_name_edit" && !patchTradeNameInput.trim()
           ? "Enter the replacement trade name to define the after condition."
           : selectedPatchScenario.id === "warning_add" && !patchWarningCodeInput.trim()
-            ? "Enter the warning code to define the after condition."
+            ? "Enter the replacement warning code to define the after condition."
+            : selectedPatchScenario.id === "warning_add" && selectedWarningRequiresComment && !patchWarningCommentInput.trim()
+              ? "Enter the warning comment required for CW999."
             : selectedPatchScenario.id === "storage_condition_edit" &&
                 !Object.values(patchStorageConditionInputs).some((value) => value.trim())
               ? "Enter at least one replacement storage-condition comment to define the after condition."
-              : "Ready to generate a derived PATCH preview from the selected baseline pair.";
+              : "Ready to generate a derived PATCH preview from the current accepted device state.";
   const selectedPairAnchor =
     xmlPairPreview?.registered_device_anchor ??
     (selectedPairRequestArgs ? buildSelectionAnchor(selectedPairRequestArgs) : null);
@@ -1803,8 +1839,10 @@ export function App() {
               ? xmlMarketInfoPreview?.file_name ??
                 `${selectedXmlMarketInfoRecord?.product_family ?? "device"}-${selectedXmlMarketInfoRecord?.product_variant ?? "variant"}-${selectedXmlMarketInfoRecord?.catalogue_number ?? "record"}-market-info-put.xml`
               : xmlMode === "patch"
-                ? xmlPatchPreview?.derived_patch_file_name ??
-                  `${selectedXmlPairRecord?.product_family ?? "device"}-${selectedXmlPairRecord?.product_variant ?? "variant"}-${selectedPatchScenario.id}.xml`
+                ? `${(
+                    xmlPatchPreview?.derived_patch_file_name ??
+                    `${selectedXmlPairRecord?.product_family ?? "device"}-${selectedXmlPairRecord?.product_variant ?? "variant"}-${selectedPatchScenario.id}.xml`
+                  ).replace(/\.xml$/i, "")}.zip`
                 : xmlBatchPreview?.package_file_name ??
                   `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-batch-package.zip`);
       const objectUrl = URL.createObjectURL(blob);
@@ -1814,7 +1852,11 @@ export function App() {
       anchor.style.display = "none";
       document.body.appendChild(anchor);
       anchor.click();
-      setXmlActionMessage(`Download started for ${resolvedFileName}. If your browser does not prompt, check the default Downloads folder.`);
+      setXmlActionMessage(
+        xmlMode === "patch"
+          ? `Patch scenario ZIP download started for ${resolvedFileName}. If your browser does not prompt, check the default Downloads folder.`
+          : `Download started for ${resolvedFileName}. If your browser does not prompt, check the default Downloads folder.`,
+      );
       window.setTimeout(() => {
         anchor.remove();
         URL.revokeObjectURL(objectUrl);
@@ -3620,10 +3662,10 @@ export function App() {
                       ? "Download POST + PATCH ZIPs"
                       : xmlMode === "single"
                         ? "Download XML"
-                        : xmlMode === "marketInfo"
+                      : xmlMode === "marketInfo"
                           ? "Download Market Info"
                           : xmlMode === "patch"
-                            ? "Download Patch Scenario"
+                            ? "Download Patch Scenario ZIP"
                           : "Download Batch Package"}
                   </button>
                   {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
@@ -3744,7 +3786,7 @@ export function App() {
                           </span>
                         </div>
                         <p className="draft-meta">
-                          Parent POST {selectedXmlPairRecord.catalogue_number} · Baseline child PATCH version 2
+                          Parent POST {selectedXmlPairRecord.catalogue_number} · Current accepted base {matchesSelectedPatchPreview && xmlPatchPreview ? `version ${xmlPatchPreview.context.baseline_patch_version}` : "version pending preview"}
                         </p>
                         <div className="family-scope-pill-row xml-status-row">
                           <span className={hasReviewedPatchBaselinePair ? "status-pill ok compact" : "status-pill warn compact"}>
@@ -3759,9 +3801,9 @@ export function App() {
                             <div className="patch-compare-grid">
                               <div className="patch-compare-card">
                                 <span className="summary-label">Before</span>
-                                <strong>Baseline first PATCH</strong>
+                                <strong>{currentAcceptedPatchLabel}</strong>
                                 <p>
-                                  Parent POST {selectedXmlPairRecord.catalogue_number} · Version 2
+                                  Parent POST {selectedXmlPairRecord.catalogue_number} · Version {matchesSelectedPatchPreview && xmlPatchPreview ? xmlPatchPreview.context.baseline_patch_version : "Pending"}
                                 </p>
                                 <ul className="patch-compare-list">
                                   {patchDraftComparisonRows.map((row) => (
@@ -3822,7 +3864,7 @@ export function App() {
                               </div>
                               <div className="patch-field patch-field-full">
                                 <p className="panel-copy patch-field-note">
-                                  Baseline `POST` is version `1`. Baseline child `PATCH` is version `2`. Enter the next version visible in the EUDAMED playground for this test.
+                                  Baseline `POST` is version `1`. Scenario PATCH generation now resolves the current accepted PATCH base from the YAML test tracker when available. Enter a version greater than the latest accepted version for this device in the EUDAMED playground.
                                 </p>
                               </div>
                               {selectedPatchScenario.id === "trade_name_edit" ? (
@@ -3841,30 +3883,57 @@ export function App() {
                               ) : null}
                               {selectedPatchScenario.id === "warning_add" ? (
                                 <>
+                                  <div className="patch-field patch-field-full">
+                                    <label className="field-label" htmlFor="patch-warning-current-input">
+                                      Current critical warning set
+                                    </label>
+                                    <input
+                                      id="patch-warning-current-input"
+                                      className="rule-select patch-select"
+                                      type="text"
+                                      value={selectedPatchWarningCodes.join(", ") || "None"}
+                                      readOnly
+                                    />
+                                    {selectedPatchWarningDescriptions.length ? (
+                                      <p className="field-source-note">
+                                        {selectedPatchWarningDescriptions.join(" | ")}
+                                      </p>
+                                    ) : null}
+                                  </div>
                                   <div className="patch-field">
                                     <label className="field-label" htmlFor="patch-warning-code-input">
-                                      Warning code
+                                      Replacement warning code
                                     </label>
                                     <input
                                       id="patch-warning-code-input"
                                       className="rule-select patch-select"
                                       type="text"
+                                      list="critical-warning-code-options"
                                       value={patchWarningCodeInput}
                                       onChange={(event) => setPatchWarningCodeInput(event.target.value)}
                                     />
                                   </div>
-                                  <div className="patch-field">
-                                    <label className="field-label" htmlFor="patch-warning-comment-input">
-                                      Warning comment
-                                    </label>
-                                    <input
-                                      id="patch-warning-comment-input"
-                                      className="rule-select patch-select"
-                                      type="text"
-                                      value={patchWarningCommentInput}
-                                      onChange={(event) => setPatchWarningCommentInput(event.target.value)}
-                                    />
-                                  </div>
+                                  <datalist id="critical-warning-code-options">
+                                    {criticalWarningCodeOptions.map((option) => (
+                                      <option key={option.code} value={option.code}>
+                                        {option.description ? `${option.code} - ${option.description}` : option.code}
+                                      </option>
+                                    ))}
+                                  </datalist>
+                                  {selectedWarningRequiresComment || patchWarningCommentInput.trim() ? (
+                                    <div className="patch-field patch-field-full">
+                                      <label className="field-label" htmlFor="patch-warning-comment-input">
+                                        Warning comment
+                                      </label>
+                                      <input
+                                        id="patch-warning-comment-input"
+                                        className="rule-select patch-select"
+                                        type="text"
+                                        value={patchWarningCommentInput}
+                                        onChange={(event) => setPatchWarningCommentInput(event.target.value)}
+                                      />
+                                    </div>
+                                  ) : null}
                                 </>
                               ) : null}
                               {selectedPatchScenario.id === "storage_condition_edit" ? (

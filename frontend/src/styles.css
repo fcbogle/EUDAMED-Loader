@@ -940,6 +940,7 @@ a.ghost-button:visited {
   border: 1px solid rgba(76, 111, 122, 0.12);
   border-radius: 16px;
   background: rgba(0, 42, 58, 0.03);
+  min-width: 0;
 }
 
 .draft-card-head {
@@ -997,6 +998,7 @@ a.ghost-button:visited {
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid rgba(76, 111, 122, 0.12);
+  min-width: 0;
 }
 
 .roadmap-item strong {
@@ -1008,6 +1010,8 @@ a.ghost-button:visited {
 .roadmap-item p {
   margin: 0;
   color: #4c6f7a;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .compact-structured-list {
@@ -1488,6 +1492,7 @@ a.ghost-button:visited {
 .xml-sidebar-surface {
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .xml-equal-panel {

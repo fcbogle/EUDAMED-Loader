@@ -29,8 +29,8 @@ Current `Patch XML` behavior is now more specific:
 
 - require a reviewed `Post + Patch` pair for the selected record
 - reuse the existing generated `Post + Patch` pair for that same selected record
-- treat the first child `PATCH` from that pair as the baseline scenario source
-- derive approved scenario PATCH drafts from that baseline
+- treat the first child `PATCH` from that pair as the lineage starting point
+- derive approved scenario PATCH drafts from the latest successful tracked state for that device, falling back to that first child `PATCH` when needed
 
 ### General XML Tools
 
@@ -47,7 +47,7 @@ They remain general XML generation tools driven from the broader XML-ready valid
 
 `Post + Patch`, `Patch XML`, and `Market Info` use the shared registered device anchor.
 
-These testing modes now operate from the currently selected XML-ready parent `POST` record rather than from the old fixed Echelon VAC fixture anchor.
+These testing modes now operate from the currently selected XML-ready parent `POST` record rather than from any fixed sample device.
 
 ### General XML Tools
 
@@ -76,7 +76,8 @@ Current implementation:
 
 - selected record resolves one parent `POST`
 - `Post + Patch` must be generated and reviewed first for that exact record
-- existing generated `Post + Patch` pair provides the baseline first `PATCH`
+- existing generated `Post + Patch` pair provides the equivalent first `PATCH` for that same selected row
+- later scenario generation resolves the latest successful tracked state for that device when available
 - user enters the version integer for the scenario PATCH draft
 - user edits only approved scenario fields
 - UI shows before/after business-field comparison before generation
@@ -121,7 +122,8 @@ Equivalent first `PATCH` test path:
 
 Scenario-derived later `PATCH` path:
 
-- starts from the proven first child `PATCH`
+- starts from the latest successful tracked state for the same device lineage
+- falls back to the proven first child `PATCH` when no later accepted state has been recorded
 - preserves the parent POST / baseline PATCH identity chain
 - requires a user-supplied `e:version` integer
 - changes only scenario-approved fields
@@ -136,11 +138,12 @@ Standalone `MARKET_INFO.PUT`:
 
 The XML layer now consumes a typed XML projection built from validation records and generated scenario inputs.
 
-`Patch XML` is generated dynamically from the reviewed baseline pair for the selected record.
+`Patch XML` is generated dynamically from the reviewed baseline pair and the tracked accepted state for the selected record.
 
 Some XML generation paths are now intentionally more conservative than others:
 
 - shared-device testing paths are anchored to the selected reviewed baseline pair
+- later PATCH scenarios remain anchored to the same device lineage and tracked accepted state
 - general XML tools still operate over broader XML-ready canonical validation scope
 
 This is deliberate and matches the current staged testing approach.

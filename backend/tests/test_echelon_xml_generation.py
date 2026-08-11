@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from zipfile import ZipFile
 
 from app.config import get_settings
+
 from app.routers.xml_generation import (
     download_generated_patch_scenario,
     download_xml_market_info_put,
@@ -200,13 +201,13 @@ def test_generic_batch_download_route_returns_zip_package() -> None:
         assert "echelon-echelon-vt-batch-01-of-06.xml" in names
         assert "echelon-echelon-vt-batch-06-of-06.xml" in names
 
-def test_generated_trade_name_patch_scenario_reuses_post_patch_baseline() -> None:
+def test_generated_trade_name_patch_scenario_reuses_latest_successful_patch_state() -> None:
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
         catalogue_number="EVAC22L1S",
         scenario_id="trade_name_edit",
-        patch_version="3",
+        patch_version="5",
         scenario_inputs={
             "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
         },
@@ -214,13 +215,16 @@ def test_generated_trade_name_patch_scenario_reuses_post_patch_baseline() -> Non
 
     assert preview.mode == "generated_patch_scenario"
     assert preview.context.parent_post_version == "1"
-    assert preview.context.baseline_patch_version == "2"
-    assert preview.context.proposed_patch_version == "3"
+    assert preview.context.baseline_patch_version == "4"
+    assert preview.context.proposed_patch_version == "5"
+    assert preview.context.base_state_source == "yaml_latest_successful_patch"
+    assert preview.context.base_state_label == "Latest successful PATCH version 4"
     assert preview.registered_device_anchor.catalogue_number == preview.catalogue_number
     assert preview.baseline_patch_validation.valid is True
     assert preview.derived_patch_validation.valid is True
-    assert "<e:version>2</e:version>" in preview.baseline_patch_xml
-    assert "<e:version>3</e:version>" in preview.derived_patch_xml
+    assert "<e:version>4</e:version>" in preview.baseline_patch_xml
+    assert "<e:version>5</e:version>" in preview.derived_patch_xml
+    assert "Store in a dry location" in preview.baseline_patch_xml
     assert "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED" in preview.derived_patch_xml
     assert any(delta.field_key == "trade_name" for delta in preview.field_deltas)
 
@@ -231,7 +235,7 @@ def test_generated_trade_name_patch_scenario_preserves_registered_device_identit
         product_variant="Echelon VAC",
         catalogue_number="EVAC22L1S",
         scenario_id="trade_name_edit",
-        patch_version="3",
+        patch_version="5",
         scenario_inputs={
             "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
         },
@@ -248,7 +252,27 @@ def test_generated_trade_name_patch_scenario_preserves_registered_device_identit
     assert all(delta.field_key in {"patch_version", "trade_name"} for delta in preview.field_deltas)
 
 
-def test_generated_warning_patch_scenario_adds_one_warning() -> None:
+def test_generated_trade_name_patch_scenario_preserves_latest_successful_trade_name_as_base() -> None:
+    preview = XmlGenerationService().preview_generated_patch_scenario(
+        product_family="Elan",
+        product_variant="Elan IC",
+        catalogue_number="ELANIC22L1S",
+        scenario_id="warning_add",
+        patch_version="5",
+        scenario_inputs={
+            "new_warning_code": "CW011",
+            "new_warning_comment": None,
+        },
+    )
+
+    assert preview.context.baseline_patch_version == "4"
+    assert preview.context.base_state_source == "yaml_latest_successful_patch"
+    assert "<e:version>4</e:version>" in preview.baseline_patch_xml
+    assert "ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED" in preview.baseline_patch_xml
+    assert "ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED" in preview.derived_patch_xml
+
+
+def test_generated_warning_patch_scenario_replaces_warning_set() -> None:
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -263,6 +287,7 @@ def test_generated_warning_patch_scenario_adds_one_warning() -> None:
 
     assert "<e:version>5</e:version>" in preview.derived_patch_xml
     assert "<commondi:warningValue>CW011</commondi:warningValue>" in preview.derived_patch_xml
+    assert "<commondi:warningValue>CW010</commondi:warningValue>" not in preview.derived_patch_xml
     assert preview.derived_patch_validation.valid is True
 
 
@@ -272,7 +297,7 @@ def test_generated_storage_condition_patch_scenario_updates_comments() -> None:
         product_variant="Echelon VAC",
         catalogue_number="EVAC22L1S",
         scenario_id="storage_condition_edit",
-        patch_version="4",
+        patch_version="5",
         scenario_inputs={
             "updated_conditions": [
                 {
@@ -287,7 +312,9 @@ def test_generated_storage_condition_patch_scenario_updates_comments() -> None:
         },
     )
 
-    assert "<e:version>4</e:version>" in preview.derived_patch_xml
+    assert "<e:version>4</e:version>" in preview.baseline_patch_xml
+    assert "<e:version>5</e:version>" in preview.derived_patch_xml
+    assert "Store in a dry location" in preview.baseline_patch_xml
     assert "Minus 10" in preview.derived_patch_xml
     assert "Plus 45" in preview.derived_patch_xml
     assert preview.derived_patch_validation.valid is True
@@ -300,7 +327,7 @@ def test_generated_patch_scenario_route_returns_comparison_payload() -> None:
             "product_variant": "Echelon VAC",
             "catalogue_number": "EVAC22L1S",
             "scenario_id": "trade_name_edit",
-            "patch_version": 3,
+            "patch_version": 5,
             "scenario_inputs": {
                 "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
             },
@@ -308,28 +335,32 @@ def test_generated_patch_scenario_route_returns_comparison_payload() -> None:
     )
 
     assert payload["mode"] == "generated_patch_scenario"
-    assert payload["context"]["baseline_patch_version"] == "2"
-    assert payload["context"]["proposed_patch_version"] == "3"
+    assert payload["context"]["baseline_patch_version"] == "4"
+    assert payload["context"]["proposed_patch_version"] == "5"
     assert payload["derived_patch_validation"]["valid"] is True
 
 
-def test_generated_patch_scenario_download_route_returns_xml_file() -> None:
+def test_generated_patch_scenario_download_route_returns_zip_package() -> None:
     response = download_generated_patch_scenario(
         {
             "product_family": "Echelon",
             "product_variant": "Echelon VAC",
             "catalogue_number": "EVAC22L1S",
             "scenario_id": "trade_name_edit",
-            "patch_version": 3,
+            "patch_version": 5,
             "scenario_inputs": {
                 "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
             },
         }
     )
 
-    assert response.media_type == "application/xml"
-    assert 'filename="echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.xml"' in response.headers["Content-Disposition"]
-    assert b"<e:version>3</e:version>" in response.body
+    assert response.media_type == "application/zip"
+    assert 'filename="echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.zip"' in response.headers["Content-Disposition"]
+    with ZipFile(BytesIO(response.body)) as archive:
+        members = archive.namelist()
+        assert "echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.xml" in members
+        assert "manifest.json" in members
+        assert b"<e:version>5</e:version>" in archive.read("echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.xml")
 
 
 def test_post_record_selector_requires_exact_catalogue_number_for_variant_post_lineage() -> None:

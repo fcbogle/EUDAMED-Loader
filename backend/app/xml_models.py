@@ -42,8 +42,6 @@ class SingleRecordXmlPreview(BaseModel):
 
 
 class RegisteredDeviceAnchor(BaseModel):
-    family_id: str
-    baseline_fixture: str
     product_family: str
     product_variant: str
     catalogue_number: str
@@ -62,6 +60,7 @@ class EquivalentPatchPairPreview(BaseModel):
     catalogue_number: str
     primary_udi_di: str
     registered_device_anchor: RegisteredDeviceAnchor
+    latest_successful_patch_state: PatchStateSnapshot | None = None
     post_file_name: str
     post_xml: str
     post_validation: XmlValidationResult
@@ -100,6 +99,15 @@ class PatchScenarioContext(BaseModel):
     parent_post_version: str
     baseline_patch_version: str
     proposed_patch_version: str
+    base_state_source: str
+    base_state_label: str
+
+
+class PatchStateSnapshot(BaseModel):
+    version: str
+    trade_name: str | None = None
+    storage_conditions: list[StorageConditionXmlItem] = Field(default_factory=list)
+    critical_warnings: list[CriticalWarningXmlItem] = Field(default_factory=list)
 
 
 class GeneratedPatchScenarioPreview(BaseModel):

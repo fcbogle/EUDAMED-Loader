@@ -91,6 +91,11 @@ export type SchemaInventory = {
   service_files: SchemaFileSummary[];
 };
 
+export type CriticalWarningCodeOption = {
+  code: string;
+  description: string;
+};
+
 export type QmsDecision = {
   status: string;
   rationale: string | null;
@@ -327,12 +332,20 @@ export type EquivalentPatchPairPreview = {
   catalogue_number: string;
   primary_udi_di: string;
   registered_device_anchor: RegisteredDeviceAnchor;
+  latest_successful_patch_state: PatchStateSnapshot | null;
   post_file_name: string;
   post_xml: string;
   post_validation: XmlValidationResult;
   patch_file_name: string;
   patch_xml: string;
   patch_validation: XmlValidationResult;
+};
+
+export type PatchStateSnapshot = {
+  version: string;
+  trade_name: string | null;
+  storage_conditions: Array<{ code: string; comment: string | null }>;
+  critical_warnings: Array<{ code: string; comment: string | null }>;
 };
 
 export type MarketInfoPutPreview = {
@@ -348,8 +361,6 @@ export type MarketInfoPutPreview = {
 };
 
 export type RegisteredDeviceAnchor = {
-  family_id: string;
-  baseline_fixture: string;
   product_family: string;
   product_variant: string;
   catalogue_number: string;
@@ -379,6 +390,8 @@ export type PatchScenarioContext = {
   parent_post_version: string;
   baseline_patch_version: string;
   proposed_patch_version: string;
+  base_state_source: string;
+  base_state_label: string;
 };
 
 export type GeneratedPatchScenarioPreview = {

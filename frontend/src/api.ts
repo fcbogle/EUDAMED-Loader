@@ -3,6 +3,7 @@ import type {
   BatchXmlPreview,
   CanonicalValidationBundle,
   CanonicalReviewBundle,
+  CriticalWarningCodeOption,
   DistinctValueProfile,
   EquivalentPatchPairPreview,
   GeneratedPatchScenarioPreview,
@@ -138,12 +139,6 @@ export const api = {
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
     }),
-  downloadXmlPostPatchPair: (productFamily: string, productVariant: string, catalogueNumber: string) =>
-    sendDownload("/xml/download-post-patch-pair", "POST", {
-      product_family: productFamily,
-      product_variant: productVariant,
-      catalogue_number: catalogueNumber,
-    }),
   downloadXmlPostPackage: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-post-package", "POST", {
       product_family: productFamily,
@@ -184,4 +179,5 @@ export const api = {
       product_variant: productVariant,
     }),
   schemas: () => getJson<SchemaInventory>("/schemas"),
+  criticalWarningCodes: () => getJson<CriticalWarningCodeOption[]>("/schemas/critical-warning-codes"),
 };

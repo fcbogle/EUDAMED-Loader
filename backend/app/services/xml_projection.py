@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 
 from app.config import get_settings
 from app.validation_models import CanonicalValidationRecord
-from app.xml_models import CriticalWarningXmlItem, StorageConditionXmlItem
+from app.xml_models import CriticalWarningXmlItem, PatchStateSnapshot, StorageConditionXmlItem
 
 LANGUAGE_CODE_MAP = {
     "english": "EN",
@@ -231,6 +231,22 @@ class DeviceXmlProjectionBuilder:
         )
 
     @staticmethod
+    def build_patch_record_from_state(
+        post_record: DeviceXmlRecord,
+        patch_state: PatchStateSnapshot,
+    ) -> DeviceXmlRecord:
+        baseline_patch_record = DeviceXmlProjectionBuilder.build_equivalent_first_patch(post_record)
+        return replace(
+            baseline_patch_record,
+            trade_name=patch_state.trade_name,
+            storage_conditions=list(patch_state.storage_conditions),
+            critical_warnings=list(patch_state.critical_warnings),
+            source_version_marker=patch_state.version,
+            patch_version_override=patch_state.version,
+            include_market_infos_in_patch=True,
+        )
+
+    @staticmethod
     def build_trade_name_edit_patch(
         baseline_patch_record: DeviceXmlRecord,
         *,
@@ -254,10 +270,7 @@ class DeviceXmlProjectionBuilder:
     ) -> DeviceXmlRecord:
         return replace(
             baseline_patch_record,
-            critical_warnings=[
-                *baseline_patch_record.critical_warnings,
-                CriticalWarningXmlItem(code=new_warning_code, comment=new_warning_comment),
-            ],
+            critical_warnings=[CriticalWarningXmlItem(code=new_warning_code, comment=new_warning_comment)],
             source_version_marker=patch_version,
             patch_version_override=patch_version,
         )

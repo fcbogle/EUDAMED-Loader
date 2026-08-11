@@ -101,11 +101,12 @@ Current scope remains deliberately narrow:
 Current redesign direction now implemented:
 
 - build on the existing generated `Post + Patch` pair for the selected record
-- treat the first child `PATCH` from that pair as the baseline scenario source
+- treat the first child `PATCH` from that pair as the lineage starting point
+- resolve the latest successful tracked state for that same device before generating later scenario PATCH drafts
 - require the user to enter the version integer for each scenario PATCH draft
 - show business-field before/after comparison before generation
 - show toggle-based XML comparison between:
-  - baseline first `PATCH`
+  - current accepted base state
   - derived scenario `PATCH`
 
 Active candidate scenarios:
@@ -118,7 +119,7 @@ Current implementation direction:
 
 - scenario-driven UI
 - scenario metadata rather than per-scenario hardcoded screens
-- one selected parent `POST` plus baseline first `PATCH` per selected record
+- one selected parent `POST` plus equivalent first `PATCH` per selected record
 - explicit, user-supplied scenario PATCH version input
 - exact lineage preserved through `catalogue_number`
 - scenario drafting blocked until `Post + Patch` has been generated and reviewed for that same record
@@ -130,22 +131,23 @@ The current intended version model is:
 - baseline `POST` is version `1`
 - baseline equivalent first `PATCH` is version `2`
 - every later scenario PATCH draft requires a user-entered integer version
+- every later scenario PATCH draft must be greater than the latest successful tracked version for that device
 
 The user should provide the scenario PATCH version because the user can inspect the current version state in the EUDAMED playground.
 
 The UI should therefore:
 
-- display the baseline first `PATCH` version
+- display the current accepted base version for the selected device lineage
 - collect the proposed scenario PATCH version as an explicit input
 - never silently auto-increment it
 
 ## PATCH Comparison Direction
 
-The current `Patch XML` workspace is now comparison-driven rather than fixture-driven.
+The current `Patch XML` workspace is now comparison-driven and record-driven.
 
 Current comparison areas:
 
-- parent `POST` and baseline first `PATCH` context
+- parent `POST` and current accepted device-state context
 - scenario-specific editable fields only
 - before/after business values
 - toggle-based XML comparison between baseline and derived scenario PATCH

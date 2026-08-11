@@ -8,6 +8,7 @@ from app.services.xml_packaging import XmlPackageBuilder
 from app.services.xml_projection import DeviceXmlProjectionBuilder
 from app.services.xml_rendering import EudamedMessageRenderer
 from app.services.xml_selection import ValidationRecordSelector
+from app.services.testing_state_store import TestingStateStore
 from app.services.xml_validation import XmlValidationService
 from app.validation_models import CanonicalValidationRecord
 from app.xml_models import (
@@ -34,6 +35,7 @@ class XmlGenerationService:
         self.projection_builder = DeviceXmlProjectionBuilder()
         self.renderer = EudamedMessageRenderer(self.settings)
         self.package_builder = XmlPackageBuilder()
+        self.testing_state_store = TestingStateStore()
 
     @property
     def project_root(self):
@@ -73,7 +75,6 @@ class XmlGenerationService:
         scenario_inputs: dict[str, Any] | None = None,
     ) -> GeneratedPatchScenarioPreview:
         scenario_data = scenario_inputs or {}
-        normalized_version = self._validate_patch_version(patch_version)
         post_source_record = self.selector.find_post_record(
             product_family=product_family,
             product_variant=product_variant,
@@ -81,13 +82,27 @@ class XmlGenerationService:
         )
         post_record = self.projection_builder.build_device_record(post_source_record)
         baseline_patch_record = self.projection_builder.build_equivalent_first_patch(post_record)
+        patch_state_resolution = self.testing_state_store.latest_successful_patch_state(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        scenario_base_record = (
+            self.projection_builder.build_patch_record_from_state(post_record, patch_state_resolution.state)
+            if patch_state_resolution
+            else baseline_patch_record
+        )
+        normalized_version = self._validate_patch_version(
+            patch_version,
+            minimum_exclusive_version=scenario_base_record.patch_version_override or "2",
+        )
         registered_device_anchor = self._registered_device_anchor_from_pair(post_record, baseline_patch_record)
 
-        baseline_patch_xml_bytes = self.renderer.render_message(baseline_patch_record)
+        baseline_patch_xml_bytes = self.renderer.render_message(scenario_base_record)
         baseline_patch_validation = self.xml_validation_service.validate_message(baseline_patch_xml_bytes)
 
         derived_patch_record, scenario_label, field_deltas = self._build_generated_patch_scenario(
-            baseline_patch_record=baseline_patch_record,
+            baseline_patch_record=scenario_base_record,
             scenario_id=scenario_id,
             patch_version=normalized_version,
             scenario_inputs=scenario_data,
@@ -117,8 +132,18 @@ class XmlGenerationService:
                 catalogue_number=post_record.catalogue_number,
                 primary_udi_di=post_record.primary_udi_di,
                 parent_post_version="1",
-                baseline_patch_version=baseline_patch_record.patch_version_override or "2",
+                baseline_patch_version=scenario_base_record.patch_version_override or "2",
                 proposed_patch_version=normalized_version,
+                base_state_source=(
+                    patch_state_resolution.source
+                    if patch_state_resolution
+                    else "baseline_first_patch"
+                ),
+                base_state_label=(
+                    f"Latest successful PATCH version {scenario_base_record.patch_version_override}"
+                    if patch_state_resolution
+                    else "Baseline first PATCH version 2"
+                ),
             ),
             field_deltas=field_deltas,
             baseline_patch_file_name=registered_device_anchor.patch_file_name,
@@ -147,7 +172,32 @@ class XmlGenerationService:
             patch_version=patch_version,
             scenario_inputs=scenario_inputs,
         )
-        return preview.derived_patch_file_name, preview.derived_patch_xml.encode("utf-8")
+        package_file_name = self.package_builder.scenario_package_file_name(
+            product_family=preview.product_family or product_family,
+            product_variant=preview.product_variant or product_variant,
+            scenario_id=preview.scenario_id,
+            catalogue_number=preview.catalogue_number,
+        )
+        manifest = {
+            "mode": preview.mode,
+            "message_type": "UDI_DI.PATCH",
+            "scenario_id": preview.scenario_id,
+            "scenario_label": preview.scenario_label,
+            "product_family": preview.product_family,
+            "product_variant": preview.product_variant,
+            "catalogue_number": preview.catalogue_number,
+            "primary_udi_di": preview.primary_udi_di,
+            "baseline_patch_file_name": preview.baseline_patch_file_name,
+            "derived_patch_file_name": preview.derived_patch_file_name,
+            "baseline_patch_version": preview.context.baseline_patch_version,
+            "proposed_patch_version": preview.context.proposed_patch_version,
+            "valid": preview.derived_patch_validation.valid,
+        }
+        return self.package_builder.build_archive(
+            package_file_name=package_file_name,
+            members=[(preview.derived_patch_file_name, preview.derived_patch_xml.encode("utf-8"))],
+            manifest=manifest,
+        )
 
     def preview_single_record(
         self,
@@ -214,6 +264,11 @@ class XmlGenerationService:
 
         post_record = self.projection_builder.build_device_record(record)
         patch_record = self.projection_builder.build_equivalent_first_patch(post_record)
+        patch_state_resolution = self.testing_state_store.latest_successful_patch_state(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            catalogue_number=post_record.catalogue_number,
+        )
         post_xml_bytes = self.renderer.render_message(post_record)
         patch_xml_bytes = self.renderer.render_message(patch_record)
         post_file_name = self.package_builder.operation_file_name(
@@ -229,11 +284,6 @@ class XmlGenerationService:
             catalogue_number=patch_record.catalogue_number,
         )
         registered_device_anchor = RegisteredDeviceAnchor(
-            family_id=self._slugify_fixture_family_id(record.product_family, record.product_variant, post_record.catalogue_number),
-            baseline_fixture=(
-                f"selection/"
-                f"{self._slugify_fixture_family_id(record.product_family, record.product_variant, post_record.catalogue_number)}"
-            ),
             product_family=record.product_family,
             product_variant=record.product_variant,
             catalogue_number=post_record.catalogue_number,
@@ -250,6 +300,7 @@ class XmlGenerationService:
             catalogue_number=post_record.catalogue_number,
             primary_udi_di=post_record.primary_udi_di,
             registered_device_anchor=registered_device_anchor,
+            latest_successful_patch_state=patch_state_resolution.state if patch_state_resolution else None,
             post_file_name=post_file_name,
             post_xml=post_xml_bytes.decode("utf-8"),
             post_validation=self.xml_validation_service.validate_message(post_xml_bytes),
@@ -273,19 +324,12 @@ class XmlGenerationService:
         market_info_record = self.projection_builder.build_market_info_record(record)
         xml_bytes = self.renderer.render_market_info_message(market_info_record)
         validation = self.xml_validation_service.validate_message(xml_bytes)
-        fixture_family_id = self._slugify_fixture_family_id(
-            record.product_family,
-            record.product_variant,
-            market_info_record.catalogue_number,
-        )
         return MarketInfoPutPreview(
             product_family=record.product_family,
             product_variant=record.product_variant,
             catalogue_number=market_info_record.catalogue_number,
             primary_udi_di=market_info_record.primary_udi_di,
             registered_device_anchor=RegisteredDeviceAnchor(
-                family_id=fixture_family_id,
-                baseline_fixture=f"selection/{fixture_family_id}",
                 product_family=record.product_family,
                 product_variant=record.product_variant,
                 catalogue_number=market_info_record.catalogue_number,
@@ -334,14 +378,7 @@ class XmlGenerationService:
         post_record,
         baseline_patch_record,
     ) -> RegisteredDeviceAnchor:
-        family_id = self._slugify_fixture_family_id(
-            post_record.product_family,
-            post_record.product_variant,
-            post_record.catalogue_number,
-        )
         return RegisteredDeviceAnchor(
-            family_id=family_id,
-            baseline_fixture=f"selection/{family_id}",
             product_family=post_record.product_family,
             product_variant=post_record.product_variant,
             catalogue_number=post_record.catalogue_number,
@@ -419,10 +456,10 @@ class XmlGenerationService:
                         after_value=patch_version,
                     ),
                     PatchScenarioFieldDelta(
-                        field_key="critical_warning_add",
-                        label="Added Critical Warning",
+                        field_key="critical_warning_replace",
+                        label="Critical Warning",
                         target_xpath_hint="udidi:criticalWarnings/commondi:warning",
-                        before_value=None,
+                        before_value=", ".join(item.code for item in baseline_patch_record.critical_warnings) or "None",
                         after_value=(
                             f"{new_warning_code} ({new_warning_comment})"
                             if new_warning_comment
@@ -476,7 +513,7 @@ class XmlGenerationService:
         raise ValueError(f"Unsupported generated PATCH scenario {scenario_id!r}.")
 
     @staticmethod
-    def _validate_patch_version(patch_version: str) -> str:
+    def _validate_patch_version(patch_version: str, *, minimum_exclusive_version: str) -> str:
         normalized = str(patch_version).strip()
         if not normalized:
             raise ValueError("patch_version is required.")
@@ -484,8 +521,12 @@ class XmlGenerationService:
             parsed = int(normalized)
         except ValueError as exc:
             raise ValueError("patch_version must be an integer.") from exc
-        if parsed <= 2:
-            raise ValueError("patch_version must be greater than the baseline first PATCH version 2.")
+        try:
+            minimum = int(str(minimum_exclusive_version).strip())
+        except ValueError as exc:
+            raise ValueError("minimum_exclusive_version must be an integer.") from exc
+        if parsed <= minimum:
+            raise ValueError(f"patch_version must be greater than the current accepted PATCH version {minimum}.")
         return str(parsed)
 
     @staticmethod
@@ -518,52 +559,6 @@ class XmlGenerationService:
             f"{self.package_builder._slugify(product_variant)}-"
             f"patch-{scenario_id.replace('_', '-')}-"
             f"{self.package_builder._safe_catalogue_number(catalogue_number)}.xml"
-        )
-
-    def _slugify_fixture_family_id(self, product_family: str, product_variant: str, catalogue_number: str) -> str:
-        return "-".join(
-            [
-                product_family.strip().lower().replace(" ", "-"),
-                product_variant.strip().lower().replace(" ", "-"),
-                catalogue_number.strip(),
-            ]
-        )
-
-    def download_post_patch_pair(
-        self,
-        *,
-        product_family: str,
-        product_variant: str,
-        catalogue_number: str,
-    ) -> tuple[str, bytes]:
-        preview = self.preview_post_patch_pair(
-            product_family=product_family,
-            product_variant=product_variant,
-            catalogue_number=catalogue_number,
-        )
-        package_file_name = self.package_builder.post_patch_pair_package_file_name(
-            product_family=preview.product_family or product_family,
-            product_variant=preview.product_variant or product_variant,
-            catalogue_number=preview.catalogue_number,
-        )
-        manifest = {
-            "mode": preview.mode,
-            "product_family": preview.product_family,
-            "product_variant": preview.product_variant,
-            "catalogue_number": preview.catalogue_number,
-            "primary_udi_di": preview.primary_udi_di,
-            "post_file_name": preview.post_file_name,
-            "post_valid": preview.post_validation.valid,
-            "patch_file_name": preview.patch_file_name,
-            "patch_valid": preview.patch_validation.valid,
-        }
-        return self.package_builder.build_archive(
-            package_file_name=package_file_name,
-            members=[
-                (preview.post_file_name, preview.post_xml.encode("utf-8")),
-                (preview.patch_file_name, preview.patch_xml.encode("utf-8")),
-            ],
-            manifest=manifest,
         )
 
     def download_post_package(

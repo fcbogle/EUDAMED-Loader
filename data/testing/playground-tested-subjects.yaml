@@ -17,6 +17,18 @@ tested_subjects:
       exclude_from_post_wave: true
       exclude_from_baseline_patch_wave: true
 
+    latest_successful_state:
+      version: 4
+      trade_name: "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Store in a dry location"
+        - code: "SHC007"
+          comment: "Store in a dry location"
+      critical_warnings:
+        - code: "CW010"
+          comment: "Refer to instruction for use"
+
     test_events:
       - message_type: "DEVICE.POST"
         status: "SUCCESS"
@@ -30,3 +42,129 @@ tested_subjects:
         tested_at: "2026-08-09T20:59:45+02:00"
         transaction_id: "349eb9f9-6445-4f52-a130-aed9f9c80dad"
         submission_id: "ccccc754-313c-496e-b4b2-b402df7f9645"
+
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "storage_condition_edit"
+        scenario_label: "Storage Condition Edit"
+        version: 3
+        status: "SUCCESS"
+        tested_at: "2026-08-11T12:02:14.683+02:00"
+        transaction_id: "a63b317b-6994-48c7-b5d6-29f8f7727ff9"
+        submission_id: "2d4e6323-ab2c-4639-bf93-6cee0c964351"
+        payload_created_at: "2026-08-11T10:00:36+00:00"
+        correlation_id: "cb67dcb5-33b0-4358-834a-7316718bc4b2"
+        message_id: "3d025f58-e5b6-40ac-b0e1-bad3f10525cc"
+        changed_fields:
+          - field: "storage_condition.SHC006"
+            condition_code: "SHC006"
+            before: "Minus 15C"
+            after: "Store in a dry location"
+        unchanged_fields:
+          - field: "storage_condition.SHC007"
+            condition_code: "SHC007"
+            value: "Plus 50C"
+
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "storage_condition_edit"
+        scenario_label: "Storage Condition Edit"
+        version: 4
+        status: "SUCCESS"
+        tested_at: "2026-08-11T12:34:04.607+02:00"
+        transaction_id: "05925076-b7af-423a-a385-ed84f51a8eb3"
+        submission_id: "8008074a-8b72-40d6-842f-5fddd3a846b0"
+        payload_created_at: "2026-08-11T10:31:49+00:00"
+        correlation_id: "a02d26a4-346b-48c3-a117-0b807d43a887"
+        message_id: "404bd610-d886-47af-a1ff-ed343d41aea2"
+        changed_fields:
+          - field: "storage_condition.SHC007"
+            condition_code: "SHC007"
+            before: "Plus 50C"
+            after: "Store in a dry location"
+        retained_fields:
+          - field: "storage_condition.SHC006"
+            condition_code: "SHC006"
+            value: "Store in a dry location"
+
+  - subject_id: "elan|elan-ic|ELANIC22L1S"
+    product_family: "Elan"
+    product_variant: "Elan IC"
+    catalogue_number: "ELANIC22L1S"
+    primary_udi_di: "05050649096501"
+    basic_udi_di: "5050649ELANICNM"
+
+    source_reference:
+      workbook: "Template for Elan products EUDAMED.xlsx"
+      sheet: "Elan IC"
+      row_index: 3
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: true
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: true
+
+    latest_successful_state:
+      version: 4
+      trade_name: "ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW011"
+          comment: null
+
+    test_events:
+      - message_type: "DEVICE.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-11T12:54:18.979+02:00"
+        transaction_id: "5788dbed-16ae-42b3-af99-6e3751d41746"
+        submission_id: "ff9574dd-0f54-4cfe-8136-5991f0770119"
+
+      - message_type: "UDI_DI.PATCH"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-11T13:02:41.257+02:00"
+        transaction_id: "3dea9de9-f857-4db1-b8bd-c97efba76312"
+        submission_id: "9f335a58-82c6-4ec8-aaa2-f862b4cb6933"
+
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "trade_name_edit"
+        scenario_label: "Trade Name Edit"
+        version: 3
+        status: "SUCCESS"
+        tested_at: "2026-08-11T13:50:14.111+02:00"
+        transaction_id: "9b620847-7c81-4e32-b74c-de286b5dcd17"
+        submission_id: "53c96b77-c5a3-4226-937b-9808ac4a3970"
+        payload_created_at: "2026-08-11T11:47:46+00:00"
+        correlation_id: "2bca3ac6-b64c-4e26-bf7b-25efe8d27b56"
+        message_id: "874a9d48-961e-40c6-a5e4-ae646329c81b"
+        changed_fields:
+          - field: "trade_name"
+            before: "ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS"
+            after: "ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED"
+
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "warning_add"
+        scenario_label: "Critical Warnings"
+        version: 4
+        status: "SUCCESS"
+        tested_at: "2026-08-11T16:26:05.343+02:00"
+        transaction_id: "6aebefd6-4a73-47e4-96f1-23094c0a0167"
+        submission_id: "06b987f7-4432-4780-9a31-c1fe12de3603"
+        correlation_id: "d1c63bc4-2987-46fa-a4c9-7fc16ab630bf"
+        message_id: "3a671c6e-61a8-450e-b638-5b4b2cad9ee5"
+        changed_fields:
+          - field: "critical_warning"
+            before: "CW010"
+            after: "CW011"
+        retained_fields:
+          - field: "trade_name"
+            value: "ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED"
+          - field: "storage_condition.SHC006"
+            condition_code: "SHC006"
+            value: "Minus 15C"
+          - field: "storage_condition.SHC007"
+            condition_code: "SHC007"
+            value: "Plus 50C"

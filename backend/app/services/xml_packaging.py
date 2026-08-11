@@ -83,6 +83,19 @@ class XmlPackageBuilder:
         )
 
     @staticmethod
+    def scenario_package_file_name(
+        *,
+        product_family: str,
+        product_variant: str,
+        scenario_id: str,
+        catalogue_number: str,
+    ) -> str:
+        return (
+            f"{XmlPackageBuilder._slugify(product_family)}-{XmlPackageBuilder._slugify(product_variant)}-"
+            f"patch-{scenario_id.replace('_', '-')}-{XmlPackageBuilder._safe_catalogue_number(catalogue_number)}.zip"
+        )
+
+    @staticmethod
     def market_info_file_name(
         *,
         product_family: str,

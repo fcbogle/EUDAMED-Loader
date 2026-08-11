@@ -265,17 +265,27 @@ Implemented XML service profiles include:
 - `UDI_DI.PATCH`
 - `MARKET_INFO.PUT`
 
-Current XML behavior includes:
+Current implemented XML behavior includes:
 
 - baseline `POST`
 - equivalent first child `PATCH` with `e:version = 2`
 - scenario-derived later `PATCH` from that reviewed baseline
 - local XSD validation against the bundled schema set
 
+Agreed target XML behavior now moves in a more explicit direction:
+
+- the baseline registration workspace should become `POST` only
+- `Patch XML` should own all `PATCH` generation
+- `Equivalent First Patch` should become an explicit `PATCH` option
+- a version `2` `PATCH` should be allowed to be the first real update derived directly from the accepted `POST`
+- that version `2` `PATCH` must match the accepted `POST` in all non-target fields
+- only the explicitly changed field or fields should differ
+- version `3+` `PATCH` messages should derive from the latest accepted tracked `PATCH` state for the same device lineage
+
 Current `Patch XML` control model includes:
 
 - exact parent-record lineage through `catalogue_number`
-- reviewed baseline pair gating
+- reviewed baseline gating
 - explicit user-entered later `PATCH` version
 - scenario-specific field changes only
 
@@ -299,6 +309,7 @@ Documented assumptions include:
 
 - local schema validity is necessary but not sufficient for operational acceptance
 - scenario `PATCH` drafting should remain conservative and controlled
+- version `2` `PATCH` generation should be able to derive directly from the accepted `POST` without requiring an unchanged no-op `PATCH`
 - the solution should be extensible toward later submission support
 
 ## Risks And Issues
@@ -329,6 +340,11 @@ Near-term roadmap items already documented include:
 - reduce field-name drift
 - harden workbook parsing
 - keep XML profiles explicit by scenario
+- redesign the baseline testing workspace from `Post + Patch` to `POST` only
+- redesign `Patch XML` so it supports:
+  - explicit `Equivalent First Patch`
+  - real first-update version `2` `PATCH` from accepted `POST`
+  - later version `3+` `PATCH` from latest accepted tracked `PATCH`
 - define submission-domain models
 - add manual upload workflow support after XML review
 - add persistence and later delivery adapters
@@ -340,7 +356,10 @@ Current major decisions reflected in the documentation include:
 - the project is a preparation and review application first, not a live submission platform
 - workbook parsing, canonical interpretation, validation, and XML generation remain separate
 - XML testing and accepted generation are separated in the UI
-- later scenario `PATCH` drafts must derive from a reviewed baseline `Post + Patch` chain
+- the baseline registration flow should converge toward `POST` only
+- all `PATCH` generation should converge into `Patch XML`
+- version `2` `PATCH` should derive from accepted `POST`
+- version `3+` `PATCH` should derive from the latest accepted tracked `PATCH`
 - scenario `PATCH` generation must target the exact selected parent record
 - `Patch XML` should not be a freeform XML editor
 
@@ -359,6 +378,7 @@ Current open questions include:
 
 - whether accepted scenario `PATCH` patterns should later appear in `EUDAMED Generation`
 - how baseline review and scenario acceptance state should be persisted
+- whether the unchanged equivalent first-child `PATCH` remains only as an optional controlled testing path
 - whether `Single XML` remains a long-term mode
 - how `POST Batch` and scenario-driven `PATCH Batch` should be introduced
 - what audit, retention, and security controls will be required in later phases

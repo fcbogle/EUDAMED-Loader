@@ -100,28 +100,6 @@ def preview_xml_post_patch_pair(payload: dict[str, str]) -> dict:
     return preview.model_dump(mode="json")
 
 
-@router.post("/xml/download-post-patch-pair")
-def download_xml_post_patch_pair(payload: dict[str, str]) -> Response:
-    product_family = payload.get("product_family")
-    product_variant = payload.get("product_variant")
-    catalogue_number = payload.get("catalogue_number")
-    if not product_family or not product_variant or not catalogue_number:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family, product_variant, and catalogue_number are required.",
-        )
-    try:
-        file_name, zip_bytes = XmlGenerationService().download_post_patch_pair(
-            product_family=product_family,
-            product_variant=product_variant,
-            catalogue_number=catalogue_number,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
-    return Response(content=zip_bytes, media_type="application/zip", headers=headers)
-
-
 @router.post("/xml/download-post-package")
 def download_xml_post_package(payload: dict[str, str]) -> Response:
     product_family = payload.get("product_family")
@@ -234,7 +212,7 @@ def download_generated_patch_scenario(payload: dict) -> Response:
         _parse_generated_patch_payload(payload)
     )
     try:
-        file_name, xml_bytes = XmlGenerationService().download_generated_patch_scenario(
+        file_name, package_bytes = XmlGenerationService().download_generated_patch_scenario(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
@@ -245,7 +223,7 @@ def download_generated_patch_scenario(payload: dict) -> Response:
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
-    return Response(content=xml_bytes, media_type="application/xml", headers=headers)
+    return Response(content=package_bytes, media_type="application/zip", headers=headers)
 
 
 @router.post("/xml/preview-batch")
