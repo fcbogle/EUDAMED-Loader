@@ -680,9 +680,13 @@ class XmlGenerationService:
     @staticmethod
     def _required_positive_int_input(payload: dict[str, Any], key: str) -> int:
         value = payload.get(key)
+        if isinstance(value, bool):
+            raise ValueError(f"{key} must be a positive integer.")
+        if not isinstance(value, (int, str)):
+            raise ValueError(f"{key} must be a positive integer.")
         try:
             parsed = int(value)
-        except (TypeError, ValueError) as exc:
+        except ValueError as exc:
             raise ValueError(f"{key} must be a positive integer.") from exc
         if parsed <= 0:
             raise ValueError(f"{key} must be a positive integer.")

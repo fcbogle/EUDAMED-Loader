@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from io import BytesIO
 from types import SimpleNamespace
+from typing import cast
 from zipfile import ZipFile
 
 from app.config import get_settings
+from app.services.canonical_validation import CanonicalValidationService
 
 from app.routers.xml_generation import (
     download_generated_patch_scenario,
@@ -18,6 +20,18 @@ from app.routers.xml_generation import (
 )
 from app.services.xml_generation import XmlGenerationService
 from app.services.xml_selection import ValidationRecordSelector
+from app.validation_models import CanonicalValidationBundle, CanonicalValidationRecord
+
+
+def test_required_positive_int_input_rejects_bool_values() -> None:
+    service = XmlGenerationService()
+
+    try:
+        service._required_positive_int_input({"new_base_quantity": True}, "new_base_quantity")
+    except ValueError as exc:
+        assert str(exc) == "new_base_quantity must be a positive integer."
+    else:
+        raise AssertionError("Expected ValueError for boolean base quantity input.")
 
 
 def test_generic_single_record_preview_generates_schema_valid_xml() -> None:
@@ -450,8 +464,15 @@ def test_generated_patch_scenario_download_route_returns_zip_package() -> None:
 
 
 def test_post_record_selector_requires_exact_catalogue_number_for_variant_post_lineage() -> None:
+    class StubValidationService:
+        def __init__(self, records: list[CanonicalValidationRecord]) -> None:
+            self._bundle = cast(CanonicalValidationBundle, SimpleNamespace(records=records))
+
+        def build_validation_bundle(self) -> CanonicalValidationBundle:
+            return self._bundle
+
     validation_bundle = XmlGenerationService().validation_service.build_validation_bundle()
-    variant_post_records = [
+    variant_post_records: list[CanonicalValidationRecord] = [
         record
         for record in validation_bundle.records
         if record.product_family == "Echelon"
@@ -461,17 +482,21 @@ def test_post_record_selector_requires_exact_catalogue_number_for_variant_post_l
     ]
     assert variant_post_records
 
-    baseline_record = variant_post_records[0]
-    alternate_record = baseline_record.model_copy(update={"catalogue_number": "EVAC22L1S-ALT"})
-    selector = ValidationRecordSelector(XmlGenerationService().validation_service)
-    selector.validation_service.build_validation_bundle = lambda: SimpleNamespace(
-        records=[alternate_record, baseline_record]
+    baseline_record: CanonicalValidationRecord = cast(CanonicalValidationRecord, variant_post_records[0])
+    alternate_record: CanonicalValidationRecord = cast(
+        CanonicalValidationRecord,
+        baseline_record.model_copy(update={"catalogue_number": "EVAC22L1S-ALT"}),
+    )
+    assert baseline_record.catalogue_number is not None
+    expected_catalogue_number = baseline_record.catalogue_number
+    selector = ValidationRecordSelector(
+        cast(CanonicalValidationService, StubValidationService([alternate_record, baseline_record]))
     )
 
-    selected = selector.find_post_record(
+    selected: CanonicalValidationRecord = selector.find_post_record(
         product_family="Echelon",
         product_variant="Echelon VAC",
-        catalogue_number=baseline_record.catalogue_number,
+        catalogue_number=expected_catalogue_number,
     )
 
-    assert selected.catalogue_number == baseline_record.catalogue_number
+    assert selected.catalogue_number == expected_catalogue_number
