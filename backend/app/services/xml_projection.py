@@ -239,6 +239,18 @@ class DeviceXmlProjectionBuilder:
         return replace(
             baseline_patch_record,
             trade_name=patch_state.trade_name,
+            base_quantity=(
+                patch_state.base_quantity
+                if patch_state.base_quantity is not None
+                else baseline_patch_record.base_quantity
+            ),
+            sterile=patch_state.sterile if patch_state.sterile is not None else baseline_patch_record.sterile,
+            contains_latex=(
+                patch_state.contains_latex
+                if patch_state.contains_latex is not None
+                else baseline_patch_record.contains_latex
+            ),
+            status_code=patch_state.status_code or baseline_patch_record.status_code,
             storage_conditions=list(patch_state.storage_conditions),
             critical_warnings=list(patch_state.critical_warnings),
             source_version_marker=patch_state.version,
@@ -292,6 +304,62 @@ class DeviceXmlProjectionBuilder:
         return replace(
             baseline_patch_record,
             storage_conditions=updated_conditions,
+            source_version_marker=patch_version,
+            patch_version_override=patch_version,
+        )
+
+    @staticmethod
+    def build_base_quantity_edit_patch(
+        baseline_patch_record: DeviceXmlRecord,
+        *,
+        new_base_quantity: int,
+        patch_version: str,
+    ) -> DeviceXmlRecord:
+        return replace(
+            baseline_patch_record,
+            base_quantity=new_base_quantity,
+            source_version_marker=patch_version,
+            patch_version_override=patch_version,
+        )
+
+    @staticmethod
+    def build_sterile_edit_patch(
+        baseline_patch_record: DeviceXmlRecord,
+        *,
+        new_sterile: bool,
+        patch_version: str,
+    ) -> DeviceXmlRecord:
+        return replace(
+            baseline_patch_record,
+            sterile=new_sterile,
+            source_version_marker=patch_version,
+            patch_version_override=patch_version,
+        )
+
+    @staticmethod
+    def build_latex_edit_patch(
+        baseline_patch_record: DeviceXmlRecord,
+        *,
+        new_contains_latex: bool,
+        patch_version: str,
+    ) -> DeviceXmlRecord:
+        return replace(
+            baseline_patch_record,
+            contains_latex=new_contains_latex,
+            source_version_marker=patch_version,
+            patch_version_override=patch_version,
+        )
+
+    @staticmethod
+    def build_status_code_edit_patch(
+        baseline_patch_record: DeviceXmlRecord,
+        *,
+        new_status_code: str,
+        patch_version: str,
+    ) -> DeviceXmlRecord:
+        return replace(
+            baseline_patch_record,
+            status_code=new_status_code,
             source_version_marker=patch_version,
             patch_version_override=patch_version,
         )

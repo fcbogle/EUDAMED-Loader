@@ -214,9 +214,82 @@ Important limitation:
 
 Active generated scenarios:
 
+- `Equivalent First Patch`
+  - purpose: explicit version `2` baseline `UDI_DI.PATCH`
+  - values:
+    - `e:version = 2`
+    - no business-field delta
+  - example:
+    - accepted `POST` version `1`
+    - derived `PATCH` version `2`
 - `Trade Name Edit`
+  - target: `udidi:tradeNames`
+  - values:
+    - free text
+    - one replacement trade name value per generated scenario
+  - example:
+    - before: `ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS`
+    - after: `ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED`
 - `Critical Warnings`
+  - target: `udidi:criticalWarnings`
+  - values:
+    - controlled warning code
+    - optional comment
+    - `CW999` requires comment
+  - example:
+    - before: `CW010`
+    - after: `CW011`
 - `Storage Condition Edit`
+  - target: `udidi:storageHandlingConditions`
+  - values:
+    - one or more existing condition comments updated
+    - current implemented testing focus remains `SHC006` and `SHC007`
+  - example:
+    - before `SHC006`: `Minus 15C`
+    - after `SHC006`: `Store in a dry location`
+
+Candidate design-only scenarios now listed in the dropdown:
+
+- `Sterilization`
+- `Reprocessed`
+- `Number Of Reuses`
+- `MDN Codes`
+
+Next implemented simple scenarios:
+
+- `Base Quantity`
+  - target: `udidi:baseQuantity`
+  - values:
+    - any positive integer
+  - examples:
+    - `1`
+    - `2`
+    - `10`
+- `Sterile`
+  - target: `udidi:sterile`
+  - values:
+    - `true`
+    - `false`
+  - example:
+    - before: `false`
+    - after: `true`
+- `Latex`
+  - target: `udidi:latex`
+  - values:
+    - `true`
+    - `false`
+  - example:
+    - before: `false`
+    - after: `true`
+- `Status Code`
+  - target: `udidi:status/commondi:code`
+  - values:
+    - `NOT_INTENDED_FOR_EU_MARKET`
+    - `ON_THE_MARKET`
+    - `NO_LONGER_PLACED_ON_THE_MARKET`
+  - example:
+    - before: `ON_THE_MARKET`
+    - after: `NO_LONGER_PLACED_ON_THE_MARKET`
 
 ## Current XML Facts
 

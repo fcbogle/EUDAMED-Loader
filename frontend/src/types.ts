@@ -325,8 +325,8 @@ export type SingleRecordXmlPreview = {
   validation: XmlValidationResult;
 };
 
-export type EquivalentPatchPairPreview = {
-  mode: "post_patch_pair";
+export type PostRegistrationPreview = {
+  mode: "post_registration";
   product_family: string | null;
   product_variant: string | null;
   catalogue_number: string;
@@ -336,14 +336,15 @@ export type EquivalentPatchPairPreview = {
   post_file_name: string;
   post_xml: string;
   post_validation: XmlValidationResult;
-  patch_file_name: string;
-  patch_xml: string;
-  patch_validation: XmlValidationResult;
 };
 
 export type PatchStateSnapshot = {
   version: string;
   trade_name: string | null;
+  base_quantity: number | null;
+  sterile: boolean | null;
+  contains_latex: boolean | null;
+  status_code: string | null;
   storage_conditions: Array<{ code: string; comment: string | null }>;
   critical_warnings: Array<{ code: string; comment: string | null }>;
 };
@@ -388,7 +389,8 @@ export type PatchScenarioContext = {
   catalogue_number: string;
   primary_udi_di: string;
   parent_post_version: string;
-  baseline_patch_version: string;
+  base_message_type: "POST" | "PATCH";
+  base_version: string;
   proposed_patch_version: string;
   base_state_source: string;
   base_state_label: string;
@@ -405,9 +407,9 @@ export type GeneratedPatchScenarioPreview = {
   registered_device_anchor: RegisteredDeviceAnchor;
   context: PatchScenarioContext;
   field_deltas: PatchScenarioFieldDelta[];
-  baseline_patch_file_name: string;
-  baseline_patch_xml: string;
-  baseline_patch_validation: XmlValidationResult;
+  base_file_name: string;
+  base_xml: string;
+  base_validation: XmlValidationResult;
   derived_patch_file_name: string;
   derived_patch_xml: string;
   derived_patch_validation: XmlValidationResult;

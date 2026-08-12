@@ -289,6 +289,39 @@ Current `Patch XML` control model includes:
 - explicit user-entered later `PATCH` version
 - scenario-specific field changes only
 
+### PATCH Scenario Architecture
+
+The architecture now treats `PATCH` generation as a controlled scenario framework rather than as a generic XML editing function.
+
+Current design rules are:
+
+- each generated `PATCH` belongs to one explicit scenario type
+- each scenario is anchored to one exact selected device lineage
+- version `2` `PATCH` should derive directly from the accepted `POST` baseline for that same lineage
+- version `3+` `PATCH` should derive from the latest accepted tracked `PATCH` state for that same lineage
+- all non-target fields should remain aligned with the chosen base state
+- only the scenario-approved target field or fields should change
+- the current YAML testing state store is the temporary persistence mechanism for accepted device state and `PATCH` lineage until the database-backed model is introduced
+
+The current implemented single-field or narrow-scope scenario families are:
+
+- `Equivalent First Patch`
+- `Trade Name Edit`
+- `Critical Warnings`
+- `Storage Condition Edit`
+- `Base Quantity`
+- `Sterile`
+- `Latex`
+- `Status Code`
+
+The next scenario families remain intentionally staged:
+
+- list-based updates such as `Production Identifier` and `MDN Codes`
+- additional boolean or numeric state changes such as `Sterilization`, `Reprocessed`, and `Number Of Reuses`
+- later multi-field `PATCH` scenarios, once single-field lineage and acceptance behavior are better proven
+
+The architecture document should record the scenario framework, lineage rules, and persistence model. Detailed allowed values, examples, and executed Playground test evidence should remain in the testing and reporting documents rather than being duplicated here.
+
 Future integration direction includes:
 
 - manual upload preparation and tracking

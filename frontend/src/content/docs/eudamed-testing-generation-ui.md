@@ -96,12 +96,12 @@ Current scope remains deliberately narrow:
 - one candidate PATCH scenario at a time
 - generated preview and download
 - no freeform PATCH editing
-- strict dependency on a reviewed `Post + Patch` pair for the exact selected record
+- strict dependency on a reviewed `POST` baseline for the exact selected record
 
 Current redesign direction now implemented:
 
-- build on the existing generated `Post + Patch` pair for the selected record
-- treat the first child `PATCH` from that pair as the lineage starting point
+- build on the generated `POST` baseline for the selected record
+- treat the explicit `Equivalent First Patch` as an optional version `2` lineage step
 - resolve the latest successful tracked state for that same device before generating later scenario PATCH drafts
 - require the user to enter the version integer for each scenario PATCH draft
 - show business-field before/after comparison before generation
@@ -111,18 +111,62 @@ Current redesign direction now implemented:
 
 Active candidate scenarios:
 
+- `equivalent_first_patch`
+  - explicit version `2` baseline `PATCH`
+  - no business-field change
 - `trade_name_edit`
+  - replacement free-text trade name
+  - example:
+    - before: `ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS`
+    - after: `ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED`
 - `warning_add`
+  - replacement warning code plus optional comment
+  - example:
+    - before: `CW010`
+    - after: `CW011`
 - `storage_condition_edit`
+  - replacement comment for one or more existing storage-condition codes
+  - example:
+    - `SHC006` from `Minus 15C` to `Store in a dry location`
+- `base_quantity_edit`
+  - positive integer only
+  - examples:
+    - `1`
+    - `2`
+    - `10`
+- `sterile_edit`
+  - boolean only
+  - values:
+    - `true`
+    - `false`
+- `latex_edit`
+  - boolean only
+  - values:
+    - `true`
+    - `false`
+- `status_code_edit`
+  - controlled enum
+  - values:
+    - `NOT_INTENDED_FOR_EU_MARKET`
+    - `ON_THE_MARKET`
+    - `NO_LONGER_PLACED_ON_THE_MARKET`
+
+Design-only candidate scenarios now shown in the dropdown:
+
+- `production_identifier_edit`
+- `sterilization_edit`
+- `reprocessed_edit`
+- `number_of_reuses_edit`
+- `mdn_codes_edit`
 
 Current implementation direction:
 
 - scenario-driven UI
 - scenario metadata rather than per-scenario hardcoded screens
-- one selected parent `POST` plus equivalent first `PATCH` per selected record
+- one selected parent `POST` per selected record
 - explicit, user-supplied scenario PATCH version input
 - exact lineage preserved through `catalogue_number`
-- scenario drafting blocked until `Post + Patch` has been generated and reviewed for that same record
+- scenario drafting blocked until `POST` has been generated and reviewed for that same record
 
 ## PATCH Version Rule
 

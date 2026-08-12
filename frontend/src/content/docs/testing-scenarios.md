@@ -91,6 +91,68 @@ These are candidate scenarios only. They still need QMS confirmation before bein
 - change to trade-name or language-supported descriptive content
 - change to warnings or storage conditions if those are treated as updateable device details
 
+Current implemented single-scenario PATCH catalogue:
+
+- `Equivalent First Patch`
+  - `e:version = 2`
+  - no business-field change
+- `Trade Name Edit`
+  - free-text replacement
+  - example:
+    - before: `ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS`
+    - after: `ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED`
+- `Critical Warnings`
+  - warning code plus optional comment
+  - example:
+    - before: `CW010`
+    - after: `CW011`
+- `Storage Condition Edit`
+  - replacement comment for existing storage-condition codes
+  - example:
+    - `SHC006` from `Minus 15C` to `Store in a dry location`
+- `Base Quantity`
+  - positive integer only
+  - examples:
+    - `1`
+    - `2`
+    - `10`
+- `Sterile`
+  - boolean only
+  - values:
+    - `true`
+    - `false`
+- `Latex`
+  - boolean only
+  - values:
+    - `true`
+    - `false`
+- `Status Code`
+  - controlled enum
+  - values:
+    - `NOT_INTENDED_FOR_EU_MARKET`
+    - `ON_THE_MARKET`
+    - `NO_LONGER_PLACED_ON_THE_MARKET`
+
+Design-only next scenarios still not implemented:
+
+- `Production Identifier`
+  - one or more of:
+    - `BATCH_NUMBER`
+    - `SOFTWARE_IDENTIFICATION`
+    - `SERIALISATION_NUMBER`
+    - `EXPIRATION_DATE`
+    - `MANUFACTURING_DATE`
+- `Sterilization`
+  - `true` / `false`
+- `Reprocessed`
+  - `true` / `false`
+- `Number Of Reuses`
+  - `-1`
+  - `0`
+  - positive integer
+- `MDN Codes`
+  - one or more valid nomenclature codes
+
 The point of this list is not to assume these are valid. The point is to give QMS a concrete set of questions to confirm or reject.
 
 ## Market Information Testing

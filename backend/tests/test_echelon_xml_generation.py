@@ -67,7 +67,7 @@ def test_single_record_preview_can_override_manufacturer_srn_for_playground(monk
     monkeypatch.setenv("EUDAMED_MANUFACTURER_SRN_OVERRIDE", "UK-MF-000033261")
     get_settings.cache_clear()
     try:
-        preview = XmlGenerationService().preview_post_patch_pair(
+        preview = XmlGenerationService().preview_post_registration(
             product_family="Elan",
             product_variant="Elan IC",
             catalogue_number="ELANIC22L1S",
@@ -215,18 +215,37 @@ def test_generated_trade_name_patch_scenario_reuses_latest_successful_patch_stat
 
     assert preview.mode == "generated_patch_scenario"
     assert preview.context.parent_post_version == "1"
-    assert preview.context.baseline_patch_version == "4"
+    assert preview.context.base_message_type == "PATCH"
+    assert preview.context.base_version == "4"
     assert preview.context.proposed_patch_version == "5"
     assert preview.context.base_state_source == "yaml_latest_successful_patch"
     assert preview.context.base_state_label == "Latest successful PATCH version 4"
     assert preview.registered_device_anchor.catalogue_number == preview.catalogue_number
-    assert preview.baseline_patch_validation.valid is True
+    assert preview.base_validation.valid is True
     assert preview.derived_patch_validation.valid is True
-    assert "<e:version>4</e:version>" in preview.baseline_patch_xml
+    assert "<e:version>4</e:version>" in preview.base_xml
     assert "<e:version>5</e:version>" in preview.derived_patch_xml
-    assert "Store in a dry location" in preview.baseline_patch_xml
+    assert "Store in a dry location" in preview.base_xml
     assert "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED" in preview.derived_patch_xml
     assert any(delta.field_key == "trade_name" for delta in preview.field_deltas)
+
+
+def test_equivalent_first_patch_scenario_uses_post_as_base_for_version_two() -> None:
+    preview = XmlGenerationService().preview_generated_patch_scenario(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+        scenario_id="equivalent_first_patch",
+        patch_version="2",
+        scenario_inputs={},
+    )
+
+    assert preview.context.base_message_type == "POST"
+    assert preview.context.base_version == "1"
+    assert preview.context.proposed_patch_version == "2"
+    assert "<s:serviceOperation>POST</s:serviceOperation>" in preview.base_xml
+    assert "<s:serviceOperation>PATCH</s:serviceOperation>" in preview.derived_patch_xml
+    assert "<e:version>2</e:version>" in preview.derived_patch_xml
 
 
 def test_generated_trade_name_patch_scenario_preserves_registered_device_identity() -> None:
@@ -245,9 +264,9 @@ def test_generated_trade_name_patch_scenario_preserves_registered_device_identit
     assert preview.registered_device_anchor.primary_udi_di == "05050649062025"
     assert preview.context.catalogue_number == "EVAC22L1S"
     assert preview.context.primary_udi_di == "05050649062025"
-    assert "<commondi:DICode>05050649062025</commondi:DICode>" in preview.baseline_patch_xml
+    assert "<commondi:DICode>05050649062025</commondi:DICode>" in preview.base_xml
     assert "<commondi:DICode>05050649062025</commondi:DICode>" in preview.derived_patch_xml
-    assert "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS" in preview.baseline_patch_xml
+    assert "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS" in preview.base_xml
     assert "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED" in preview.derived_patch_xml
     assert all(delta.field_key in {"patch_version", "trade_name"} for delta in preview.field_deltas)
 
@@ -265,10 +284,10 @@ def test_generated_trade_name_patch_scenario_preserves_latest_successful_trade_n
         },
     )
 
-    assert preview.context.baseline_patch_version == "4"
+    assert preview.context.base_version == "4"
     assert preview.context.base_state_source == "yaml_latest_successful_patch"
-    assert "<e:version>4</e:version>" in preview.baseline_patch_xml
-    assert "ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED" in preview.baseline_patch_xml
+    assert "<e:version>4</e:version>" in preview.base_xml
+    assert "ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED" in preview.base_xml
     assert "ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED" in preview.derived_patch_xml
 
 
@@ -312,11 +331,78 @@ def test_generated_storage_condition_patch_scenario_updates_comments() -> None:
         },
     )
 
-    assert "<e:version>4</e:version>" in preview.baseline_patch_xml
+    assert "<e:version>4</e:version>" in preview.base_xml
     assert "<e:version>5</e:version>" in preview.derived_patch_xml
-    assert "Store in a dry location" in preview.baseline_patch_xml
+    assert "Store in a dry location" in preview.base_xml
     assert "Minus 10" in preview.derived_patch_xml
     assert "Plus 45" in preview.derived_patch_xml
+    assert preview.derived_patch_validation.valid is True
+
+
+def test_generated_base_quantity_patch_scenario_updates_quantity() -> None:
+    preview = XmlGenerationService().preview_generated_patch_scenario(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+        scenario_id="base_quantity_edit",
+        patch_version="5",
+        scenario_inputs={"new_base_quantity": 7},
+    )
+
+    assert "<e:version>5</e:version>" in preview.derived_patch_xml
+    assert "<udidi:baseQuantity>7</udidi:baseQuantity>" in preview.derived_patch_xml
+    assert any(delta.field_key == "base_quantity" and delta.after_value == "7" for delta in preview.field_deltas)
+    assert preview.derived_patch_validation.valid is True
+
+
+def test_generated_sterile_patch_scenario_updates_boolean() -> None:
+    preview = XmlGenerationService().preview_generated_patch_scenario(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+        scenario_id="sterile_edit",
+        patch_version="5",
+        scenario_inputs={"new_sterile": True},
+    )
+
+    assert "<e:version>5</e:version>" in preview.derived_patch_xml
+    assert "<udidi:sterile>true</udidi:sterile>" in preview.derived_patch_xml
+    assert any(delta.field_key == "sterile" and delta.after_value == "true" for delta in preview.field_deltas)
+    assert preview.derived_patch_validation.valid is True
+
+
+def test_generated_latex_patch_scenario_updates_boolean() -> None:
+    preview = XmlGenerationService().preview_generated_patch_scenario(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+        scenario_id="latex_edit",
+        patch_version="5",
+        scenario_inputs={"new_contains_latex": True},
+    )
+
+    assert "<e:version>5</e:version>" in preview.derived_patch_xml
+    assert "<udidi:latex>true</udidi:latex>" in preview.derived_patch_xml
+    assert any(delta.field_key == "latex" and delta.after_value == "true" for delta in preview.field_deltas)
+    assert preview.derived_patch_validation.valid is True
+
+
+def test_generated_status_code_patch_scenario_updates_enum() -> None:
+    preview = XmlGenerationService().preview_generated_patch_scenario(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+        scenario_id="status_code_edit",
+        patch_version="5",
+        scenario_inputs={"new_status_code": "NO_LONGER_PLACED_ON_THE_MARKET"},
+    )
+
+    assert "<e:version>5</e:version>" in preview.derived_patch_xml
+    assert "<commondi:code>NO_LONGER_PLACED_ON_THE_MARKET</commondi:code>" in preview.derived_patch_xml
+    assert any(
+        delta.field_key == "status_code" and delta.after_value == "NO_LONGER_PLACED_ON_THE_MARKET"
+        for delta in preview.field_deltas
+    )
     assert preview.derived_patch_validation.valid is True
 
 
@@ -335,7 +421,7 @@ def test_generated_patch_scenario_route_returns_comparison_payload() -> None:
     )
 
     assert payload["mode"] == "generated_patch_scenario"
-    assert payload["context"]["baseline_patch_version"] == "4"
+    assert payload["context"]["base_version"] == "4"
     assert payload["context"]["proposed_patch_version"] == "5"
     assert payload["derived_patch_validation"]["valid"] is True
 

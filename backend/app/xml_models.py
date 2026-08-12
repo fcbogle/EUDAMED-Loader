@@ -53,8 +53,8 @@ class RegisteredDeviceAnchor(BaseModel):
     eudamed_status: str
 
 
-class EquivalentPatchPairPreview(BaseModel):
-    mode: Literal["post_patch_pair"] = "post_patch_pair"
+class PostRegistrationPreview(BaseModel):
+    mode: Literal["post_registration"] = "post_registration"
     product_family: str | None = None
     product_variant: str | None = None
     catalogue_number: str
@@ -64,9 +64,6 @@ class EquivalentPatchPairPreview(BaseModel):
     post_file_name: str
     post_xml: str
     post_validation: XmlValidationResult
-    patch_file_name: str
-    patch_xml: str
-    patch_validation: XmlValidationResult
 
 
 class MarketInfoPutPreview(BaseModel):
@@ -97,7 +94,8 @@ class PatchScenarioContext(BaseModel):
     catalogue_number: str
     primary_udi_di: str
     parent_post_version: str
-    baseline_patch_version: str
+    base_message_type: Literal["POST", "PATCH"]
+    base_version: str
     proposed_patch_version: str
     base_state_source: str
     base_state_label: str
@@ -106,6 +104,10 @@ class PatchScenarioContext(BaseModel):
 class PatchStateSnapshot(BaseModel):
     version: str
     trade_name: str | None = None
+    base_quantity: int | None = None
+    sterile: bool | None = None
+    contains_latex: bool | None = None
+    status_code: str | None = None
     storage_conditions: list[StorageConditionXmlItem] = Field(default_factory=list)
     critical_warnings: list[CriticalWarningXmlItem] = Field(default_factory=list)
 
@@ -121,9 +123,9 @@ class GeneratedPatchScenarioPreview(BaseModel):
     registered_device_anchor: RegisteredDeviceAnchor
     context: PatchScenarioContext
     field_deltas: list[PatchScenarioFieldDelta] = Field(default_factory=list)
-    baseline_patch_file_name: str
-    baseline_patch_xml: str
-    baseline_patch_validation: XmlValidationResult
+    base_file_name: str
+    base_xml: str
+    base_validation: XmlValidationResult
     derived_patch_file_name: str
     derived_patch_xml: str
     derived_patch_validation: XmlValidationResult

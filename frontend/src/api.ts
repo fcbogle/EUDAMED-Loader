@@ -5,10 +5,10 @@ import type {
   CanonicalReviewBundle,
   CriticalWarningCodeOption,
   DistinctValueProfile,
-  EquivalentPatchPairPreview,
   GeneratedPatchScenarioPreview,
   MarketInfoPutPreview,
   NormalizationRuleFile,
+  PostRegistrationPreview,
   RegisteredDeviceAnchor,
   ReferenceWorkbookSummary,
   SchemaInventory,
@@ -99,8 +99,8 @@ export const api = {
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
     }),
-  previewXmlPostPatchPair: (productFamily: string, productVariant: string, catalogueNumber: string) =>
-    sendJson<EquivalentPatchPairPreview>("/xml/preview-post-patch-pair", "POST", {
+  previewXmlPostRegistration: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+    sendJson<PostRegistrationPreview>("/xml/preview-post-registration", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
@@ -141,12 +141,6 @@ export const api = {
     }),
   downloadXmlPostPackage: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-post-package", "POST", {
-      product_family: productFamily,
-      product_variant: productVariant,
-      catalogue_number: catalogueNumber,
-    }),
-  downloadXmlPatchPackage: (productFamily: string, productVariant: string, catalogueNumber: string) =>
-    sendDownload("/xml/download-patch-package", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,

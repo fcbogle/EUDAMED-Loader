@@ -50,6 +50,10 @@ class TestingStateStore:
                     state=PatchStateSnapshot(
                         version=version,
                         trade_name=self._optional_string(latest_state.get("trade_name")),
+                        base_quantity=self._optional_int(latest_state.get("base_quantity")),
+                        sterile=self._optional_bool(latest_state.get("sterile")),
+                        contains_latex=self._optional_bool(latest_state.get("contains_latex")),
+                        status_code=self._optional_string(latest_state.get("status_code")),
                         storage_conditions=self._storage_conditions(latest_state.get("storage_conditions")),
                         critical_warnings=self._critical_warnings(latest_state.get("critical_warnings")),
                     ),
@@ -64,6 +68,27 @@ class TestingStateStore:
             return str(value)
         normalized = value.strip()
         return normalized or None
+
+    @staticmethod
+    def _optional_int(value: object) -> int | None:
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _optional_bool(value: object) -> bool | None:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized == "true":
+                return True
+            if normalized == "false":
+                return False
+        return None
 
     @staticmethod
     def _storage_conditions(value: object) -> list[StorageConditionXmlItem]:

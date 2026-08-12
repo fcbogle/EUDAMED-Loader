@@ -20,10 +20,10 @@ import type {
   CanonicalReviewBundle,
   CriticalWarningCodeOption,
   DistinctValueProfile,
-  EquivalentPatchPairPreview,
   GeneratedPatchScenarioPreview,
   MarketInfoPutPreview,
   NormalizationRuleFile,
+  PostRegistrationPreview,
   RegisteredDeviceAnchor,
   ReferenceWorkbookSummary,
   SchemaInventory,
@@ -41,13 +41,28 @@ const focusColumns = [
 type MainTab = "workbooks" | "canonical" | "canonicalValidation" | "xml" | "generation" | "documentation";
 type ScopeMode = "all" | "sheet";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
-type PatchScenarioId = "trade_name_edit" | "warning_add" | "storage_condition_edit";
+type PatchScenarioId =
+  | "equivalent_first_patch"
+  | "trade_name_edit"
+  | "warning_add"
+  | "storage_condition_edit"
+  | "base_quantity_edit"
+  | "production_identifier_edit"
+  | "sterile_edit"
+  | "sterilization_edit"
+  | "latex_edit"
+  | "reprocessed_edit"
+  | "number_of_reuses_edit"
+  | "status_code_edit"
+  | "mdn_codes_edit";
 
 type PatchScenarioDefinition = {
   id: PatchScenarioId;
   label: string;
   target: string;
   summary: string;
+  implemented: boolean;
+  optionsSummary?: string;
 };
 
 type PatchScenarioComparisonRow = {
@@ -63,31 +78,108 @@ type SelectionAnchorInput = {
   primary_udi_di: string | null;
 };
 
-type PreparedPairDownloads = {
-  postFileName: string;
-  postUrl: string;
-  patchFileName: string;
-  patchUrl: string;
-};
-
 const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
+  {
+    id: "equivalent_first_patch",
+    label: "Equivalent First Patch",
+    target: "Full UDI-DI payload equality",
+    summary: "Version 2 PATCH derived directly from the POST with no business-field change, used only when you want an explicit baseline PATCH in Playground.",
+    implemented: true,
+  },
   {
     id: "trade_name_edit",
     label: "Trade Name Edit",
     target: "udidi:tradeNames",
     summary: "Candidate PATCH shape that updates the trade name text while keeping the baseline device identity unchanged.",
+    implemented: true,
   },
   {
     id: "warning_add",
     label: "Critical Warnings",
     target: "udidi:criticalWarnings",
     summary: "Candidate PATCH shape that replaces the current warning set with the selected warning while keeping the baseline device identity unchanged.",
+    implemented: true,
   },
   {
     id: "storage_condition_edit",
     label: "Storage Condition Edit",
     target: "udidi:storageHandlingConditions",
     summary: "Candidate PATCH shape that edits selected storage-condition comment text while preserving the baseline device identity.",
+    implemented: true,
+  },
+  {
+    id: "base_quantity_edit",
+    label: "Base Quantity",
+    target: "udidi:baseQuantity",
+    summary: "Candidate PATCH shape for changing the device base quantity.",
+    implemented: true,
+    optionsSummary: "Any positive integer such as 1, 2, 10.",
+  },
+  {
+    id: "production_identifier_edit",
+    label: "Production Identifier",
+    target: "udidi:productionIdentifier",
+    summary: "Candidate PATCH shape for changing the UDI-PI control model.",
+    implemented: false,
+    optionsSummary:
+      "One or more of: BATCH_NUMBER, SOFTWARE_IDENTIFICATION, SERIALISATION_NUMBER, EXPIRATION_DATE, MANUFACTURING_DATE.",
+  },
+  {
+    id: "sterile_edit",
+    label: "Sterile",
+    target: "udidi:sterile",
+    summary: "Candidate PATCH shape for changing whether the device is labelled sterile.",
+    implemented: true,
+    optionsSummary: "Boolean: true or false.",
+  },
+  {
+    id: "sterilization_edit",
+    label: "Sterilization",
+    target: "udidi:sterilization",
+    summary: "Candidate PATCH shape for changing whether sterilisation before use is required.",
+    implemented: false,
+    optionsSummary: "Boolean: true or false.",
+  },
+  {
+    id: "latex_edit",
+    label: "Latex",
+    target: "udidi:latex",
+    summary: "Candidate PATCH shape for changing the latex flag.",
+    implemented: true,
+    optionsSummary: "Boolean: true or false.",
+  },
+  {
+    id: "reprocessed_edit",
+    label: "Reprocessed",
+    target: "udidi:reprocessed",
+    summary: "Candidate PATCH shape for changing the reprocessed flag.",
+    implemented: false,
+    optionsSummary: "Boolean: true or false.",
+  },
+  {
+    id: "number_of_reuses_edit",
+    label: "Number Of Reuses",
+    target: "udidi:numberOfReuses",
+    summary: "Candidate PATCH shape for changing the declared number of reuses.",
+    implemented: false,
+    optionsSummary: "Use -1 for not defined, 0 for single-use, or a positive integer.",
+  },
+  {
+    id: "status_code_edit",
+    label: "Status Code",
+    target: "udidi:status/commondi:code",
+    summary: "Candidate PATCH shape for changing the UDI-DI status code.",
+    implemented: true,
+    optionsSummary:
+      "One of: NOT_INTENDED_FOR_EU_MARKET, ON_THE_MARKET, NO_LONGER_PLACED_ON_THE_MARKET.",
+  },
+  {
+    id: "mdn_codes_edit",
+    label: "MDN Codes",
+    target: "udidi:MDNCodes",
+    summary: "Candidate PATCH shape for changing one or more nomenclature codes.",
+    implemented: false,
+    optionsSummary: "One or more valid nomenclature codes. The schema does not enumerate them locally.",
   },
 ];
 
@@ -357,6 +449,27 @@ function buildSelectionAnchor(record: SelectionAnchorInput): RegisteredDeviceAnc
   };
 }
 
+function fieldValue(record: { fields: Array<{ canonical_path: string; value: string | null }> } | null, canonicalPath: string): string | null {
+  if (!record) {
+    return null;
+  }
+  return record.fields.find((field) => field.canonical_path === canonicalPath)?.value ?? null;
+}
+
+function parseBooleanString(value: string | null | undefined): boolean | null {
+  if (value == null) {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") {
+    return true;
+  }
+  if (normalized === "false") {
+    return false;
+  }
+  return null;
+}
+
 function basicUdiMatchLabel(matchStatus: string | null | undefined): string {
   if (matchStatus === "matched") {
     return "Matched in BasicUDIs.xlsx";
@@ -553,13 +666,22 @@ export function App() {
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
   const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
   const [selectedXmlRecordKey, setSelectedXmlRecordKey] = useState<string | null>(null);
-  const [xmlMode, setXmlMode] = useState<"pair" | "single" | "marketInfo" | "batch" | "patch">("pair");
-  const [pairPreviewView, setPairPreviewView] = useState<"post" | "patch">("post");
-  const [selectedPatchScenarioId, setSelectedPatchScenarioId] = useState<PatchScenarioId>("trade_name_edit");
+  const [xmlMode, setXmlMode] = useState<"post" | "single" | "marketInfo" | "batch" | "patch">("post");
+  const [selectedPatchScenarioId, setSelectedPatchScenarioId] = useState<PatchScenarioId>("equivalent_first_patch");
   const [patchScenarioStatuses, setPatchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
+    equivalent_first_patch: "EUDAMED Candidate",
     trade_name_edit: "EUDAMED Candidate",
     warning_add: "EUDAMED Candidate",
     storage_condition_edit: "EUDAMED Candidate",
+    base_quantity_edit: "EUDAMED Candidate",
+    production_identifier_edit: "EUDAMED Candidate",
+    sterile_edit: "EUDAMED Candidate",
+    sterilization_edit: "EUDAMED Candidate",
+    latex_edit: "EUDAMED Candidate",
+    reprocessed_edit: "EUDAMED Candidate",
+    number_of_reuses_edit: "EUDAMED Candidate",
+    status_code_edit: "EUDAMED Candidate",
+    mdn_codes_edit: "EUDAMED Candidate",
   });
   const [selectedXmlChunkSequence, setSelectedXmlChunkSequence] = useState<number>(1);
   const [scopeMode] = useState<ScopeMode>("all");
@@ -573,15 +695,18 @@ export function App() {
   const [criticalWarningCodeOptions, setCriticalWarningCodeOptions] = useState<CriticalWarningCodeOption[]>([]);
   const [xmlPreview, setXmlPreview] = useState<SingleRecordXmlPreview | null>(null);
   const [xmlBatchPreview, setXmlBatchPreview] = useState<BatchXmlPreview | null>(null);
-  const [xmlPairPreview, setXmlPairPreview] = useState<EquivalentPatchPairPreview | null>(null);
+  const [xmlPairPreview, setXmlPairPreview] = useState<PostRegistrationPreview | null>(null);
   const [xmlMarketInfoPreview, setXmlMarketInfoPreview] = useState<MarketInfoPutPreview | null>(null);
   const [xmlPatchPreview, setXmlPatchPreview] = useState<GeneratedPatchScenarioPreview | null>(null);
-  const [preparedPairDownloads, setPreparedPairDownloads] = useState<PreparedPairDownloads | null>(null);
-  const [patchPreviewView, setPatchPreviewView] = useState<"baseline" | "derived">("derived");
+  const [patchPreviewView, setPatchPreviewView] = useState<"base" | "derived">("derived");
   const [patchVersionInput, setPatchVersionInput] = useState<string>("3");
   const [patchTradeNameInput, setPatchTradeNameInput] = useState<string>("");
   const [patchWarningCodeInput, setPatchWarningCodeInput] = useState<string>("");
   const [patchWarningCommentInput, setPatchWarningCommentInput] = useState<string>("");
+  const [patchBaseQuantityInput, setPatchBaseQuantityInput] = useState<string>("");
+  const [patchSterileInput, setPatchSterileInput] = useState<string>("");
+  const [patchLatexInput, setPatchLatexInput] = useState<string>("");
+  const [patchStatusCodeInput, setPatchStatusCodeInput] = useState<string>("");
   const [patchStorageConditionInputs, setPatchStorageConditionInputs] = useState<Record<string, string>>({
     SHC006: "",
     SHC007: "",
@@ -698,16 +823,6 @@ export function App() {
     setSelectedXmlRecordKey(
       canonicalValidationData.records.find((record) => record.xml_readiness.status === "complete")?.catalogue_number ?? null,
     );
-  }
-
-  function clearPreparedPairDownloads(): void {
-    setPreparedPairDownloads((current) => {
-      if (current) {
-        URL.revokeObjectURL(current.postUrl);
-        URL.revokeObjectURL(current.patchUrl);
-      }
-      return null;
-    });
   }
 
   async function loadCanonicalReviewBundle(): Promise<void> {
@@ -846,10 +961,7 @@ export function App() {
     setXmlPairPreview(null);
     setXmlMarketInfoPreview(null);
     setXmlPatchPreview(null);
-    clearPreparedPairDownloads();
   }, [selectedXmlRecordKey, selectedXmlFamily, selectedXmlVariant, selectedXmlChunkSequence]);
-
-  useEffect(() => () => clearPreparedPairDownloads(), []);
 
   useEffect(() => {
     if (!canonicalValidation?.family_summaries.length) {
@@ -951,36 +1063,8 @@ export function App() {
   }, [selectedXmlFamily, selectedXmlVariant]);
 
   useEffect(() => {
-    setPairPreviewView("post");
-  }, [selectedXmlFamily, selectedXmlVariant, selectedXmlRecordKey, xmlMode]);
-
-  useEffect(() => {
-    setPatchPreviewView("derived");
-    const latestSuccessfulVersion = Number(xmlPairPreview?.latest_successful_patch_state?.version ?? "2");
-    setPatchVersionInput(
-      Number.isInteger(latestSuccessfulVersion) && latestSuccessfulVersion >= 2
-        ? String(latestSuccessfulVersion + 1)
-        : "3",
-    );
-    setXmlPatchPreview(null);
-    if (xmlPairPreview?.latest_successful_patch_state) {
-      setPatchTradeNameInput(xmlPairPreview.latest_successful_patch_state.trade_name ?? "");
-    } else if (selectedXmlPairRecord) {
-      setPatchTradeNameInput(selectedXmlPairRecord.trade_name ?? "");
-    } else {
-      setPatchTradeNameInput("");
-    }
-    setPatchWarningCodeInput("");
-    setPatchWarningCommentInput("");
-    setPatchStorageConditionInputs({
-      SHC006: "",
-      SHC007: "",
-    });
-  }, [selectedXmlFamily, selectedXmlVariant, selectedPatchScenarioId, selectedXmlRecordKey, xmlPairPreview]);
-
-  useEffect(() => {
-    if (activeTab === "generation" && xmlMode !== "pair") {
-      setXmlMode("pair");
+    if (activeTab === "generation" && xmlMode !== "post") {
+      setXmlMode("post");
     }
   }, [activeTab, xmlMode]);
 
@@ -1204,8 +1288,8 @@ export function App() {
           primary_udi_di: selectedXmlMarketInfoRecord.primary_udi_di,
         }
       : null;
-  const hasSelectedPatchBaselinePair = Boolean(selectedXmlPairRecord);
-  const hasReviewedPatchBaselinePair = Boolean(
+  const hasSelectedPatchBaselinePost = Boolean(selectedXmlPairRecord);
+  const hasReviewedPatchBaselinePost = Boolean(
     selectedPairRequestArgs &&
       xmlPairPreview &&
       xmlPairPreview.product_family === selectedPairRequestArgs.product_family &&
@@ -1218,6 +1302,7 @@ export function App() {
   const selectedPatchScenario =
     PATCH_SCENARIOS.find((scenario) => scenario.id === selectedPatchScenarioId) ?? PATCH_SCENARIOS[0];
   const selectedPatchScenarioStatus = patchScenarioStatuses[selectedPatchScenario.id];
+  const selectedPatchScenarioImplemented = selectedPatchScenario.implemented;
   const selectedLatestPatchState = xmlPairPreview?.latest_successful_patch_state ?? null;
   const selectedPatchWarningCodes = selectedLatestPatchState
     ? selectedLatestPatchState.critical_warnings.map((item) => item.code).filter((value) => value)
@@ -1240,6 +1325,62 @@ export function App() {
   );
   const selectedCurrentTradeName =
     selectedLatestPatchState?.trade_name ?? selectedXmlPairRecord?.trade_name ?? null;
+  const selectedCurrentBaseQuantity =
+    selectedLatestPatchState?.base_quantity ??
+    (fieldValue(selectedXmlPairRecord, "device_record.base_quantity")
+      ? Number(fieldValue(selectedXmlPairRecord, "device_record.base_quantity"))
+      : null);
+  const selectedCurrentSterile =
+    selectedLatestPatchState?.sterile ?? parseBooleanString(fieldValue(selectedXmlPairRecord, "device_record.sterile"));
+  const selectedCurrentLatex =
+    selectedLatestPatchState?.contains_latex ??
+    parseBooleanString(fieldValue(selectedXmlPairRecord, "device_record.contains_latex"));
+  const selectedCurrentStatusCode =
+    selectedLatestPatchState?.status_code ?? fieldValue(selectedXmlPairRecord, "device_record.status");
+  useEffect(() => {
+    setPatchPreviewView("derived");
+    const latestSuccessfulVersion = Number(xmlPairPreview?.latest_successful_patch_state?.version ?? "1");
+    const nextVersion =
+      selectedPatchScenarioId === "equivalent_first_patch"
+        ? "2"
+        : Number.isInteger(latestSuccessfulVersion) && latestSuccessfulVersion >= 1
+          ? String(latestSuccessfulVersion + 1)
+          : "2";
+    setPatchVersionInput(nextVersion);
+    setXmlPatchPreview(null);
+    if (xmlPairPreview?.latest_successful_patch_state) {
+      setPatchTradeNameInput(xmlPairPreview.latest_successful_patch_state.trade_name ?? "");
+    } else if (selectedXmlPairRecord) {
+      setPatchTradeNameInput(selectedXmlPairRecord.trade_name ?? "");
+    } else {
+      setPatchTradeNameInput("");
+    }
+    setPatchWarningCodeInput("");
+    setPatchWarningCommentInput("");
+    setPatchBaseQuantityInput(
+      selectedCurrentBaseQuantity !== null && selectedCurrentBaseQuantity !== undefined
+        ? String(selectedCurrentBaseQuantity)
+        : "",
+    );
+    setPatchSterileInput(selectedCurrentSterile === null ? "" : selectedCurrentSterile ? "true" : "false");
+    setPatchLatexInput(selectedCurrentLatex === null ? "" : selectedCurrentLatex ? "true" : "false");
+    setPatchStatusCodeInput(selectedCurrentStatusCode ?? "");
+    setPatchStorageConditionInputs({
+      SHC006: "",
+      SHC007: "",
+    });
+  }, [
+    selectedXmlFamily,
+    selectedXmlVariant,
+    selectedPatchScenarioId,
+    selectedXmlRecordKey,
+    xmlPairPreview,
+    selectedXmlPairRecord,
+    selectedCurrentBaseQuantity,
+    selectedCurrentSterile,
+    selectedCurrentLatex,
+    selectedCurrentStatusCode,
+  ]);
   const matchesSelectedPatchPreview = Boolean(
     xmlPatchPreview &&
       selectedPairRequestArgs &&
@@ -1248,14 +1389,14 @@ export function App() {
       xmlPatchPreview.product_variant === selectedPairRequestArgs.product_variant &&
       xmlPatchPreview.scenario_id === selectedPatchScenario.id,
   );
-  const currentAcceptedPatchVersion =
-    matchesSelectedPatchPreview && xmlPatchPreview
-      ? Number(xmlPatchPreview.context.baseline_patch_version)
-      : 2;
-  const currentAcceptedPatchLabel =
-    matchesSelectedPatchPreview && xmlPatchPreview
-      ? xmlPatchPreview.context.base_state_label
-      : "Baseline first PATCH version 2";
+  const currentAcceptedPatchVersion = selectedLatestPatchState
+    ? Number(selectedLatestPatchState.version)
+    : 1;
+  const currentAcceptedPatchLabel = selectedLatestPatchState
+    ? `Latest successful PATCH version ${selectedLatestPatchState.version}`
+    : "Accepted POST version 1";
+  const requiredPatchVersion = selectedPatchScenario.id === "equivalent_first_patch" ? 2 : currentAcceptedPatchVersion + 1;
+  const currentPatchVersion = Number(patchVersionInput);
   const patchDraftComparisonRows: PatchScenarioComparisonRow[] = matchesSelectedPatchPreview && xmlPatchPreview
     ? xmlPatchPreview.field_deltas.map((delta) => ({
         label: delta.label,
@@ -1263,74 +1404,177 @@ export function App() {
         after: delta.after_value ?? "None",
       }))
     : selectedXmlPairRecord
-    ? selectedPatchScenario.id === "trade_name_edit"
+    ? selectedPatchScenario.id === "equivalent_first_patch"
       ? [
           {
             label: "PATCH Version",
-            before: "2",
-            after: patchVersionInput.trim() || "Pending input",
-          },
-          {
-            label: "Trade Name",
-            before: selectedCurrentTradeName ?? "None",
-            after: patchTradeNameInput.trim() || "Pending input",
+            before: "1",
+            after: "2",
           },
         ]
-      : selectedPatchScenario.id === "warning_add"
+      : !selectedPatchScenarioImplemented
         ? [
             {
               label: "PATCH Version",
-              before: "2",
+              before: String(currentAcceptedPatchVersion),
               after: patchVersionInput.trim() || "Pending input",
             },
             {
-              label: "Critical Warning",
-              before: selectedPatchWarningCodes.join(", ") || "None",
-              after: patchWarningCodeInput.trim()
-                ? patchWarningCommentInput.trim()
-                  ? `${patchWarningCodeInput.trim()} (${patchWarningCommentInput.trim()})`
-                  : patchWarningCodeInput.trim()
-                : "Pending input",
+              label: "Candidate Target",
+              before: "Current accepted device state",
+              after: selectedPatchScenario.target,
             },
           ]
-        : [
+      : selectedPatchScenario.id === "trade_name_edit"
+        ? [
             {
               label: "PATCH Version",
-              before: "2",
+              before: String(currentAcceptedPatchVersion),
               after: patchVersionInput.trim() || "Pending input",
             },
             {
-              label: "Storage Condition SHC006",
-              before: selectedPatchStorageConditionMap.get("SHC006") ?? "None",
-              after: patchStorageConditionInputs.SHC006?.trim() || "No change entered",
-            },
-            {
-              label: "Storage Condition SHC007",
-              before: selectedPatchStorageConditionMap.get("SHC007") ?? "None",
-              after: patchStorageConditionInputs.SHC007?.trim() || "No change entered",
+              label: "Trade Name",
+              before: selectedCurrentTradeName ?? "None",
+              after: patchTradeNameInput.trim() || "Pending input",
             },
           ]
+        : selectedPatchScenario.id === "base_quantity_edit"
+          ? [
+              {
+                label: "PATCH Version",
+                before: String(currentAcceptedPatchVersion),
+                after: patchVersionInput.trim() || "Pending input",
+              },
+              {
+                label: "Base Quantity",
+                before: selectedCurrentBaseQuantity !== null ? String(selectedCurrentBaseQuantity) : "None",
+                after: patchBaseQuantityInput.trim() || "Pending input",
+              },
+            ]
+        : selectedPatchScenario.id === "sterile_edit"
+          ? [
+              {
+                label: "PATCH Version",
+                before: String(currentAcceptedPatchVersion),
+                after: patchVersionInput.trim() || "Pending input",
+              },
+              {
+                label: "Sterile",
+                before: selectedCurrentSterile === null ? "None" : selectedCurrentSterile ? "true" : "false",
+                after: patchSterileInput.trim() || "Pending input",
+              },
+            ]
+        : selectedPatchScenario.id === "latex_edit"
+          ? [
+              {
+                label: "PATCH Version",
+                before: String(currentAcceptedPatchVersion),
+                after: patchVersionInput.trim() || "Pending input",
+              },
+              {
+                label: "Latex",
+                before: selectedCurrentLatex === null ? "None" : selectedCurrentLatex ? "true" : "false",
+                after: patchLatexInput.trim() || "Pending input",
+              },
+            ]
+        : selectedPatchScenario.id === "status_code_edit"
+          ? [
+              {
+                label: "PATCH Version",
+                before: String(currentAcceptedPatchVersion),
+                after: patchVersionInput.trim() || "Pending input",
+              },
+              {
+                label: "Status Code",
+                before: selectedCurrentStatusCode ?? "None",
+                after: patchStatusCodeInput.trim() || "Pending input",
+              },
+            ]
+        : selectedPatchScenario.id === "warning_add"
+          ? [
+              {
+                label: "PATCH Version",
+                before: String(currentAcceptedPatchVersion),
+                after: patchVersionInput.trim() || "Pending input",
+              },
+              {
+                label: "Critical Warning",
+                before: selectedPatchWarningCodes.join(", ") || "None",
+                after: patchWarningCodeInput.trim()
+                  ? patchWarningCommentInput.trim()
+                    ? `${patchWarningCodeInput.trim()} (${patchWarningCommentInput.trim()})`
+                    : patchWarningCodeInput.trim()
+                  : "Pending input",
+              },
+            ]
+          : [
+              {
+                label: "PATCH Version",
+                before: String(currentAcceptedPatchVersion),
+                after: patchVersionInput.trim() || "Pending input",
+              },
+              {
+                label: "Storage Condition SHC006",
+                before: selectedPatchStorageConditionMap.get("SHC006") ?? "None",
+                after: patchStorageConditionInputs.SHC006?.trim() || "No change entered",
+              },
+              {
+                label: "Storage Condition SHC007",
+                before: selectedPatchStorageConditionMap.get("SHC007") ?? "None",
+                after: patchStorageConditionInputs.SHC007?.trim() || "No change entered",
+              },
+            ]
     : [];
   const selectedWarningRequiresComment = patchWarningCodeInput.trim().toUpperCase() === "CW999";
+  const isPatchVersionValid =
+    matchesSelectedPatchPreview && xmlPatchPreview
+      ? Number(xmlPatchPreview.context.proposed_patch_version) >= requiredPatchVersion
+      : Number.isInteger(currentPatchVersion) &&
+        currentPatchVersion === requiredPatchVersion;
   const isPatchScenarioReady =
-    hasReviewedPatchBaselinePair &&
-    Number.isInteger(Number(patchVersionInput)) &&
-    Number(patchVersionInput) > currentAcceptedPatchVersion &&
-    (selectedPatchScenario.id === "trade_name_edit"
+    hasReviewedPatchBaselinePost &&
+    selectedPatchScenarioImplemented &&
+    isPatchVersionValid &&
+    (selectedPatchScenario.id === "equivalent_first_patch"
+      ? true
+      : selectedPatchScenario.id === "trade_name_edit"
       ? Boolean(patchTradeNameInput.trim())
+      : selectedPatchScenario.id === "base_quantity_edit"
+        ? Boolean(patchBaseQuantityInput.trim()) && Number.isInteger(Number(patchBaseQuantityInput)) && Number(patchBaseQuantityInput) > 0
+      : selectedPatchScenario.id === "sterile_edit"
+        ? patchSterileInput === "true" || patchSterileInput === "false"
+      : selectedPatchScenario.id === "latex_edit"
+        ? patchLatexInput === "true" || patchLatexInput === "false"
+      : selectedPatchScenario.id === "status_code_edit"
+        ? Boolean(patchStatusCodeInput.trim())
       : selectedPatchScenario.id === "warning_add"
         ? Boolean(patchWarningCodeInput.trim()) && (!selectedWarningRequiresComment || Boolean(patchWarningCommentInput.trim()))
         : Object.values(patchStorageConditionInputs).some((value) => value.trim()));
   const patchScenarioReadinessMessage = !selectedXmlPairRecord?.catalogue_number
-    ? "Generate the baseline Post + Patch pair for an XML-ready POST record first."
-    : !hasReviewedPatchBaselinePair
-      ? "Generate and review Post + Patch for this exact selected record before drafting a scenario PATCH."
+    ? "Generate the baseline POST for an XML-ready POST record first."
+    : !hasReviewedPatchBaselinePost
+      ? "Generate and review the POST for this exact selected record before drafting a PATCH."
     : !patchVersionInput.trim()
-      ? "Enter the next PATCH version integer."
-      : !Number.isInteger(Number(patchVersionInput)) || Number(patchVersionInput) <= currentAcceptedPatchVersion
-        ? `PATCH version must be an integer greater than ${currentAcceptedPatchVersion}.`
+      ? "Enter the required PATCH version integer."
+      : !selectedPatchScenarioImplemented
+        ? "This candidate scenario has been added to the design and dropdown, but XML generation is not implemented yet."
+      : !isPatchVersionValid
+        ? selectedPatchScenario.id === "equivalent_first_patch"
+          ? "Equivalent First Patch must use PATCH version 2."
+          : `PATCH version must be exactly ${requiredPatchVersion} based on the latest accepted state.`
         : selectedPatchScenario.id === "trade_name_edit" && !patchTradeNameInput.trim()
           ? "Enter the replacement trade name to define the after condition."
+          : selectedPatchScenario.id === "base_quantity_edit" &&
+              (!patchBaseQuantityInput.trim() || !Number.isInteger(Number(patchBaseQuantityInput)) || Number(patchBaseQuantityInput) <= 0)
+            ? "Enter a positive integer base quantity."
+          : selectedPatchScenario.id === "sterile_edit" && !(patchSterileInput === "true" || patchSterileInput === "false")
+            ? "Choose true or false for the sterile flag."
+          : selectedPatchScenario.id === "latex_edit" && !(patchLatexInput === "true" || patchLatexInput === "false")
+            ? "Choose true or false for the latex flag."
+          : selectedPatchScenario.id === "status_code_edit" && !patchStatusCodeInput.trim()
+            ? "Choose the replacement status code."
+          : selectedPatchScenario.id === "equivalent_first_patch"
+            ? "Ready to generate the explicit version 2 PATCH that mirrors the accepted POST."
           : selectedPatchScenario.id === "warning_add" && !patchWarningCodeInput.trim()
             ? "Enter the replacement warning code to define the after condition."
             : selectedPatchScenario.id === "warning_add" && selectedWarningRequiresComment && !patchWarningCommentInput.trim()
@@ -1346,7 +1590,7 @@ export function App() {
     xmlMarketInfoPreview?.registered_device_anchor ??
     (selectedMarketInfoRequestArgs ? buildSelectionAnchor(selectedMarketInfoRequestArgs) : null);
   const selectedTestingAnchor =
-    xmlMode === "pair"
+    xmlMode === "post"
       ? selectedPairAnchor
       : xmlMode === "marketInfo"
         ? selectedMarketInfoAnchor
@@ -1354,26 +1598,23 @@ export function App() {
   const isPairWorkspaceReady = Boolean(selectedPairRequestArgs);
   const acceptedXmlModes = [
     {
-      id: "pair",
-      label: "Post + Patch",
+      id: "post",
+      label: "POST",
       status: "EUDAMED Accepted" as EudamedStatus,
-      summary: "Accepted baseline pair based on EUDAMED-tested POST plus equivalent first PATCH comparison.",
+      summary: "Accepted baseline POST generation for a selected XML-ready registration record.",
     },
   ];
   const xmlPreviewLines =
-    xmlMode === "pair"
+    xmlMode === "post"
       ? xmlPairPreview
-        ? pairPreviewView === "post"
-          ? xmlPairPreview.post_xml
-          : xmlPairPreview.patch_xml
+        ? xmlPairPreview.post_xml
         : selectedXmlPairRecord
           ? [
-              "<!-- Generate paired XML to load the accepted-shape POST and equivalent first PATCH previews -->",
+              "<!-- Generate POST XML to load the accepted registration preview -->",
               `<catalogue-number>${selectedXmlPairRecord.catalogue_number}</catalogue-number>`,
               `<udi-di>${selectedXmlPairRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
-              `<preview-view>${pairPreviewView.toUpperCase()}</preview-view>`,
             ].join("\n")
-          : "<!-- No POST-classified XML-ready record is currently available for paired POST/PATCH generation -->"
+          : "<!-- No POST-classified XML-ready record is currently available for POST generation -->"
       : xmlMode === "single"
       ? selectedXmlRecord
         ? xmlPreview?.xml ??
@@ -1395,11 +1636,11 @@ export function App() {
         : "<!-- No XML-ready record is currently available for MARKET_INFO.PUT generation -->"
       : xmlMode === "patch"
       ? (xmlPatchPreview
-          ? patchPreviewView === "baseline"
-            ? xmlPatchPreview.baseline_patch_xml
+          ? patchPreviewView === "base"
+            ? xmlPatchPreview.base_xml
             : xmlPatchPreview.derived_patch_xml
           : [
-              "<!-- Generate a scenario-derived PATCH preview built on the existing Post + Patch baseline -->",
+              "<!-- Generate a scenario-derived PATCH preview built on the accepted POST or latest accepted PATCH -->",
               `<scenario-id>${selectedPatchScenario.id}</scenario-id>`,
               `<scenario-status>${selectedPatchScenarioStatus}</scenario-status>`,
               `<target>${selectedPatchScenario.target}</target>`,
@@ -1413,21 +1654,18 @@ export function App() {
           `<chunk-sequence>${selectedXmlChunkSequence}</chunk-sequence>`,
         ].join("\n");
   const selectedBatchValidation =
-    xmlMode === "pair"
-      ? pairPreviewView === "post"
-        ? xmlPairPreview?.post_validation ?? null
-        : xmlPairPreview?.patch_validation ?? null
+    xmlMode === "post"
+      ? xmlPairPreview?.post_validation ?? null
       : xmlMode === "single"
         ? xmlPreview?.validation ?? null
         : xmlMode === "marketInfo"
           ? xmlMarketInfoPreview?.validation ?? null
         : xmlMode === "patch"
-          ? patchPreviewView === "baseline"
-            ? xmlPatchPreview?.baseline_patch_validation ?? null
+          ? patchPreviewView === "base"
+            ? xmlPatchPreview?.base_validation ?? null
             : xmlPatchPreview?.derived_patch_validation ?? null
         : xmlBatchPreview?.selected_chunk_validation ?? null;
   const pairPostValidation = xmlPairPreview?.post_validation ?? null;
-  const pairPatchValidation = xmlPairPreview?.patch_validation ?? null;
   const validationStatusLabel = selectedBatchValidation
     ? selectedBatchValidation.valid
       ? "Schema valid"
@@ -1437,8 +1675,8 @@ export function App() {
     ? formatSchemaPathForInlineNote(selectedBatchValidation.schema_path)
     : null;
   const xmlModeLabel =
-    xmlMode === "pair"
-      ? "Post + Patch"
+    xmlMode === "post"
+      ? "POST"
       : xmlMode === "single"
         ? "Single XML"
         : xmlMode === "marketInfo"
@@ -1447,18 +1685,18 @@ export function App() {
             ? "Patch XML"
           : "Batch XML";
   const xmlModeDescription =
-    xmlMode === "pair"
-      ? "Generate a create/update comparison for one XML-ready device record."
+    xmlMode === "post"
+      ? "Generate one accepted registration POST for a selected XML-ready device record."
       : xmlMode === "single"
         ? "Generate one wrapped Push message for a selected XML-ready device record."
         : xmlMode === "marketInfo"
         ? "Generate one standalone MARKET_INFO.PUT message for a selected XML-ready record."
           : xmlMode === "patch"
-            ? "Generate one scenario-derived PATCH draft at a time from the accepted Post + Patch baseline."
+            ? "Generate one scenario-derived PATCH draft at a time from the accepted POST or the latest accepted PATCH."
           : "Generate a chunked batch package for every XML-ready row in the selected variant.";
   const xmlWorkspaceTitle =
-    xmlMode === "pair"
-      ? "Comparison Workspace"
+    xmlMode === "post"
+      ? "POST Workspace"
       : xmlMode === "single"
         ? "Single Record Workspace"
         : xmlMode === "marketInfo"
@@ -1467,31 +1705,27 @@ export function App() {
             ? "Patch Scenario Workspace"
           : "Batch Workspace";
   const activePreviewLabel =
-    xmlMode === "pair"
-      ? pairPreviewView === "post"
-        ? "Post"
-        : "Patch"
+    xmlMode === "post"
+      ? "Post"
       : xmlMode === "single"
         ? "Single XML"
         : xmlMode === "marketInfo"
         ? "Market Info"
           : xmlMode === "patch"
-            ? patchPreviewView === "baseline"
-              ? "Baseline Patch"
+            ? patchPreviewView === "base"
+              ? "Base Message"
               : "Derived Patch"
           : `Batch Chunk ${selectedXmlChunkSequence}`;
   const activePreviewFileName =
-    xmlMode === "pair"
-      ? pairPreviewView === "post"
-        ? xmlPairPreview?.post_file_name ?? null
-        : xmlPairPreview?.patch_file_name ?? null
+    xmlMode === "post"
+      ? xmlPairPreview?.post_file_name ?? null
       : xmlMode === "single"
         ? xmlPreview?.file_name ?? null
         : xmlMode === "marketInfo"
         ? xmlMarketInfoPreview?.file_name ?? null
           : xmlMode === "patch"
-            ? patchPreviewView === "baseline"
-              ? xmlPatchPreview?.baseline_patch_file_name ?? null
+            ? patchPreviewView === "base"
+              ? xmlPatchPreview?.base_file_name ?? null
               : xmlPatchPreview?.derived_patch_file_name ?? null
           : xmlBatchPreview?.selected_chunk_file_name ?? null;
   const profileColumns = sheetProfile?.columns ?? [];
@@ -1660,6 +1894,9 @@ export function App() {
   }
 
   function currentPatchScenarioInputs(): Record<string, unknown> {
+    if (selectedPatchScenario.id === "equivalent_first_patch" || !selectedPatchScenario.implemented) {
+      return {};
+    }
     if (selectedPatchScenario.id === "trade_name_edit") {
       return {
         new_trade_name: patchTradeNameInput,
@@ -1669,6 +1906,26 @@ export function App() {
       return {
         new_warning_code: patchWarningCodeInput,
         new_warning_comment: patchWarningCommentInput || null,
+      };
+    }
+    if (selectedPatchScenario.id === "base_quantity_edit") {
+      return {
+        new_base_quantity: Number(patchBaseQuantityInput),
+      };
+    }
+    if (selectedPatchScenario.id === "sterile_edit") {
+      return {
+        new_sterile: patchSterileInput,
+      };
+    }
+    if (selectedPatchScenario.id === "latex_edit") {
+      return {
+        new_contains_latex: patchLatexInput,
+      };
+    }
+    if (selectedPatchScenario.id === "status_code_edit") {
+      return {
+        new_status_code: patchStatusCodeInput,
       };
     }
     return {
@@ -1689,11 +1946,11 @@ export function App() {
     setError(null);
     setXmlActionMessage(null);
     try {
-      if (xmlMode === "pair") {
+      if (xmlMode === "post") {
         if (!selectedPairRequestArgs) {
           return;
         }
-        const preview = await api.previewXmlPostPatchPair(
+        const preview = await api.previewXmlPostRegistration(
           selectedPairRequestArgs.product_family,
           selectedPairRequestArgs.product_variant,
           selectedPairRequestArgs.catalogue_number,
@@ -1755,50 +2012,14 @@ export function App() {
     setError(null);
     setXmlActionMessage("Preparing download...");
     try {
-      if (xmlMode === "pair" && selectedPairRequestArgs) {
-        clearPreparedPairDownloads();
-        const [postDownload, patchDownload] = await Promise.all([
-          api.downloadXmlPostPackage(
-            selectedPairRequestArgs.product_family,
-            selectedPairRequestArgs.product_variant,
-            selectedPairRequestArgs.catalogue_number,
-          ),
-          api.downloadXmlPatchPackage(
-            selectedPairRequestArgs.product_family,
-            selectedPairRequestArgs.product_variant,
-            selectedPairRequestArgs.catalogue_number,
-          ),
-        ]);
-
-        const resolvedPostFileName =
-          postDownload.fileName ??
-          (selectedXmlPairRecord
-            ? `${selectedXmlPairRecord.product_family}-${selectedXmlPairRecord.product_variant}-${selectedXmlPairRecord.catalogue_number}-post.zip`
-            : "post-package.zip");
-        const resolvedPatchFileName =
-          patchDownload.fileName ??
-          (selectedXmlPairRecord
-            ? `${selectedXmlPairRecord.product_family}-${selectedXmlPairRecord.product_variant}-${selectedXmlPairRecord.catalogue_number}-patch.zip`
-            : "patch-package.zip");
-
-        if (postDownload.blob && patchDownload.blob) {
-          setPreparedPairDownloads({
-            postFileName: resolvedPostFileName,
-            postUrl: URL.createObjectURL(postDownload.blob),
-            patchFileName: resolvedPatchFileName,
-            patchUrl: URL.createObjectURL(patchDownload.blob),
-          });
-          setXmlActionMessage(
-            `POST and PATCH ZIPs are ready below. Use the explicit download buttons to save each file.`,
-          );
-        } else {
-          setXmlActionMessage("POST and PATCH ZIPs could not be prepared.");
-        }
-        return;
-      }
-
       const downloadResult =
-        xmlMode === "single" && selectedXmlRecord?.catalogue_number
+        xmlMode === "post" && selectedPairRequestArgs
+          ? await api.downloadXmlPostPackage(
+              selectedPairRequestArgs.product_family,
+              selectedPairRequestArgs.product_variant,
+              selectedPairRequestArgs.catalogue_number,
+            )
+        : xmlMode === "single" && selectedXmlRecord?.catalogue_number
           ? await api.downloadXmlRecord(
               selectedXmlFamilySummary.product_family,
               selectedXmlVariantSummary.product_variant,
@@ -1964,7 +2185,7 @@ export function App() {
               <p className="eyebrow">EUDAMED Testing</p>
               <h1>Review Candidate And Accepted EUDAMED XML</h1>
               <p className="hero-copy">
-                Produce previewable wrapped `Push` messages, compare accepted baseline pairs with candidate
+                Produce previewable wrapped `Push` messages, review accepted baseline POST XML with candidate
                 PATCH scenarios, validate them against the local schema set, and prepare controlled external test files.
               </p>
             </>
@@ -2039,7 +2260,7 @@ export function App() {
               <span className="status-label">Accepted scope</span>
               <span className="status-pill ok">1 accepted XML pattern</span>
               <p className="status-detail">
-                Only `Post + Patch` is currently marked `EUDAMED Accepted` and available for generation here.
+                Only `POST` is currently marked `EUDAMED Accepted` and available for generation here.
               </p>
             </>
           ) : null}
@@ -3393,11 +3614,11 @@ export function App() {
             <div className="xml-header-band">
               <div className="xml-mode-toggle xml-top-tabs">
                 <button
-                  className={xmlMode === "pair" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                  className={xmlMode === "post" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
                   type="button"
-                  onClick={() => setXmlMode("pair")}
+                  onClick={() => setXmlMode("post")}
                 >
-                  Post + Patch
+                  POST
                 </button>
                 <button
                   className={xmlMode === "patch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
@@ -3443,15 +3664,15 @@ export function App() {
                 <div className="xml-header-context-block">
                   <span className="summary-label">Current Scope</span>
                   <strong>
-                    {xmlMode === "pair" || xmlMode === "marketInfo" || xmlMode === "patch"
-                      ? xmlMode === "patch" && !hasReviewedPatchBaselinePair
-                        ? "No Post + Patch pair"
+                    {xmlMode === "post" || xmlMode === "marketInfo" || xmlMode === "patch"
+                      ? xmlMode === "patch" && !hasReviewedPatchBaselinePost
+                        ? "No reviewed POST"
                         : selectedTestingAnchor?.product_family ?? "No testing anchor"
                       : selectedXmlFamilySummary?.product_family ?? "No family selected"}
                   </strong>
                   <p>
-                    {xmlMode === "pair" || xmlMode === "marketInfo" || xmlMode === "patch"
-                      ? xmlMode === "patch" && !hasReviewedPatchBaselinePair
+                    {xmlMode === "post" || xmlMode === "marketInfo" || xmlMode === "patch"
+                      ? xmlMode === "patch" && !hasReviewedPatchBaselinePost
                         ? "Select a variant with an XML-ready POST record"
                         : selectedTestingAnchor?.product_variant ?? "No anchor variant"
                       : selectedXmlVariantSummary?.product_variant ?? "No variant selected"}
@@ -3459,7 +3680,7 @@ export function App() {
                 </div>
               </div>
             </div>
-            {xmlMode === "pair" || xmlMode === "marketInfo" || xmlMode === "patch" ? (
+            {xmlMode === "post" || xmlMode === "marketInfo" || xmlMode === "patch" ? (
               <div className="xml-anchor-panel">
                 <div className="xml-anchor-header">
                   <div>
@@ -3493,7 +3714,7 @@ export function App() {
                   <p className="panel-copy">The accepted baseline device anchor has not loaded yet.</p>
                 )}
                 <p className="panel-copy">
-                  `Post + Patch`, `Market Info`, and all `Patch XML` scenarios are tied to this same registered device.
+                  `POST`, `Market Info`, and all `Patch XML` scenarios are tied to this same registered device.
                 </p>
               </div>
             ) : null}
@@ -3503,8 +3724,8 @@ export function App() {
                   <div>
                     <span className="section-kicker">Preview</span>
                     <h2>
-                      {xmlMode === "pair"
-                        ? "Post + Patch Preview"
+                      {xmlMode === "post"
+                        ? "POST Preview"
                         : xmlMode === "single"
                           ? "Single Record XML Preview"
                           : xmlMode === "marketInfo"
@@ -3514,31 +3735,14 @@ export function App() {
                               : "Batch XML Preview"}
                     </h2>
                   </div>
-                  {xmlMode === "pair" ? (
+                  {xmlMode === "patch" ? (
                     <div className="xml-mode-toggle xml-sub-tabs xml-compare-toggle">
                       <button
-                        className={pairPreviewView === "post" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
+                        className={patchPreviewView === "base" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
                         type="button"
-                        onClick={() => setPairPreviewView("post")}
+                        onClick={() => setPatchPreviewView("base")}
                       >
-                        Post
-                      </button>
-                      <button
-                        className={pairPreviewView === "patch" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
-                        type="button"
-                        onClick={() => setPairPreviewView("patch")}
-                      >
-                        Patch
-                      </button>
-                    </div>
-                  ) : xmlMode === "patch" ? (
-                    <div className="xml-mode-toggle xml-sub-tabs xml-compare-toggle">
-                      <button
-                        className={patchPreviewView === "baseline" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
-                        type="button"
-                        onClick={() => setPatchPreviewView("baseline")}
-                      >
-                        Baseline Patch
+                        Base Message
                       </button>
                       <button
                         className={patchPreviewView === "derived" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
@@ -3576,10 +3780,10 @@ export function App() {
                 <div className="workflow-note">
                   <strong>Preview status</strong>
                   <span>
-                    {xmlMode === "pair"
+                    {xmlMode === "post"
                       ? xmlPairPreview
-                        ? `Pair preview generated for ${xmlPairPreview.product_family} / ${xmlPairPreview.product_variant} / ${xmlPairPreview.catalogue_number}. Currently showing ${pairPreviewView.toUpperCase()}.`
-                        : "No paired XML preview generated yet for the registered testing anchor."
+                        ? `POST preview generated for ${xmlPairPreview.product_family} / ${xmlPairPreview.product_variant} / ${xmlPairPreview.catalogue_number}.`
+                        : "No POST preview generated yet for the registered testing anchor."
                       : xmlMode === "single"
                         ? xmlPreview
                           ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
@@ -3590,12 +3794,12 @@ export function App() {
                             : "No MARKET_INFO.PUT preview generated yet for the registered testing anchor."
                           : xmlMode === "patch"
                             ? xmlPatchPreview
-                              ? `Scenario-derived PATCH preview loaded for ${xmlPatchPreview.product_family} / ${xmlPatchPreview.product_variant} / ${xmlPatchPreview.catalogue_number}. Currently showing ${patchPreviewView === "baseline" ? "BASELINE" : "DERIVED"} PATCH.`
-                              : hasReviewedPatchBaselinePair
-                                ? "No generated PATCH scenario preview loaded yet for the reviewed baseline pair."
-                                : hasSelectedPatchBaselinePair
-                                  ? "Review the baseline Post + Patch pair first. Scenario PATCH generation stays blocked until that pair has been generated for this exact record."
-                                : "No baseline Post + Patch pair is currently available for the selected family and variant."
+                              ? `Scenario-derived PATCH preview loaded for ${xmlPatchPreview.product_family} / ${xmlPatchPreview.product_variant} / ${xmlPatchPreview.catalogue_number}. Currently showing ${patchPreviewView === "base" ? "BASE" : "DERIVED"} XML.`
+                              : hasReviewedPatchBaselinePost
+                                ? "No generated PATCH scenario preview loaded yet for the reviewed POST baseline."
+                                : hasSelectedPatchBaselinePost
+                                  ? "Review the baseline POST first. Scenario PATCH generation stays blocked until that POST has been generated for this exact record."
+                                  : "No baseline POST is currently available for the selected family and variant."
                           : xmlBatchPreview
                             ? `Batch preview generated for ${xmlBatchPreview.product_family} / ${xmlBatchPreview.product_variant}, chunk ${xmlBatchPreview.selected_chunk_sequence}.`
                             : "No batch XML preview generated yet for the selected variant."}
@@ -3610,7 +3814,7 @@ export function App() {
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      (xmlMode === "pair" && !isPairWorkspaceReady) ||
+                      (xmlMode === "post" && !isPairWorkspaceReady) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && !isPatchScenarioReady) ||
@@ -3620,8 +3824,8 @@ export function App() {
                   >
                     {isGeneratingXml
                       ? "Generating..."
-                      : xmlMode === "pair"
-                        ? "Generate Post + Patch"
+                      : xmlMode === "post"
+                        ? "Generate POST"
                         : xmlMode === "single"
                         ? "Generate XML"
                         : xmlMode === "marketInfo"
@@ -3635,7 +3839,7 @@ export function App() {
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      (xmlMode === "pair" && !isPairWorkspaceReady) ||
+                      (xmlMode === "post" && !isPairWorkspaceReady) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && !isPatchScenarioReady) ||
@@ -3650,16 +3854,16 @@ export function App() {
                     type="button"
                     onClick={() => void downloadXmlRecord()}
                     disabled={
-                      (xmlMode === "pair" && !isPairWorkspaceReady) ||
+                      (xmlMode === "post" && !isPairWorkspaceReady) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
-                      (xmlMode === "patch" && !hasReviewedPatchBaselinePair) ||
+                      (xmlMode === "patch" && !hasReviewedPatchBaselinePost) ||
                       ((xmlMode === "single" || xmlMode === "batch") && !selectedXmlVariantSummary) ||
                       isGeneratingXml
                     }
                   >
-                    {xmlMode === "pair"
-                      ? "Download POST + PATCH ZIPs"
+                    {xmlMode === "post"
+                      ? "Download POST ZIP"
                       : xmlMode === "single"
                         ? "Download XML"
                       : xmlMode === "marketInfo"
@@ -3670,36 +3874,7 @@ export function App() {
                   </button>
                   {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
                 </div>
-                {xmlMode === "pair" && preparedPairDownloads ? (
-                  <div className="draft-list xml-record-stack">
-                    <div className="draft-card xml-record-card">
-                      <div className="draft-card-head">
-                        <strong>Prepared Pair Downloads</strong>
-                        <span className="status-pill ok compact">Ready</span>
-                      </div>
-                      <p className="panel-copy">
-                        Save each ZIP explicitly. This avoids browser blocking of multiple automatic downloads.
-                      </p>
-                      <div className="draft-actions-bar xml-actions-bar">
-                        <a
-                          className="ghost-button"
-                          href={preparedPairDownloads.postUrl}
-                          download={preparedPairDownloads.postFileName}
-                        >
-                          Download POST ZIP
-                        </a>
-                        <a
-                          className="ghost-button"
-                          href={preparedPairDownloads.patchUrl}
-                          download={preparedPairDownloads.patchFileName}
-                        >
-                          Download PATCH ZIP
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-                {xmlMode === "pair" ? (
+                {xmlMode === "post" ? (
                   selectedTestingAnchor ? (
                     <div className="draft-list xml-record-stack">
                       <div className="draft-card xml-record-card">
@@ -3711,21 +3886,18 @@ export function App() {
                           {selectedTestingAnchor.product_family} / {selectedTestingAnchor.product_variant}
                         </p>
                         <p className="panel-copy">
-                          UDI-DI {selectedTestingAnchor.primary_udi_di} · Accepted baseline {selectedTestingAnchor.post_file_name}
+                          UDI-DI {selectedTestingAnchor.primary_udi_di} · Accepted registration {selectedTestingAnchor.post_file_name}
                         </p>
-                        <p className="panel-copy">Compare the accepted baseline create message with the equivalent first update message for the same registered device.</p>
+                        <p className="panel-copy">Review the accepted registration POST for the device that will anchor later PATCH and MARKET_INFO testing.</p>
                         <div className="family-scope-pill-row xml-status-row">
                           <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
                             Post {pairPostValidation ? (pairPostValidation.valid ? "valid" : "invalid") : "awaiting preview"}
-                          </span>
-                          <span className={pairPatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                            Patch {pairPatchValidation ? (pairPatchValidation.valid ? "valid" : "invalid") : "awaiting preview"}
                           </span>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <p className="panel-copy">No registered testing anchor is currently available for paired POST/PATCH generation.</p>
+                    <p className="panel-copy">No registered testing anchor is currently available for POST generation.</p>
                   )
                 ) : xmlMode === "single" ? (
                   selectedXmlRecord ? (
@@ -3769,7 +3941,7 @@ export function App() {
                         <p className="panel-copy">
                           UDI-DI {selectedTestingAnchor.primary_udi_di} · Registered device anchor
                         </p>
-                        <p className="panel-copy">Review a standalone market information update message against the same registered device used for `Post + Patch` and the candidate patch scenarios.</p>
+                        <p className="panel-copy">Review a standalone market information update message against the same registered device used for `POST` and the candidate patch scenarios.</p>
                       </div>
                     </div>
                   ) : (
@@ -3786,24 +3958,24 @@ export function App() {
                           </span>
                         </div>
                         <p className="draft-meta">
-                          Parent POST {selectedXmlPairRecord.catalogue_number} · Current accepted base {matchesSelectedPatchPreview && xmlPatchPreview ? `version ${xmlPatchPreview.context.baseline_patch_version}` : "version pending preview"}
+                          Parent POST {selectedXmlPairRecord.catalogue_number} · Current accepted base {currentAcceptedPatchLabel}
                         </p>
                         <div className="family-scope-pill-row xml-status-row">
-                          <span className={hasReviewedPatchBaselinePair ? "status-pill ok compact" : "status-pill warn compact"}>
-                            {hasReviewedPatchBaselinePair ? "Baseline pair reviewed" : "Baseline pair required"}
+                          <span className={hasReviewedPatchBaselinePost ? "status-pill ok compact" : "status-pill warn compact"}>
+                            {hasReviewedPatchBaselinePost ? "Baseline POST reviewed" : "Baseline POST required"}
                           </span>
                           <span className="status-pill ok compact">Parent POST</span>
                           <span className="status-pill ok compact">{selectedXmlPairRecord.catalogue_number}</span>
                         </div>
                         <p className="panel-copy">{selectedPatchScenario.summary}</p>
-                        {hasReviewedPatchBaselinePair ? (
+                        {hasReviewedPatchBaselinePost ? (
                           <>
                             <div className="patch-compare-grid">
                               <div className="patch-compare-card">
                                 <span className="summary-label">Before</span>
                                 <strong>{currentAcceptedPatchLabel}</strong>
                                 <p>
-                                  Parent POST {selectedXmlPairRecord.catalogue_number} · Version {matchesSelectedPatchPreview && xmlPatchPreview ? xmlPatchPreview.context.baseline_patch_version : "Pending"}
+                                  Parent POST {selectedXmlPairRecord.catalogue_number} · Version {String(currentAcceptedPatchVersion)}
                                 </p>
                                 <ul className="patch-compare-list">
                                   {patchDraftComparisonRows.map((row) => (
@@ -3843,7 +4015,7 @@ export function App() {
                                 >
                                   {PATCH_SCENARIOS.map((scenario) => (
                                     <option key={scenario.id} value={scenario.id}>
-                                      {scenario.label}
+                                      {scenario.implemented ? scenario.label : `${scenario.label} (Design only)`}
                                     </option>
                                   ))}
                                 </select>
@@ -3856,7 +4028,7 @@ export function App() {
                                   id="patch-version-input"
                                   className="rule-select patch-select"
                                   type="number"
-                                  min={3}
+                                  min={2}
                                   step={1}
                                   value={patchVersionInput}
                                   onChange={(event) => setPatchVersionInput(event.target.value)}
@@ -3864,9 +4036,27 @@ export function App() {
                               </div>
                               <div className="patch-field patch-field-full">
                                 <p className="panel-copy patch-field-note">
-                                  Baseline `POST` is version `1`. Scenario PATCH generation now resolves the current accepted PATCH base from the YAML test tracker when available. Enter a version greater than the latest accepted version for this device in the EUDAMED playground.
+                                  Baseline `POST` is version `1`. Version `2` PATCHes are derived directly from the POST. Version `3+` PATCHes are derived from the latest successful PATCH tracked in YAML for this device.
                                 </p>
                               </div>
+                              {!selectedPatchScenarioImplemented ? (
+                                <div className="patch-field patch-field-full">
+                                  <div className="workflow-note patch-readiness-note">
+                                    <strong>Design placeholder</strong>
+                                    <span>
+                                      This candidate scenario is now listed in the dropdown for design review, but XML generation is not implemented yet.
+                                      {selectedPatchScenario.optionsSummary ? ` Allowed options: ${selectedPatchScenario.optionsSummary}` : ""}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : null}
+                              {selectedPatchScenario.id === "equivalent_first_patch" ? (
+                                <div className="patch-field patch-field-full">
+                                  <p className="panel-copy">
+                                    This option creates the explicit version `2` PATCH that mirrors the accepted POST and makes no business-field change.
+                                  </p>
+                                </div>
+                              ) : null}
                               {selectedPatchScenario.id === "trade_name_edit" ? (
                                 <div className="patch-field patch-field-full">
                                   <label className="field-label" htmlFor="patch-trade-name-input">
@@ -3879,6 +4069,86 @@ export function App() {
                                     value={patchTradeNameInput}
                                     onChange={(event) => setPatchTradeNameInput(event.target.value)}
                                   />
+                                </div>
+                              ) : null}
+                              {selectedPatchScenario.id === "base_quantity_edit" ? (
+                                <div className="patch-field patch-field-full">
+                                  <label className="field-label" htmlFor="patch-base-quantity-input">
+                                    New base quantity
+                                  </label>
+                                  <input
+                                    id="patch-base-quantity-input"
+                                    className="rule-select patch-select"
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    value={patchBaseQuantityInput}
+                                    onChange={(event) => setPatchBaseQuantityInput(event.target.value)}
+                                  />
+                                  <p className="field-source-note">
+                                    Current value: {selectedCurrentBaseQuantity !== null ? selectedCurrentBaseQuantity : "None"}
+                                  </p>
+                                </div>
+                              ) : null}
+                              {selectedPatchScenario.id === "sterile_edit" ? (
+                                <div className="patch-field patch-field-full">
+                                  <label className="field-label" htmlFor="patch-sterile-input">
+                                    Sterile
+                                  </label>
+                                  <select
+                                    id="patch-sterile-input"
+                                    className="rule-select patch-select"
+                                    value={patchSterileInput}
+                                    onChange={(event) => setPatchSterileInput(event.target.value)}
+                                  >
+                                    <option value="">Select value</option>
+                                    <option value="true">true</option>
+                                    <option value="false">false</option>
+                                  </select>
+                                  <p className="field-source-note">
+                                    Current value: {selectedCurrentSterile === null ? "None" : selectedCurrentSterile ? "true" : "false"}
+                                  </p>
+                                </div>
+                              ) : null}
+                              {selectedPatchScenario.id === "latex_edit" ? (
+                                <div className="patch-field patch-field-full">
+                                  <label className="field-label" htmlFor="patch-latex-input">
+                                    Latex
+                                  </label>
+                                  <select
+                                    id="patch-latex-input"
+                                    className="rule-select patch-select"
+                                    value={patchLatexInput}
+                                    onChange={(event) => setPatchLatexInput(event.target.value)}
+                                  >
+                                    <option value="">Select value</option>
+                                    <option value="true">true</option>
+                                    <option value="false">false</option>
+                                  </select>
+                                  <p className="field-source-note">
+                                    Current value: {selectedCurrentLatex === null ? "None" : selectedCurrentLatex ? "true" : "false"}
+                                  </p>
+                                </div>
+                              ) : null}
+                              {selectedPatchScenario.id === "status_code_edit" ? (
+                                <div className="patch-field patch-field-full">
+                                  <label className="field-label" htmlFor="patch-status-code-input">
+                                    Status code
+                                  </label>
+                                  <select
+                                    id="patch-status-code-input"
+                                    className="rule-select patch-select"
+                                    value={patchStatusCodeInput}
+                                    onChange={(event) => setPatchStatusCodeInput(event.target.value)}
+                                  >
+                                    <option value="">Select value</option>
+                                    <option value="NOT_INTENDED_FOR_EU_MARKET">NOT_INTENDED_FOR_EU_MARKET</option>
+                                    <option value="ON_THE_MARKET">ON_THE_MARKET</option>
+                                    <option value="NO_LONGER_PLACED_ON_THE_MARKET">NO_LONGER_PLACED_ON_THE_MARKET</option>
+                                  </select>
+                                  <p className="field-source-note">
+                                    Current value: {selectedCurrentStatusCode ?? "None"}
+                                  </p>
                                 </div>
                               ) : null}
                               {selectedPatchScenario.id === "warning_add" ? (
@@ -4005,10 +4275,10 @@ export function App() {
                           </>
                         ) : (
                           <div className="workflow-note patch-readiness-note">
-                            <strong>Baseline review required</strong>
+                            <strong>POST review required</strong>
                             <span>
-                              Generate and review `Post + Patch` for `{selectedXmlPairRecord.catalogue_number}` first.
-                              Scenario drafting stays blocked until that exact baseline pair has been loaded in this session.
+                              Generate and review `POST` for `{selectedXmlPairRecord.catalogue_number}` first.
+                              Scenario drafting stays blocked until that exact baseline POST has been loaded in this session.
                             </span>
                           </div>
                         )}
@@ -4040,14 +4310,14 @@ export function App() {
                   ) : (
                     <div className="draft-card">
                       <div className="draft-card-head">
-                        <strong>No Post + Patch Pair Available</strong>
+                        <strong>No POST Baseline Available</strong>
                         <span className="status-pill warn compact">Scenario blocked</span>
                       </div>
                       <p className="panel-copy">
-                        `Patch XML` requires a baseline `Post + Patch` pair for the selected family and variant.
+                        `Patch XML` requires a baseline `POST` record for the selected family and variant.
                       </p>
                       <p className="panel-copy">
-                        No XML-ready `POST` record is currently available, so the baseline pair cannot be generated and scenario PATCH drafting is unavailable for this selection.
+                        No XML-ready `POST` record is currently available, so the baseline POST cannot be generated and scenario PATCH drafting is unavailable for this selection.
                       </p>
                     </div>
                   )
@@ -4090,8 +4360,8 @@ export function App() {
                 )}
                 <div className="workflow-note">
                   <strong>
-                    {xmlMode === "pair"
-                      ? "Paired POST/PATCH review"
+                    {xmlMode === "post"
+                      ? "POST review"
                       : xmlMode === "single"
                         ? "Single-record review"
                         : xmlMode === "marketInfo"
@@ -4101,14 +4371,14 @@ export function App() {
                           : "Variant-batch scope"}
                   </strong>
                   <span>
-                    {xmlMode === "pair"
-                      ? "Use one current POST-classified device to compare an accepted-shape POST against an equivalent first PATCH with e:version = 2."
+                    {xmlMode === "post"
+                      ? "Use one current POST-classified device to confirm the accepted registration payload before generating PATCH scenarios."
                       : xmlMode === "single"
                         ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
                         : xmlMode === "marketInfo"
                         ? "Use one XML-ready record to inspect the standalone MARKET_INFO.PUT wrapper and its current marketInfos collection."
                         : xmlMode === "patch"
-                            ? "Use one selected POST parent and baseline child PATCH, then compare the derived scenario PATCH against that baseline before external EUDAMED testing."
+                            ? "Use one selected POST parent, then compare the derived scenario PATCH against the accepted POST or latest accepted PATCH before external EUDAMED testing."
                           : "Batch generation remains strictly within the selected product variant and only includes XML-ready rows."}
                   </span>
                 </div>
@@ -4124,7 +4394,7 @@ export function App() {
                   </div>
                   <div className="draft-card">
                     <div className="draft-card-head">
-                      <strong>{xmlMode === "pair" ? "Active preview validation" : "Validation output"}</strong>
+                      <strong>{xmlMode === "post" ? "Active preview validation" : "Validation output"}</strong>
                       <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
                         {selectedBatchValidation
                           ? selectedBatchValidation.valid
@@ -4149,22 +4419,22 @@ export function App() {
                           </div>
                         ) : (
                           <p className="panel-copy">
-                            {xmlMode === "pair"
-                              ? `The generated ${pairPreviewView.toUpperCase()} preview validates cleanly.`
+                            {xmlMode === "post"
+                              ? "The generated POST preview validates cleanly."
                               : xmlMode === "single"
                                 ? "The generated single-record Push message validates cleanly."
                                 : xmlMode === "marketInfo"
                                 ? "The generated MARKET_INFO.PUT Push message validates cleanly."
                                 : xmlMode === "patch"
-                                    ? `The generated ${patchPreviewView === "baseline" ? "baseline" : "derived"} PATCH preview validates cleanly against the local schema set.`
+                                    ? `The generated ${patchPreviewView === "base" ? "base" : "derived"} PATCH preview validates cleanly against the local schema set.`
                                   : "The generated variant-batch Push message validates cleanly."}
                           </p>
                         )}
                       </>
                     ) : (
                       <p className="panel-copy">
-                        {xmlMode === "pair"
-                          ? "Generate a paired preview to inspect the POST and PATCH schema validation outcomes."
+                        {xmlMode === "post"
+                          ? "Generate a POST preview to inspect the schema validation outcome."
                           : xmlMode === "single"
                             ? "Generate a single-record preview to inspect the schema validation outcome."
                             : xmlMode === "marketInfo"
@@ -4179,12 +4449,12 @@ export function App() {
                     <>
                       <div className="draft-card">
                         <div className="draft-card-head">
-                          <strong>Baseline PATCH validation</strong>
-                          <span className={xmlPatchPreview.baseline_patch_validation.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                            {xmlPatchPreview.baseline_patch_validation.valid ? "Schema valid" : "Schema invalid"}
+                          <strong>Base message validation</strong>
+                          <span className={xmlPatchPreview.base_validation.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                            {xmlPatchPreview.base_validation.valid ? "Schema valid" : "Schema invalid"}
                           </span>
                         </div>
-                        <p className="panel-copy">{xmlPatchPreview.baseline_patch_validation.schema_path}</p>
+                        <p className="panel-copy">{xmlPatchPreview.base_validation.schema_path}</p>
                       </div>
                       <div className="draft-card">
                         <div className="draft-card-head">
@@ -4197,27 +4467,16 @@ export function App() {
                       </div>
                     </>
                   ) : null}
-                  {xmlMode === "pair" ? (
-                    <>
-                      <div className="draft-card">
-                        <div className="draft-card-head">
-                          <strong>POST validation</strong>
-                          <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                            {pairPostValidation ? (pairPostValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
-                          </span>
-                        </div>
-                        <p className="panel-copy">{pairPostValidation?.schema_path ?? "Generate a pair preview to validate the POST XML."}</p>
+                  {xmlMode === "post" ? (
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>POST validation</strong>
+                        <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                          {pairPostValidation ? (pairPostValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
+                        </span>
                       </div>
-                      <div className="draft-card">
-                        <div className="draft-card-head">
-                          <strong>PATCH validation</strong>
-                          <span className={pairPatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                            {pairPatchValidation ? (pairPatchValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
-                          </span>
-                        </div>
-                        <p className="panel-copy">{pairPatchValidation?.schema_path ?? "Generate a pair preview to validate the equivalent PATCH XML."}</p>
-                      </div>
-                    </>
+                      <p className="panel-copy">{pairPostValidation?.schema_path ?? "Generate a POST preview to validate the XML."}</p>
+                    </div>
                   ) : null}
                   {xmlMode === "batch" && xmlBatchPreview ? (
                     <div className="draft-card">
@@ -4266,8 +4525,8 @@ export function App() {
               </div>
               <div className="summary-card">
                 <span className="summary-label">Current accepted mode</span>
-                <strong>Post + Patch</strong>
-                <p>The accepted baseline pair remains the only operationally enabled XML generation path.</p>
+                <strong>POST</strong>
+                <p>The accepted baseline POST remains the operationally enabled XML generation path.</p>
               </div>
               <div className="summary-card">
                 <span className="summary-label">Candidate PATCH scenarios</span>
@@ -4308,35 +4567,16 @@ export function App() {
                     <div className="section-heading xml-preview-heading">
                       <div>
                         <span className="section-kicker">Accepted Preview</span>
-                        <h2>Post + Patch Pair</h2>
+                        <h2>POST</h2>
                       </div>
-                    </div>
-                    <div className="xml-mode-toggle xml-sub-tabs xml-compare-toggle">
-                      <button
-                        className={pairPreviewView === "post" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
-                        type="button"
-                        onClick={() => setPairPreviewView("post")}
-                      >
-                        Post
-                      </button>
-                      <button
-                        className={pairPreviewView === "patch" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
-                        type="button"
-                        onClick={() => setPairPreviewView("patch")}
-                      >
-                        Patch
-                      </button>
                     </div>
                     <pre className="xml-preview-block">
                       <code>
                         {xmlPairPreview
-                          ? pairPreviewView === "post"
-                            ? xmlPairPreview.post_xml
-                            : xmlPairPreview.patch_xml
+                          ? xmlPairPreview.post_xml
                           : [
-                              "<!-- Generate the accepted POST/PATCH pair preview -->",
+                              "<!-- Generate the accepted POST preview -->",
                               `<catalogue-number>${selectedXmlPairRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
-                              `<preview-view>${pairPreviewView.toUpperCase()}</preview-view>`,
                             ].join("\n")}
                       </code>
                     </pre>
@@ -4344,13 +4584,13 @@ export function App() {
                   <div className="xml-sidebar-surface">
                     <div className="draft-actions-bar xml-actions-bar">
                       <button className="action-button" type="button" onClick={() => void generateXmlPreview()} disabled={!selectedXmlPairRecord || isGeneratingXml}>
-                        {isGeneratingXml ? "Generating..." : "Generate Accepted Pair"}
+                        {isGeneratingXml ? "Generating..." : "Generate Accepted POST"}
                       </button>
                       <button className="ghost-button" type="button" onClick={() => void generateXmlPreview()} disabled={!selectedXmlPairRecord || isGeneratingXml}>
                         Validate Against XSD
                       </button>
                       <button className="ghost-button" type="button" onClick={() => void downloadXmlRecord()} disabled={!selectedXmlPairRecord || isGeneratingXml}>
-                        Download Pair Package
+                        Download POST Package
                       </button>
                       {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
                     </div>
@@ -4364,14 +4604,14 @@ export function App() {
                           {selectedXmlPairRecord.product_family} / {selectedXmlPairRecord.product_variant}
                         </p>
                         <p className="panel-copy">
-                          Generate only the accepted baseline `Post + Patch` pair in this workspace.
+                          Generate only the accepted baseline `POST` in this workspace.
                         </p>
                       </div>
                     </div>
                   </div>
                 </div>
               ) : (
-                <p className="panel-copy">No XML-ready POST record is currently available for accepted `Post + Patch` generation for the selected family and variant.</p>
+                <p className="panel-copy">No XML-ready POST record is currently available for accepted `POST` generation for the selected family and variant.</p>
               )}
             </section>
           </section>
