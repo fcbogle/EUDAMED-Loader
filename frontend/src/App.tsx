@@ -1381,6 +1381,19 @@ export function App() {
     selectedCurrentLatex,
     selectedCurrentStatusCode,
   ]);
+  useEffect(() => {
+    setXmlPatchPreview(null);
+  }, [
+    patchVersionInput,
+    patchTradeNameInput,
+    patchWarningCodeInput,
+    patchWarningCommentInput,
+    patchBaseQuantityInput,
+    patchSterileInput,
+    patchLatexInput,
+    patchStatusCodeInput,
+    patchStorageConditionInputs,
+  ]);
   const matchesSelectedPatchPreview = Boolean(
     xmlPatchPreview &&
       selectedPairRequestArgs &&
@@ -1397,6 +1410,7 @@ export function App() {
     : "Accepted POST version 1";
   const requiredPatchVersion = selectedPatchScenario.id === "equivalent_first_patch" ? 2 : currentAcceptedPatchVersion + 1;
   const currentPatchVersion = Number(patchVersionInput);
+  const hasReviewedGeneratedPatchPreview = Boolean(matchesSelectedPatchPreview && xmlPatchPreview);
   const patchDraftComparisonRows: PatchScenarioComparisonRow[] = matchesSelectedPatchPreview && xmlPatchPreview
     ? xmlPatchPreview.field_deltas.map((delta) => ({
         label: delta.label,
@@ -1527,10 +1541,8 @@ export function App() {
     : [];
   const selectedWarningRequiresComment = patchWarningCodeInput.trim().toUpperCase() === "CW999";
   const isPatchVersionValid =
-    matchesSelectedPatchPreview && xmlPatchPreview
-      ? Number(xmlPatchPreview.context.proposed_patch_version) >= requiredPatchVersion
-      : Number.isInteger(currentPatchVersion) &&
-        currentPatchVersion === requiredPatchVersion;
+    Number.isInteger(currentPatchVersion) &&
+    currentPatchVersion === requiredPatchVersion;
   const isPatchScenarioReady =
     hasReviewedPatchBaselinePost &&
     selectedPatchScenarioImplemented &&
@@ -3857,7 +3869,7 @@ export function App() {
                       (xmlMode === "post" && !isPairWorkspaceReady) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
-                      (xmlMode === "patch" && !hasReviewedPatchBaselinePost) ||
+                      (xmlMode === "patch" && (!hasReviewedPatchBaselinePost || !hasReviewedGeneratedPatchPreview)) ||
                       ((xmlMode === "single" || xmlMode === "batch") && !selectedXmlVariantSummary) ||
                       isGeneratingXml
                     }
