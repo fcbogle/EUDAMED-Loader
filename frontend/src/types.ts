@@ -333,6 +333,7 @@ export type PostRegistrationPreview = {
   primary_udi_di: string;
   registered_device_anchor: RegisteredDeviceAnchor;
   latest_successful_patch_state: PatchStateSnapshot | null;
+  latest_successful_patch_scenario_id: string | null;
   post_file_name: string;
   post_xml: string;
   post_validation: XmlValidationResult;
@@ -455,5 +456,91 @@ export type BatchXmlPreview = {
   selected_chunk_record_count: number;
   selected_chunk_xml: string;
   selected_chunk_validation: XmlValidationResult;
+  chunks: BatchXmlChunkSummary[];
+};
+
+export type BulkXmlRecordSummary = {
+  catalogue_number: string;
+  primary_udi_di: string | null;
+  basic_udi_di: string | null;
+  trade_name: string | null;
+  source_workbook: string | null;
+  source_sheet: string | null;
+  source_row_index: number | null;
+  base_message_type: "POST" | "PATCH" | null;
+  base_version: string | null;
+  derived_version: string | null;
+  accepted_state_source: string | null;
+  scenario_id: string | null;
+};
+
+export type BulkXmlExcludedRecord = {
+  catalogue_number: string | null;
+  primary_udi_di: string | null;
+  reason_code: string;
+  reason_message: string;
+};
+
+export type BulkPostPreview = {
+  mode: "bulk_post";
+  product_family: string;
+  product_variant: string;
+  requested_record_count: number;
+  eligible_post_records: number;
+  included_record_count: number;
+  excluded_record_count: number;
+  package_file_name: string;
+  max_records_per_file: number;
+  chunk_count: number;
+  selected_chunk_sequence: number;
+  selected_chunk_file_name: string;
+  selected_chunk_record_count: number;
+  selected_chunk_xml: string;
+  selected_chunk_validation: XmlValidationResult;
+  included_records: BulkXmlRecordSummary[];
+  excluded_records: BulkXmlExcludedRecord[];
+  chunks: BatchXmlChunkSummary[];
+};
+
+export type BulkUdidiPostPreview = {
+  mode: "bulk_udidi_post";
+  product_family: string;
+  product_variant: string;
+  requested_record_count: number;
+  eligible_child_records: number;
+  included_record_count: number;
+  excluded_record_count: number;
+  package_file_name: string;
+  max_records_per_file: number;
+  chunk_count: number;
+  selected_chunk_sequence: number;
+  selected_chunk_file_name: string;
+  selected_chunk_record_count: number;
+  selected_chunk_xml: string;
+  selected_chunk_validation: XmlValidationResult;
+  included_records: BulkXmlRecordSummary[];
+  excluded_records: BulkXmlExcludedRecord[];
+  chunks: BatchXmlChunkSummary[];
+};
+
+export type BulkPatchPreview = {
+  mode: "bulk_patch";
+  product_family: string;
+  product_variant: string;
+  requested_record_count: number;
+  scenario_id: string;
+  scenario_label: string;
+  package_file_name: string;
+  max_records_per_file: number;
+  chunk_count: number;
+  selected_chunk_sequence: number;
+  selected_chunk_file_name: string;
+  selected_chunk_record_count: number;
+  selected_chunk_xml: string;
+  selected_chunk_validation: XmlValidationResult;
+  included_record_count: number;
+  excluded_record_count: number;
+  included_records: BulkXmlRecordSummary[];
+  excluded_records: BulkXmlExcludedRecord[];
   chunks: BatchXmlChunkSummary[];
 };

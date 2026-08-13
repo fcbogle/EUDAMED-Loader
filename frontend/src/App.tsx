@@ -15,7 +15,9 @@ import workbooksDocumentation from "./content/docs/workbooks.md?raw";
 import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import xmlSampleComparisonDocumentation from "./content/docs/xml-sample-comparison.md?raw";
 import type {
-  BatchXmlPreview,
+  BulkPatchPreview,
+  BulkPostPreview,
+  BulkUdidiPostPreview,
   CanonicalValidationBundle,
   CanonicalReviewBundle,
   CriticalWarningCodeOption,
@@ -62,6 +64,7 @@ type PatchScenarioDefinition = {
   target: string;
   summary: string;
   implemented: boolean;
+  testStatus: "success" | "failure" | "untested";
   optionsSummary?: string;
 };
 
@@ -85,6 +88,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "Full UDI-DI payload equality",
     summary: "Version 2 PATCH derived directly from the POST with no business-field change, used only when you want an explicit baseline PATCH in Playground.",
     implemented: true,
+    testStatus: "success",
   },
   {
     id: "trade_name_edit",
@@ -92,6 +96,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "udidi:tradeNames",
     summary: "Candidate PATCH shape that updates the trade name text while keeping the baseline device identity unchanged.",
     implemented: true,
+    testStatus: "success",
   },
   {
     id: "warning_add",
@@ -99,6 +104,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "udidi:criticalWarnings",
     summary: "Candidate PATCH shape that replaces the current warning set with the selected warning while keeping the baseline device identity unchanged.",
     implemented: true,
+    testStatus: "success",
   },
   {
     id: "storage_condition_edit",
@@ -106,6 +112,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "udidi:storageHandlingConditions",
     summary: "Candidate PATCH shape that edits selected storage-condition comment text while preserving the baseline device identity.",
     implemented: true,
+    testStatus: "success",
   },
   {
     id: "base_quantity_edit",
@@ -113,6 +120,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "udidi:baseQuantity",
     summary: "Candidate PATCH shape for changing the device base quantity.",
     implemented: true,
+    testStatus: "success",
     optionsSummary: "Any positive integer such as 1, 2, 10.",
   },
   {
@@ -121,6 +129,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "udidi:productionIdentifier",
     summary: "Candidate PATCH shape for changing the UDI-PI control model.",
     implemented: false,
+    testStatus: "untested",
     optionsSummary:
       "One or more of: BATCH_NUMBER, SOFTWARE_IDENTIFICATION, SERIALISATION_NUMBER, EXPIRATION_DATE, MANUFACTURING_DATE.",
   },
@@ -128,9 +137,10 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     id: "sterile_edit",
     label: "Sterile",
     target: "udidi:sterile",
-    summary: "Candidate PATCH shape for changing whether the device is labelled sterile.",
-    implemented: true,
-    optionsSummary: "Boolean: true or false.",
+    summary: "Blocked by Playground testing. EUDAMED returned ERR-DTX-UDI-031-033.02 indicating that device labelled sterile is not updatable by PATCH.",
+    implemented: false,
+    testStatus: "failure",
+    optionsSummary: "Do not use for PATCH generation unless EUDAMED business rules change.",
   },
   {
     id: "sterilization_edit",
@@ -138,15 +148,17 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "udidi:sterilization",
     summary: "Candidate PATCH shape for changing whether sterilisation before use is required.",
     implemented: false,
+    testStatus: "untested",
     optionsSummary: "Boolean: true or false.",
   },
   {
     id: "latex_edit",
     label: "Latex",
     target: "udidi:latex",
-    summary: "Candidate PATCH shape for changing the latex flag.",
-    implemented: true,
-    optionsSummary: "Boolean: true or false.",
+    summary: "Blocked by Playground testing. EUDAMED returned ERR-DTX-UDI-031-033.02 indicating that containing latex is not updatable by PATCH.",
+    implemented: false,
+    testStatus: "failure",
+    optionsSummary: "Do not use for PATCH generation unless EUDAMED business rules change.",
   },
   {
     id: "reprocessed_edit",
@@ -154,6 +166,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "udidi:reprocessed",
     summary: "Candidate PATCH shape for changing the reprocessed flag.",
     implemented: false,
+    testStatus: "untested",
     optionsSummary: "Boolean: true or false.",
   },
   {
@@ -162,6 +175,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "udidi:numberOfReuses",
     summary: "Candidate PATCH shape for changing the declared number of reuses.",
     implemented: false,
+    testStatus: "untested",
     optionsSummary: "Use -1 for not defined, 0 for single-use, or a positive integer.",
   },
   {
@@ -170,6 +184,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "udidi:status/commondi:code",
     summary: "Candidate PATCH shape for changing the UDI-DI status code.",
     implemented: true,
+    testStatus: "failure",
     optionsSummary:
       "One of: NOT_INTENDED_FOR_EU_MARKET, ON_THE_MARKET, NO_LONGER_PLACED_ON_THE_MARKET.",
   },
@@ -179,9 +194,23 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "udidi:MDNCodes",
     summary: "Candidate PATCH shape for changing one or more nomenclature codes.",
     implemented: false,
+    testStatus: "untested",
     optionsSummary: "One or more valid nomenclature codes. The schema does not enumerate them locally.",
   },
 ];
+
+function patchScenarioOptionLabel(scenario: PatchScenarioDefinition): string {
+  if (scenario.testStatus === "success") {
+    return `${scenario.label} (success)`;
+  }
+  if (scenario.testStatus === "failure") {
+    return `${scenario.label} (rejected)`;
+  }
+  if (scenario.testStatus === "untested") {
+    return `${scenario.label} (untested)`;
+  }
+  return scenario.label;
+}
 
 type DraftAction = {
   column: string;
@@ -666,7 +695,7 @@ export function App() {
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
   const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
   const [selectedXmlRecordKey, setSelectedXmlRecordKey] = useState<string | null>(null);
-  const [xmlMode, setXmlMode] = useState<"post" | "single" | "marketInfo" | "batch" | "patch">("post");
+  const [xmlMode, setXmlMode] = useState<"post" | "single" | "marketInfo" | "bulkPost" | "bulkUdidiPost" | "patch" | "bulkPatch">("post");
   const [selectedPatchScenarioId, setSelectedPatchScenarioId] = useState<PatchScenarioId>("equivalent_first_patch");
   const [patchScenarioStatuses, setPatchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
     equivalent_first_patch: "EUDAMED Candidate",
@@ -684,6 +713,7 @@ export function App() {
     mdn_codes_edit: "EUDAMED Candidate",
   });
   const [selectedXmlChunkSequence, setSelectedXmlChunkSequence] = useState<number>(1);
+  const [selectedBulkRecordCount, setSelectedBulkRecordCount] = useState<number>(1);
   const [scopeMode] = useState<ScopeMode>("all");
   const [showUnmappedOnly, setShowUnmappedOnly] = useState<boolean>(true);
   const [valueFilter, setValueFilter] = useState<string>("");
@@ -694,10 +724,12 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [criticalWarningCodeOptions, setCriticalWarningCodeOptions] = useState<CriticalWarningCodeOption[]>([]);
   const [xmlPreview, setXmlPreview] = useState<SingleRecordXmlPreview | null>(null);
-  const [xmlBatchPreview, setXmlBatchPreview] = useState<BatchXmlPreview | null>(null);
+  const [xmlBulkPostPreview, setXmlBulkPostPreview] = useState<BulkPostPreview | null>(null);
+  const [xmlBulkUdidiPostPreview, setXmlBulkUdidiPostPreview] = useState<BulkUdidiPostPreview | null>(null);
   const [xmlPairPreview, setXmlPairPreview] = useState<PostRegistrationPreview | null>(null);
   const [xmlMarketInfoPreview, setXmlMarketInfoPreview] = useState<MarketInfoPutPreview | null>(null);
   const [xmlPatchPreview, setXmlPatchPreview] = useState<GeneratedPatchScenarioPreview | null>(null);
+  const [xmlBulkPatchPreview, setXmlBulkPatchPreview] = useState<BulkPatchPreview | null>(null);
   const [patchPreviewView, setPatchPreviewView] = useState<"base" | "derived">("derived");
   const [patchVersionInput, setPatchVersionInput] = useState<string>("3");
   const [patchTradeNameInput, setPatchTradeNameInput] = useState<string>("");
@@ -957,10 +989,12 @@ export function App() {
 
   useEffect(() => {
     setXmlPreview(null);
-    setXmlBatchPreview(null);
+    setXmlBulkPostPreview(null);
+    setXmlBulkUdidiPostPreview(null);
     setXmlPairPreview(null);
     setXmlMarketInfoPreview(null);
     setXmlPatchPreview(null);
+    setXmlBulkPatchPreview(null);
   }, [selectedXmlRecordKey, selectedXmlFamily, selectedXmlVariant, selectedXmlChunkSequence]);
 
   useEffect(() => {
@@ -1269,6 +1303,31 @@ export function App() {
     ) ??
     selectedXmlVariantRecords.find((record) => (record.submission_operation ?? "").toUpperCase() === "POST") ??
     null;
+  const selectedBulkEligiblePostRecords = selectedXmlVariantRecords.filter(
+    (record) => (record.submission_operation ?? "").toUpperCase() === "POST",
+  );
+  const selectedBulkEligiblePostCount = selectedBulkEligiblePostRecords.length;
+  const selectedBulkEligibleBasicUdiCount = new Set(
+    selectedBulkEligiblePostRecords
+      .map(
+        (record) =>
+          record.fields.find((field) => field.canonical_path === "basic_device.basic_udi_di")?.value ??
+          record.fields.find((field) => field.canonical_path === "device_record.basic_udi_identifier")?.value,
+      )
+      .filter((value): value is string => Boolean(value)),
+  ).size;
+  const selectedBulkEligibleUdidiPostCount = (() => {
+    const groupedCounts = new Map<string, number>();
+    for (const record of selectedBulkEligiblePostRecords) {
+      const basicUdi =
+        record.fields.find((field) => field.canonical_path === "basic_device.basic_udi_di")?.value ??
+        record.fields.find((field) => field.canonical_path === "device_record.basic_udi_identifier")?.value;
+      if (basicUdi) {
+        groupedCounts.set(basicUdi, (groupedCounts.get(basicUdi) ?? 0) + 1);
+      }
+    }
+    return Array.from(groupedCounts.values()).reduce((sum, count) => sum + Math.max(count - 1, 0), 0);
+  })();
   const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
   const selectedPairRequestArgs =
     selectedXmlPairRecord?.catalogue_number
@@ -1299,6 +1358,29 @@ export function App() {
   const selectedXmlVariantChunkCount = selectedXmlVariantSummary
     ? Math.max(Math.ceil(selectedXmlVariantSummary.xml_ready_records / 300), 1)
     : 1;
+  const selectedBulkCapacity =
+    xmlMode === "bulkPost"
+      ? selectedBulkEligibleBasicUdiCount
+      : xmlMode === "bulkUdidiPost"
+        ? selectedBulkEligibleUdidiPostCount
+        : selectedBulkEligiblePostCount;
+  const normalizedBulkRecordCount = Math.min(Math.max(selectedBulkRecordCount, 1), Math.max(selectedBulkCapacity, 1));
+  const selectedBulkChunkCount =
+    xmlMode === "bulkPost"
+      ? xmlBulkPostPreview?.chunk_count ?? Math.max(Math.ceil(normalizedBulkRecordCount / 300), 1)
+      : xmlMode === "bulkUdidiPost"
+        ? xmlBulkUdidiPostPreview?.chunk_count ?? Math.max(Math.ceil(normalizedBulkRecordCount / 300), 1)
+      : xmlMode === "bulkPatch"
+        ? xmlBulkPatchPreview?.chunk_count ?? Math.max(Math.ceil(normalizedBulkRecordCount / 300), 1)
+        : selectedXmlVariantChunkCount;
+  const selectedBulkPreview =
+    xmlMode === "bulkPost"
+      ? xmlBulkPostPreview
+      : xmlMode === "bulkUdidiPost"
+        ? xmlBulkUdidiPostPreview
+        : xmlMode === "bulkPatch"
+          ? xmlBulkPatchPreview
+          : null;
   const selectedPatchScenario =
     PATCH_SCENARIOS.find((scenario) => scenario.id === selectedPatchScenarioId) ?? PATCH_SCENARIOS[0];
   const selectedPatchScenarioStatus = patchScenarioStatuses[selectedPatchScenario.id];
@@ -1337,7 +1419,80 @@ export function App() {
     parseBooleanString(fieldValue(selectedXmlPairRecord, "device_record.contains_latex"));
   const selectedCurrentStatusCode =
     selectedLatestPatchState?.status_code ?? fieldValue(selectedXmlPairRecord, "device_record.status");
+  const isSharedAnchorLoading =
+    (xmlMode === "post" || xmlMode === "patch" || xmlMode === "marketInfo") &&
+    Boolean(selectedPairRequestArgs) &&
+    !xmlPairPreview;
   useEffect(() => {
+    if (!(xmlMode === "post" || xmlMode === "patch" || xmlMode === "marketInfo") || !selectedPairRequestArgs) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const preview = await api.previewXmlPostRegistration(
+          selectedPairRequestArgs.product_family,
+          selectedPairRequestArgs.product_variant,
+          selectedPairRequestArgs.catalogue_number,
+        );
+        if (!cancelled) {
+          setXmlPairPreview(preview);
+        }
+      } catch {
+        // Keep the last loaded anchor state until the user explicitly regenerates or changes selection.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    xmlMode,
+    selectedPairRequestArgs?.product_family,
+    selectedPairRequestArgs?.product_variant,
+    selectedPairRequestArgs?.catalogue_number,
+  ]);
+  useEffect(() => {
+    if (!selectedPairRequestArgs || !xmlPairPreview) {
+      return;
+    }
+    if (
+      xmlPairPreview.product_family !== selectedPairRequestArgs.product_family ||
+      xmlPairPreview.product_variant !== selectedPairRequestArgs.product_variant ||
+      xmlPairPreview.catalogue_number !== selectedPairRequestArgs.catalogue_number
+    ) {
+      return;
+    }
+    setSelectedPatchScenarioId(
+      resolveDefaultPatchScenarioId(xmlPairPreview.latest_successful_patch_scenario_id),
+    );
+  }, [
+    selectedPairRequestArgs?.product_family,
+    selectedPairRequestArgs?.product_variant,
+    selectedPairRequestArgs?.catalogue_number,
+    xmlPairPreview?.product_family,
+    xmlPairPreview?.product_variant,
+    xmlPairPreview?.catalogue_number,
+    xmlPairPreview?.latest_successful_patch_scenario_id,
+  ]);
+  useEffect(() => {
+    setSelectedBulkRecordCount(1);
+    setSelectedXmlChunkSequence(1);
+    setXmlBulkPostPreview(null);
+    setXmlBulkUdidiPostPreview(null);
+    setXmlBulkPatchPreview(null);
+  }, [selectedXmlFamily, selectedXmlVariant]);
+  useEffect(() => {
+    if (selectedBulkRecordCount > Math.max(selectedBulkCapacity, 1)) {
+      setSelectedBulkRecordCount(Math.max(selectedBulkCapacity, 1));
+    }
+  }, [selectedBulkCapacity, selectedBulkRecordCount]);
+  useEffect(() => {
+    if (selectedPatchScenarioId !== "equivalent_first_patch" && isSharedAnchorLoading) {
+      return;
+    }
     setPatchPreviewView("derived");
     const latestSuccessfulVersion = Number(xmlPairPreview?.latest_successful_patch_state?.version ?? "1");
     const nextVersion =
@@ -1380,6 +1535,7 @@ export function App() {
     selectedCurrentSterile,
     selectedCurrentLatex,
     selectedCurrentStatusCode,
+    isSharedAnchorLoading,
   ]);
   useEffect(() => {
     setXmlPatchPreview(null);
@@ -1394,6 +1550,26 @@ export function App() {
     patchStatusCodeInput,
     patchStorageConditionInputs,
   ]);
+  useEffect(() => {
+    setXmlBulkPatchPreview(null);
+  }, [
+    selectedBulkRecordCount,
+    selectedPatchScenarioId,
+    patchTradeNameInput,
+    patchWarningCodeInput,
+    patchWarningCommentInput,
+    patchBaseQuantityInput,
+    patchSterileInput,
+    patchLatexInput,
+    patchStatusCodeInput,
+    patchStorageConditionInputs,
+  ]);
+  useEffect(() => {
+    setXmlBulkPostPreview(null);
+  }, [selectedBulkRecordCount]);
+  useEffect(() => {
+    setXmlBulkUdidiPostPreview(null);
+  }, [selectedBulkRecordCount]);
   const matchesSelectedPatchPreview = Boolean(
     xmlPatchPreview &&
       selectedPairRequestArgs &&
@@ -1658,11 +1834,31 @@ export function App() {
               `<target>${selectedPatchScenario.target}</target>`,
               `<patch-version>${patchVersionInput || "PENDING"}</patch-version>`,
             ].join("\n"))
-      : xmlBatchPreview?.selected_chunk_xml ??
+      : xmlMode === "bulkPost"
+        ? xmlBulkPostPreview?.selected_chunk_xml ??
+          [
+            "<!-- Generate XML to preview the selected bulk Basic UDI POST chunk -->",
+            `<product-family>${selectedXmlFamilySummary?.product_family ?? "PENDING"}</product-family>`,
+            `<product-variant>${selectedXmlVariantSummary?.product_variant ?? "PENDING"}</product-variant>`,
+            `<record-count>${normalizedBulkRecordCount}</record-count>`,
+            `<chunk-sequence>${selectedXmlChunkSequence}</chunk-sequence>`,
+          ].join("\n")
+        : xmlMode === "bulkUdidiPost"
+          ? xmlBulkUdidiPostPreview?.selected_chunk_xml ??
+            [
+              "<!-- Generate XML to preview the selected bulk UDI-DI POST chunk -->",
+              `<product-family>${selectedXmlFamilySummary?.product_family ?? "PENDING"}</product-family>`,
+              `<product-variant>${selectedXmlVariantSummary?.product_variant ?? "PENDING"}</product-variant>`,
+              `<record-count>${normalizedBulkRecordCount}</record-count>`,
+              `<chunk-sequence>${selectedXmlChunkSequence}</chunk-sequence>`,
+            ].join("\n")
+        : xmlBulkPatchPreview?.selected_chunk_xml ??
         [
-          "<!-- Generate XML to preview the selected variant batch -->",
+          "<!-- Generate XML to preview the selected bulk PATCH chunk -->",
           `<product-family>${selectedXmlFamilySummary?.product_family ?? "PENDING"}</product-family>`,
           `<product-variant>${selectedXmlVariantSummary?.product_variant ?? "PENDING"}</product-variant>`,
+          `<scenario-id>${selectedPatchScenario.id}</scenario-id>`,
+          `<record-count>${normalizedBulkRecordCount}</record-count>`,
           `<chunk-sequence>${selectedXmlChunkSequence}</chunk-sequence>`,
         ].join("\n");
   const selectedBatchValidation =
@@ -1676,7 +1872,11 @@ export function App() {
           ? patchPreviewView === "base"
             ? xmlPatchPreview?.base_validation ?? null
             : xmlPatchPreview?.derived_patch_validation ?? null
-        : xmlBatchPreview?.selected_chunk_validation ?? null;
+        : xmlMode === "bulkPost"
+          ? xmlBulkPostPreview?.selected_chunk_validation ?? null
+          : xmlMode === "bulkUdidiPost"
+            ? xmlBulkUdidiPostPreview?.selected_chunk_validation ?? null
+          : xmlBulkPatchPreview?.selected_chunk_validation ?? null;
   const pairPostValidation = xmlPairPreview?.post_validation ?? null;
   const validationStatusLabel = selectedBatchValidation
     ? selectedBatchValidation.valid
@@ -1695,17 +1895,25 @@ export function App() {
           ? "Market Info"
           : xmlMode === "patch"
             ? "Patch XML"
-          : "Batch XML";
+            : xmlMode === "bulkPost"
+              ? "Bulk Basic UDI POST"
+              : xmlMode === "bulkUdidiPost"
+                ? "Bulk UDI-DI POST"
+              : "Bulk PATCH";
   const xmlModeDescription =
     xmlMode === "post"
       ? "Generate one accepted registration POST for a selected XML-ready device record."
       : xmlMode === "single"
         ? "Generate one wrapped Push message for a selected XML-ready device record."
         : xmlMode === "marketInfo"
-        ? "Generate one standalone MARKET_INFO.PUT message for a selected XML-ready record."
+          ? "Generate one standalone MARKET_INFO.PUT message for a selected XML-ready record."
           : xmlMode === "patch"
             ? "Generate one scenario-derived PATCH draft at a time from the accepted POST or the latest accepted PATCH."
-          : "Generate a chunked batch package for every XML-ready row in the selected variant.";
+            : xmlMode === "bulkPost"
+              ? "Generate a chunked bulk Basic UDI POST package that keeps only the first eligible row for each Basic UDI-DI."
+              : xmlMode === "bulkUdidiPost"
+                ? "Generate standalone child UDI-DI POST messages for sibling rows under an already accepted Basic UDI-DI."
+              : "Generate a chunked bulk PATCH package that applies one PATCH scenario across the selected bulk POST cohort.";
   const xmlWorkspaceTitle =
     xmlMode === "post"
       ? "POST Workspace"
@@ -1715,7 +1923,11 @@ export function App() {
           ? "Market Info Workspace"
           : xmlMode === "patch"
             ? "Patch Scenario Workspace"
-          : "Batch Workspace";
+            : xmlMode === "bulkPost"
+              ? "Bulk Basic UDI POST Workspace"
+              : xmlMode === "bulkUdidiPost"
+                ? "Bulk UDI-DI POST Workspace"
+              : "Bulk PATCH Workspace";
   const activePreviewLabel =
     xmlMode === "post"
       ? "Post"
@@ -1727,7 +1939,7 @@ export function App() {
             ? patchPreviewView === "base"
               ? "Base Message"
               : "Derived Patch"
-          : `Batch Chunk ${selectedXmlChunkSequence}`;
+            : `${xmlMode === "bulkPost" ? "Bulk Basic UDI POST" : xmlMode === "bulkUdidiPost" ? "Bulk UDI-DI POST" : "Bulk PATCH"} Chunk ${selectedXmlChunkSequence}`;
   const activePreviewFileName =
     xmlMode === "post"
       ? xmlPairPreview?.post_file_name ?? null
@@ -1739,7 +1951,11 @@ export function App() {
             ? patchPreviewView === "base"
               ? xmlPatchPreview?.base_file_name ?? null
               : xmlPatchPreview?.derived_patch_file_name ?? null
-          : xmlBatchPreview?.selected_chunk_file_name ?? null;
+            : xmlMode === "bulkPost"
+              ? xmlBulkPostPreview?.selected_chunk_file_name ?? null
+              : xmlMode === "bulkUdidiPost"
+                ? xmlBulkUdidiPostPreview?.selected_chunk_file_name ?? null
+              : xmlBulkPatchPreview?.selected_chunk_file_name ?? null;
   const profileColumns = sheetProfile?.columns ?? [];
   const highNullColumns = profileColumns.filter((column) => {
     if (!sheetProfile?.data_rows) {
@@ -1951,7 +2167,10 @@ export function App() {
   }
 
   async function generateXmlPreview(): Promise<void> {
-    if ((xmlMode === "single" || xmlMode === "batch") && (!selectedXmlFamilySummary || !selectedXmlVariantSummary)) {
+    if (
+      (xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") &&
+      (!selectedXmlFamilySummary || !selectedXmlVariantSummary)
+    ) {
       return;
     }
     setIsGeneratingXml(true);
@@ -2001,13 +2220,32 @@ export function App() {
           currentPatchScenarioInputs(),
         );
         setXmlPatchPreview(preview);
-      } else {
-        const preview = await api.previewXmlBatch(
+      } else if (xmlMode === "bulkPost") {
+        const preview = await api.previewBulkPost(
           selectedXmlFamilySummary.product_family,
           selectedXmlVariantSummary.product_variant,
+          normalizedBulkRecordCount,
           selectedXmlChunkSequence,
         );
-        setXmlBatchPreview(preview);
+        setXmlBulkPostPreview(preview);
+      } else if (xmlMode === "bulkUdidiPost") {
+        const preview = await api.previewBulkUdidiPost(
+          selectedXmlFamilySummary.product_family,
+          selectedXmlVariantSummary.product_variant,
+          normalizedBulkRecordCount,
+          selectedXmlChunkSequence,
+        );
+        setXmlBulkUdidiPostPreview(preview);
+      } else {
+        const preview = await api.previewBulkPatch(
+          selectedXmlFamilySummary.product_family,
+          selectedXmlVariantSummary.product_variant,
+          normalizedBulkRecordCount,
+          selectedPatchScenario.id,
+          currentPatchScenarioInputs(),
+          selectedXmlChunkSequence,
+        );
+        setXmlBulkPatchPreview(preview);
       }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Failed to generate XML preview.");
@@ -2017,7 +2255,10 @@ export function App() {
   }
 
   async function downloadXmlRecord(): Promise<void> {
-    if ((xmlMode === "single" || xmlMode === "batch") && (!selectedXmlFamilySummary || !selectedXmlVariantSummary)) {
+    if (
+      (xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") &&
+      (!selectedXmlFamilySummary || !selectedXmlVariantSummary)
+    ) {
       return;
     }
     setIsGeneratingXml(true);
@@ -2052,9 +2293,24 @@ export function App() {
               patchVersionInput,
               currentPatchScenarioInputs(),
             )
-          : await api.downloadXmlBatch(
+          : xmlMode === "bulkPost"
+            ? await api.downloadBulkPost(
+                selectedXmlFamilySummary.product_family,
+                selectedXmlVariantSummary.product_variant,
+                normalizedBulkRecordCount,
+              )
+            : xmlMode === "bulkUdidiPost"
+              ? await api.downloadBulkUdidiPost(
+                  selectedXmlFamilySummary.product_family,
+                  selectedXmlVariantSummary.product_variant,
+                  normalizedBulkRecordCount,
+                )
+            : await api.downloadBulkPatch(
               selectedXmlFamilySummary.product_family,
               selectedXmlVariantSummary.product_variant,
+              normalizedBulkRecordCount,
+              selectedPatchScenario.id,
+              currentPatchScenarioInputs(),
             );
       if (!downloadResult) {
         return;
@@ -2076,8 +2332,14 @@ export function App() {
                     xmlPatchPreview?.derived_patch_file_name ??
                     `${selectedXmlPairRecord?.product_family ?? "device"}-${selectedXmlPairRecord?.product_variant ?? "variant"}-${selectedPatchScenario.id}.xml`
                   ).replace(/\.xml$/i, "")}.zip`
-                : xmlBatchPreview?.package_file_name ??
-                  `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-batch-package.zip`);
+                : xmlMode === "bulkPost"
+                  ? xmlBulkPostPreview?.package_file_name ??
+                    `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-bulk-post-package.zip`
+                  : xmlMode === "bulkUdidiPost"
+                    ? xmlBulkUdidiPostPreview?.package_file_name ??
+                      `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-bulk-udidi-post-package.zip`
+                  : xmlBulkPatchPreview?.package_file_name ??
+                    `${selectedXmlFamilySummary.product_family}-${selectedXmlVariantSummary.product_variant}-${selectedPatchScenario.id}-bulk-patch-package.zip`);
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
@@ -2086,7 +2348,7 @@ export function App() {
       document.body.appendChild(anchor);
       anchor.click();
       setXmlActionMessage(
-        xmlMode === "patch"
+        xmlMode === "patch" || xmlMode === "bulkPatch"
           ? `Patch scenario ZIP download started for ${resolvedFileName}. If your browser does not prompt, check the default Downloads folder.`
           : `Download started for ${resolvedFileName}. If your browser does not prompt, check the default Downloads folder.`,
       );
@@ -3655,11 +3917,25 @@ export function App() {
                   Single XML
                 </button>
                 <button
-                  className={xmlMode === "batch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                  className={xmlMode === "bulkPost" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
                   type="button"
-                  onClick={() => setXmlMode("batch")}
+                  onClick={() => setXmlMode("bulkPost")}
                 >
-                  Batch XML
+                  Bulk Basic UDI POST
+                </button>
+                <button
+                  className={xmlMode === "bulkUdidiPost" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                  type="button"
+                  onClick={() => setXmlMode("bulkUdidiPost")}
+                >
+                  Bulk UDI-DI POST
+                </button>
+                <button
+                  className={xmlMode === "bulkPatch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                  type="button"
+                  onClick={() => setXmlMode("bulkPatch")}
+                >
+                  Bulk PATCH
                 </button>
               </div>
               <div className="xml-header-context">
@@ -3744,7 +4020,11 @@ export function App() {
                             ? "Market Info Preview"
                             : xmlMode === "patch"
                               ? "Patch XML Preview"
-                              : "Batch XML Preview"}
+                              : xmlMode === "bulkPost"
+                                ? "Bulk Basic UDI POST Preview"
+                                : xmlMode === "bulkUdidiPost"
+                                  ? "Bulk UDI-DI POST Preview"
+                                : "Bulk PATCH Preview"}
                     </h2>
                   </div>
                   {xmlMode === "patch" ? (
@@ -3812,9 +4092,17 @@ export function App() {
                                 : hasSelectedPatchBaselinePost
                                   ? "Review the baseline POST first. Scenario PATCH generation stays blocked until that POST has been generated for this exact record."
                                   : "No baseline POST is currently available for the selected family and variant."
-                          : xmlBatchPreview
-                            ? `Batch preview generated for ${xmlBatchPreview.product_family} / ${xmlBatchPreview.product_variant}, chunk ${xmlBatchPreview.selected_chunk_sequence}.`
-                            : "No batch XML preview generated yet for the selected variant."}
+                          : xmlMode === "bulkPost"
+                            ? xmlBulkPostPreview
+                              ? `Bulk Basic UDI POST preview generated for ${xmlBulkPostPreview.product_family} / ${xmlBulkPostPreview.product_variant}, chunk ${xmlBulkPostPreview.selected_chunk_sequence}.`
+                              : "No bulk Basic UDI POST preview generated yet for the selected variant."
+                            : xmlMode === "bulkUdidiPost"
+                              ? xmlBulkUdidiPostPreview
+                                ? `Bulk UDI-DI POST preview generated for ${xmlBulkUdidiPostPreview.product_family} / ${xmlBulkUdidiPostPreview.product_variant}, chunk ${xmlBulkUdidiPostPreview.selected_chunk_sequence}.`
+                                : "No bulk UDI-DI POST preview generated yet for the selected variant."
+                            : xmlBulkPatchPreview
+                              ? `Bulk PATCH preview generated for ${xmlBulkPatchPreview.product_family} / ${xmlBulkPatchPreview.product_variant}, chunk ${xmlBulkPatchPreview.selected_chunk_sequence}.`
+                              : "No bulk PATCH preview generated yet for the selected variant."}
                   </span>
                 </div>
               </div>
@@ -3830,7 +4118,8 @@ export function App() {
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && !isPatchScenarioReady) ||
-                      ((xmlMode === "single" || xmlMode === "batch") && !selectedXmlVariantSummary) ||
+                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedBulkCapacity) ||
+                      ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
                       isGeneratingXml
                     }
                   >
@@ -3844,7 +4133,11 @@ export function App() {
                           ? "Generate Market Info"
                           : xmlMode === "patch"
                             ? "Generate Patch Scenario"
-                          : "Generate Batch Preview"}
+                            : xmlMode === "bulkPost"
+                              ? "Generate Bulk Basic UDI POST"
+                              : xmlMode === "bulkUdidiPost"
+                                ? "Generate Bulk UDI-DI POST"
+                              : "Generate Bulk PATCH"}
                   </button>
                   <button
                     className="ghost-button"
@@ -3855,7 +4148,8 @@ export function App() {
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && !isPatchScenarioReady) ||
-                      ((xmlMode === "single" || xmlMode === "batch") && !selectedXmlVariantSummary) ||
+                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedBulkCapacity) ||
+                      ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
                       isGeneratingXml
                     }
                   >
@@ -3870,7 +4164,8 @@ export function App() {
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && (!hasReviewedPatchBaselinePost || !hasReviewedGeneratedPatchPreview)) ||
-                      ((xmlMode === "single" || xmlMode === "batch") && !selectedXmlVariantSummary) ||
+                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedBulkCapacity) ||
+                      ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
                       isGeneratingXml
                     }
                   >
@@ -3882,7 +4177,11 @@ export function App() {
                           ? "Download Market Info"
                           : xmlMode === "patch"
                             ? "Download Patch Scenario ZIP"
-                          : "Download Batch Package"}
+                            : xmlMode === "bulkPost"
+                              ? "Download Bulk Basic UDI POST ZIP"
+                              : xmlMode === "bulkUdidiPost"
+                                ? "Download Bulk UDI-DI POST ZIP"
+                              : "Download Bulk PATCH ZIP"}
                   </button>
                   {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
                 </div>
@@ -4027,7 +4326,7 @@ export function App() {
                                 >
                                   {PATCH_SCENARIOS.map((scenario) => (
                                     <option key={scenario.id} value={scenario.id}>
-                                      {scenario.implemented ? scenario.label : `${scenario.label} (Design only)`}
+                                      {patchScenarioOptionLabel(scenario)}
                                     </option>
                                   ))}
                                 </select>
@@ -4333,7 +4632,7 @@ export function App() {
                       </p>
                     </div>
                   )
-                ) : selectedXmlVariantSummary ? (
+                ) : xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? (
                   <div className="draft-list xml-record-stack">
                     <div className="draft-card xml-record-card">
                       <div className="draft-card-head">
@@ -4344,14 +4643,64 @@ export function App() {
                         {selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}
                       </p>
                       <p className="panel-copy">
-                        {selectedXmlVariantSummary.xml_ready_records} XML-ready rows will be grouped into {selectedXmlVariantChunkCount} batch file
-                        {selectedXmlVariantChunkCount === 1 ? "" : "s"} at up to 300 rows per file.
+                        {xmlMode === "bulkPost"
+                          ? "Select how many unique Basic UDI-DI parent registrations to include in the bulk package."
+                          : xmlMode === "bulkUdidiPost"
+                            ? "Select how many sibling child UDI-DI registrations to include under the already accepted Basic UDI-DI parent."
+                          : "Select the POST cohort size, then apply one PATCH scenario across those accepted device records."}
+                      </p>
+                      <p className="panel-copy">
+                        {xmlMode === "bulkPost"
+                          ? `${selectedBulkEligibleBasicUdiCount} eligible Basic UDI-DI registration${selectedBulkEligibleBasicUdiCount === 1 ? "" : "s"} in this variant can be used for Bulk Basic UDI POST.`
+                          : xmlMode === "bulkUdidiPost"
+                            ? `${selectedBulkEligibleUdidiPostCount} eligible child UDI-DI registration${selectedBulkEligibleUdidiPostCount === 1 ? "" : "s"} in this variant can be used for Bulk UDI-DI POST.`
+                            : `${selectedBulkEligiblePostCount} eligible POST row${selectedBulkEligiblePostCount === 1 ? "" : "s"} in this variant can be used for Bulk PATCH.`}
                       </p>
                       <p className="panel-copy">
                         {selectedXmlVariantSummary.xml_blocked_records} row{selectedXmlVariantSummary.xml_blocked_records === 1 ? "" : "s"} remain excluded until resolved.
                       </p>
+                      <label className="field-label" htmlFor="xml-bulk-record-count">
+                        Record count
+                      </label>
+                      <select
+                        id="xml-bulk-record-count"
+                        className="rule-select"
+                        value={selectedBulkRecordCount}
+                        onChange={(event) => {
+                          setSelectedBulkRecordCount(Number(event.target.value));
+                          setSelectedXmlChunkSequence(1);
+                        }}
+                      >
+                        {Array.from(
+                          { length: Math.max(Math.min(selectedBulkCapacity, 300), 1) },
+                          (_, index) => index + 1,
+                        ).map((count) => (
+                          <option key={count} value={count}>
+                            {count} record{count === 1 ? "" : "s"}
+                          </option>
+                        ))}
+                      </select>
+                      {xmlMode === "bulkPatch" ? (
+                        <>
+                          <label className="field-label" htmlFor="xml-bulk-patch-scenario-selector">
+                            Bulk PATCH scenario
+                          </label>
+                          <select
+                            id="xml-bulk-patch-scenario-selector"
+                            className="rule-select"
+                            value={selectedPatchScenario.id}
+                            onChange={(event) => setSelectedPatchScenarioId(event.target.value as PatchScenarioId)}
+                          >
+                            {PATCH_SCENARIOS.map((scenario) => (
+                              <option key={scenario.id} value={scenario.id}>
+                                {patchScenarioOptionLabel(scenario)}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      ) : null}
                       <label className="field-label" htmlFor="xml-batch-chunk-sequence">
-                        Preview batch chunk
+                        Preview chunk
                       </label>
                       <select
                         id="xml-batch-chunk-sequence"
@@ -4359,16 +4708,31 @@ export function App() {
                         value={selectedXmlChunkSequence}
                         onChange={(event) => setSelectedXmlChunkSequence(Number(event.target.value))}
                       >
-                        {Array.from({ length: selectedXmlVariantChunkCount }, (_, index) => index + 1).map((sequence) => (
+                        {Array.from({ length: selectedBulkChunkCount }, (_, index) => index + 1).map((sequence) => (
                           <option key={sequence} value={sequence}>
-                            Chunk {sequence} of {selectedXmlVariantChunkCount}
+                            Chunk {sequence} of {selectedBulkChunkCount}
                           </option>
                         ))}
                       </select>
+                      {selectedBulkPreview ? (
+                        <>
+                          <p className="panel-copy">
+                            Included {selectedBulkPreview.included_record_count} record{selectedBulkPreview.included_record_count === 1 ? "" : "s"}.
+                            Excluded {selectedBulkPreview.excluded_record_count}.
+                          </p>
+                          <p className="panel-copy">
+                            Selected file: {selectedBulkPreview.selected_chunk_file_name} · {selectedBulkPreview.selected_chunk_record_count} rows
+                          </p>
+                        </>
+                      ) : !selectedBulkCapacity ? (
+                        <p className="panel-copy">
+                          No eligible {xmlMode === "bulkPost" ? "Basic UDI-DI parent registrations" : xmlMode === "bulkUdidiPost" ? "child UDI-DI registrations" : "POST rows"} are available for this variant, so Bulk {xmlMode === "bulkPost" ? "Basic UDI POST" : xmlMode === "bulkUdidiPost" ? "UDI-DI POST" : "PATCH"} cannot be generated here.
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 ) : (
-                  <p className="panel-copy">No XML-ready variant batch is currently available for the selected family and variant.</p>
+                  <p className="panel-copy">No XML-ready bulk scope is currently available for the selected family and variant.</p>
                 )}
                 <div className="workflow-note">
                   <strong>
@@ -4380,7 +4744,11 @@ export function App() {
                           ? "Standalone market-info review"
                           : xmlMode === "patch"
                             ? "Scenario PATCH review"
-                          : "Variant-batch scope"}
+                            : xmlMode === "bulkPost"
+                              ? "Bulk Basic UDI POST scope"
+                              : xmlMode === "bulkUdidiPost"
+                                ? "Bulk UDI-DI POST scope"
+                              : "Bulk PATCH scope"}
                   </strong>
                   <span>
                     {xmlMode === "post"
@@ -4388,10 +4756,14 @@ export function App() {
                       : xmlMode === "single"
                         ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
                         : xmlMode === "marketInfo"
-                        ? "Use one XML-ready record to inspect the standalone MARKET_INFO.PUT wrapper and its current marketInfos collection."
+                          ? "Use one XML-ready record to inspect the standalone MARKET_INFO.PUT wrapper and its current marketInfos collection."
                         : xmlMode === "patch"
-                            ? "Use one selected POST parent, then compare the derived scenario PATCH against the accepted POST or latest accepted PATCH before external EUDAMED testing."
-                          : "Batch generation remains strictly within the selected product variant and only includes XML-ready rows."}
+                          ? "Use one selected POST parent, then compare the derived scenario PATCH against the accepted POST or latest accepted PATCH before external EUDAMED testing."
+                          : xmlMode === "bulkPost"
+                            ? "Bulk Basic UDI POST remains within the selected product variant and includes one first eligible row per Basic UDI-DI."
+                            : xmlMode === "bulkUdidiPost"
+                              ? "Bulk UDI-DI POST emits standalone child UDI-DI registrations and assumes the referenced Basic UDI-DI parent has already been accepted."
+                            : "Bulk PATCH reuses the selected product variant cohort and derives each PATCH from that device's latest successful accepted state."}
                   </span>
                 </div>
                 <div className="draft-list xml-validation-stack">
@@ -4439,7 +4811,11 @@ export function App() {
                                 ? "The generated MARKET_INFO.PUT Push message validates cleanly."
                                 : xmlMode === "patch"
                                     ? `The generated ${patchPreviewView === "base" ? "base" : "derived"} PATCH preview validates cleanly against the local schema set.`
-                                  : "The generated variant-batch Push message validates cleanly."}
+                                  : xmlMode === "bulkPost"
+                                    ? "The generated bulk Basic UDI POST Push message validates cleanly."
+                                    : xmlMode === "bulkUdidiPost"
+                                      ? "The generated bulk UDI-DI POST Push message validates cleanly."
+                                    : "The generated bulk PATCH Push message validates cleanly."}
                           </p>
                         )}
                       </>
@@ -4453,7 +4829,11 @@ export function App() {
                               ? "Generate a MARKET_INFO.PUT preview to inspect the schema validation outcome."
                               : xmlMode === "patch"
                                 ? "Generate the baseline and derived PATCH previews to inspect their schema validation outcomes."
-                              : "Generate a variant-batch preview to inspect the schema validation outcome."}
+                              : xmlMode === "bulkPost"
+                                ? "Generate a bulk Basic UDI POST preview to inspect the schema validation outcome."
+                                : xmlMode === "bulkUdidiPost"
+                                  ? "Generate a bulk UDI-DI POST preview to inspect the schema validation outcome."
+                                : "Generate a bulk PATCH preview to inspect the schema validation outcome."}
                       </p>
                     )}
                   </div>
@@ -4490,19 +4870,22 @@ export function App() {
                       <p className="panel-copy">{pairPostValidation?.schema_path ?? "Generate a POST preview to validate the XML."}</p>
                     </div>
                   ) : null}
-                  {xmlMode === "batch" && xmlBatchPreview ? (
+                  {(xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && selectedBulkPreview ? (
                     <div className="draft-card">
                       <div className="draft-card-head">
-                        <strong>Batch chunk summary</strong>
+                        <strong>{xmlMode === "bulkPost" ? "Bulk Basic UDI POST chunk summary" : xmlMode === "bulkUdidiPost" ? "Bulk UDI-DI POST chunk summary" : "Bulk PATCH chunk summary"}</strong>
                         <span className="status-pill ok compact">
-                          {xmlBatchPreview.chunk_count} chunk{xmlBatchPreview.chunk_count === 1 ? "" : "s"}
+                          {selectedBulkPreview.chunk_count} chunk{selectedBulkPreview.chunk_count === 1 ? "" : "s"}
                         </span>
                       </div>
                       <p className="panel-copy">
-                        Selected file: {xmlBatchPreview.selected_chunk_file_name} · {xmlBatchPreview.selected_chunk_record_count} rows
+                        Selected file: {selectedBulkPreview.selected_chunk_file_name} · {selectedBulkPreview.selected_chunk_record_count} rows
+                      </p>
+                      <p className="panel-copy">
+                        Included {selectedBulkPreview.included_record_count} · Excluded {selectedBulkPreview.excluded_record_count}
                       </p>
                       <div className="roadmap-list">
-                        {xmlBatchPreview.chunks.slice(0, 6).map((chunk) => (
+                        {selectedBulkPreview.chunks.slice(0, 6).map((chunk) => (
                           <div className="roadmap-item" key={chunk.file_name}>
                             <strong>{chunk.file_name}</strong>
                             <p>
@@ -4511,6 +4894,16 @@ export function App() {
                           </div>
                         ))}
                       </div>
+                      {selectedBulkPreview.excluded_records.length ? (
+                        <div className="roadmap-list">
+                          {selectedBulkPreview.excluded_records.slice(0, 5).map((record, index) => (
+                            <div className="roadmap-item" key={`${record.catalogue_number ?? "unknown"}-${index}`}>
+                              <strong>{record.catalogue_number ?? record.primary_udi_di ?? "Unknown record"}</strong>
+                              <p>{record.reason_message}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -4689,3 +5082,10 @@ export function App() {
     </main>
   );
 }
+  function resolveDefaultPatchScenarioId(latestScenarioId: string | null | undefined): PatchScenarioId {
+    if (!latestScenarioId) {
+      return "equivalent_first_patch";
+    }
+    const matchedScenario = PATCH_SCENARIOS.find((scenario) => scenario.id === latestScenarioId);
+    return matchedScenario ? matchedScenario.id : "equivalent_first_patch";
+  }

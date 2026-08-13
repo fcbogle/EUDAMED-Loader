@@ -1,6 +1,9 @@
 import type {
   ApplyNormalizationRulesResponse,
   BatchXmlPreview,
+  BulkPatchPreview,
+  BulkPostPreview,
+  BulkUdidiPostPreview,
   CanonicalValidationBundle,
   CanonicalReviewBundle,
   CriticalWarningCodeOption,
@@ -21,10 +24,22 @@ import type {
 
 const API_ROOT = "http://localhost:8000/api";
 
+async function readErrorMessage(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as { detail?: string };
+    if (typeof payload.detail === "string" && payload.detail.trim()) {
+      return payload.detail;
+    }
+  } catch {
+    // Ignore JSON parsing failures and fall back to the status line.
+  }
+  return `Request failed: ${response.status}`;
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_ROOT}${path}`);
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(await readErrorMessage(response));
   }
   return response.json() as Promise<T>;
 }
@@ -38,7 +53,7 @@ async function sendJson<T>(path: string, method: string, body: unknown): Promise
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(await readErrorMessage(response));
   }
   return response.json() as Promise<T>;
 }
@@ -58,7 +73,7 @@ async function sendDownload(path: string, method: string, body?: unknown): Promi
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(await readErrorMessage(response));
   }
   return {
     blob: await response.blob(),
@@ -133,6 +148,36 @@ export const api = {
       product_variant: productVariant,
       chunk_sequence: chunkSequence,
     }),
+  previewBulkPost: (productFamily: string, productVariant: string, recordCount: number, chunkSequence = 1) =>
+    sendJson<BulkPostPreview>("/xml/preview-bulk-post", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      record_count: recordCount,
+      chunk_sequence: chunkSequence,
+    }),
+  previewBulkUdidiPost: (productFamily: string, productVariant: string, recordCount: number, chunkSequence = 1) =>
+    sendJson<BulkUdidiPostPreview>("/xml/preview-bulk-udidi-post", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      record_count: recordCount,
+      chunk_sequence: chunkSequence,
+    }),
+  previewBulkPatch: (
+    productFamily: string,
+    productVariant: string,
+    recordCount: number,
+    scenarioId: string,
+    scenarioInputs: unknown,
+    chunkSequence = 1,
+  ) =>
+    sendJson<BulkPatchPreview>("/xml/preview-bulk-patch", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      record_count: recordCount,
+      scenario_id: scenarioId,
+      scenario_inputs: scenarioInputs,
+      chunk_sequence: chunkSequence,
+    }),
   downloadXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-record", "POST", {
       product_family: productFamily,
@@ -171,6 +216,32 @@ export const api = {
     sendDownload("/xml/download-batch", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
+    }),
+  downloadBulkPost: (productFamily: string, productVariant: string, recordCount: number) =>
+    sendDownload("/xml/download-bulk-post", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      record_count: recordCount,
+    }),
+  downloadBulkUdidiPost: (productFamily: string, productVariant: string, recordCount: number) =>
+    sendDownload("/xml/download-bulk-udidi-post", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      record_count: recordCount,
+    }),
+  downloadBulkPatch: (
+    productFamily: string,
+    productVariant: string,
+    recordCount: number,
+    scenarioId: string,
+    scenarioInputs: unknown,
+  ) =>
+    sendDownload("/xml/download-bulk-patch", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      record_count: recordCount,
+      scenario_id: scenarioId,
+      scenario_inputs: scenarioInputs,
     }),
   schemas: () => getJson<SchemaInventory>("/schemas"),
   criticalWarningCodes: () => getJson<CriticalWarningCodeOption[]>("/schemas/critical-warning-codes"),

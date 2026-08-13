@@ -12,6 +12,7 @@ from app.xml_models import CriticalWarningXmlItem, PatchStateSnapshot, StorageCo
 class PatchStateResolution:
     source: str
     state: PatchStateSnapshot
+    scenario_id: str | None = None
 
 
 class TestingStateStore:
@@ -45,6 +46,23 @@ class TestingStateStore:
                 version = str(latest_state.get("version") or "").strip()
                 if not version:
                     return None
+                latest_successful_scenario_id = None
+                test_events = subject.get("test_events")
+                if isinstance(test_events, list):
+                    successful_patch_events = [
+                        event
+                        for event in test_events
+                        if isinstance(event, dict)
+                        and event.get("message_type") == "UDI_DI.PATCH"
+                        and event.get("status") == "SUCCESS"
+                    ]
+                    if successful_patch_events:
+                        latest_event = successful_patch_events[-1]
+                        scenario_value = latest_event.get("scenario_id")
+                        if isinstance(scenario_value, str) and scenario_value.strip():
+                            latest_successful_scenario_id = scenario_value.strip()
+                        elif str(latest_event.get("version") or "").strip() == "2":
+                            latest_successful_scenario_id = "equivalent_first_patch"
                 return PatchStateResolution(
                     source="yaml_latest_successful_patch",
                     state=PatchStateSnapshot(
@@ -57,6 +75,7 @@ class TestingStateStore:
                         storage_conditions=self._storage_conditions(latest_state.get("storage_conditions")),
                         critical_warnings=self._critical_warnings(latest_state.get("critical_warnings")),
                     ),
+                    scenario_id=latest_successful_scenario_id,
                 )
         return None
 

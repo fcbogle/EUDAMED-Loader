@@ -58,6 +58,27 @@ class XmlPackageBuilder:
         return f"{XmlPackageBuilder._slugify(product_family)}-{XmlPackageBuilder._slugify(product_variant)}-batch-package.zip"
 
     @staticmethod
+    def bulk_package_file_name(*, product_family: str, product_variant: str, flow: str) -> str:
+        return (
+            f"{XmlPackageBuilder._slugify(product_family)}-{XmlPackageBuilder._slugify(product_variant)}-"
+            f"bulk-{XmlPackageBuilder._slugify(flow)}-package.zip"
+        )
+
+    @staticmethod
+    def bulk_file_name(
+        *,
+        product_family: str,
+        product_variant: str,
+        flow: str,
+        sequence: int,
+        total_chunks: int,
+    ) -> str:
+        return (
+            f"{XmlPackageBuilder._slugify(product_family)}-{XmlPackageBuilder._slugify(product_variant)}-"
+            f"bulk-{XmlPackageBuilder._slugify(flow)}-{sequence:02d}-of-{total_chunks:02d}.xml"
+        )
+
+    @staticmethod
     def post_patch_pair_package_file_name(
         *,
         product_family: str,

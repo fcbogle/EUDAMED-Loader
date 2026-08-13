@@ -168,3 +168,361 @@ tested_subjects:
           - field: "storage_condition.SHC007"
             condition_code: "SHC007"
             value: "Plus 50C"
+
+  - subject_id: "elite|elite2|EL22-24-1KIT-S"
+    product_family: "Elite"
+    product_variant: "Elite2"
+    catalogue_number: "EL22-24-1KIT-S"
+    primary_udi_di: "05050649049491"
+    basic_udi_di: "5050649ELITE2PX"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "Elite2"
+      row_index: 3
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: true
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: true
+
+    latest_successful_state:
+      version: 4
+      trade_name: "ELITE2 ST SIZE 22-23-24 #1 KIT UPDATED"
+      base_quantity: 2
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW011"
+          comment: null
+
+    test_events:
+      - message_type: "DEVICE.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-12T15:33:19.021+02:00"
+        transaction_id: "6ee04bdc-2dae-47cd-9d60-cd2d8cca0e90"
+        submission_id: "ec9c3495-94da-45d0-8997-ffd2980a2c1c"
+
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "trade_name_edit"
+        scenario_label: "Trade Name Edit"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-12T15:41:40.673+02:00"
+        transaction_id: "ca0fdb5d-4ef0-4fed-9d02-dafeb961528c"
+        submission_id: "9e2b1417-3481-466a-99ca-398bc1c827af"
+        payload_created_at: "2026-08-12T13:38:49+00:00"
+        correlation_id: "9567ce49-7e83-4560-9132-fa27bbcd44a2"
+        message_id: "46fdf502-5ca3-40f5-9b7d-20ceff3b96d0"
+        changed_fields:
+          - field: "trade_name"
+            before: "ELITE2 ST SIZE 22-23-24 #1 KIT"
+            after: "ELITE2 ST SIZE 22-23-24 #1 KIT UPDATED"
+
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "warning_add"
+        scenario_label: "Critical Warnings"
+        version: 3
+        status: "SUCCESS"
+        tested_at: "2026-08-12T16:09:26.945+02:00"
+        transaction_id: "c17b16f2-a973-4cdd-a897-0e9873c92fc5"
+        submission_id: "f8e08b5f-36ed-4440-8ca3-9b547851a90e"
+        payload_created_at: "2026-08-12T14:07:30+00:00"
+        correlation_id: "2b0857d0-6adb-4f5d-a367-909f7fe87398"
+        message_id: "893ca351-819d-4d92-b7ff-3ad250ce9c78"
+        changed_fields:
+          - field: "critical_warning"
+            before: "CW010"
+            after: "CW011"
+        retained_fields:
+          - field: "trade_name"
+            value: "ELITE2 ST SIZE 22-23-24 #1 KIT UPDATED"
+          - field: "storage_condition.SHC006"
+            condition_code: "SHC006"
+            value: "Minus 15C"
+          - field: "storage_condition.SHC007"
+            condition_code: "SHC007"
+            value: "Plus 50C"
+
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "base_quantity_edit"
+        scenario_label: "Base Quantity"
+        version: 4
+        status: "SUCCESS"
+        tested_at: "2026-08-12T16:14:47.844+02:00"
+        transaction_id: "b2184ab0-b9b1-4131-a2e3-708b4465a809"
+        submission_id: "cead7982-dbcc-46f3-b143-67d2ccfdb79e"
+        payload_created_at: "2026-08-12T14:13:06+00:00"
+        correlation_id: "d72dcac2-c93e-46bd-a5c6-50e5fa5da37d"
+        message_id: "6ce7ba50-adac-4b19-9e53-9a2d7f5b9869"
+        changed_fields:
+          - field: "base_quantity"
+            before: "1"
+            after: "2"
+        retained_fields:
+          - field: "trade_name"
+            value: "ELITE2 ST SIZE 22-23-24 #1 KIT UPDATED"
+          - field: "critical_warning"
+            value: "CW011"
+          - field: "storage_condition.SHC006"
+            condition_code: "SHC006"
+            value: "Minus 15C"
+          - field: "storage_condition.SHC007"
+            condition_code: "SHC007"
+            value: "Plus 50C"
+
+  - subject_id: "elite|elite-vt|EVT22L11S"
+    product_family: "Elite"
+    product_variant: "Elite VT"
+    catalogue_number: "EVT22L11S"
+    primary_udi_di: "05050649110023"
+    basic_udi_di: "5050649ELITEVTV4"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "Elite VT"
+      row_index: 3
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: false
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 1
+      trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-1"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "DEVICE.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-12T21:49:59.327+02:00"
+        transaction_id: "bd91b270-79af-4f5c-b61f-eb7ac507a6e6"
+        submission_id: "897671e3-bbc9-4148-8737-ec31545e112f"
+        notes:
+          - "Bulk parent DEVICE.POST wave accepted the first Basic UDI-DI creation for 5050649ELITEVTV4."
+          - "Later duplicate parent creations in the same wave were rejected because the Basic UDI-DI already existed."
+
+  - subject_id: "elite|elite-vt|EVT22L11SD"
+    product_family: "Elite"
+    product_variant: "Elite VT"
+    catalogue_number: "EVT22L11SD"
+    primary_udi_di: "05050649110030"
+    basic_udi_di: "5050649ELITEVTV4"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "Elite VT"
+      row_index: 4
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: false
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 1
+      trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-1 DK"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "UDI_DI.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-12T23:05:04.590+02:00"
+        transaction_id: "474d9442-9288-400b-897f-2d8268c421af"
+        submission_id: "5a61396a-7563-4ceb-a6d4-b9ea7396276c"
+
+  - subject_id: "elite|elite-vt|EVT22L12S"
+    product_family: "Elite"
+    product_variant: "Elite VT"
+    catalogue_number: "EVT22L12S"
+    primary_udi_di: "05050649110047"
+    basic_udi_di: "5050649ELITEVTV4"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "Elite VT"
+      row_index: 5
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: false
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 1
+      trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-2"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "UDI_DI.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-12T23:05:04.590+02:00"
+        transaction_id: "474d9442-9288-400b-897f-2d8268c421af"
+        submission_id: "5a61396a-7563-4ceb-a6d4-b9ea7396276c"
+
+  - subject_id: "elite|elite-vt|EVT22L13S"
+    product_family: "Elite"
+    product_variant: "Elite VT"
+    catalogue_number: "EVT22L13S"
+    primary_udi_di: "05050649110054"
+    basic_udi_di: "5050649ELITEVTV4"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "Elite VT"
+      row_index: 6
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: false
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 1
+      trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-3"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "UDI_DI.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-12T23:05:04.590+02:00"
+        transaction_id: "474d9442-9288-400b-897f-2d8268c421af"
+        submission_id: "5a61396a-7563-4ceb-a6d4-b9ea7396276c"
+
+  - subject_id: "elite|elite-vt|EVT22L14S"
+    product_family: "Elite"
+    product_variant: "Elite VT"
+    catalogue_number: "EVT22L14S"
+    primary_udi_di: "05050649110061"
+    basic_udi_di: "5050649ELITEVTV4"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "Elite VT"
+      row_index: 7
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: false
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 1
+      trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-4"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "UDI_DI.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-12T23:05:04.590+02:00"
+        transaction_id: "474d9442-9288-400b-897f-2d8268c421af"
+        submission_id: "5a61396a-7563-4ceb-a6d4-b9ea7396276c"
+
+  - subject_id: "elite|elite-vt|EVT22L15S"
+    product_family: "Elite"
+    product_variant: "Elite VT"
+    catalogue_number: "EVT22L15S"
+    primary_udi_di: "05050649110078"
+    basic_udi_di: "5050649ELITEVTV4"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "Elite VT"
+      row_index: 8
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: false
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 1
+      trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-5"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "UDI_DI.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-12T23:05:04.590+02:00"
+        transaction_id: "474d9442-9288-400b-897f-2d8268c421af"
+        submission_id: "5a61396a-7563-4ceb-a6d4-b9ea7396276c"

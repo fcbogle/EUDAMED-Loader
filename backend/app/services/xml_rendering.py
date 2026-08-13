@@ -84,12 +84,13 @@ class EudamedMessageRenderer:
         self._append_text(root, MESSAGE_NS, "creationDateTime", datetime.now(UTC).replace(microsecond=0).isoformat())
         self._append_text(root, MESSAGE_NS, "messageID", str(uuid4()))
         first_operation = self._normalized_operation(records[0].submission_operation)
+        first_service_id = records[0].service_id_override or self._service_id_for_operation(first_operation)
         root.append(
             self._endpoint_element(
                 tag_name="recipient",
                 node_actor_code="EUDAMED",
                 service_operation=first_operation,
-                service_id=self._service_id_for_operation(first_operation),
+                service_id=first_service_id,
             )
         )
 
@@ -101,6 +102,45 @@ class EudamedMessageRenderer:
             self._endpoint_element(
                 tag_name="sender",
                 node_actor_code=records[0].manufacturer_srn,
+                service_operation=first_operation,
+                service_id=first_service_id,
+            )
+        )
+
+        return etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True)
+
+    def render_batch_from_strings(self, messages: list[str]) -> bytes:
+        if not messages:
+            raise ValueError("At least one XML message is required.")
+
+        roots = [etree.fromstring(message.encode("utf-8")) for message in messages]
+        payload_children = [self._single_payload_child(root) for root in roots]
+        first_operation = self._message_operation(roots[0])
+        sender_code = self._message_sender_code(roots[0])
+
+        root = etree.Element(self._q(MESSAGE_NS, "Push"), nsmap=NSMAP)
+        root.set("version", self.settings.eudamed_message_schema_version)
+
+        self._append_text(root, MESSAGE_NS, "correlationID", str(uuid4()))
+        self._append_text(root, MESSAGE_NS, "creationDateTime", datetime.now(UTC).replace(microsecond=0).isoformat())
+        self._append_text(root, MESSAGE_NS, "messageID", str(uuid4()))
+        root.append(
+            self._endpoint_element(
+                tag_name="recipient",
+                node_actor_code="EUDAMED",
+                service_operation=first_operation,
+                service_id=self._service_id_for_operation(first_operation),
+            )
+        )
+
+        payload = etree.SubElement(root, self._q(MESSAGE_NS, "payload"))
+        for child in payload_children:
+            payload.append(child)
+
+        root.append(
+            self._endpoint_element(
+                tag_name="sender",
+                node_actor_code=sender_code,
                 service_operation=first_operation,
                 service_id=self._service_id_for_operation(first_operation),
             )
@@ -126,6 +166,8 @@ class EudamedMessageRenderer:
 
     def _payload_element(self, record: DeviceXmlRecord) -> XmlElement:
         profile = self._profile_for_operation(record.submission_operation)
+        if self._normalized_operation(record.submission_operation) == "POST" and record.post_payload_mode == "udidi_only":
+            return self._udidi_data_element(record)
         if profile == "device_post":
             return self._device_payload(record)
         return self._udidi_data_element(record)
@@ -183,7 +225,10 @@ class EudamedMessageRenderer:
 
     def _udidi_data_element(self, record: DeviceXmlRecord) -> XmlElement:
         profile = self._profile_for_operation(record.submission_operation)
-        if profile == "device_post":
+        if self._normalized_operation(record.submission_operation) == "POST" and record.post_payload_mode == "udidi_only":
+            udidi = etree.Element(self._q(DEVICE_NS, "UDIDIData"))
+            udidi.set(self._q(XSI_NS, "type"), "udidi:MDRUDIDIDataType")
+        elif profile == "device_post":
             udidi = etree.Element(self._q(DEVICE_NS, "MDRUDIDIData"))
         else:
             udidi = etree.Element(self._q(DEVICE_NS, "UDIDIData"))
@@ -320,6 +365,39 @@ class EudamedMessageRenderer:
         element = etree.SubElement(parent, etree.QName(namespace, tag_name))
         element.text = value
         return element
+
+    @staticmethod
+    def _single_payload_child(root: XmlElement) -> XmlElement:
+        payload = root.find(f"{{{MESSAGE_NS}}}payload")
+        if payload is None or len(payload) != 1:
+            raise ValueError("Each XML message must contain exactly one payload child.")
+        return payload[0]
+
+    @staticmethod
+    def _message_operation(root: XmlElement) -> str:
+        recipient = root.find(f"{{{MESSAGE_NS}}}recipient")
+        if recipient is None:
+            raise ValueError("XML message is missing recipient metadata.")
+        service = recipient.find(f"{{{MESSAGE_NS}}}service")
+        if service is None:
+            raise ValueError("XML message is missing recipient service metadata.")
+        operation = service.findtext(f"{{{SERVICE_NS}}}serviceOperation")
+        if not operation:
+            raise ValueError("XML message is missing recipient service operation.")
+        return operation.upper()
+
+    @staticmethod
+    def _message_sender_code(root: XmlElement) -> str:
+        sender = root.find(f"{{{MESSAGE_NS}}}sender")
+        if sender is None:
+            raise ValueError("XML message is missing sender metadata.")
+        node = sender.find(f"{{{MESSAGE_NS}}}node")
+        if node is None:
+            raise ValueError("XML message is missing sender node metadata.")
+        node_actor_code = node.findtext(f"{{{SERVICE_NS}}}nodeActorCode")
+        if not node_actor_code:
+            raise ValueError("XML message is missing sender node actor code.")
+        return node_actor_code
 
     def _language_optional_texts(self, text: str, *, language: str) -> XmlElement:
         comments = etree.Element(self._q(COMMON_DEVICE_NS, "comments"))

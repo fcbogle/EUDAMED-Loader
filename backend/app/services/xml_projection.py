@@ -92,6 +92,8 @@ class DeviceXmlRecord:
     base_quantity: int | None
     storage_conditions: list[StorageConditionXmlItem]
     critical_warnings: list[CriticalWarningXmlItem]
+    post_payload_mode: str = "device"
+    service_id_override: str | None = None
     patch_version_override: str | None = None
     include_market_infos_in_patch: bool = False
 
@@ -179,6 +181,15 @@ class DeviceXmlProjectionBuilder:
             base_quantity=self._optional_int(field_map.get("device_record.base_quantity")),
             storage_conditions=self._storage_condition_items(record),
             critical_warnings=self._critical_warning_items(record),
+        )
+
+    @staticmethod
+    def build_udidi_post_record(post_record: DeviceXmlRecord) -> DeviceXmlRecord:
+        return replace(
+            post_record,
+            submission_operation="POST",
+            post_payload_mode="udidi_only",
+            service_id_override="UDI_DI",
         )
 
     @staticmethod

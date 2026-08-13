@@ -61,6 +61,7 @@ class PostRegistrationPreview(BaseModel):
     primary_udi_di: str
     registered_device_anchor: RegisteredDeviceAnchor
     latest_successful_patch_state: PatchStateSnapshot | None = None
+    latest_successful_patch_scenario_id: str | None = None
     post_file_name: str
     post_xml: str
     post_validation: XmlValidationResult
@@ -171,4 +172,90 @@ class BatchXmlPreview(BaseModel):
     selected_chunk_record_count: int
     selected_chunk_xml: str
     selected_chunk_validation: XmlValidationResult
+    chunks: list[BatchXmlChunkSummary] = Field(default_factory=list)
+
+
+class BulkXmlRecordSummary(BaseModel):
+    catalogue_number: str
+    primary_udi_di: str | None = None
+    basic_udi_di: str | None = None
+    trade_name: str | None = None
+    source_workbook: str | None = None
+    source_sheet: str | None = None
+    source_row_index: int | None = None
+    base_message_type: Literal["POST", "PATCH"] | None = None
+    base_version: str | None = None
+    derived_version: str | None = None
+    accepted_state_source: str | None = None
+    scenario_id: str | None = None
+
+
+class BulkXmlExcludedRecord(BaseModel):
+    catalogue_number: str | None = None
+    primary_udi_di: str | None = None
+    reason_code: str
+    reason_message: str
+
+
+class BulkPostPreview(BaseModel):
+    mode: Literal["bulk_post"] = "bulk_post"
+    product_family: str
+    product_variant: str
+    requested_record_count: int
+    eligible_post_records: int
+    included_record_count: int
+    excluded_record_count: int
+    package_file_name: str
+    max_records_per_file: int
+    chunk_count: int
+    selected_chunk_sequence: int
+    selected_chunk_file_name: str
+    selected_chunk_record_count: int
+    selected_chunk_xml: str
+    selected_chunk_validation: XmlValidationResult
+    included_records: list[BulkXmlRecordSummary] = Field(default_factory=list)
+    excluded_records: list[BulkXmlExcludedRecord] = Field(default_factory=list)
+    chunks: list[BatchXmlChunkSummary] = Field(default_factory=list)
+
+
+class BulkUdidiPostPreview(BaseModel):
+    mode: Literal["bulk_udidi_post"] = "bulk_udidi_post"
+    product_family: str
+    product_variant: str
+    requested_record_count: int
+    eligible_child_records: int
+    included_record_count: int
+    excluded_record_count: int
+    package_file_name: str
+    max_records_per_file: int
+    chunk_count: int
+    selected_chunk_sequence: int
+    selected_chunk_file_name: str
+    selected_chunk_record_count: int
+    selected_chunk_xml: str
+    selected_chunk_validation: XmlValidationResult
+    included_records: list[BulkXmlRecordSummary] = Field(default_factory=list)
+    excluded_records: list[BulkXmlExcludedRecord] = Field(default_factory=list)
+    chunks: list[BatchXmlChunkSummary] = Field(default_factory=list)
+
+
+class BulkPatchPreview(BaseModel):
+    mode: Literal["bulk_patch"] = "bulk_patch"
+    product_family: str
+    product_variant: str
+    requested_record_count: int
+    scenario_id: str
+    scenario_label: str
+    package_file_name: str
+    max_records_per_file: int
+    chunk_count: int
+    selected_chunk_sequence: int
+    selected_chunk_file_name: str
+    selected_chunk_record_count: int
+    selected_chunk_xml: str
+    selected_chunk_validation: XmlValidationResult
+    included_record_count: int
+    excluded_record_count: int
+    included_records: list[BulkXmlRecordSummary] = Field(default_factory=list)
+    excluded_records: list[BulkXmlExcludedRecord] = Field(default_factory=list)
     chunks: list[BatchXmlChunkSummary] = Field(default_factory=list)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from app.config import get_settings
@@ -14,6 +15,11 @@ from app.validation_models import CanonicalValidationRecord
 from app.xml_models import (
     BatchXmlChunkSummary,
     BatchXmlPreview,
+    BulkPatchPreview,
+    BulkPostPreview,
+    BulkUdidiPostPreview,
+    BulkXmlExcludedRecord,
+    BulkXmlRecordSummary,
     GeneratedPatchScenarioPreview,
     MarketInfoPutPreview,
     PatchScenarioContext,
@@ -62,6 +68,698 @@ class XmlGenerationService:
             ),
             total_xml_ready_records=bundle.xml_ready_records,
             families=families,
+        )
+
+    @staticmethod
+    def _normalize_record_count(record_count: int | None, max_records: int) -> int:
+        normalized = int(record_count or 1)
+        if normalized < 1:
+            raise ValueError("record_count must be between 1 and 300.")
+        if normalized > max_records:
+            raise ValueError(f"record_count must be between 1 and {max_records}.")
+        return normalized
+
+    def _variant_post_records_with_exclusions(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        record_count: int,
+    ) -> tuple[list[CanonicalValidationRecord], list[BulkXmlExcludedRecord], int]:
+        bundle = self.validation_service.build_validation_bundle()
+        variant_records = [
+            record
+            for record in bundle.records
+            if record.product_family == product_family and record.product_variant == product_variant
+        ]
+        excluded: list[BulkXmlExcludedRecord] = []
+        eligible_posts: list[CanonicalValidationRecord] = []
+        for record in variant_records:
+            if self._normalized_operation(record.submission_operation) != "POST":
+                excluded.append(
+                    BulkXmlExcludedRecord(
+                        catalogue_number=record.catalogue_number,
+                        primary_udi_di=record.primary_udi_di,
+                        reason_code="not_post_operation",
+                        reason_message="Record is not classified as a POST row.",
+                    )
+                )
+                continue
+            if record.xml_readiness.status != "complete":
+                excluded.append(
+                    BulkXmlExcludedRecord(
+                        catalogue_number=record.catalogue_number,
+                        primary_udi_di=record.primary_udi_di,
+                        reason_code="xml_not_ready",
+                        reason_message="Record is not XML-ready.",
+                    )
+                )
+                continue
+            eligible_posts.append(record)
+        return eligible_posts[:record_count], excluded, len(eligible_posts)
+
+    @staticmethod
+    def _bulk_record_summary(record: CanonicalValidationRecord) -> BulkXmlRecordSummary:
+        basic_udi_di = next(
+            (
+                field.value
+                for field in record.fields
+                if field.canonical_path in {"basic_device.basic_udi_di", "device_record.basic_udi_identifier"}
+                and field.value
+            ),
+            None,
+        )
+        return BulkXmlRecordSummary(
+            catalogue_number=record.catalogue_number or "",
+            primary_udi_di=record.primary_udi_di,
+            basic_udi_di=basic_udi_di,
+            trade_name=record.trade_name,
+            source_workbook=record.source_workbook,
+            source_sheet=record.source_sheet,
+            source_row_index=record.source_row_index,
+        )
+
+    def _deduplicate_bulk_basic_udi_posts(
+        self,
+        records: list[CanonicalValidationRecord],
+        excluded_records: list[BulkXmlExcludedRecord],
+    ) -> tuple[list[CanonicalValidationRecord], list[BulkXmlExcludedRecord], int]:
+        included: list[CanonicalValidationRecord] = []
+        seen_basic_udi_dis: set[str] = set()
+        eligible_basic_udi_dis: set[str] = set()
+
+        for record in records:
+            summary = self._bulk_record_summary(record)
+            basic_udi_di = summary.basic_udi_di
+            if not basic_udi_di:
+                excluded_records.append(
+                    BulkXmlExcludedRecord(
+                        catalogue_number=record.catalogue_number,
+                        primary_udi_di=record.primary_udi_di,
+                        reason_code="missing_basic_udi_di",
+                        reason_message="Record does not resolve to a Basic UDI-DI, so it cannot be used for Bulk Basic UDI POST.",
+                    )
+                )
+                continue
+
+            eligible_basic_udi_dis.add(basic_udi_di)
+            if basic_udi_di in seen_basic_udi_dis:
+                excluded_records.append(
+                    BulkXmlExcludedRecord(
+                        catalogue_number=record.catalogue_number,
+                        primary_udi_di=record.primary_udi_di,
+                        reason_code="duplicate_basic_udi_di",
+                        reason_message=(
+                            f"Bulk Basic UDI POST keeps only the first eligible row for Basic UDI-DI {basic_udi_di}."
+                        ),
+                    )
+                )
+                continue
+
+            seen_basic_udi_dis.add(basic_udi_di)
+            included.append(record)
+
+        return included, excluded_records, len(eligible_basic_udi_dis)
+
+    def _bulk_udidi_post_candidates(
+        self,
+        records: list[CanonicalValidationRecord],
+        excluded_records: list[BulkXmlExcludedRecord],
+    ) -> tuple[list[CanonicalValidationRecord], list[BulkXmlExcludedRecord], int]:
+        grouped_records: dict[str, list[CanonicalValidationRecord]] = {}
+        eligible_child_records = 0
+
+        for record in records:
+            summary = self._bulk_record_summary(record)
+            basic_udi_di = summary.basic_udi_di
+            if not basic_udi_di:
+                excluded_records.append(
+                    BulkXmlExcludedRecord(
+                        catalogue_number=record.catalogue_number,
+                        primary_udi_di=record.primary_udi_di,
+                        reason_code="missing_basic_udi_di",
+                        reason_message="Record does not resolve to a Basic UDI-DI, so it cannot be used for Bulk UDI-DI POST.",
+                    )
+                )
+                continue
+            grouped_records.setdefault(basic_udi_di, []).append(record)
+
+        included: list[CanonicalValidationRecord] = []
+        for basic_udi_di, group in grouped_records.items():
+            if group:
+                parent_seed = group[0]
+                excluded_records.append(
+                    BulkXmlExcludedRecord(
+                        catalogue_number=parent_seed.catalogue_number,
+                        primary_udi_di=parent_seed.primary_udi_di,
+                        reason_code="parent_seed_row",
+                        reason_message=(
+                            f"First eligible row for Basic UDI-DI {basic_udi_di} is reserved as the parent registration seed."
+                        ),
+                    )
+                )
+            children = group[1:]
+            eligible_child_records += len(children)
+            included.extend(children)
+
+        return included, excluded_records, eligible_child_records
+
+    def preview_bulk_post(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        record_count: int,
+        chunk_sequence: int = 1,
+    ) -> BulkPostPreview:
+        normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
+        candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=self.settings.eudamed_max_batch_records,
+        )
+        deduplicated_records, excluded_records, eligible_basic_udi_posts = self._deduplicate_bulk_basic_udi_posts(
+            candidate_records,
+            excluded_records,
+        )
+        included_records_raw = deduplicated_records[:normalized_count]
+        if not included_records_raw:
+            raise ValueError(
+                f"No eligible Basic UDI-DI POST records are currently available for {product_family} / {product_variant}."
+            )
+        record_chunks = self.selector.chunk_records(included_records_raw, self.settings.eudamed_max_batch_records)
+        total_chunks = len(record_chunks)
+        chunk_summaries: list[BatchXmlChunkSummary] = []
+        xml_chunks: list[tuple[int, list[CanonicalValidationRecord], bytes]] = []
+        for sequence, chunk_records in enumerate(record_chunks, start=1):
+            xml_records = [self.projection_builder.build_device_record(record) for record in chunk_records]
+            xml_bytes = self.renderer.render_message_records(xml_records)
+            validation = self.xml_validation_service.validate_message(xml_bytes)
+            file_name = self.package_builder.bulk_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+                flow="post",
+                sequence=sequence,
+                total_chunks=total_chunks,
+            )
+            xml_chunks.append((sequence, chunk_records, xml_bytes))
+            chunk_summaries.append(
+                BatchXmlChunkSummary(
+                    sequence=sequence,
+                    file_name=file_name,
+                    record_count=len(chunk_records),
+                    first_catalogue_number=chunk_records[0].catalogue_number if chunk_records else None,
+                    last_catalogue_number=chunk_records[-1].catalogue_number if chunk_records else None,
+                    validation=validation,
+                )
+            )
+        if chunk_sequence < 1 or chunk_sequence > total_chunks:
+            raise ValueError(f"Bulk POST chunk {chunk_sequence} is out of range. Valid chunks are 1 to {total_chunks}.")
+        selected_sequence, selected_records, selected_xml_bytes = xml_chunks[chunk_sequence - 1]
+        selected_summary = chunk_summaries[chunk_sequence - 1]
+        return BulkPostPreview(
+            product_family=product_family,
+            product_variant=product_variant,
+            requested_record_count=normalized_count,
+            eligible_post_records=eligible_basic_udi_posts,
+            included_record_count=len(included_records_raw),
+            excluded_record_count=len(excluded_records),
+            package_file_name=self.package_builder.bulk_package_file_name(
+                product_family=product_family, product_variant=product_variant, flow="post"
+            ),
+            max_records_per_file=self.settings.eudamed_max_batch_records,
+            chunk_count=total_chunks,
+            selected_chunk_sequence=selected_sequence,
+            selected_chunk_file_name=selected_summary.file_name,
+            selected_chunk_record_count=len(selected_records),
+            selected_chunk_xml=selected_xml_bytes.decode("utf-8"),
+            selected_chunk_validation=selected_summary.validation,
+            included_records=[self._bulk_record_summary(record) for record in included_records_raw],
+            excluded_records=excluded_records,
+            chunks=chunk_summaries,
+        )
+
+    def download_bulk_post(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        record_count: int,
+    ) -> tuple[str, bytes]:
+        preview = self.preview_bulk_post(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=record_count,
+        )
+        members: list[tuple[str, bytes]] = []
+        manifest_chunks = []
+        raw_candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=self.settings.eudamed_max_batch_records,
+        )
+        raw_records, _, _ = self._deduplicate_bulk_basic_udi_posts(raw_candidate_records, excluded_records)
+        raw_records = raw_records[: preview.included_record_count]
+        record_chunks = self.selector.chunk_records(raw_records, self.settings.eudamed_max_batch_records)
+        total_chunks = len(record_chunks)
+        for sequence, chunk_records in enumerate(record_chunks, start=1):
+            file_name = self.package_builder.bulk_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+                flow="post",
+                sequence=sequence,
+                total_chunks=total_chunks,
+            )
+            xml_records = [self.projection_builder.build_device_record(record) for record in chunk_records]
+            xml_bytes = self.renderer.render_message_records(xml_records)
+            validation = self.xml_validation_service.validate_message(xml_bytes)
+            members.append((file_name, xml_bytes))
+            manifest_chunks.append(
+                {
+                    "sequence": sequence,
+                    "file_name": file_name,
+                    "record_count": len(chunk_records),
+                    "valid": validation.valid,
+                }
+            )
+        manifest = {
+            "mode": "bulk_post",
+            "product_family": product_family,
+            "product_variant": product_variant,
+            "requested_record_count": preview.requested_record_count,
+            "included_record_count": preview.included_record_count,
+            "excluded_record_count": preview.excluded_record_count,
+            "records": [record.model_dump(mode="json") for record in preview.included_records],
+            "excluded_records": [record.model_dump(mode="json") for record in preview.excluded_records],
+            "chunks": manifest_chunks,
+        }
+        members.append(
+            (
+                "excluded-records.json",
+                json.dumps([record.model_dump(mode="json") for record in preview.excluded_records], indent=2).encode(
+                    "utf-8"
+                ),
+            )
+        )
+        return self.package_builder.build_archive(
+            package_file_name=preview.package_file_name,
+            members=members,
+            manifest=manifest,
+        )
+
+    def preview_bulk_udidi_post(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        record_count: int,
+        chunk_sequence: int = 1,
+    ) -> BulkUdidiPostPreview:
+        normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
+        candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=self.settings.eudamed_max_batch_records,
+        )
+        included_candidates, excluded_records, eligible_child_records = self._bulk_udidi_post_candidates(
+            candidate_records,
+            excluded_records,
+        )
+        included_records_raw = included_candidates[:normalized_count]
+        if not included_records_raw:
+            raise ValueError(
+                f"No eligible child UDI-DI POST records are currently available for {product_family} / {product_variant}."
+            )
+
+        record_chunks = self.selector.chunk_records(included_records_raw, self.settings.eudamed_max_batch_records)
+        total_chunks = len(record_chunks)
+        chunk_summaries: list[BatchXmlChunkSummary] = []
+        xml_chunks: list[tuple[int, list[CanonicalValidationRecord], bytes]] = []
+        for sequence, chunk_records in enumerate(record_chunks, start=1):
+            xml_records = [
+                self.projection_builder.build_udidi_post_record(self.projection_builder.build_device_record(record))
+                for record in chunk_records
+            ]
+            xml_bytes = self.renderer.render_message_records(xml_records)
+            validation = self.xml_validation_service.validate_message(xml_bytes)
+            file_name = self.package_builder.bulk_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+                flow="udidi-post",
+                sequence=sequence,
+                total_chunks=total_chunks,
+            )
+            xml_chunks.append((sequence, chunk_records, xml_bytes))
+            chunk_summaries.append(
+                BatchXmlChunkSummary(
+                    sequence=sequence,
+                    file_name=file_name,
+                    record_count=len(chunk_records),
+                    first_catalogue_number=chunk_records[0].catalogue_number if chunk_records else None,
+                    last_catalogue_number=chunk_records[-1].catalogue_number if chunk_records else None,
+                    validation=validation,
+                )
+            )
+
+        if chunk_sequence < 1 or chunk_sequence > total_chunks:
+            raise ValueError(f"Bulk UDI-DI POST chunk {chunk_sequence} is out of range. Valid chunks are 1 to {total_chunks}.")
+
+        selected_sequence, selected_records, selected_xml_bytes = xml_chunks[chunk_sequence - 1]
+        selected_summary = chunk_summaries[chunk_sequence - 1]
+        return BulkUdidiPostPreview(
+            product_family=product_family,
+            product_variant=product_variant,
+            requested_record_count=normalized_count,
+            eligible_child_records=eligible_child_records,
+            included_record_count=len(included_records_raw),
+            excluded_record_count=len(excluded_records),
+            package_file_name=self.package_builder.bulk_package_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+                flow="udidi-post",
+            ),
+            max_records_per_file=self.settings.eudamed_max_batch_records,
+            chunk_count=total_chunks,
+            selected_chunk_sequence=selected_sequence,
+            selected_chunk_file_name=selected_summary.file_name,
+            selected_chunk_record_count=len(selected_records),
+            selected_chunk_xml=selected_xml_bytes.decode("utf-8"),
+            selected_chunk_validation=selected_summary.validation,
+            included_records=[self._bulk_record_summary(record) for record in included_records_raw],
+            excluded_records=excluded_records,
+            chunks=chunk_summaries,
+        )
+
+    def download_bulk_udidi_post(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        record_count: int,
+    ) -> tuple[str, bytes]:
+        preview = self.preview_bulk_udidi_post(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=record_count,
+        )
+        raw_candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=self.settings.eudamed_max_batch_records,
+        )
+        raw_records, _, _ = self._bulk_udidi_post_candidates(raw_candidate_records, excluded_records)
+        raw_records = raw_records[: preview.included_record_count]
+
+        members: list[tuple[str, bytes]] = []
+        manifest_chunks = []
+        record_chunks = self.selector.chunk_records(raw_records, self.settings.eudamed_max_batch_records)
+        total_chunks = len(record_chunks)
+        for sequence, chunk_records in enumerate(record_chunks, start=1):
+            file_name = self.package_builder.bulk_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+                flow="udidi-post",
+                sequence=sequence,
+                total_chunks=total_chunks,
+            )
+            xml_records = [
+                self.projection_builder.build_udidi_post_record(self.projection_builder.build_device_record(record))
+                for record in chunk_records
+            ]
+            xml_bytes = self.renderer.render_message_records(xml_records)
+            validation = self.xml_validation_service.validate_message(xml_bytes)
+            members.append((file_name, xml_bytes))
+            manifest_chunks.append(
+                {
+                    "sequence": sequence,
+                    "file_name": file_name,
+                    "record_count": len(chunk_records),
+                    "valid": validation.valid,
+                }
+            )
+        manifest = {
+            "mode": "bulk_udidi_post",
+            "product_family": product_family,
+            "product_variant": product_variant,
+            "requested_record_count": preview.requested_record_count,
+            "included_record_count": preview.included_record_count,
+            "excluded_record_count": preview.excluded_record_count,
+            "records": [record.model_dump(mode="json") for record in preview.included_records],
+            "excluded_records": [record.model_dump(mode="json") for record in preview.excluded_records],
+            "chunks": manifest_chunks,
+        }
+        members.append(
+            (
+                "excluded-records.json",
+                json.dumps([record.model_dump(mode="json") for record in preview.excluded_records], indent=2).encode(
+                    "utf-8"
+                ),
+            )
+        )
+        return self.package_builder.build_archive(
+            package_file_name=preview.package_file_name,
+            members=members,
+            manifest=manifest,
+        )
+
+    def preview_bulk_patch(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        record_count: int,
+        scenario_id: str,
+        scenario_inputs: dict[str, Any] | None = None,
+        chunk_sequence: int = 1,
+    ) -> BulkPatchPreview:
+        normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
+        candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=normalized_count,
+        )
+        scenario_data = scenario_inputs or {}
+        included_summaries: list[BulkXmlRecordSummary] = []
+        included_payloads: list[tuple[BulkXmlRecordSummary, bytes]] = []
+        scenario_label = next(
+            (label for sid, label in {
+                "equivalent_first_patch": "Equivalent First Patch",
+                "trade_name_edit": "Trade Name Edit",
+                "warning_add": "Critical Warnings",
+                "storage_condition_edit": "Storage Condition Edit",
+                "base_quantity_edit": "Base Quantity",
+                "status_code_edit": "Status Code",
+            }.items() if sid == scenario_id),
+            scenario_id,
+        )
+        blocked_scenarios = {
+            "latex_edit": "Scenario is currently rejected by EUDAMED business rules.",
+            "sterile_edit": "Scenario is currently rejected by EUDAMED business rules.",
+        }
+        unimplemented_scenarios = {
+            "production_identifier_edit",
+            "sterilization_edit",
+            "reprocessed_edit",
+            "number_of_reuses_edit",
+            "mdn_codes_edit",
+        }
+        if scenario_id in blocked_scenarios or scenario_id in unimplemented_scenarios:
+            reason_code = "scenario_blocked_by_eudamed" if scenario_id in blocked_scenarios else "scenario_not_implemented"
+            reason_message = blocked_scenarios.get(scenario_id, "Scenario is not implemented for bulk PATCH.")
+            for record in candidate_records:
+                excluded_records.append(
+                    BulkXmlExcludedRecord(
+                        catalogue_number=record.catalogue_number,
+                        primary_udi_di=record.primary_udi_di,
+                        reason_code=reason_code,
+                        reason_message=reason_message,
+                    )
+                )
+            candidate_records = []
+        for record in candidate_records:
+            post_record = self.projection_builder.build_device_record(record)
+            patch_state_resolution = self.testing_state_store.latest_successful_patch_state(
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                catalogue_number=post_record.catalogue_number,
+            )
+            derived_version = "2" if not patch_state_resolution else str(int(patch_state_resolution.state.version) + 1)
+            try:
+                preview = self.preview_generated_patch_scenario(
+                    product_family=record.product_family,
+                    product_variant=record.product_variant,
+                    catalogue_number=post_record.catalogue_number,
+                    scenario_id=scenario_id,
+                    patch_version=derived_version,
+                    scenario_inputs=scenario_data,
+                )
+            except ValueError as exc:
+                excluded_records.append(
+                    BulkXmlExcludedRecord(
+                        catalogue_number=record.catalogue_number,
+                        primary_udi_di=record.primary_udi_di,
+                        reason_code="scenario_input_missing" if "required" in str(exc).lower() else "invalid_next_version",
+                        reason_message=str(exc),
+                    )
+                )
+                continue
+            included_summary = self._bulk_record_summary(record)
+            included_summary.base_message_type = preview.context.base_message_type
+            included_summary.base_version = preview.context.base_version
+            included_summary.derived_version = preview.context.proposed_patch_version
+            included_summary.accepted_state_source = preview.context.base_state_source
+            included_summary.scenario_id = scenario_id
+            included_summaries.append(included_summary)
+            included_payloads.append((included_summary, preview.derived_patch_xml.encode("utf-8")))
+        if not included_payloads:
+            raise ValueError(
+                f"No eligible records are currently available for bulk PATCH generation for {product_family} / {product_variant}."
+            )
+        payload_chunks = [
+            included_payloads[index : index + self.settings.eudamed_max_batch_records]
+            for index in range(0, len(included_payloads), self.settings.eudamed_max_batch_records)
+        ]
+        total_chunks = len(payload_chunks)
+        chunk_summaries: list[BatchXmlChunkSummary] = []
+        rendered_chunks: list[tuple[int, list[BulkXmlRecordSummary], bytes, XmlValidationResult, str]] = []
+        for sequence, chunk_payloads in enumerate(payload_chunks, start=1):
+            xml_bytes = self.renderer.render_batch_from_strings([payload.decode("utf-8") for _, payload in chunk_payloads])
+            validation = self.xml_validation_service.validate_message(xml_bytes)
+            file_name = self.package_builder.bulk_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+                flow=f"patch-{scenario_id.replace('_', '-')}",
+                sequence=sequence,
+                total_chunks=total_chunks,
+            )
+            chunk_records = [summary for summary, _ in chunk_payloads]
+            rendered_chunks.append((sequence, chunk_records, xml_bytes, validation, file_name))
+            chunk_summaries.append(
+                BatchXmlChunkSummary(
+                    sequence=sequence,
+                    file_name=file_name,
+                    record_count=len(chunk_records),
+                    first_catalogue_number=chunk_records[0].catalogue_number if chunk_records else None,
+                    last_catalogue_number=chunk_records[-1].catalogue_number if chunk_records else None,
+                    validation=validation,
+                )
+            )
+        if chunk_sequence < 1 or chunk_sequence > total_chunks:
+            raise ValueError(f"Bulk PATCH chunk {chunk_sequence} is out of range. Valid chunks are 1 to {total_chunks}.")
+        selected_sequence, selected_records, selected_xml_bytes, selected_validation, selected_file_name = rendered_chunks[
+            chunk_sequence - 1
+        ]
+        return BulkPatchPreview(
+            product_family=product_family,
+            product_variant=product_variant,
+            requested_record_count=normalized_count,
+            scenario_id=scenario_id,
+            scenario_label=scenario_label,
+            package_file_name=self.package_builder.bulk_package_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+                flow=f"patch-{scenario_id.replace('_', '-')}",
+            ),
+            max_records_per_file=self.settings.eudamed_max_batch_records,
+            chunk_count=total_chunks,
+            selected_chunk_sequence=selected_sequence,
+            selected_chunk_file_name=selected_file_name,
+            selected_chunk_record_count=len(selected_records),
+            selected_chunk_xml=selected_xml_bytes.decode("utf-8"),
+            selected_chunk_validation=selected_validation,
+            included_record_count=len(included_summaries),
+            excluded_record_count=len(excluded_records),
+            included_records=included_summaries,
+            excluded_records=excluded_records,
+            chunks=chunk_summaries,
+        )
+
+    def download_bulk_patch(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        record_count: int,
+        scenario_id: str,
+        scenario_inputs: dict[str, Any] | None = None,
+    ) -> tuple[str, bytes]:
+        preview = self.preview_bulk_patch(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=record_count,
+            scenario_id=scenario_id,
+            scenario_inputs=scenario_inputs,
+        )
+        candidate_records, _, _ = self._variant_post_records_with_exclusions(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=preview.requested_record_count,
+        )
+        members: list[tuple[str, bytes]] = []
+        chunk_members = []
+        successful_catalogues = {record.catalogue_number for record in preview.included_records}
+        included_payloads: list[tuple[BulkXmlRecordSummary, bytes]] = []
+        scenario_data = scenario_inputs or {}
+        for record in candidate_records:
+            if record.catalogue_number not in successful_catalogues:
+                continue
+            patch_state_resolution = self.testing_state_store.latest_successful_patch_state(
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                catalogue_number=record.catalogue_number or "",
+            )
+            derived_version = "2" if not patch_state_resolution else str(int(patch_state_resolution.state.version) + 1)
+            scenario_preview = self.preview_generated_patch_scenario(
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                catalogue_number=record.catalogue_number or "",
+                scenario_id=scenario_id,
+                patch_version=derived_version,
+                scenario_inputs=scenario_data,
+            )
+            summary = next(item for item in preview.included_records if item.catalogue_number == record.catalogue_number)
+            included_payloads.append((summary, scenario_preview.derived_patch_xml.encode("utf-8")))
+        payload_chunks = [
+            included_payloads[index : index + self.settings.eudamed_max_batch_records]
+            for index in range(0, len(included_payloads), self.settings.eudamed_max_batch_records)
+        ]
+        total_chunks = len(payload_chunks)
+        for sequence, chunk_payloads in enumerate(payload_chunks, start=1):
+            xml_bytes = self.renderer.render_batch_from_strings([payload.decode("utf-8") for _, payload in chunk_payloads])
+            file_name = self.package_builder.bulk_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+                flow=f"patch-{scenario_id.replace('_', '-')}",
+                sequence=sequence,
+                total_chunks=total_chunks,
+            )
+            members.append((file_name, xml_bytes))
+            chunk_members.append({"sequence": sequence, "file_name": file_name, "record_count": len(chunk_payloads)})
+        manifest = {
+            "mode": "bulk_patch",
+            "product_family": product_family,
+            "product_variant": product_variant,
+            "requested_record_count": preview.requested_record_count,
+            "scenario_id": scenario_id,
+            "scenario_label": preview.scenario_label,
+            "included_record_count": preview.included_record_count,
+            "excluded_record_count": preview.excluded_record_count,
+            "records": [record.model_dump(mode="json") for record in preview.included_records],
+            "excluded_records": [record.model_dump(mode="json") for record in preview.excluded_records],
+            "chunks": chunk_members,
+        }
+        members.append(
+            (
+                "excluded-records.json",
+                json.dumps([record.model_dump(mode="json") for record in preview.excluded_records], indent=2).encode(
+                    "utf-8"
+                ),
+            )
+        )
+        return self.package_builder.build_archive(
+            package_file_name=preview.package_file_name,
+            members=members,
+            manifest=manifest,
         )
 
     def preview_generated_patch_scenario(
@@ -294,6 +992,7 @@ class XmlGenerationService:
             primary_udi_di=post_record.primary_udi_di,
             registered_device_anchor=registered_device_anchor,
             latest_successful_patch_state=patch_state_resolution.state if patch_state_resolution else None,
+            latest_successful_patch_scenario_id=patch_state_resolution.scenario_id if patch_state_resolution else None,
             post_file_name=post_file_name,
             post_xml=post_xml_bytes.decode("utf-8"),
             post_validation=self.xml_validation_service.validate_message(post_xml_bytes),

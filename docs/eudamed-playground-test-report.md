@@ -68,6 +68,40 @@ Related documents:
   - baseline first-child `PATCH` tested successfully
   - first real scenario-derived `PATCH` tested successfully for trade name
 
+### Subject 3
+
+- Product family: `Elite`
+- Product variant: `Elite2`
+- Catalogue number: `EL22-24-1KIT-S`
+- Primary UDI-DI: `05050649049491`
+- Basic UDI-DI: `5050649ELITE2PX`
+- Source workbook: `Template for Elite family EUDAMED.xlsx`
+- Source sheet: `Elite2`
+- Source row index: `3`
+- Current status:
+  - baseline `POST` tested successfully
+  - baseline first real `PATCH` tested successfully for trade name
+  - attempted `latex` `PATCH` at version `3` failed with Playground business-rule error `ERR-DTX-UDI-031-033.02`
+  - attempted `sterile` `PATCH` at version `3` failed with Playground business-rule error `ERR-DTX-UDI-031-033.02`
+  - `criticalWarnings` `PATCH` then tested successfully at version `3`
+  - `baseQuantity` `PATCH` then tested successfully at version `4`
+
+### Subject 4
+
+- Product family: `Elite`
+- Product variant: `Elite VT`
+- Catalogue number: `EVT22L11S`
+- Primary UDI-DI: `05050649110023`
+- Basic UDI-DI: `5050649ELITEVTV4`
+- Source workbook: `Template for Elite family EUDAMED.xlsx`
+- Source sheet: `Elite VT`
+- Source row index: `3`
+- Current status:
+  - parent `DEVICE.POST` tested successfully for the new `Basic UDI-DI`
+  - attempted bulk parent `DEVICE.POST` then showed duplicate-parent rejection for later rows in the same wave
+  - follow-on child `UDI_DI.POST` bulk upload then tested successfully for five sibling UDI-DI records under the accepted parent
+  - these child UDI-DI registrations are now valid candidates for first `PATCH` testing at version `2`
+
 ## Confirmed Test Executions
 
 ### Single-Device Testing
@@ -302,9 +336,287 @@ Notes:
 - This confirmed that the generated warning PATCH preserved the successful version `3` trade-name update rather than reverting to the original baseline value.
 - This is the first confirmed successful `Critical Warnings` scenario PATCH for the `Elan IC` subject.
 
+#### Device C: `Elite` / `Elite2` / `EL22-24-1KIT-S`
+
+Device identity:
+
+- Product family: `Elite`
+- Product variant: `Elite2`
+- Catalogue number: `EL22-24-1KIT-S`
+- Primary UDI-DI: `05050649049491`
+- Basic UDI-DI: `5050649ELITE2PX`
+
+##### C1. Baseline `DEVICE.POST`
+
+- Playground acceptance time: `2026-08-12T15:33:19.021+02:00`
+- Message type: `DEVICE.POST`
+- Subject:
+  - `Elite`
+  - `Elite2`
+  - `EL22-24-1KIT-S`
+  - `05050649049491`
+- Outcome: `SUCCESS`
+- Transaction id: `6ee04bdc-2dae-47cd-9d60-cd2d8cca0e90`
+- Submission id: `ec9c3495-94da-45d0-8997-ffd2980a2c1c`
+
+Notes:
+
+- This established a third tested device lineage in Playground.
+- The successful payload used manufacturer actor `UK-MF-000033261` and service `DEVICE.POST`.
+- The next planned step for this subject is the first `UDI_DI.PATCH` at `e:version = 2`, derived from this accepted `POST`.
+
+##### C2. Scenario `UDI_DI.PATCH` for trade name
+
+- Playground acceptance time: `2026-08-12T15:41:40.673+02:00`
+- Payload creation time: `2026-08-12T13:38:49+00:00`
+- Message type: `UDI_DI.PATCH`
+- Scenario id: `trade_name_edit`
+- Subject:
+  - `Elite`
+  - `Elite2`
+  - `EL22-24-1KIT-S`
+  - `05050649049491`
+- `e:version`: `2`
+- Outcome: `SUCCESS`
+- Transaction id: `ca0fdb5d-4ef0-4fed-9d02-dafeb961528c`
+- Submission id: `9e2b1417-3481-466a-99ca-398bc1c827af`
+
+Confirmed business delta:
+
+- changed field: `trade_name`
+- before: `ELITE2 ST SIZE 22-23-24 #1 KIT`
+- after: `ELITE2 ST SIZE 22-23-24 #1 KIT UPDATED`
+
+Notes:
+
+- This is the first confirmed successful `UDI_DI.PATCH` for the `Elite2` subject after the accepted baseline `POST`.
+- This accepted version `2` `PATCH` now becomes the required base state for any later `PATCH` at version `3+` on this same device lineage.
+
+##### C3. Scenario `UDI_DI.PATCH` for latex
+
+- Playground acceptance time: `2026-08-12T15:53:42.722+02:00`
+- Payload creation time: `2026-08-12T13:51:02+00:00`
+- Message type: `UDI_DI.PATCH`
+- Scenario id: `latex_edit`
+- Subject:
+  - `Elite`
+  - `Elite2`
+  - `EL22-24-1KIT-S`
+  - `05050649049491`
+- `e:version`: `3`
+- Outcome: `PROCESSED_WITH_ERRORS`
+- Transaction id: `e0980a52-75cb-47fd-9275-6f4a41ccf149`
+- Submission id: `0834941e-d18d-4075-8745-cd49d6990726`
+
+Attempted business delta:
+
+- changed field: `latex`
+- before: `false`
+- after: `true`
+
+Observed Playground rule:
+
+- field: `latex`
+- error: `ERR-DTX-UDI-031-033.02: Containing latex is not updatable.`
+
+Notes:
+
+- The payload was processed but rejected at EUDAMED business-rule level.
+- This does not create a new accepted device state and must not replace the accepted version `2` trade-name PATCH as the current base state.
+- The next candidate `PATCH` for this subject should still derive from the accepted version `2` state and continue to use `e:version = 3` until a later scenario succeeds.
+
+##### C4. Scenario `UDI_DI.PATCH` for sterile
+
+- Playground acceptance time: `2026-08-12T16:05:05.363+02:00`
+- Payload creation time: `2026-08-12T14:02:41+00:00`
+- Message type: `UDI_DI.PATCH`
+- Scenario id: `sterile_edit`
+- Subject:
+  - `Elite`
+  - `Elite2`
+  - `EL22-24-1KIT-S`
+  - `05050649049491`
+- `e:version`: `3`
+- Outcome: `PROCESSED_WITH_ERRORS`
+- Transaction id: `0bda8430-519a-4559-a05c-5d107a70872b`
+- Submission id: `b5f43481-3a59-434b-9319-39007940a673`
+
+Attempted business delta:
+
+- changed field: `sterile`
+- before: `false`
+- after: `true`
+
+Observed Playground rule:
+
+- field: `sterile`
+- error: `ERR-DTX-UDI-031-033.02: Device labelled sterile is not updatable.`
+
+Notes:
+
+- The payload was processed but rejected at EUDAMED business-rule level.
+- This does not create a new accepted device state and must not replace the accepted version `2` trade-name PATCH as the current base state.
+- The next candidate `PATCH` for this subject should still derive from the accepted version `2` state and continue to use `e:version = 3` until a later scenario succeeds.
+
+##### C5. Scenario `UDI_DI.PATCH` for critical warnings
+
+- Playground acceptance time: `2026-08-12T16:09:26.945+02:00`
+- Payload creation time: `2026-08-12T14:07:30+00:00`
+- Message type: `UDI_DI.PATCH`
+- Scenario id: `warning_add`
+- Subject:
+  - `Elite`
+  - `Elite2`
+  - `EL22-24-1KIT-S`
+  - `05050649049491`
+- `e:version`: `3`
+- Outcome: `SUCCESS`
+- Transaction id: `c17b16f2-a973-4cdd-a897-0e9873c92fc5`
+- Submission id: `f8e08b5f-36ed-4440-8ca3-9b547851a90e`
+
+Confirmed business delta:
+
+- changed field: `critical_warning`
+- before: `CW010`
+- after: `CW011`
+
+Confirmed retained fields:
+
+- retained trade name: `ELITE2 ST SIZE 22-23-24 #1 KIT UPDATED`
+- retained `SHC006`: `Minus 15C`
+- retained `SHC007`: `Plus 50C`
+
+Notes:
+
+- This confirms that a later successful version `3` PATCH can still be accepted after earlier version `3` attempts were processed with errors and did not advance state.
+- This accepted version `3` PATCH now becomes the required base state for any later `PATCH` at version `4+` on this same device lineage.
+
+##### C6. Scenario `UDI_DI.PATCH` for base quantity
+
+- Playground acceptance time: `2026-08-12T16:14:47.844+02:00`
+- Payload creation time: `2026-08-12T14:13:06+00:00`
+- Message type: `UDI_DI.PATCH`
+- Scenario id: `base_quantity_edit`
+- Subject:
+  - `Elite`
+  - `Elite2`
+  - `EL22-24-1KIT-S`
+  - `05050649049491`
+- `e:version`: `4`
+- Outcome: `SUCCESS`
+- Transaction id: `b2184ab0-b9b1-4131-a2e3-708b4465a809`
+- Submission id: `cead7982-dbcc-46f3-b143-67d2ccfdb79e`
+
+Confirmed business delta:
+
+- changed field: `base_quantity`
+- before: `1`
+- after: `2`
+
+Confirmed retained fields:
+
+- retained trade name: `ELITE2 ST SIZE 22-23-24 #1 KIT UPDATED`
+- retained critical warning: `CW011`
+- retained `SHC006`: `Minus 15C`
+- retained `SHC007`: `Plus 50C`
+
+Notes:
+
+- This is the first confirmed successful `Base Quantity` scenario PATCH in Playground.
+- This accepted version `4` PATCH now becomes the required base state for any later `PATCH` at version `5+` on this same device lineage.
+
+##### C7. Scenario `UDI_DI.PATCH` for status code
+
+- Playground acceptance time: `2026-08-12T16:19:08.562+02:00`
+- Payload creation time: `2026-08-12T14:17:38+00:00`
+- Message type: `UDI_DI.PATCH`
+- Scenario id: `status_code_edit`
+- Subject:
+  - `Elite`
+  - `Elite2`
+  - `EL22-24-1KIT-S`
+  - `05050649049491`
+- `e:version`: `5`
+- Outcome: `PROCESSED_WITH_ERRORS`
+- Transaction id: `a70fcafb-a194-43cd-9187-dc60056fa501`
+- Submission id: `64600d0d-b76d-45fc-aa5c-cedf0fb73a5f`
+
+Attempted business delta:
+
+- changed field: `status_code`
+- before: `ON_THE_MARKET`
+- after: `NO_LONGER_PLACED_ON_THE_MARKET`
+
+Observed Playground rules:
+
+- field: `marketInfoLink`
+- error: `Market information is not applicable when device's status is: "Not intended for the EU market" or "No longer placed on the EU market"`
+- field: `marketInfoLink`
+- error: `Market info is not allowed when changing status from "On the Market" to "No Longer Placed on the EU Market"`
+
+Notes:
+
+- The payload was processed but rejected at EUDAMED business-rule level because it still carried `marketInfos` for a status transition where those market information links are not allowed.
+- This does not prove that status itself is never updatable; it shows that the current generated PATCH shape is invalid for this specific status change.
+- This does not create a new accepted device state and must not replace the accepted version `4` base-quantity PATCH as the current base state.
+
 ### Bulk Testing
 
-No bulk Playground testing has been recorded yet.
+#### BT1. Bulk parent `DEVICE.POST` wave for `Elite VT`
+
+- Playground response time: `2026-08-12T21:49:59.327+02:00`
+- Message type: `DEVICE.POST`
+- Product family: `Elite`
+- Product variant: `Elite VT`
+- Parent Basic UDI-DI: `5050649ELITEVTV4`
+- Outcome: `PROCESSED_WITH_ERRORS`
+- Transaction id: `bd91b270-79af-4f5c-b61f-eb7ac507a6e6`
+- Submission id: `897671e3-bbc9-4148-8737-ec31545e112f`
+
+Observed outcome:
+
+- one parent registration was accepted successfully
+- later rows in the same bulk parent wave were rejected because the same `Basic UDI-DI` was being recreated
+
+Observed Playground rule:
+
+- field: `basicUdiDatas[0].basicUdi`
+- message: `The device identifier code 5050649ELITEVTV4 already exists for the selected issuing agency GS1`
+
+Notes:
+
+- This confirmed that repeated fresh `DEVICE.POST` creation is not valid for multiple sibling devices sharing the same new parent `Basic UDI-DI`.
+- This test established the required split:
+  - parent creation first via `DEVICE.POST`
+  - child registration afterwards via `UDI_DI.POST`
+
+#### BT2. Bulk child `UDI_DI.POST` wave for `Elite VT`
+
+- Playground response time: `2026-08-12T23:05:04.590+02:00`
+- Message type: `UDI_DI.POST`
+- Product family: `Elite`
+- Product variant: `Elite VT`
+- Parent Basic UDI-DI: `5050649ELITEVTV4`
+- Outcome: `SUCCESS`
+- Transaction id: `474d9442-9288-400b-897f-2d8268c421af`
+- Submission id: `5a61396a-7563-4ceb-a6d4-b9ea7396276c`
+
+Accepted child UDI-DI registrations:
+
+- `05050649110030`
+- `05050649110078`
+- `05050649110061`
+- `05050649110047`
+- `05050649110054`
+
+Notes:
+
+- This confirmed that standalone child-device registration using `UDI_DI.POST` is accepted by Playground after the parent `Basic UDI-DI` has already been created.
+- This is the first confirmed successful bulk child registration wave recorded in Playground from the application.
+- Current validated bulk registration order is now:
+  1. `Bulk Basic UDI POST`
+  2. `Bulk UDI-DI POST`
+  3. `Bulk PATCH`
 
 ## Confirmed Operational Findings
 
@@ -358,6 +670,36 @@ Resulting current testing position:
 
 - Playground testing uses `EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE=DE-AR-000031681`
 - `EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE=false`
+
+### Latex is not updatable by `PATCH`
+
+On Wednesday, August 12, 2026, Playground processed an `Elite2` version `3` `UDI_DI.PATCH` attempt and returned a business-rule error for `latex`.
+
+Observed rejection:
+
+- outcome: `PROCESSED_WITH_ERRORS`
+- code: `ERR-DTX-UDI-031-033.02`
+- message: `Containing latex is not updatable.`
+
+Resulting current testing position:
+
+- `latex` should not be treated as a supported candidate PATCH scenario
+- failed `latex` attempts must not advance the tracked accepted device version
+
+### Sterile is not updatable by `PATCH`
+
+On Wednesday, August 12, 2026, Playground processed an `Elite2` version `3` `UDI_DI.PATCH` attempt and returned a business-rule error for `sterile`.
+
+Observed rejection:
+
+- outcome: `PROCESSED_WITH_ERRORS`
+- code: `ERR-DTX-UDI-031-033.02`
+- message: `Device labelled sterile is not updatable.`
+
+Resulting current testing position:
+
+- `sterile` should not be treated as a supported candidate PATCH scenario
+- failed `sterile` attempts must not advance the tracked accepted device version
 
 ## Tested Record Identification Position
 

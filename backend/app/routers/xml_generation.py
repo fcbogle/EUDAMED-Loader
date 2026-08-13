@@ -204,7 +204,143 @@ def download_generated_patch_scenario(payload: dict) -> Response:
     return Response(content=package_bytes, media_type="application/zip", headers=headers)
 
 
-@router.post("/xml/preview-batch")
+@router.post("/xml/preview-bulk-post")
+def preview_xml_bulk_post(payload: dict[str, str | int] | None = None) -> dict:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    record_count = int(data.get("record_count", 1))
+    chunk_sequence = int(data.get("chunk_sequence", 1))
+    if not product_family or not product_variant:
+        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    try:
+        preview = XmlGenerationService().preview_bulk_post(
+            product_family=str(product_family),
+            product_variant=str(product_variant),
+            record_count=record_count,
+            chunk_sequence=chunk_sequence,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return preview.model_dump(mode="json")
+
+
+@router.post("/xml/download-bulk-post")
+def download_xml_bulk_post(payload: dict[str, str | int] | None = None) -> Response:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    record_count = int(data.get("record_count", 1))
+    if not product_family or not product_variant:
+        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    try:
+        file_name, zip_bytes = XmlGenerationService().download_bulk_post(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=record_count,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
+    return Response(content=zip_bytes, media_type="application/zip", headers=headers)
+
+
+@router.post("/xml/preview-bulk-udidi-post")
+def preview_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) -> dict:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    record_count = int(data.get("record_count", 1))
+    chunk_sequence = int(data.get("chunk_sequence", 1))
+    if not product_family or not product_variant:
+        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    try:
+        preview = XmlGenerationService().preview_bulk_udidi_post(
+            product_family=str(product_family),
+            product_variant=str(product_variant),
+            record_count=record_count,
+            chunk_sequence=chunk_sequence,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return preview.model_dump(mode="json")
+
+
+@router.post("/xml/download-bulk-udidi-post")
+def download_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) -> Response:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    record_count = int(data.get("record_count", 1))
+    if not product_family or not product_variant:
+        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    try:
+        file_name, zip_bytes = XmlGenerationService().download_bulk_udidi_post(
+            product_family=str(product_family),
+            product_variant=str(product_variant),
+            record_count=record_count,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
+    return Response(content=zip_bytes, media_type="application/zip", headers=headers)
+
+
+@router.post("/xml/preview-bulk-patch")
+def preview_xml_bulk_patch(payload: dict | None = None) -> dict:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    scenario_id = data.get("scenario_id")
+    record_count = int(data.get("record_count", 1))
+    chunk_sequence = int(data.get("chunk_sequence", 1))
+    scenario_inputs = data.get("scenario_inputs") or {}
+    if not product_family or not product_variant or not scenario_id:
+        raise HTTPException(
+            status_code=400,
+            detail="product_family, product_variant, and scenario_id are required.",
+        )
+    try:
+        preview = XmlGenerationService().preview_bulk_patch(
+            product_family=str(product_family),
+            product_variant=str(product_variant),
+            record_count=record_count,
+            scenario_id=str(scenario_id),
+            scenario_inputs=scenario_inputs if isinstance(scenario_inputs, dict) else {},
+            chunk_sequence=chunk_sequence,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return preview.model_dump(mode="json")
+
+
+@router.post("/xml/download-bulk-patch")
+def download_xml_bulk_patch(payload: dict | None = None) -> Response:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    scenario_id = data.get("scenario_id")
+    record_count = int(data.get("record_count", 1))
+    scenario_inputs = data.get("scenario_inputs") or {}
+    if not product_family or not product_variant or not scenario_id:
+        raise HTTPException(
+            status_code=400,
+            detail="product_family, product_variant, and scenario_id are required.",
+        )
+    try:
+        file_name, zip_bytes = XmlGenerationService().download_bulk_patch(
+            product_family=str(product_family),
+            product_variant=str(product_variant),
+            record_count=record_count,
+            scenario_id=str(scenario_id),
+            scenario_inputs=scenario_inputs if isinstance(scenario_inputs, dict) else {},
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
+    return Response(content=zip_bytes, media_type="application/zip", headers=headers)
+
+
 def preview_xml_batch(payload: dict[str, str | int] | None = None) -> dict:
     data = payload or {}
     product_family = data.get("product_family")
@@ -223,8 +359,7 @@ def preview_xml_batch(payload: dict[str, str | int] | None = None) -> dict:
     return preview.model_dump(mode="json")
 
 
-@router.post("/xml/download-batch")
-def download_xml_batch(payload: dict[str, str] | None = None) -> Response:
+def download_xml_batch(payload: dict[str, str | int] | None = None) -> Response:
     data = payload or {}
     product_family = data.get("product_family")
     product_variant = data.get("product_variant")
@@ -232,8 +367,8 @@ def download_xml_batch(payload: dict[str, str] | None = None) -> Response:
         raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
         file_name, zip_bytes = XmlGenerationService().download_batch(
-            product_family=product_family,
-            product_variant=product_variant,
+            product_family=str(product_family),
+            product_variant=str(product_variant),
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
