@@ -67,6 +67,11 @@ while keeping `Patch XML` as a controlled testing workflow that:
 - The redundant combined `download-post-patch-pair` path has been removed.
 - Separate `POST` ZIP and `PATCH` ZIP downloads remain the supported baseline-pair download behavior.
 - Workbook-drift detection or workbook-refreshed scenario regeneration can be considered later, after initial testing.
+- Agreed next execution order on Thursday, August 13, 2026:
+  - harden and test `Bulk PATCH`
+  - test `Market Info` update in Playground
+  - implement database-backed persistence
+  - refine the UI after the database-backed state model is in place
 
 ## Current Implemented Behavior
 
@@ -79,7 +84,9 @@ Current pill order:
 - `Market Info`
 - divider
 - `Single XML`
-- `Batch XML`
+- `Bulk Basic UDI POST`
+- `Bulk UDI-DI POST`
+- `Bulk PATCH`
 
 Shared-device testing group:
 
@@ -90,7 +97,9 @@ Shared-device testing group:
 General XML tools:
 
 - `Single XML`
-- `Batch XML`
+- `Bulk Basic UDI POST`
+- `Bulk UDI-DI POST`
+- `Bulk PATCH`
 
 ### Post + Patch
 
@@ -154,10 +163,16 @@ Important limitation:
 - Generates one standalone `MARKET_INFO.PUT` message
 - Validates locally and supports download
 
-### Single XML / Batch XML
+### Single XML / Bulk XML
 
-- Still operate from the broader XML-ready family/variant selection model
-- Do not use the shared baseline-pair gate
+- `Single XML` still operates from the broader XML-ready family/variant selection model.
+- `Bulk Basic UDI POST` now represents parent registration waves only.
+- In a parent wave, only the first eligible row for a given `Basic UDI-DI` should emit a `DEVICE.POST`; later duplicate-parent rows in that same wave should be omitted to avoid duplicate parent creation errors.
+- `Bulk UDI-DI POST` now represents child registration waves only.
+- In a child wave, each generated message should be a standalone `UDI_DI.POST` for one device under an already accepted parent `Basic UDI-DI`.
+- The validated standalone child wrapper is `device:UDIDIData` with `xsi:type="udidi:MDRUDIDIDataType"`.
+- `Bulk PATCH` is the next bulk mode and should reuse the same per-device accepted-state lineage rules as single-device `Patch XML`.
+- Bulk modes do not use the in-memory reviewed baseline-pair gate used by the current single-device testing flow.
 
 ## Current PATCH Workflow
 
@@ -195,6 +210,45 @@ Important limitation:
   - version `2` base state: accepted `POST`
   - version `3+` base state: latest accepted tracked `PATCH`
 - The current no-change equivalent version `2` `PATCH` should therefore be treated as an optional testing flow, not as the default or only PATCH flow.
+- Bulk registration should now be treated as explicit staged flows rather than one generic `Batch XML` mode.
+- The validated sequence is:
+  - `Bulk Basic UDI POST`
+  - `Bulk UDI-DI POST`
+  - `Bulk PATCH`
+- `Bulk Basic UDI POST` should create at most one new parent registration per `Basic UDI-DI` in a wave.
+- `Bulk UDI-DI POST` should register child devices only after the parent `Basic UDI-DI` has already been accepted.
+- `Bulk PATCH` should resolve the latest accepted state independently for each targeted child device lineage.
+
+## Bulk POST Design Direction
+
+- The old generic `Batch XML` concept is now superseded by explicit bulk modes with different regulatory behavior.
+- `Bulk Basic UDI POST` is the parent registration step.
+- `Bulk UDI-DI POST` is the child registration step.
+- `Bulk PATCH` comes only after both registration steps have been proven for the targeted device set.
+
+### Bulk Basic UDI POST
+
+- Purpose: register a new parent `Basic UDI-DI` once.
+- Service profile: `DEVICE.POST`.
+- Emission rule: one parent message per distinct `Basic UDI-DI`.
+- If several selected rows belong to the same new parent, only the first eligible row should generate the parent payload.
+- This rule has now been validated by Playground behavior where repeated parent creation for the same `Basic UDI-DI` was rejected as a duplicate.
+
+### Bulk UDI-DI POST
+
+- Purpose: register multiple child UDI-DIs under an already accepted parent.
+- Service profile: `UDI_DI.POST`.
+- Message shape: standalone child registration payload, not parent `DEVICE.POST`.
+- XML wrapper: `device:UDIDIData` with `xsi:type="udidi:MDRUDIDIDataType"`.
+- Parent linkage is carried through `basicUDIIdentifier`; the parent `MDRBasicUDI` block is not repeated in this flow.
+- This flow has now been validated in Playground for five child UDI-DIs under one accepted `Elite VT` parent.
+
+### Bulk PATCH
+
+- Purpose: apply the same approved PATCH scenario across several already registered child devices.
+- Dependency: all targeted child UDI-DIs must already exist in Playground.
+- Base-state rule: each child device must resolve its own latest accepted state before the next PATCH is derived.
+- Bulk PATCH therefore cannot rely on one shared wave baseline; it must behave as a per-device PATCH lineage operation executed in bulk.
 
 ## Implemented Guardrails
 
@@ -538,32 +592,28 @@ Files refreshed in this pass:
 - PostgreSQL-backed persistence for imported workbook rows, accepted device state, and Playground testing history
 - automatic promotion of accepted PATCH scenarios into `EUDAMED Generation`
 - redesign of baseline `Post + Patch` workspace into `POST` only
-- explicit `POST Batch` / `PATCH Batch` redesign
-- scenario-driven `PATCH Batch` generation
-- broader scenario library beyond the current three active generated scenarios
+- hardening and test coverage for `Bulk PATCH`
+- real Playground confirmation for `Bulk PATCH`
+- real Playground confirmation for `MARKET_INFO.PUT`
+- broader scenario library beyond the current implemented PATCH scenarios
 - external confirmation that candidate scenarios are operationally accepted by EUDAMED
 - workbook-drift detection between the reviewed baseline pair and newer workbook state
 - any later decision on workbook-refreshed scenario PATCH regeneration
 
 ## Recommended Next Step
 
-Focus next on operational clarity rather than more XML shape changes:
+Focus next on proving the remaining testing workflows before replacing YAML with database-backed state:
 
-1. decide whether accepted scenario PATCH patterns should ever appear in `EUDAMED Generation`
-2. redesign the baseline workspace from `Post + Patch` to `POST` only
-3. redesign `Patch XML` so:
-   - `Equivalent First Patch` is an explicit option
-   - version `2` real-update PATCH derives directly from accepted `POST`
-   - version `3+` derives from latest accepted tracked `PATCH`
-   - non-target fields remain aligned with the chosen base state
-4. test the redesigned `POST` plus `Patch XML` workflow in Playground
-5. start PostgreSQL persistence work on Wednesday, August 12, 2026 for:
+1. harden `Bulk PATCH` against the currently tested device cohorts
+2. test `Bulk PATCH` in Playground and record both successes and rejections
+3. test `MARKET_INFO.PUT` in Playground and capture the accepted update pattern
+4. implement database-backed persistence for:
    - imported workbook rows
    - current accepted device state
    - submission / Playground history
-6. design persistence for baseline review / scenario acceptance state
-7. decide the future of:
-   - `Single XML`
-   - generic `Batch XML`
-   - explicit `POST Batch`
-   - explicit scenario-driven `PATCH Batch`
+   - baseline review and scenario acceptance state
+5. switch the application from YAML-backed accepted state to database-backed accepted state
+6. refine the UI after the persistence model is in place so:
+   - status and lineage messaging come from the database
+   - bulk and single-device workspaces reflect persisted accepted state
+   - later promotion and reporting flows can be added cleanly

@@ -2,6 +2,8 @@ import type {
   ApplyNormalizationRulesResponse,
   BatchXmlPreview,
   BulkPatchPreview,
+  BulkPatchPostedEntriesResponse,
+  BulkPatchPostedParentsResponse,
   BulkPostPreview,
   BulkUdidiPostPreview,
   CanonicalValidationBundle,
@@ -165,18 +167,33 @@ export const api = {
   previewBulkPatch: (
     productFamily: string,
     productVariant: string,
+    basicUdiDi: string,
     recordCount: number,
     scenarioId: string,
     scenarioInputs: unknown,
+    selectedCatalogueNumbers: string[],
     chunkSequence = 1,
   ) =>
     sendJson<BulkPatchPreview>("/xml/preview-bulk-patch", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
+      basic_udi_di: basicUdiDi,
       record_count: recordCount,
       scenario_id: scenarioId,
       scenario_inputs: scenarioInputs,
+      selected_catalogue_numbers: selectedCatalogueNumbers,
       chunk_sequence: chunkSequence,
+    }),
+  bulkPatchPostedEntries: (productFamily: string, productVariant: string, basicUdiDi: string) =>
+    sendJson<BulkPatchPostedEntriesResponse>("/xml/bulk-patch-posted-entries", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      basic_udi_di: basicUdiDi,
+    }),
+  bulkPatchPostedParents: (productFamily: string, productVariant: string) =>
+    sendJson<BulkPatchPostedParentsResponse>("/xml/bulk-patch-posted-parents", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
     }),
   downloadXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-record", "POST", {
@@ -232,16 +249,20 @@ export const api = {
   downloadBulkPatch: (
     productFamily: string,
     productVariant: string,
+    basicUdiDi: string,
     recordCount: number,
     scenarioId: string,
     scenarioInputs: unknown,
+    selectedCatalogueNumbers: string[],
   ) =>
     sendDownload("/xml/download-bulk-patch", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
+      basic_udi_di: basicUdiDi,
       record_count: recordCount,
       scenario_id: scenarioId,
       scenario_inputs: scenarioInputs,
+      selected_catalogue_numbers: selectedCatalogueNumbers,
     }),
   schemas: () => getJson<SchemaInventory>("/schemas"),
   criticalWarningCodes: () => getJson<CriticalWarningCodeOption[]>("/schemas/critical-warning-codes"),

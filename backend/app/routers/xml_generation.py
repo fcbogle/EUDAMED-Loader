@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from app.services.xml_generation import XmlGenerationService
+from app.services.testing_state_store import TestingStateStore
 
 router = APIRouter(tags=["xml-generation"])
 
@@ -291,26 +292,32 @@ def preview_xml_bulk_patch(payload: dict | None = None) -> dict:
     data = payload or {}
     product_family = data.get("product_family")
     product_variant = data.get("product_variant")
+    basic_udi_di = data.get("basic_udi_di")
     scenario_id = data.get("scenario_id")
     record_count = int(data.get("record_count", 1))
     chunk_sequence = int(data.get("chunk_sequence", 1))
     scenario_inputs = data.get("scenario_inputs") or {}
-    if not product_family or not product_variant or not scenario_id:
+    selected_catalogue_numbers = data.get("selected_catalogue_numbers") or []
+    if not product_family or not product_variant or not basic_udi_di or not scenario_id:
         raise HTTPException(
             status_code=400,
-            detail="product_family, product_variant, and scenario_id are required.",
+            detail="product_family, product_variant, basic_udi_di, and scenario_id are required.",
         )
     try:
         preview = XmlGenerationService().preview_bulk_patch(
             product_family=str(product_family),
             product_variant=str(product_variant),
+            basic_udi_di=str(basic_udi_di),
             record_count=record_count,
             scenario_id=str(scenario_id),
             scenario_inputs=scenario_inputs if isinstance(scenario_inputs, dict) else {},
+            selected_catalogue_numbers=[
+                str(value) for value in selected_catalogue_numbers if isinstance(value, str) and value.strip()
+            ],
             chunk_sequence=chunk_sequence,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return preview.model_dump(mode="json")
 
 
@@ -319,26 +326,77 @@ def download_xml_bulk_patch(payload: dict | None = None) -> Response:
     data = payload or {}
     product_family = data.get("product_family")
     product_variant = data.get("product_variant")
+    basic_udi_di = data.get("basic_udi_di")
     scenario_id = data.get("scenario_id")
     record_count = int(data.get("record_count", 1))
     scenario_inputs = data.get("scenario_inputs") or {}
-    if not product_family or not product_variant or not scenario_id:
+    selected_catalogue_numbers = data.get("selected_catalogue_numbers") or []
+    if not product_family or not product_variant or not basic_udi_di or not scenario_id:
         raise HTTPException(
             status_code=400,
-            detail="product_family, product_variant, and scenario_id are required.",
+            detail="product_family, product_variant, basic_udi_di, and scenario_id are required.",
         )
     try:
         file_name, zip_bytes = XmlGenerationService().download_bulk_patch(
             product_family=str(product_family),
             product_variant=str(product_variant),
+            basic_udi_di=str(basic_udi_di),
             record_count=record_count,
             scenario_id=str(scenario_id),
             scenario_inputs=scenario_inputs if isinstance(scenario_inputs, dict) else {},
+            selected_catalogue_numbers=[
+                str(value) for value in selected_catalogue_numbers if isinstance(value, str) and value.strip()
+            ],
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
     return Response(content=zip_bytes, media_type="application/zip", headers=headers)
+
+
+@router.post("/xml/bulk-patch-posted-entries")
+def bulk_patch_posted_entries(payload: dict | None = None) -> dict:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    basic_udi_di = data.get("basic_udi_di")
+    if not product_family or not product_variant or not basic_udi_di:
+        raise HTTPException(
+            status_code=400,
+            detail="product_family, product_variant, and basic_udi_di are required.",
+        )
+    entries = TestingStateStore().posted_entries(
+        product_family=str(product_family),
+        product_variant=str(product_variant),
+        basic_udi_di=str(basic_udi_di),
+    )
+    return {
+        "product_family": str(product_family),
+        "product_variant": str(product_variant),
+        "basic_udi_di": str(basic_udi_di),
+        "entries": entries,
+    }
+
+
+@router.post("/xml/bulk-patch-posted-parents")
+def bulk_patch_posted_parents(payload: dict | None = None) -> dict:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    if not product_family or not product_variant:
+        raise HTTPException(
+            status_code=400,
+            detail="product_family and product_variant are required.",
+        )
+    groups = TestingStateStore().posted_parent_groups(
+        product_family=str(product_family),
+        product_variant=str(product_variant),
+    )
+    return {
+        "product_family": str(product_family),
+        "product_variant": str(product_variant),
+        "parents": groups,
+    }
 
 
 def preview_xml_batch(payload: dict[str, str | int] | None = None) -> dict:

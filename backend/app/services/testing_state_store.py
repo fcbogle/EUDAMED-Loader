@@ -23,6 +23,11 @@ class TestingStateStore:
     def yaml_path(self):
         return self.settings.schema_dir.parents[1] / "data" / "testing" / "playground-tested-subjects.yaml"
 
+    def _subjects(self) -> list[dict]:
+        data = yaml.safe_load(self.yaml_path.read_text()) or {}
+        subjects = data.get("tested_subjects") or []
+        return [subject for subject in subjects if isinstance(subject, dict)]
+
     def latest_successful_patch_state(
         self,
         *,
@@ -30,15 +35,11 @@ class TestingStateStore:
         product_variant: str,
         catalogue_number: str,
     ) -> PatchStateResolution | None:
-        data = yaml.safe_load(self.yaml_path.read_text()) or {}
-        subjects = data.get("tested_subjects") or []
-        for subject in subjects:
-            if not isinstance(subject, dict):
-                continue
+        for subject in self._subjects():
             if (
-                subject.get("product_family") == product_family
-                and subject.get("product_variant") == product_variant
-                and subject.get("catalogue_number") == catalogue_number
+                self._matches_identity(subject.get("product_family"), product_family)
+                and self._matches_identity(subject.get("product_variant"), product_variant)
+                and self._matches_identity(subject.get("catalogue_number"), catalogue_number)
             ):
                 latest_state = subject.get("latest_successful_state")
                 if not isinstance(latest_state, dict):
@@ -79,6 +80,84 @@ class TestingStateStore:
                 )
         return None
 
+    def posted_entries(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        basic_udi_di: str,
+    ) -> list[dict[str, object]]:
+        entries: list[dict[str, object]] = []
+        for subject in self._subjects():
+            if (
+                not self._matches_identity(subject.get("product_family"), product_family)
+                or not self._matches_identity(subject.get("product_variant"), product_variant)
+                or not self._matches_identity(subject.get("basic_udi_di"), basic_udi_di)
+            ):
+                continue
+            if not self._is_posted_patch_candidate(subject):
+                continue
+            playground_status = subject.get("playground_status") or {}
+            latest_state = subject.get("latest_successful_state") or {}
+            entries.append(
+                {
+                    "catalogue_number": self._optional_string(subject.get("catalogue_number")),
+                    "primary_udi_di": self._optional_string(subject.get("primary_udi_di")),
+                    "basic_udi_di": self._optional_string(subject.get("basic_udi_di")),
+                    "latest_version": self._optional_string(latest_state.get("version")) if isinstance(latest_state, dict) else None,
+                    "baseline_patch_success": bool(playground_status.get("baseline_patch_success")),
+                }
+            )
+        return entries
+
+    def posted_parent_groups(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+    ) -> list[dict[str, object]]:
+        grouped: dict[str, list[dict[str, object]]] = {}
+        for subject in self._subjects():
+            if (
+                not self._matches_identity(subject.get("product_family"), product_family)
+                or not self._matches_identity(subject.get("product_variant"), product_variant)
+            ):
+                continue
+            if not self._is_posted_patch_candidate(subject):
+                continue
+            basic_udi_di = self._optional_string(subject.get("basic_udi_di"))
+            if not basic_udi_di:
+                continue
+            grouped.setdefault(basic_udi_di, []).append(subject)
+
+        return [
+            {
+                "basic_udi_di": basic_udi_di,
+                "posted_child_count": len(subjects),
+                "sample_catalogue_numbers": [
+                    self._optional_string(subject.get("catalogue_number"))
+                    for subject in subjects[:10]
+                    if self._optional_string(subject.get("catalogue_number"))
+                ],
+            }
+            for basic_udi_di, subjects in sorted(grouped.items(), key=lambda item: item[0])
+        ]
+
+    @staticmethod
+    def _is_posted_patch_candidate(subject: dict[str, object]) -> bool:
+        playground_status = subject.get("playground_status") or {}
+        if not isinstance(playground_status, dict) or not playground_status.get("post_success"):
+            return False
+        test_events = subject.get("test_events")
+        if not isinstance(test_events, list):
+            return False
+        return any(
+            isinstance(event, dict)
+            and event.get("status") == "SUCCESS"
+            and event.get("message_type") in {"UDI_DI.POST", "UDI_DI.PATCH"}
+            for event in test_events
+        )
+
     @staticmethod
     def _optional_string(value: object) -> str | None:
         if value is None:
@@ -87,6 +166,19 @@ class TestingStateStore:
             return str(value)
         normalized = value.strip()
         return normalized or None
+
+    @classmethod
+    def _matches_identity(cls, left: object, right: object) -> bool:
+        left_normalized = cls._normalize_identity(left)
+        right_normalized = cls._normalize_identity(right)
+        return bool(left_normalized and right_normalized and left_normalized == right_normalized)
+
+    @classmethod
+    def _normalize_identity(cls, value: object) -> str:
+        text = cls._optional_string(value)
+        if not text:
+            return ""
+        return "".join(text.casefold().split())
 
     @staticmethod
     def _optional_int(value: object) -> int | None:

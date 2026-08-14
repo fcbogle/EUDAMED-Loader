@@ -16,6 +16,8 @@ import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import xmlSampleComparisonDocumentation from "./content/docs/xml-sample-comparison.md?raw";
 import type {
   BulkPatchPreview,
+  BulkPatchPostedEntry,
+  BulkPatchPostedParentGroup,
   BulkPostPreview,
   BulkUdidiPostPreview,
   CanonicalValidationBundle,
@@ -43,6 +45,7 @@ const focusColumns = [
 type MainTab = "workbooks" | "canonical" | "canonicalValidation" | "xml" | "generation" | "documentation";
 type ScopeMode = "all" | "sheet";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
+type BulkPatchScopeMode = "all_posted" | "selected_catalogue_numbers" | "import_catalogue_list";
 type PatchScenarioId =
   | "equivalent_first_patch"
   | "trade_name_edit"
@@ -485,6 +488,13 @@ function fieldValue(record: { fields: Array<{ canonical_path: string; value: str
   return record.fields.find((field) => field.canonical_path === canonicalPath)?.value ?? null;
 }
 
+function basicUdiDiForRecord(record: { fields: Array<{ canonical_path: string; value: string | null }> } | null): string | null {
+  return (
+    fieldValue(record, "basic_device.basic_udi_di") ??
+    fieldValue(record, "device_record.basic_udi_identifier")
+  );
+}
+
 function parseBooleanString(value: string | null | undefined): boolean | null {
   if (value == null) {
     return null;
@@ -497,6 +507,15 @@ function parseBooleanString(value: string | null | undefined): boolean | null {
     return false;
   }
   return null;
+}
+
+function parseCatalogueNumberList(value: string): string[] {
+  const normalized = value
+    .replace(/\r/g, "\n")
+    .split(/[\n,;]/)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  return Array.from(new Set(normalized));
 }
 
 function basicUdiMatchLabel(matchStatus: string | null | undefined): string {
@@ -697,6 +716,13 @@ export function App() {
   const [selectedXmlRecordKey, setSelectedXmlRecordKey] = useState<string | null>(null);
   const [xmlMode, setXmlMode] = useState<"post" | "single" | "marketInfo" | "bulkPost" | "bulkUdidiPost" | "patch" | "bulkPatch">("post");
   const [selectedPatchScenarioId, setSelectedPatchScenarioId] = useState<PatchScenarioId>("equivalent_first_patch");
+  const [selectedBulkPatchBasicUdiDi, setSelectedBulkPatchBasicUdiDi] = useState<string>("");
+  const [bulkPatchScopeMode, setBulkPatchScopeMode] = useState<BulkPatchScopeMode>("all_posted");
+  const [selectedBulkPatchCatalogueNumbers, setSelectedBulkPatchCatalogueNumbers] = useState<string[]>([]);
+  const [bulkPatchCatalogueFilter, setBulkPatchCatalogueFilter] = useState<string>("");
+  const [bulkPatchImportText, setBulkPatchImportText] = useState<string>("");
+  const [bulkPatchPostedEntries, setBulkPatchPostedEntries] = useState<BulkPatchPostedEntry[]>([]);
+  const [bulkPatchPostedParents, setBulkPatchPostedParents] = useState<BulkPatchPostedParentGroup[]>([]);
   const [patchScenarioStatuses, setPatchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
     equivalent_first_patch: "EUDAMED Candidate",
     trade_name_edit: "EUDAMED Candidate",
@@ -1309,25 +1335,99 @@ export function App() {
   const selectedBulkEligiblePostCount = selectedBulkEligiblePostRecords.length;
   const selectedBulkEligibleBasicUdiCount = new Set(
     selectedBulkEligiblePostRecords
-      .map(
-        (record) =>
-          record.fields.find((field) => field.canonical_path === "basic_device.basic_udi_di")?.value ??
-          record.fields.find((field) => field.canonical_path === "device_record.basic_udi_identifier")?.value,
-      )
+      .map((record) => basicUdiDiForRecord(record))
       .filter((value): value is string => Boolean(value)),
   ).size;
   const selectedBulkEligibleUdidiPostCount = (() => {
     const groupedCounts = new Map<string, number>();
     for (const record of selectedBulkEligiblePostRecords) {
-      const basicUdi =
-        record.fields.find((field) => field.canonical_path === "basic_device.basic_udi_di")?.value ??
-        record.fields.find((field) => field.canonical_path === "device_record.basic_udi_identifier")?.value;
+      const basicUdi = basicUdiDiForRecord(record);
       if (basicUdi) {
         groupedCounts.set(basicUdi, (groupedCounts.get(basicUdi) ?? 0) + 1);
       }
     }
     return Array.from(groupedCounts.values()).reduce((sum, count) => sum + Math.max(count - 1, 0), 0);
   })();
+  const fallbackBulkPatchParentOptions = Array.from(
+    selectedBulkEligiblePostRecords.reduce((groups, record) => {
+      const basicUdi = basicUdiDiForRecord(record);
+      if (!basicUdi) {
+        return groups;
+      }
+      const existing = groups.get(basicUdi) ?? { totalRecords: 0, childCatalogueNumbers: [] as string[] };
+      existing.totalRecords += 1;
+      if (record.catalogue_number && record.primary_udi_di && !existing.childCatalogueNumbers.includes(record.catalogue_number)) {
+        existing.childCatalogueNumbers.push(record.catalogue_number);
+      }
+      groups.set(basicUdi, existing);
+      return groups;
+    }, new Map<string, { totalRecords: number; childCatalogueNumbers: string[] }>()),
+  )
+    .map(([basic_udi_di, group]) => {
+      const postedChildCount = Math.max(group.totalRecords - 1, 0);
+      return {
+        basic_udi_di,
+        posted_child_count: postedChildCount,
+        sample_catalogue_numbers: group.childCatalogueNumbers.slice(0, postedChildCount),
+      };
+    })
+    .filter((group) => group.posted_child_count > 0);
+  const displayedBulkPatchParentOptions =
+    bulkPatchPostedParents.length > 0 ? bulkPatchPostedParents : fallbackBulkPatchParentOptions;
+  const selectedBulkPatchParentGroup =
+    displayedBulkPatchParentOptions.find((group) => group.basic_udi_di === selectedBulkPatchBasicUdiDi) ??
+    displayedBulkPatchParentOptions[0] ??
+    null;
+  const selectedBulkPatchFallbackCatalogueNumbers = selectedBulkPatchParentGroup?.sample_catalogue_numbers ?? [];
+  const bulkPatchPostedCatalogueNumbers = bulkPatchPostedEntries
+    .map((entry) => entry.catalogue_number)
+    .filter((catalogueNumber): catalogueNumber is string => Boolean(catalogueNumber));
+  const bulkPatchPostedCatalogueSet = new Set(bulkPatchPostedCatalogueNumbers);
+  const bulkPatchFilteredPostedEntries =
+    bulkPatchScopeMode !== "selected_catalogue_numbers" || !bulkPatchCatalogueFilter.trim()
+      ? bulkPatchPostedEntries
+      : bulkPatchPostedEntries.filter((entry) =>
+          (entry.catalogue_number ?? "").toLowerCase().includes(bulkPatchCatalogueFilter.trim().toLowerCase()),
+        );
+  const bulkPatchImportedCatalogueNumbers = parseCatalogueNumberList(bulkPatchImportText);
+  const bulkPatchImportedMatchedEntries = bulkPatchPostedEntries.filter(
+    (entry) => entry.catalogue_number && bulkPatchImportedCatalogueNumbers.includes(entry.catalogue_number),
+  );
+  const bulkPatchImportedMatchedCatalogueNumbers = bulkPatchImportedMatchedEntries
+    .map((entry) => entry.catalogue_number)
+    .filter((catalogueNumber): catalogueNumber is string => Boolean(catalogueNumber));
+  const bulkPatchImportedNotFoundCatalogueNumbers = bulkPatchImportedCatalogueNumbers.filter(
+    (catalogueNumber) => !bulkPatchPostedCatalogueSet.has(catalogueNumber),
+  );
+  const effectiveBulkPatchCatalogueNumbers =
+    bulkPatchScopeMode === "all_posted"
+      ? (bulkPatchPostedCatalogueNumbers.length > 0 ? bulkPatchPostedCatalogueNumbers : selectedBulkPatchFallbackCatalogueNumbers)
+      : bulkPatchScopeMode === "selected_catalogue_numbers"
+        ? selectedBulkPatchCatalogueNumbers
+        : bulkPatchImportedMatchedCatalogueNumbers;
+  const effectiveBulkPatchCatalogueSet = new Set(effectiveBulkPatchCatalogueNumbers);
+  const selectedBulkPatchEntries = bulkPatchPostedEntries.filter(
+    (entry) => entry.catalogue_number && effectiveBulkPatchCatalogueSet.has(entry.catalogue_number),
+  );
+  const selectedBulkPatchSelectedCount = effectiveBulkPatchCatalogueNumbers.length;
+  const selectedBulkPatchEligibleCount =
+    selectedBulkPatchParentGroup?.posted_child_count ??
+    Math.max(bulkPatchPostedEntries.length, selectedBulkPatchFallbackCatalogueNumbers.length);
+  const canRunBulkPatch =
+    Boolean(selectedBulkPatchParentGroup) &&
+    (
+      (bulkPatchScopeMode === "all_posted" && selectedBulkPatchEligibleCount > 0) ||
+      (bulkPatchScopeMode !== "all_posted" && selectedBulkPatchSelectedCount > 0)
+    );
+  const bulkPatchReadinessReason = !selectedBulkPatchParentGroup
+    ? "No Basic UDI-DI parent is selected."
+    : bulkPatchScopeMode === "all_posted" && selectedBulkPatchEligibleCount < 1
+      ? "No posted child devices are currently available under the selected parent."
+      : bulkPatchScopeMode === "selected_catalogue_numbers" && selectedBulkPatchSelectedCount < 1
+        ? "Select at least one posted catalogue number."
+        : bulkPatchScopeMode === "import_catalogue_list" && selectedBulkPatchSelectedCount < 1
+          ? "Import at least one posted catalogue number that matches the selected parent."
+          : "Ready.";
   const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
   const selectedPairRequestArgs =
     selectedXmlPairRecord?.catalogue_number
@@ -1363,7 +1463,7 @@ export function App() {
       ? selectedBulkEligibleBasicUdiCount
       : xmlMode === "bulkUdidiPost"
         ? selectedBulkEligibleUdidiPostCount
-        : selectedBulkEligiblePostCount;
+        : selectedBulkPatchEligibleCount;
   const normalizedBulkRecordCount = Math.min(Math.max(selectedBulkRecordCount, 1), Math.max(selectedBulkCapacity, 1));
   const selectedBulkChunkCount =
     xmlMode === "bulkPost"
@@ -1371,7 +1471,7 @@ export function App() {
       : xmlMode === "bulkUdidiPost"
         ? xmlBulkUdidiPostPreview?.chunk_count ?? Math.max(Math.ceil(normalizedBulkRecordCount / 300), 1)
       : xmlMode === "bulkPatch"
-        ? xmlBulkPatchPreview?.chunk_count ?? Math.max(Math.ceil(normalizedBulkRecordCount / 300), 1)
+        ? xmlBulkPatchPreview?.chunk_count ?? Math.max(Math.ceil(Math.max(selectedBulkPatchSelectedCount, 1) / 300), 1)
         : selectedXmlVariantChunkCount;
   const selectedBulkPreview =
     xmlMode === "bulkPost"
@@ -1381,6 +1481,95 @@ export function App() {
         : xmlMode === "bulkPatch"
           ? xmlBulkPatchPreview
           : null;
+  useEffect(() => {
+    const parentOption = displayedBulkPatchParentOptions[0]?.basic_udi_di ?? "";
+    if (
+      selectedBulkPatchBasicUdiDi &&
+      displayedBulkPatchParentOptions.some((group) => group.basic_udi_di === selectedBulkPatchBasicUdiDi)
+    ) {
+      return;
+    }
+    setSelectedBulkPatchBasicUdiDi(parentOption);
+  }, [displayedBulkPatchParentOptions, selectedBulkPatchBasicUdiDi]);
+  useEffect(() => {
+    if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) {
+      setBulkPatchPostedParents([]);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .bulkPatchPostedParents(
+        selectedXmlFamilySummary.product_family,
+        selectedXmlVariantSummary.product_variant,
+      )
+      .then((response) => {
+        if (!cancelled) {
+          setBulkPatchPostedParents(response.parents);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBulkPatchPostedParents([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedXmlFamilySummary?.product_family, selectedXmlVariantSummary?.product_variant]);
+  useEffect(() => {
+    if (!selectedBulkPatchParentGroup) {
+      setSelectedBulkPatchCatalogueNumbers([]);
+      setBulkPatchPostedEntries([]);
+      return;
+    }
+    setBulkPatchCatalogueFilter("");
+    setBulkPatchImportText("");
+  }, [selectedBulkPatchParentGroup?.basic_udi_di]);
+  useEffect(() => {
+    if (!selectedXmlFamilySummary || !selectedXmlVariantSummary || !selectedBulkPatchParentGroup) {
+      setBulkPatchPostedEntries([]);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .bulkPatchPostedEntries(
+        selectedXmlFamilySummary.product_family,
+        selectedXmlVariantSummary.product_variant,
+        selectedBulkPatchParentGroup.basic_udi_di,
+      )
+      .then((response) => {
+        if (!cancelled) {
+          setBulkPatchPostedEntries(response.entries);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBulkPatchPostedEntries([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    selectedXmlFamilySummary?.product_family,
+    selectedXmlVariantSummary?.product_variant,
+    selectedBulkPatchParentGroup?.basic_udi_di,
+  ]);
+  useEffect(() => {
+    const filtered = selectedBulkPatchCatalogueNumbers.filter((catalogueNumber) => bulkPatchPostedCatalogueSet.has(catalogueNumber));
+    if (filtered.length === selectedBulkPatchCatalogueNumbers.length) {
+      return;
+    }
+    setSelectedBulkPatchCatalogueNumbers(filtered);
+  }, [bulkPatchPostedCatalogueNumbers.join("|")]);
+  const bulkPatchIncludedByCatalogue = new Map(
+    (xmlBulkPatchPreview?.included_records ?? []).map((record) => [record.catalogue_number, record]),
+  );
+  const bulkPatchExcludedByCatalogue = new Map(
+    (xmlBulkPatchPreview?.excluded_records ?? [])
+      .filter((record) => record.catalogue_number)
+      .map((record) => [record.catalogue_number ?? "", record]),
+  );
   const selectedPatchScenario =
     PATCH_SCENARIOS.find((scenario) => scenario.id === selectedPatchScenarioId) ?? PATCH_SCENARIOS[0];
   const selectedPatchScenarioStatus = patchScenarioStatuses[selectedPatchScenario.id];
@@ -1489,6 +1678,10 @@ export function App() {
       setSelectedBulkRecordCount(Math.max(selectedBulkCapacity, 1));
     }
   }, [selectedBulkCapacity, selectedBulkRecordCount]);
+  useEffect(() => {
+    setSelectedXmlChunkSequence(1);
+    setXmlBulkPatchPreview(null);
+  }, [selectedBulkPatchBasicUdiDi, selectedBulkPatchCatalogueNumbers, selectedPatchScenarioId]);
   useEffect(() => {
     if (selectedPatchScenarioId !== "equivalent_first_patch" && isSharedAnchorLoading) {
       return;
@@ -2166,6 +2359,40 @@ export function App() {
     };
   }
 
+  async function resolveBulkPatchCatalogueNumbers(): Promise<string[]> {
+    if (!selectedXmlFamilySummary || !selectedXmlVariantSummary || !selectedBulkPatchParentGroup) {
+      return [];
+    }
+    if (bulkPatchScopeMode === "all_posted") {
+      if (bulkPatchPostedCatalogueNumbers.length > 0) {
+        return bulkPatchPostedCatalogueNumbers;
+      }
+      if (
+        selectedBulkPatchFallbackCatalogueNumbers.length > 0 &&
+        selectedBulkPatchFallbackCatalogueNumbers.length === selectedBulkPatchParentGroup.posted_child_count
+      ) {
+        return selectedBulkPatchFallbackCatalogueNumbers;
+      }
+      const response = await api.bulkPatchPostedEntries(
+        selectedXmlFamilySummary.product_family,
+        selectedXmlVariantSummary.product_variant,
+        selectedBulkPatchParentGroup.basic_udi_di,
+      );
+      setBulkPatchPostedEntries(response.entries);
+      const resolvedCatalogueNumbers = response.entries
+        .map((entry) => entry.catalogue_number)
+        .filter((catalogueNumber): catalogueNumber is string => Boolean(catalogueNumber));
+      if (resolvedCatalogueNumbers.length > 0) {
+        return resolvedCatalogueNumbers;
+      }
+      return selectedBulkPatchFallbackCatalogueNumbers;
+    }
+    if (bulkPatchScopeMode === "selected_catalogue_numbers") {
+      return selectedBulkPatchCatalogueNumbers;
+    }
+    return bulkPatchImportedMatchedCatalogueNumbers;
+  }
+
   async function generateXmlPreview(): Promise<void> {
     if (
       (xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") &&
@@ -2237,18 +2464,37 @@ export function App() {
         );
         setXmlBulkUdidiPostPreview(preview);
       } else {
+        setXmlActionMessage("Bulk PATCH action received. Preparing selection...");
+        if (!selectedBulkPatchParentGroup) {
+          setError("Select a Basic UDI-DI parent before generating Bulk PATCH.");
+          setXmlActionMessage("Bulk PATCH is not ready: no Basic UDI-DI parent is selected.");
+          return;
+        }
+        const bulkPatchCatalogueNumbers = await resolveBulkPatchCatalogueNumbers();
+        if (bulkPatchCatalogueNumbers.length < 1) {
+          setError("No posted devices are currently selected for Bulk PATCH.");
+          setXmlActionMessage("Bulk PATCH is not ready: no posted devices are currently selected.");
+          return;
+        }
+        setXmlActionMessage("Generating Bulk PATCH preview...");
         const preview = await api.previewBulkPatch(
           selectedXmlFamilySummary.product_family,
           selectedXmlVariantSummary.product_variant,
-          normalizedBulkRecordCount,
+          selectedBulkPatchParentGroup.basic_udi_di,
+          bulkPatchCatalogueNumbers.length,
           selectedPatchScenario.id,
           currentPatchScenarioInputs(),
+          bulkPatchCatalogueNumbers,
           selectedXmlChunkSequence,
         );
         setXmlBulkPatchPreview(preview);
+        setXmlActionMessage(
+          `Bulk PATCH preview generated for ${selectedXmlFamilySummary.product_family} / ${selectedXmlVariantSummary.product_variant} / ${selectedBulkPatchParentGroup.basic_udi_di}.`
+        );
       }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Failed to generate XML preview.");
+      setXmlActionMessage(null);
     } finally {
       setIsGeneratingXml(false);
     }
@@ -2305,13 +2551,24 @@ export function App() {
                   selectedXmlVariantSummary.product_variant,
                   normalizedBulkRecordCount,
                 )
-            : await api.downloadBulkPatch(
-              selectedXmlFamilySummary.product_family,
-              selectedXmlVariantSummary.product_variant,
-              normalizedBulkRecordCount,
-              selectedPatchScenario.id,
-              currentPatchScenarioInputs(),
-            );
+            : await (async () => {
+              if (!selectedBulkPatchParentGroup) {
+                throw new Error("Select a Basic UDI-DI parent before downloading Bulk PATCH.");
+              }
+              const bulkPatchCatalogueNumbers = await resolveBulkPatchCatalogueNumbers();
+              if (bulkPatchCatalogueNumbers.length < 1) {
+                throw new Error("No posted devices are currently selected for Bulk PATCH.");
+              }
+              return api.downloadBulkPatch(
+                selectedXmlFamilySummary.product_family,
+                selectedXmlVariantSummary.product_variant,
+                selectedBulkPatchParentGroup.basic_udi_di,
+                bulkPatchCatalogueNumbers.length,
+                selectedPatchScenario.id,
+                currentPatchScenarioInputs(),
+                bulkPatchCatalogueNumbers,
+              );
+            })();
       if (!downloadResult) {
         return;
       }
@@ -4101,8 +4358,8 @@ export function App() {
                                 ? `Bulk UDI-DI POST preview generated for ${xmlBulkUdidiPostPreview.product_family} / ${xmlBulkUdidiPostPreview.product_variant}, chunk ${xmlBulkUdidiPostPreview.selected_chunk_sequence}.`
                                 : "No bulk UDI-DI POST preview generated yet for the selected variant."
                             : xmlBulkPatchPreview
-                              ? `Bulk PATCH preview generated for ${xmlBulkPatchPreview.product_family} / ${xmlBulkPatchPreview.product_variant}, chunk ${xmlBulkPatchPreview.selected_chunk_sequence}.`
-                              : "No bulk PATCH preview generated yet for the selected variant."}
+                              ? `Bulk PATCH preview generated for ${xmlBulkPatchPreview.product_family} / ${xmlBulkPatchPreview.product_variant} / ${xmlBulkPatchPreview.selected_basic_udi_di}, chunk ${xmlBulkPatchPreview.selected_chunk_sequence}.`
+                              : "No bulk PATCH preview generated yet for the selected parent scope."}
                   </span>
                 </div>
               </div>
@@ -4118,7 +4375,8 @@ export function App() {
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && !isPatchScenarioReady) ||
-                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedBulkCapacity) ||
+                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost") && !selectedBulkCapacity) ||
+                      (xmlMode === "bulkPatch" && !canRunBulkPatch) ||
                       ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
                       isGeneratingXml
                     }
@@ -4148,7 +4406,8 @@ export function App() {
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && !isPatchScenarioReady) ||
-                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedBulkCapacity) ||
+                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost") && !selectedBulkCapacity) ||
+                      (xmlMode === "bulkPatch" && !canRunBulkPatch) ||
                       ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
                       isGeneratingXml
                     }
@@ -4164,7 +4423,8 @@ export function App() {
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && (!hasReviewedPatchBaselinePost || !hasReviewedGeneratedPatchPreview)) ||
-                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedBulkCapacity) ||
+                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost") && !selectedBulkCapacity) ||
+                      (xmlMode === "bulkPatch" && !canRunBulkPatch) ||
                       ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
                       isGeneratingXml
                     }
@@ -4647,41 +4907,94 @@ export function App() {
                           ? "Select how many unique Basic UDI-DI parent registrations to include in the bulk package."
                           : xmlMode === "bulkUdidiPost"
                             ? "Select how many sibling child UDI-DI registrations to include under the already accepted Basic UDI-DI parent."
-                          : "Select the POST cohort size, then apply one PATCH scenario across those accepted device records."}
+                          : "Select one accepted Basic UDI-DI parent, then apply one PATCH scenario across the related child devices."}
                       </p>
                       <p className="panel-copy">
                         {xmlMode === "bulkPost"
                           ? `${selectedBulkEligibleBasicUdiCount} eligible Basic UDI-DI registration${selectedBulkEligibleBasicUdiCount === 1 ? "" : "s"} in this variant can be used for Bulk Basic UDI POST.`
                           : xmlMode === "bulkUdidiPost"
                             ? `${selectedBulkEligibleUdidiPostCount} eligible child UDI-DI registration${selectedBulkEligibleUdidiPostCount === 1 ? "" : "s"} in this variant can be used for Bulk UDI-DI POST.`
-                            : `${selectedBulkEligiblePostCount} eligible POST row${selectedBulkEligiblePostCount === 1 ? "" : "s"} in this variant can be used for Bulk PATCH.`}
+                            : `${selectedBulkPatchEligibleCount} eligible child device${selectedBulkPatchEligibleCount === 1 ? "" : "s"} are available under the selected Basic UDI-DI parent for Bulk PATCH.`}
                       </p>
                       <p className="panel-copy">
                         {selectedXmlVariantSummary.xml_blocked_records} row{selectedXmlVariantSummary.xml_blocked_records === 1 ? "" : "s"} remain excluded until resolved.
                       </p>
-                      <label className="field-label" htmlFor="xml-bulk-record-count">
-                        Record count
-                      </label>
-                      <select
-                        id="xml-bulk-record-count"
-                        className="rule-select"
-                        value={selectedBulkRecordCount}
-                        onChange={(event) => {
-                          setSelectedBulkRecordCount(Number(event.target.value));
-                          setSelectedXmlChunkSequence(1);
-                        }}
-                      >
-                        {Array.from(
-                          { length: Math.max(Math.min(selectedBulkCapacity, 300), 1) },
-                          (_, index) => index + 1,
-                        ).map((count) => (
-                          <option key={count} value={count}>
-                            {count} record{count === 1 ? "" : "s"}
-                          </option>
-                        ))}
-                      </select>
                       {xmlMode === "bulkPatch" ? (
                         <>
+                          <div className="workflow-note patch-readiness-note">
+                            <strong>Bulk PATCH UI revision</strong>
+                            <span>posted-parent scope selector active</span>
+                          </div>
+                          <label className="field-label" htmlFor="xml-bulk-patch-parent-selector">
+                            Basic UDI-DI parent
+                          </label>
+                          <select
+                            id="xml-bulk-patch-parent-selector"
+                            className="rule-select"
+                            value={selectedBulkPatchParentGroup?.basic_udi_di ?? ""}
+                            onChange={(event) => {
+                              setSelectedBulkPatchBasicUdiDi(event.target.value);
+                              setSelectedXmlChunkSequence(1);
+                              setXmlBulkPatchPreview(null);
+                            }}
+                          >
+                            {displayedBulkPatchParentOptions.map((group) => (
+                              <option key={group.basic_udi_di} value={group.basic_udi_di}>
+                                {group.basic_udi_di} ({group.posted_child_count} posted child{group.posted_child_count === 1 ? "" : "ren"})
+                              </option>
+                            ))}
+                          </select>
+                          {displayedBulkPatchParentOptions.length ? (
+                            <div className="draft-card">
+                              <div className="draft-card-head">
+                                <strong>Available posted parents</strong>
+                                <span className="status-pill ok compact">
+                                  {displayedBulkPatchParentOptions.length} available
+                                </span>
+                              </div>
+                              <div className="bulk-parent-chip-row">
+                                {displayedBulkPatchParentOptions.map((group) => {
+                                  const isSelected = group.basic_udi_di === selectedBulkPatchParentGroup?.basic_udi_di;
+                                  return (
+                                    <button
+                                      key={group.basic_udi_di}
+                                      type="button"
+                                      className={isSelected ? "action-button bulk-parent-chip active" : "ghost-button bulk-parent-chip"}
+                                      onClick={() => {
+                                        setSelectedBulkPatchBasicUdiDi(group.basic_udi_di);
+                                        setSelectedXmlChunkSequence(1);
+                                        setXmlBulkPatchPreview(null);
+                                      }}
+                                    >
+                                      {group.basic_udi_di} ({group.posted_child_count})
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
+                          {bulkPatchPostedParents.length === 0 && displayedBulkPatchParentOptions.length > 0 ? (
+                            <p className="panel-copy">
+                              Posted parent data did not load yet in the UI, so the parent selector is using the current variant&apos;s eligible Basic UDI-DI fallback.
+                            </p>
+                          ) : null}
+                          <label className="field-label" htmlFor="xml-bulk-patch-scope-mode">
+                            Scope mode
+                          </label>
+                          <select
+                            id="xml-bulk-patch-scope-mode"
+                            className="rule-select"
+                            value={bulkPatchScopeMode}
+                            onChange={(event) => {
+                              setBulkPatchScopeMode(event.target.value as BulkPatchScopeMode);
+                              setSelectedXmlChunkSequence(1);
+                              setXmlBulkPatchPreview(null);
+                            }}
+                          >
+                            <option value="all_posted">All posted devices</option>
+                            <option value="selected_catalogue_numbers">Selected catalogue numbers</option>
+                            <option value="import_catalogue_list">Import catalogue list</option>
+                          </select>
                           <label className="field-label" htmlFor="xml-bulk-patch-scenario-selector">
                             Bulk PATCH scenario
                           </label>
@@ -4697,8 +5010,225 @@ export function App() {
                               </option>
                             ))}
                           </select>
+                          <div className="workflow-note patch-readiness-note">
+                            <strong>Selected scope</strong>
+                            <span>
+                              {selectedBulkPatchParentGroup
+                                ? `${selectedBulkPatchSelectedCount} selected posted device${selectedBulkPatchSelectedCount === 1 ? "" : "s"} under ${selectedBulkPatchParentGroup.basic_udi_di}. Versions are calculated per device.`
+                                : "Select a Basic UDI-DI parent to load the child devices for bulk PATCH."}
+                            </span>
+                          </div>
+                          <div className="workflow-note patch-readiness-note">
+                            <strong>Bulk PATCH status</strong>
+                            <span>
+                              Parent: {selectedBulkPatchParentGroup?.basic_udi_di ?? "None"} | Scope: {bulkPatchScopeMode} | Eligible posted devices: {selectedBulkPatchEligibleCount} | Selected devices: {selectedBulkPatchSelectedCount} | Ready: {canRunBulkPatch ? "Yes" : "No"}
+                            </span>
+                          </div>
+                          <div className="workflow-note patch-readiness-note">
+                            <strong>Bulk PATCH readiness</strong>
+                            <span>{bulkPatchReadinessReason}</span>
+                          </div>
+                          {selectedBulkPatchParentGroup ? (
+                            <>
+                              <div className="draft-card">
+                                <div className="draft-card-head">
+                                  <strong>Already posted entries</strong>
+                                  <span className="status-pill ok compact">
+                                    {bulkPatchPostedEntries.length} posted
+                                  </span>
+                                </div>
+                                {bulkPatchPostedEntries.length ? (
+                                  <>
+                                    {bulkPatchPostedEntries.length <= 10 ? (
+                                      <div className="bulk-posted-grid">
+                                        {bulkPatchPostedEntries.map((entry, index) => (
+                                          <div className="roadmap-item compact-structured-item" key={`${entry.catalogue_number ?? "unknown"}-${index}`}>
+                                            <strong>{entry.catalogue_number ?? entry.primary_udi_di ?? "Unknown device"}</strong>
+                                            <p>{entry.primary_udi_di ?? "Primary UDI-DI pending"}</p>
+                                            <p>Version {entry.latest_version ?? "1"}</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="panel-copy">
+                                        Many posted devices available ({bulkPatchPostedEntries.length}). Use `All posted devices`,
+                                        `Selected catalogue numbers`, or `Import catalogue list` to define the scope without loading the full list.
+                                      </p>
+                                    )}
+                                  </>
+                                ) : (
+                                  <p className="panel-copy">
+                                    No previously posted entries are currently tracked in YAML for this Basic UDI-DI parent.
+                                  </p>
+                                )}
+                              </div>
+                              {bulkPatchScopeMode === "all_posted" ? (
+                                <div className="draft-card">
+                                  <div className="draft-card-head">
+                                    <strong>All posted devices</strong>
+                                    <span className="status-pill ok compact">{bulkPatchPostedEntries.length} included</span>
+                                  </div>
+                                  <p className="panel-copy">
+                                    All posted child devices under this Basic UDI-DI parent will be included in the bulk PATCH.
+                                  </p>
+                                  {bulkPatchPostedEntries.length === 0 && selectedBulkPatchFallbackCatalogueNumbers.length > 0 ? (
+                                    <p className="panel-copy">
+                                      Using the tracked posted catalogue list for this parent until the detailed child entry list finishes loading.
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                              {bulkPatchScopeMode === "selected_catalogue_numbers" ? (
+                                <div className="draft-card">
+                                  <div className="draft-card-head">
+                                    <strong>Select catalogue numbers</strong>
+                                    <span className="status-pill ok compact">{selectedBulkPatchCatalogueNumbers.length} selected</span>
+                                  </div>
+                                  <label className="field-label" htmlFor="xml-bulk-patch-catalogue-filter">
+                                    Catalogue number filter
+                                  </label>
+                                  <input
+                                    id="xml-bulk-patch-catalogue-filter"
+                                    className="rule-select patch-select"
+                                    type="text"
+                                    placeholder={bulkPatchPostedEntries.length > 10 ? "Search posted catalogue numbers" : "Optional filter"}
+                                    value={bulkPatchCatalogueFilter}
+                                    onChange={(event) => setBulkPatchCatalogueFilter(event.target.value)}
+                                  />
+                                  {bulkPatchPostedEntries.length > 10 && !bulkPatchCatalogueFilter.trim() ? (
+                                    <p className="panel-copy">
+                                      Many posted devices available ({bulkPatchPostedEntries.length}). Enter a catalogue number filter to choose a subset.
+                                    </p>
+                                  ) : (
+                                    <div className="bulk-posted-grid">
+                                      {bulkPatchFilteredPostedEntries.map((entry, index) => {
+                                        const catalogueNumber = entry.catalogue_number ?? "";
+                                        const includedRecord = bulkPatchIncludedByCatalogue.get(catalogueNumber);
+                                        const excludedRecord = bulkPatchExcludedByCatalogue.get(catalogueNumber);
+                                        const isSelected = selectedBulkPatchCatalogueNumbers.includes(catalogueNumber);
+                                        return (
+                                          <div className="roadmap-item compact-structured-item" key={`${catalogueNumber}-${index}`}>
+                                            <strong>{catalogueNumber || entry.primary_udi_di || "Unknown device"}</strong>
+                                            <p>{entry.primary_udi_di ?? "Primary UDI-DI pending"}</p>
+                                            <p>Version {entry.latest_version ?? "1"}</p>
+                                            <p>
+                                              <label>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isSelected}
+                                                  onChange={() => {
+                                                    setSelectedBulkPatchCatalogueNumbers((current) => (
+                                                      current.includes(catalogueNumber)
+                                                        ? current.filter((value) => value !== catalogueNumber)
+                                                        : [...current, catalogueNumber]
+                                                    ));
+                                                    setSelectedXmlChunkSequence(1);
+                                                    setXmlBulkPatchPreview(null);
+                                                  }}
+                                                />{" "}
+                                                Select
+                                              </label>
+                                            </p>
+                                            {includedRecord ? <p>Next version {includedRecord.derived_version ?? "Pending"}</p> : null}
+                                            {excludedRecord ? <p>{excludedRecord.reason_message}</p> : null}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : null}
+                              {bulkPatchScopeMode === "import_catalogue_list" ? (
+                                <div className="draft-card">
+                                  <div className="draft-card-head">
+                                    <strong>Import catalogue list</strong>
+                                    <span className="status-pill ok compact">{bulkPatchImportedMatchedCatalogueNumbers.length} matched</span>
+                                  </div>
+                                  <label className="field-label" htmlFor="xml-bulk-patch-import-list">
+                                    Catalogue numbers
+                                  </label>
+                                  <textarea
+                                    id="xml-bulk-patch-import-list"
+                                    className="rule-select patch-select"
+                                    rows={6}
+                                    placeholder={"One catalogue number per line, or comma-separated values."}
+                                    value={bulkPatchImportText}
+                                    onChange={(event) => setBulkPatchImportText(event.target.value)}
+                                  />
+                                  <p className="panel-copy">
+                                    Imported {bulkPatchImportedCatalogueNumbers.length}. Matched posted devices: {bulkPatchImportedMatchedCatalogueNumbers.length}. Not found under this parent: {bulkPatchImportedNotFoundCatalogueNumbers.length}.
+                                  </p>
+                                  {bulkPatchImportedMatchedEntries.length ? (
+                                    <div className="bulk-posted-grid">
+                                      {bulkPatchImportedMatchedEntries.slice(0, 10).map((entry, index) => (
+                                        <div className="roadmap-item compact-structured-item" key={`${entry.catalogue_number ?? "unknown"}-${index}`}>
+                                          <strong>{entry.catalogue_number ?? entry.primary_udi_di ?? "Unknown device"}</strong>
+                                          <p>{entry.primary_udi_di ?? "Primary UDI-DI pending"}</p>
+                                          <p>Version {entry.latest_version ?? "1"}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                  {bulkPatchImportedNotFoundCatalogueNumbers.length ? (
+                                    <p className="panel-copy">
+                                      Not found: {bulkPatchImportedNotFoundCatalogueNumbers.join(", ")}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                              {xmlBulkPatchPreview ? (
+                                <div className="draft-card">
+                                  <div className="draft-card-head">
+                                    <strong>Selected devices</strong>
+                                    <span className="status-pill ok compact">{selectedBulkPatchEntries.length} selected</span>
+                                  </div>
+                                  <div className="roadmap-list">
+                                    {selectedBulkPatchEntries.slice(0, 10).map((entry, index) => {
+                                      const catalogueNumber = entry.catalogue_number ?? "";
+                                      const includedRecord = bulkPatchIncludedByCatalogue.get(catalogueNumber);
+                                      const excludedRecord = bulkPatchExcludedByCatalogue.get(catalogueNumber);
+                                      return (
+                                        <div className="roadmap-item" key={`${catalogueNumber}-${index}`}>
+                                          <strong>{catalogueNumber || entry.primary_udi_di || "Unknown device"}</strong>
+                                          <p>{entry.primary_udi_di ?? "Primary UDI-DI pending"}</p>
+                                          <p>
+                                            Current accepted version: {includedRecord?.base_version ?? entry.latest_version ?? "1"} | Next PATCH version: {includedRecord?.derived_version ?? "Awaiting preview"}
+                                          </p>
+                                          {excludedRecord ? <p>{excludedRecord.reason_message}</p> : null}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </>
+                          ) : null}
                         </>
-                      ) : null}
+                      ) : (
+                        <>
+                          <label className="field-label" htmlFor="xml-bulk-record-count">
+                            Record count
+                          </label>
+                          <select
+                            id="xml-bulk-record-count"
+                            className="rule-select"
+                            value={selectedBulkRecordCount}
+                            onChange={(event) => {
+                              setSelectedBulkRecordCount(Number(event.target.value));
+                              setSelectedXmlChunkSequence(1);
+                            }}
+                          >
+                            {Array.from(
+                              { length: Math.max(Math.min(selectedBulkCapacity, 300), 1) },
+                              (_, index) => index + 1,
+                            ).map((count) => (
+                              <option key={count} value={count}>
+                                {count} record{count === 1 ? "" : "s"}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )}
                       <label className="field-label" htmlFor="xml-batch-chunk-sequence">
                         Preview chunk
                       </label>
@@ -4726,7 +5256,7 @@ export function App() {
                         </>
                       ) : !selectedBulkCapacity ? (
                         <p className="panel-copy">
-                          No eligible {xmlMode === "bulkPost" ? "Basic UDI-DI parent registrations" : xmlMode === "bulkUdidiPost" ? "child UDI-DI registrations" : "POST rows"} are available for this variant, so Bulk {xmlMode === "bulkPost" ? "Basic UDI POST" : xmlMode === "bulkUdidiPost" ? "UDI-DI POST" : "PATCH"} cannot be generated here.
+                          No eligible {xmlMode === "bulkPost" ? "Basic UDI-DI parent registrations" : xmlMode === "bulkUdidiPost" ? "child UDI-DI registrations" : "child devices for the selected Basic UDI-DI"} are available for this variant, so Bulk {xmlMode === "bulkPost" ? "Basic UDI POST" : xmlMode === "bulkUdidiPost" ? "UDI-DI POST" : "PATCH"} cannot be generated here.
                         </p>
                       ) : null}
                     </div>

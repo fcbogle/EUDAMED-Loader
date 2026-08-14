@@ -527,7 +527,9 @@ export type BulkPatchPreview = {
   mode: "bulk_patch";
   product_family: string;
   product_variant: string;
+  selected_basic_udi_di: string;
   requested_record_count: number;
+  eligible_child_records: number;
   scenario_id: string;
   scenario_label: string;
   package_file_name: string;
@@ -543,4 +545,31 @@ export type BulkPatchPreview = {
   included_records: BulkXmlRecordSummary[];
   excluded_records: BulkXmlExcludedRecord[];
   chunks: BatchXmlChunkSummary[];
+};
+
+export type BulkPatchPostedEntry = {
+  catalogue_number: string | null;
+  primary_udi_di: string | null;
+  basic_udi_di: string | null;
+  latest_version: string | null;
+  baseline_patch_success: boolean;
+};
+
+export type BulkPatchPostedEntriesResponse = {
+  product_family: string;
+  product_variant: string;
+  basic_udi_di: string;
+  entries: BulkPatchPostedEntry[];
+};
+
+export type BulkPatchPostedParentGroup = {
+  basic_udi_di: string;
+  posted_child_count: number;
+  sample_catalogue_numbers: string[];
+};
+
+export type BulkPatchPostedParentsResponse = {
+  product_family: string;
+  product_variant: string;
+  parents: BulkPatchPostedParentGroup[];
 };

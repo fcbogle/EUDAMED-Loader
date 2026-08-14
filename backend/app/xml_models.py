@@ -243,7 +243,9 @@ class BulkPatchPreview(BaseModel):
     mode: Literal["bulk_patch"] = "bulk_patch"
     product_family: str
     product_variant: str
+    selected_basic_udi_di: str
     requested_record_count: int
+    eligible_child_records: int
     scenario_id: str
     scenario_label: str
     package_file_name: str

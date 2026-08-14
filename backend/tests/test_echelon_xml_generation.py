@@ -10,10 +10,12 @@ from app.services.canonical_validation import CanonicalValidationService
 
 from app.routers.xml_generation import (
     download_generated_patch_scenario,
+    download_xml_bulk_patch,
     download_xml_market_info_put,
     download_xml_batch,
     download_xml_record,
     preview_generated_patch_scenario,
+    preview_xml_bulk_patch,
     preview_xml_market_info_put,
     preview_xml_batch,
     preview_xml_record,
@@ -500,3 +502,91 @@ def test_post_record_selector_requires_exact_catalogue_number_for_variant_post_l
     )
 
     assert selected.catalogue_number == expected_catalogue_number
+
+
+def test_bulk_patch_preview_scopes_to_selected_basic_udi_parent_and_child_devices() -> None:
+    service = XmlGenerationService()
+    posted_groups = service.testing_state_store.posted_parent_groups(
+        product_family="Elite",
+        product_variant="EliteVT",
+    )
+    assert posted_groups
+    basic_udi_di = posted_groups[0]["basic_udi_di"]
+    selected_children = cast(list[str], posted_groups[0]["sample_catalogue_numbers"][:2])
+    assert len(selected_children) == 2
+
+    preview = service.preview_bulk_patch(
+        product_family="Elite",
+        product_variant="EliteVT",
+        basic_udi_di=basic_udi_di,
+        record_count=len(selected_children),
+        scenario_id="equivalent_first_patch",
+        scenario_inputs={},
+        selected_catalogue_numbers=selected_children,
+    )
+
+    assert preview.selected_basic_udi_di == basic_udi_di
+    assert preview.eligible_child_records >= len(selected_children)
+    assert preview.requested_record_count == len(selected_children)
+    assert preview.included_record_count == len(selected_children)
+    assert {record.catalogue_number for record in preview.included_records} == set(selected_children)
+
+
+def test_bulk_patch_routes_require_basic_udi_parent_scope() -> None:
+    try:
+        preview_xml_bulk_patch(
+            {
+                "product_family": "Echelon",
+                "product_variant": "Echelon VAC",
+                "scenario_id": "equivalent_first_patch",
+                "record_count": 1,
+            }
+        )
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 400
+        assert "basic_udi_di" in str(getattr(exc, "detail", exc))
+    else:
+        raise AssertionError("Expected bulk PATCH preview route to require basic_udi_di.")
+
+    try:
+        download_xml_bulk_patch(
+            {
+                "product_family": "Echelon",
+                "product_variant": "Echelon VAC",
+                "scenario_id": "equivalent_first_patch",
+                "record_count": 1,
+            }
+        )
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 400
+        assert "basic_udi_di" in str(getattr(exc, "detail", exc))
+    else:
+        raise AssertionError("Expected bulk PATCH download route to require basic_udi_di.")
+
+
+def test_bulk_patch_preview_excludes_posted_children_that_are_not_xml_ready() -> None:
+    service = XmlGenerationService()
+
+    preview = service.preview_bulk_patch(
+        product_family="Elite",
+        product_variant="EliteVT",
+        basic_udi_di="5050649ELITEVTV4",
+        record_count=5,
+        scenario_id="equivalent_first_patch",
+        scenario_inputs={},
+        selected_catalogue_numbers=["EVT22L11SD", "EVT22L12S", "EVT22L13S", "EVT22L14S", "EVT22L15S"],
+    )
+
+    assert preview.selected_basic_udi_di == "5050649ELITEVTV4"
+    assert preview.eligible_child_records == 5
+    assert preview.included_record_count == 4
+    assert {record.catalogue_number for record in preview.included_records} == {
+        "EVT22L11SD",
+        "EVT22L12S",
+        "EVT22L13S",
+        "EVT22L14S",
+    }
+    assert preview.excluded_record_count == 1
+    assert len(preview.excluded_records) == 1
+    assert preview.excluded_records[0].catalogue_number == "EVT22L15S"
+    assert preview.excluded_records[0].reason_code == "not_xml_ready"

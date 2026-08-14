@@ -16,6 +16,7 @@ Current in-scope capabilities include:
 - canonical validation and XML readiness analysis
 - XML preview, local XSD validation, and download
 - controlled baseline `POST` / `PATCH` and scenario-derived later `PATCH` review
+- controlled bulk parent and child registration XML generation for Playground testing
 
 Current out-of-scope capabilities include:
 
@@ -126,6 +127,7 @@ The intended business capability is a platform-led EUDAMED preparation workflow 
 - map workbook fields into a stable canonical regulatory model
 - validate records against EUDAMED-oriented expectations
 - generate and review baseline `POST` / `PATCH` XML in a controlled manner
+- generate staged bulk registration XML with distinct parent and child flows
 - derive approved later `PATCH` scenarios from a reviewed baseline chain
 - prepare XML packages safely for later manual upload activity
 - provide the foundation for future submission tracking and automated delivery
@@ -157,13 +159,21 @@ Within `EUDAMED Testing`, the current modes are:
 - `Patch XML`
 - `Market Info`
 - `Single XML`
-- `Batch XML`
+- `Bulk Basic UDI POST`
+- `Bulk UDI-DI POST`
+- `Bulk PATCH`
 
 The most mature controlled testing path is now:
 
 - select one XML-ready parent `POST` record
 - generate and review baseline `Post + Patch`
 - derive approved scenario `PATCH` drafts from that reviewed first child `PATCH`
+
+The current validated bulk registration path is now:
+
+- register the parent once through `Bulk Basic UDI POST`
+- register child UDI-DIs under that accepted parent through `Bulk UDI-DI POST`
+- apply later changes only through per-device lineage-aware `Bulk PATCH`
 
 ## Target Application Architecture
 
@@ -262,6 +272,7 @@ Current external interface focus is schema and message alignment, not live submi
 Implemented XML service profiles include:
 
 - `DEVICE.POST`
+- `UDI_DI.POST`
 - `UDI_DI.PATCH`
 - `MARKET_INFO.PUT`
 
@@ -270,6 +281,8 @@ Current implemented XML behavior includes:
 - baseline `POST`
 - equivalent first child `PATCH` with `e:version = 2`
 - scenario-derived later `PATCH` from that reviewed baseline
+- staged bulk parent registration through `DEVICE.POST`
+- staged bulk child registration through standalone `UDI_DI.POST`
 - local XSD validation against the bundled schema set
 
 Agreed target XML behavior now moves in a more explicit direction:
@@ -288,6 +301,22 @@ Current `Patch XML` control model includes:
 - reviewed baseline gating
 - explicit user-entered later `PATCH` version
 - scenario-specific field changes only
+
+### Bulk Registration Architecture
+
+The bulk registration architecture is no longer treated as one generic batch XML generator. It now separates parent and child registration because Playground testing confirmed those flows have different constraints.
+
+Current design rules are:
+
+- `Bulk Basic UDI POST` creates at most one parent registration per distinct `Basic UDI-DI` in a wave
+- duplicate parent creation attempts for the same `Basic UDI-DI` in the same wave should be suppressed before XML generation
+- `Bulk UDI-DI POST` is used only after the parent `Basic UDI-DI` has already been accepted
+- each child registration message is a standalone `UDI_DI.POST`
+- the validated standalone child wrapper is `device:UDIDIData` with `xsi:type="udidi:MDRUDIDIDataType"`
+- child messages link back to the accepted parent through `basicUDIIdentifier`
+- bulk `PATCH` must resolve the latest accepted state independently for each targeted child device lineage rather than rely on one shared bulk baseline
+
+This staged design is now the working architecture for Playground bulk registration and should replace references to a generic `Batch XML` mode in later controlled documents.
 
 ### PATCH Scenario Architecture
 
@@ -355,7 +384,8 @@ Current documented risks and issues include:
 - incomplete scenario coverage
 - no manual upload state tracking yet
 - no database-backed history or audit model yet
-- future operational ambiguity if `Single XML` and generic `Batch XML` are not redesigned with clearer intent
+- bulk PATCH remains to be implemented on top of per-device accepted-state lineage
+- accepted device state still lives in YAML rather than a database-backed submission state model
 
 ## Transition Architecture And Roadmap
 
@@ -378,6 +408,11 @@ Near-term roadmap items already documented include:
   - explicit `Equivalent First Patch`
   - real first-update version `2` `PATCH` from accepted `POST`
   - later version `3+` `PATCH` from latest accepted tracked `PATCH`
+- keep bulk registration split into:
+  - `Bulk Basic UDI POST`
+  - `Bulk UDI-DI POST`
+  - `Bulk PATCH`
+- implement `Bulk PATCH` as a per-device lineage-aware operation rather than a shared bulk baseline transform
 - define submission-domain models
 - add manual upload workflow support after XML review
 - add persistence and later delivery adapters
@@ -395,6 +430,9 @@ Current major decisions reflected in the documentation include:
 - version `3+` `PATCH` should derive from the latest accepted tracked `PATCH`
 - scenario `PATCH` generation must target the exact selected parent record
 - `Patch XML` should not be a freeform XML editor
+- bulk registration should be split into explicit parent and child POST flows rather than a generic batch mode
+- bulk child registration should use standalone `UDI_DI.POST` messages under an already accepted parent
+- future bulk PATCH must honor independent accepted-state lineage for each targeted device
 
 ## Dependencies
 
@@ -413,7 +451,7 @@ Current open questions include:
 - how baseline review and scenario acceptance state should be persisted
 - whether the unchanged equivalent first-child `PATCH` remains only as an optional controlled testing path
 - whether `Single XML` remains a long-term mode
-- how `POST Batch` and scenario-driven `PATCH Batch` should be introduced
+- how the eventual database model should persist parent/child registration lineage for bulk PATCH orchestration
 - what audit, retention, and security controls will be required in later phases
 
 ## Sections Still Requiring Additional Input

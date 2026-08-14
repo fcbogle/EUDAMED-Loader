@@ -84,7 +84,7 @@ class XmlGenerationService:
         *,
         product_family: str,
         product_variant: str,
-        record_count: int,
+        record_count: int | None,
     ) -> tuple[list[CanonicalValidationRecord], list[BulkXmlExcludedRecord], int]:
         bundle = self.validation_service.build_validation_bundle()
         variant_records = [
@@ -116,7 +116,23 @@ class XmlGenerationService:
                 )
                 continue
             eligible_posts.append(record)
-        return eligible_posts[:record_count], excluded, len(eligible_posts)
+        limited_posts = eligible_posts if record_count is None else eligible_posts[:record_count]
+        return limited_posts, excluded, len(eligible_posts)
+
+    def _variant_xml_ready_records(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+    ) -> list[CanonicalValidationRecord]:
+        bundle = self.validation_service.build_validation_bundle()
+        return [
+            record
+            for record in bundle.records
+            if record.product_family == product_family
+            and record.product_variant == product_variant
+            and record.xml_readiness.status == "complete"
+        ]
 
     @staticmethod
     def _bulk_record_summary(record: CanonicalValidationRecord) -> BulkXmlRecordSummary:
@@ -223,6 +239,107 @@ class XmlGenerationService:
             included.extend(children)
 
         return included, excluded_records, eligible_child_records
+
+    def _bulk_patch_candidates(
+        self,
+        *,
+        records: list[CanonicalValidationRecord],
+        excluded_records: list[BulkXmlExcludedRecord],
+        basic_udi_di: str,
+        record_count: int,
+        selected_catalogue_numbers: list[str] | None = None,
+    ) -> tuple[list[CanonicalValidationRecord], list[BulkXmlExcludedRecord], int]:
+        grouped_records: dict[str, list[CanonicalValidationRecord]] = {}
+
+        for record in records:
+            summary = self._bulk_record_summary(record)
+            if summary.basic_udi_di:
+                grouped_records.setdefault(summary.basic_udi_di, []).append(record)
+
+        parent_group = grouped_records.get(basic_udi_di)
+        if not parent_group:
+            raise ValueError(f"Basic UDI-DI {basic_udi_di} does not resolve to an eligible POST cohort for bulk PATCH.")
+
+        child_records = parent_group[1:]
+        eligible_child_records = len(child_records)
+        if not child_records:
+            raise ValueError(f"Basic UDI-DI {basic_udi_di} does not currently have any eligible child UDI-DI POST rows.")
+
+        selected_catalogue_set = {
+            catalogue_number.strip()
+            for catalogue_number in (selected_catalogue_numbers or [])
+            if isinstance(catalogue_number, str) and catalogue_number.strip()
+        }
+        if selected_catalogue_set:
+            unknown_catalogues = sorted(
+                selected_catalogue_set.difference({record.catalogue_number or "" for record in child_records})
+            )
+            if unknown_catalogues:
+                raise ValueError(
+                    "Selected bulk PATCH devices do not belong to the chosen Basic UDI-DI parent: "
+                    + ", ".join(unknown_catalogues)
+                )
+            filtered_records = [record for record in child_records if (record.catalogue_number or "") in selected_catalogue_set]
+            if not filtered_records:
+                raise ValueError(f"No selected child devices remain under Basic UDI-DI {basic_udi_di} for bulk PATCH.")
+            return filtered_records[:record_count], excluded_records, eligible_child_records
+
+        return child_records[:record_count], excluded_records, eligible_child_records
+
+    def _bulk_patch_selected_records(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        basic_udi_di: str,
+        record_count: int,
+        selected_catalogue_numbers: list[str] | None = None,
+    ) -> tuple[list[CanonicalValidationRecord], int, list[str]]:
+        variant_records = self._variant_xml_ready_records(
+            product_family=product_family,
+            product_variant=product_variant,
+        )
+        record_lookup = {
+            record.catalogue_number or "": record
+            for record in variant_records
+            if (record.catalogue_number or "")
+        }
+        posted_entries = self.testing_state_store.posted_entries(
+            product_family=product_family,
+            product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
+        )
+        posted_catalogues = [
+            str(entry.get("catalogue_number") or "").strip()
+            for entry in posted_entries
+            if str(entry.get("catalogue_number") or "").strip()
+        ]
+        eligible_child_records = len(posted_catalogues)
+        if not posted_catalogues:
+            raise ValueError(f"Basic UDI-DI {basic_udi_di} does not currently have any posted child devices for bulk PATCH.")
+
+        selected_catalogues = [
+            catalogue_number.strip()
+            for catalogue_number in (selected_catalogue_numbers or posted_catalogues)
+            if isinstance(catalogue_number, str) and catalogue_number.strip()
+        ]
+        if not selected_catalogues:
+            raise ValueError(f"No selected child devices remain under Basic UDI-DI {basic_udi_di} for bulk PATCH.")
+
+        unknown_catalogues = sorted(set(selected_catalogues).difference(posted_catalogues))
+        if unknown_catalogues:
+            raise ValueError(
+                "Selected bulk PATCH devices do not belong to the chosen Basic UDI-DI parent: "
+                + ", ".join(unknown_catalogues)
+            )
+
+        missing_variant_records = [catalogue for catalogue in selected_catalogues if catalogue not in record_lookup]
+        selected_records = [
+            record_lookup[catalogue]
+            for catalogue in selected_catalogues
+            if catalogue in record_lookup
+        ][:record_count]
+        return selected_records, eligible_child_records, missing_variant_records
 
     def preview_bulk_post(
         self,
@@ -527,16 +644,21 @@ class XmlGenerationService:
         *,
         product_family: str,
         product_variant: str,
+        basic_udi_di: str,
         record_count: int,
         scenario_id: str,
         scenario_inputs: dict[str, Any] | None = None,
+        selected_catalogue_numbers: list[str] | None = None,
         chunk_sequence: int = 1,
     ) -> BulkPatchPreview:
         normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
-        candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
+        excluded_records: list[BulkXmlExcludedRecord] = []
+        candidate_records, eligible_child_records, missing_variant_records = self._bulk_patch_selected_records(
             product_family=product_family,
             product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
             record_count=normalized_count,
+            selected_catalogue_numbers=selected_catalogue_numbers,
         )
         scenario_data = scenario_inputs or {}
         included_summaries: list[BulkXmlRecordSummary] = []
@@ -576,6 +698,16 @@ class XmlGenerationService:
                     )
                 )
             candidate_records = []
+            raise ValueError(f"{scenario_label}: {reason_message}")
+        for catalogue_number in missing_variant_records:
+            excluded_records.append(
+                BulkXmlExcludedRecord(
+                    catalogue_number=catalogue_number,
+                    primary_udi_di=None,
+                    reason_code="not_xml_ready",
+                    reason_message="Posted device is not currently XML-ready in canonical validation.",
+                )
+            )
         for record in candidate_records:
             post_record = self.projection_builder.build_device_record(record)
             patch_state_resolution = self.testing_state_store.latest_successful_patch_state(
@@ -612,6 +744,11 @@ class XmlGenerationService:
             included_summaries.append(included_summary)
             included_payloads.append((included_summary, preview.derived_patch_xml.encode("utf-8")))
         if not included_payloads:
+            if missing_variant_records:
+                raise ValueError(
+                    "Selected posted devices are not currently XML-ready in canonical validation: "
+                    + ", ".join(missing_variant_records)
+                )
             raise ValueError(
                 f"No eligible records are currently available for bulk PATCH generation for {product_family} / {product_variant}."
             )
@@ -652,7 +789,9 @@ class XmlGenerationService:
         return BulkPatchPreview(
             product_family=product_family,
             product_variant=product_variant,
-            requested_record_count=normalized_count,
+            selected_basic_udi_di=basic_udi_di,
+            requested_record_count=len(included_summaries),
+            eligible_child_records=eligible_child_records,
             scenario_id=scenario_id,
             scenario_label=scenario_label,
             package_file_name=self.package_builder.bulk_package_file_name(
@@ -679,22 +818,33 @@ class XmlGenerationService:
         *,
         product_family: str,
         product_variant: str,
+        basic_udi_di: str,
         record_count: int,
         scenario_id: str,
         scenario_inputs: dict[str, Any] | None = None,
+        selected_catalogue_numbers: list[str] | None = None,
     ) -> tuple[str, bytes]:
         preview = self.preview_bulk_patch(
             product_family=product_family,
             product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
             record_count=record_count,
             scenario_id=scenario_id,
             scenario_inputs=scenario_inputs,
+            selected_catalogue_numbers=selected_catalogue_numbers,
         )
-        candidate_records, _, _ = self._variant_post_records_with_exclusions(
+        candidate_records, _, missing_variant_records = self._bulk_patch_selected_records(
             product_family=product_family,
             product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
             record_count=preview.requested_record_count,
+            selected_catalogue_numbers=selected_catalogue_numbers,
         )
+        if not candidate_records and missing_variant_records:
+            raise ValueError(
+                "Selected posted devices are not currently XML-ready in canonical validation: "
+                + ", ".join(missing_variant_records)
+            )
         members: list[tuple[str, bytes]] = []
         chunk_members = []
         successful_catalogues = {record.catalogue_number for record in preview.included_records}
@@ -739,7 +889,9 @@ class XmlGenerationService:
             "mode": "bulk_patch",
             "product_family": product_family,
             "product_variant": product_variant,
+            "basic_udi_di": basic_udi_di,
             "requested_record_count": preview.requested_record_count,
+            "eligible_child_records": preview.eligible_child_records,
             "scenario_id": scenario_id,
             "scenario_label": preview.scenario_label,
             "included_record_count": preview.included_record_count,
