@@ -299,6 +299,7 @@ Current `Patch XML` control model includes:
 
 - exact parent-record lineage through `catalogue_number`
 - reviewed baseline gating
+- tracked successful Playground registration gating before first real version `2` `PATCH`
 - explicit user-entered later `PATCH` version
 - scenario-specific field changes only
 
@@ -309,8 +310,12 @@ The bulk registration architecture is no longer treated as one generic batch XML
 Current design rules are:
 
 - `Bulk Basic UDI POST` creates at most one parent registration per distinct `Basic UDI-DI` in a wave
+- `Bulk Basic UDI POST` must scan the full XML-ready variant population before applying the transport message cap so parent eligibility is not distorted by early row order
 - duplicate parent creation attempts for the same `Basic UDI-DI` in the same wave should be suppressed before XML generation
+- if the selected family and variant already have a tracked successful parent `DEVICE.POST`, the UI should stop the parent flow and direct the operator to `Bulk UDI-DI POST`
 - `Bulk UDI-DI POST` is used only after the parent `Basic UDI-DI` has already been accepted
+- `Bulk UDI-DI POST` must exclude any child `primary UDI-DI` already known as successfully registered in tracked state
+- if no genuinely new child devices remain, the UI should say so explicitly rather than emit duplicate child XML
 - each child registration message is a standalone `UDI_DI.POST`
 - the validated standalone child wrapper is `device:UDIDIData` with `xsi:type="udidi:MDRUDIDIDataType"`
 - child messages link back to the accepted parent through `basicUDIIdentifier`
@@ -326,11 +331,35 @@ Current design rules are:
 
 - each generated `PATCH` belongs to one explicit scenario type
 - each scenario is anchored to one exact selected device lineage
+- a first real version `2` `PATCH` is valid only when the application has both:
+  - a reviewed baseline `POST` preview for the exact selected record in the current session
+  - a tracked successful Playground registration for that same device lineage
 - version `2` `PATCH` should derive directly from the accepted `POST` baseline for that same lineage
 - version `3+` `PATCH` should derive from the latest accepted tracked `PATCH` state for that same lineage
 - all non-target fields should remain aligned with the chosen base state
 - only the scenario-approved target field or fields should change
 - the current YAML testing state store is the temporary persistence mechanism for accepted device state and `PATCH` lineage until the database-backed model is introduced
+
+### Single And Bulk Testing Flow Rules
+
+The implemented testing workflow now distinguishes four eligibility paths rather than treating `POST` and `PATCH` as generic XML generation:
+
+- `Single POST`
+- `Bulk Basic UDI POST`
+- `Bulk UDI-DI POST`
+- `Single PATCH` and `Bulk PATCH`
+
+The current rules are:
+
+- `Single POST` must select the next valid candidate from the chosen family and variant rather than simply the first workbook row
+- `Single POST` must not offer a record whose parent `Basic UDI-DI` is already known and whose child `UDI-DI` is already known
+- if the parent is already known but the child is not, `Single POST` should stop and direct the operator toward `Bulk UDI-DI POST`
+- if neither parent nor child is known, `Single POST` may offer that record as a genuine new registration candidate
+- `Bulk Basic UDI POST` is a parent-creation flow only and should never knowingly regenerate an already accepted parent lineage
+- `Bulk UDI-DI POST` is a child-creation flow only and should never knowingly regenerate an already accepted child lineage
+- `Single PATCH` and `Bulk PATCH` are state-based flows and must build from tracked accepted lineage rather than raw workbook values alone
+- `Bulk PATCH` candidate selection must come from tracked posted entries under the selected `Basic UDI-DI` parent and not from arbitrary variant workbook rows
+- UI messaging is part of the control design: when no valid candidate remains, the operator should receive a direct reason rather than a silent failure or misleading empty preview
 
 The current implemented single-field or narrow-scope scenario families are:
 
@@ -384,7 +413,6 @@ Current documented risks and issues include:
 - incomplete scenario coverage
 - no manual upload state tracking yet
 - no database-backed history or audit model yet
-- bulk PATCH remains to be implemented on top of per-device accepted-state lineage
 - accepted device state still lives in YAML rather than a database-backed submission state model
 
 ## Transition Architecture And Roadmap

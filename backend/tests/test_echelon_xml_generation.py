@@ -16,6 +16,7 @@ from app.routers.xml_generation import (
     download_xml_batch,
     download_xml_record,
     preview_generated_patch_scenario,
+    preview_xml_next_post_registration,
     preview_xml_bulk_patch,
     preview_xml_market_info_put,
     preview_xml_batch,
@@ -80,6 +81,30 @@ def test_generic_preview_route_returns_single_record_payload() -> None:
     assert payload["validation"]["valid"] is True
 
 
+def test_next_post_preview_route_returns_payload() -> None:
+    expected_preview = XmlGenerationService().preview_post_registration(
+        product_family="Elan",
+        product_variant="Elan IC",
+        catalogue_number="ELANIC22L1S",
+    )
+    original = XmlGenerationService.preview_next_post_registration
+    XmlGenerationService.preview_next_post_registration = lambda self, **kwargs: expected_preview
+    try:
+        payload = preview_xml_next_post_registration(
+            {
+                "product_family": "Echelon",
+                "product_variant": "Echelon",
+            }
+        )
+    finally:
+        XmlGenerationService.preview_next_post_registration = original
+
+    assert payload["mode"] == "post_registration"
+    assert payload["product_family"] == "Elan"
+    assert payload["product_variant"] == "Elan IC"
+    assert payload["post_validation"]["valid"] is True
+
+
 def test_single_record_preview_can_override_manufacturer_srn_for_playground(monkeypatch) -> None:
     monkeypatch.setenv("EUDAMED_MANUFACTURER_SRN_OVERRIDE", "UK-MF-000033261")
     get_settings.cache_clear()
@@ -95,6 +120,105 @@ def test_single_record_preview_can_override_manufacturer_srn_for_playground(monk
 
     assert "<basicudi:MFActorCode>UK-MF-000033261</basicudi:MFActorCode>" in preview.post_xml
     assert "<s:nodeActorCode>UK-MF-000033261</s:nodeActorCode>" in preview.post_xml
+
+
+def test_next_valid_post_record_skips_known_posted_parent_and_child(monkeypatch) -> None:
+    service = XmlGenerationService()
+    first_known = cast(
+        CanonicalValidationRecord,
+        service.selector.find_post_record(
+            product_family="Elite",
+            product_variant="Elite2",
+            catalogue_number="EL22-24-1KIT-S",
+        ),
+    )
+    second_new = cast(
+        CanonicalValidationRecord,
+        first_known.model_copy(
+            update={
+                "catalogue_number": "EC22L1S-NEW",
+                "primary_udi_di": "05050649030109-NEW",
+            }
+        ),
+    )
+
+    monkeypatch.setattr(
+        service,
+        "_variant_post_records_with_exclusions",
+        lambda **kwargs: ([first_known, second_new], [], 2),
+    )
+    original_bulk_record_summary = service._bulk_record_summary
+    monkeypatch.setattr(
+        service,
+        "_bulk_record_summary",
+        lambda record: (
+            cast(
+                type(original_bulk_record_summary(record)),
+                original_bulk_record_summary(record).model_copy(update={"basic_udi_di": "NEW-BASIC-UDI-DI"}),
+            )
+            if record.catalogue_number == "EC22L1S-NEW"
+            else original_bulk_record_summary(record)
+        ),
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_basic_udi_post",
+        lambda **kwargs: kwargs["basic_udi_di"] == basicUdiDiForRecordForTest(first_known),
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_primary_udi_post",
+        lambda **kwargs: kwargs["primary_udi_di"] == first_known.primary_udi_di,
+    )
+
+    selected = service._next_valid_post_record(
+        product_family="Elite",
+        product_variant="Elite2",
+    )
+
+    assert selected.catalogue_number == "EC22L1S-NEW"
+
+
+def test_next_valid_post_record_blocks_when_parent_exists(monkeypatch) -> None:
+    service = XmlGenerationService()
+    record = cast(
+        CanonicalValidationRecord,
+        service.selector.find_post_record(
+            product_family="Elite",
+            product_variant="Elite2",
+            catalogue_number="EL22-24-1KIT-S",
+        ),
+    )
+
+    monkeypatch.setattr(
+        service,
+        "_variant_post_records_with_exclusions",
+        lambda **kwargs: ([record], [], 1),
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_basic_udi_post",
+        lambda **kwargs: True,
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_primary_udi_post",
+        lambda **kwargs: False,
+    )
+
+    try:
+        service._next_valid_post_record(product_family="Elite", product_variant="Elite2")
+    except ValueError as exc:
+        assert str(exc) == "Parent Basic UDI-DI already exists for Elite / Elite2. Use Bulk UDI-DI POST to add child devices."
+    else:
+        raise AssertionError("Expected parent-exists POST selection block.")
+
+
+def basicUdiDiForRecordForTest(record: CanonicalValidationRecord) -> str | None:
+    for field in record.fields:
+        if field.canonical_path in {"basic_device.basic_udi_di", "device_record.basic_udi_identifier"} and field.value:
+            return field.value
+    return None
 
 
 def test_market_info_put_preview_generates_schema_valid_xml() -> None:
@@ -545,6 +669,37 @@ def test_generated_patch_scenario_requires_reviewed_post_baseline() -> None:
         raise AssertionError("Expected reviewed POST baseline requirement to be enforced.")
 
 
+def test_generated_patch_scenario_requires_tracked_successful_post_for_version_2(monkeypatch) -> None:
+    service = XmlGenerationService()
+    service.preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_primary_udi_post",
+        lambda **_: False,
+    )
+
+    try:
+        service.preview_generated_patch_scenario(
+            product_family="Echelon",
+            product_variant="Echelon VAC",
+            catalogue_number="EVAC22L1S",
+            scenario_id="equivalent_first_patch",
+            patch_version="2",
+            scenario_inputs={},
+        )
+    except ValueError as exc:
+        assert (
+            str(exc)
+            == "This device does not yet have a tracked successful Playground registration, so PATCH cannot be generated."
+        )
+    else:
+        raise AssertionError("Expected tracked successful POST requirement to be enforced for version 2 PATCH.")
+
+
 def test_generated_patch_scenario_route_requires_reviewed_post_baseline() -> None:
     try:
         preview_generated_patch_scenario(
@@ -564,6 +719,37 @@ def test_generated_patch_scenario_route_requires_reviewed_post_baseline() -> Non
         assert exc.detail == "Generate and review the baseline POST for this exact selected record before drafting a PATCH."
     else:
         raise AssertionError("Expected HTTPException when baseline POST has not been reviewed.")
+
+
+def test_generated_patch_scenario_route_requires_tracked_successful_post_for_version_2(monkeypatch) -> None:
+    original = XmlGenerationService.preview_generated_patch_scenario
+
+    def raise_missing_registration(self, **kwargs):
+        raise ValueError("This device does not yet have a tracked successful Playground registration, so PATCH cannot be generated.")
+
+    monkeypatch.setattr(XmlGenerationService, "preview_generated_patch_scenario", raise_missing_registration)
+
+    try:
+        preview_generated_patch_scenario(
+            {
+                "product_family": "Echelon",
+                "product_variant": "Echelon VAC",
+                "catalogue_number": "EVAC22L1S",
+                "scenario_id": "equivalent_first_patch",
+                "patch_version": 2,
+                "scenario_inputs": {},
+            }
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 404
+        assert (
+            exc.detail
+            == "This device does not yet have a tracked successful Playground registration, so PATCH cannot be generated."
+        )
+    else:
+        raise AssertionError("Expected HTTPException when successful Playground POST has not been tracked.")
+    finally:
+        XmlGenerationService.preview_generated_patch_scenario = original
 
 
 def test_post_preview_marks_reviewed_post_for_following_patch_generation() -> None:
@@ -880,3 +1066,73 @@ def test_bulk_udidi_post_blocks_when_parent_device_post_has_not_been_recorded(mo
         assert str(exc) == "No eligible child UDI-DI POST records are currently available for Elite / EliteVT."
     else:
         raise AssertionError("Expected Bulk UDI-DI POST preview to stop when the parent DEVICE.POST has not been recorded.")
+
+
+def test_bulk_udidi_post_excludes_children_already_registered_in_tracked_state(monkeypatch) -> None:
+    service = XmlGenerationService()
+
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_basic_udi_post",
+        lambda **_: True,
+    )
+
+    already_registered = {
+        "05050649110030",
+        "05050649110047",
+        "05050649110054",
+        "05050649110061",
+        "05050649110023",
+    }
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_primary_udi_post",
+        lambda **kwargs: kwargs.get("primary_udi_di") in already_registered,
+    )
+    original = service._variant_post_records_with_exclusions
+
+    def only_known_registered_children(**kwargs):
+        candidate_records, excluded_records, eligible_count = original(**kwargs)
+        filtered_candidates = [record for record in candidate_records if record.primary_udi_di in already_registered]
+        return filtered_candidates, excluded_records, min(eligible_count, len(filtered_candidates))
+
+    monkeypatch.setattr(service, "_variant_post_records_with_exclusions", only_known_registered_children)
+
+    try:
+        service.preview_bulk_udidi_post(
+            product_family="Elite",
+            product_variant="EliteVT",
+            record_count=5,
+        )
+    except ValueError as exc:
+        assert str(exc) == "No eligible child UDI-DI POST records are currently available for Elite / EliteVT."
+    else:
+        raise AssertionError("Expected Bulk UDI-DI POST preview to stop when every child UDI-DI is already registered.")
+
+
+def test_bulk_udidi_post_marks_registered_children_as_excluded(monkeypatch) -> None:
+    service = XmlGenerationService()
+
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_basic_udi_post",
+        lambda **_: True,
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_primary_udi_post",
+        lambda **kwargs: kwargs.get("primary_udi_di") == "05050649110030",
+    )
+
+    preview = service.preview_bulk_udidi_post(
+        product_family="Elite",
+        product_variant="EliteVT",
+        record_count=5,
+    )
+
+    assert preview.eligible_child_records >= 4
+    assert all(record.primary_udi_di != "05050649110030" for record in preview.included_records)
+    assert any(
+        record.reason_code == "child_already_registered" and record.primary_udi_di == "05050649110030"
+        for record in preview.excluded_records
+    )

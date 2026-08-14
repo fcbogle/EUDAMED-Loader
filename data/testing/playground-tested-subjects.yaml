@@ -322,6 +322,59 @@ tested_subjects:
           - "Bulk parent DEVICE.POST wave accepted the first Basic UDI-DI creation for 5050649ELITEVTV4."
           - "Later duplicate parent creations in the same wave were rejected because the Basic UDI-DI already existed."
 
+  - subject_id: "epirus|esprit|ESP22L1S"
+    product_family: "Epirus"
+    product_variant: "Esprit"
+    catalogue_number: "ESP22L1S"
+    primary_udi_di: "05050649058189"
+    basic_udi_di: "5050649ESPRITVZ"
+
+    source_reference:
+      workbook: "Template for Epirus_Esprit EUDAMED.xlsx"
+      sheet: "Esprit"
+      row_index: 3
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: true
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 2
+      trade_name: "ESPRIT 22L CAT1-EXT. FOOT PROSTHESIS UPDATED"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "DEVICE.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-14T17:08:36.957+02:00"
+        transaction_id: "9460fa42-fae4-4858-a565-dbe0134a0afd"
+        submission_id: "4bf695e2-0c23-4549-8bbf-e98c7d0b7931"
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "trade_name_edit"
+        scenario_label: "Trade Name Edit"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-14T17:13:58.939+02:00"
+        transaction_id: "60bc8111-de28-4733-9adb-8162ef8b0070"
+        submission_id: "4ea4066f-7cab-4e07-9d9f-5313e2171152"
+        changed_fields:
+          - field: "trade_name"
+            before: "ESPRIT 22L CAT1-EXT. FOOT PROSTHESIS"
+            after: "ESPRIT 22L CAT1-EXT. FOOT PROSTHESIS UPDATED"
+
   - subject_id: "elite|elite-vt|EVT22L11SD"
     product_family: "Elite"
     product_variant: "Elite VT"

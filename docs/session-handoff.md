@@ -86,6 +86,16 @@ with the current implementation focus now being:
   - the bulk POST router responses for these business-rule stops now return `400 Bad Request` rather than `404 Not Found`
   - the simplified bulk summary cards now use the full available width in the UI
   - `Bulk Basic UDI-DI POST` UI readiness now uses unposted-parent count rather than total-parent count
+  - bulk parent / child eligibility now scans the full XML-ready variant population before applying the `300` message cap
+  - the `300` cap therefore limits emitted package size, not eligibility discovery
+  - single-device `Patch XML` generation is now backend-gated as well as frontend-gated
+  - the backend now requires the exact baseline `POST` for the selected `product_family` / `product_variant` / `catalogue_number` to have been generated and reviewed in the current process before `PATCH` preview or download is allowed
+  - bulk `PATCH` remains exempt from that in-memory single-device reviewed-baseline gate
+  - `Bulk Basic UDI-DI POST` frontend readiness now resolves by actual unposted `Basic UDI-DI` set difference rather than by subtracting unrelated posted-parent counts
+  - explicit action feedback is now shown when generating `Bulk Basic UDI-DI POST` and `Bulk UDI-DI POST` previews
+  - current automated verification status at handoff:
+    - backend `pytest`: `51 passed`
+    - frontend production build: `npm run build` passed
 
 ## Current Implemented Behavior
 
@@ -630,6 +640,7 @@ Files refreshed in this pass:
 - hardening and test coverage for `Bulk PATCH`
 - real Playground confirmation for `Bulk PATCH`
 - real Playground confirmation for `MARKET_INFO.PUT`
+- full manual feature-validation pass across all current workspaces before database work starts
 - broader scenario library beyond the current implemented PATCH scenarios
 - external confirmation that candidate scenarios are operationally accepted by EUDAMED
 - workbook-drift detection between the reviewed baseline pair and newer workbook state
@@ -637,18 +648,36 @@ Files refreshed in this pass:
 
 ## Recommended Next Step
 
-Focus next on proving the remaining testing workflows before replacing YAML with database-backed state:
+Focus next on proving all current testing workflows before replacing YAML with database-backed state:
 
-1. harden `Bulk PATCH` against the currently tested device cohorts
-2. test `Bulk PATCH` in Playground and record both successes and rejections
-3. test `MARKET_INFO.PUT` in Playground and capture the accepted update pattern
-4. implement database-backed persistence for:
+1. run a full feature pass in this order:
+   - `POST`
+   - `Patch XML`
+   - `Market Info`
+   - `Bulk Basic UDI-DI POST`
+   - `Bulk UDI-DI POST`
+   - `Bulk PATCH`
+2. for each workspace, verify:
+   - preview generation
+   - local XSD validation feedback
+   - download behavior and archive contents
+   - expected business-rule stop messages
+3. explicitly exercise negative paths:
+   - parent already posted
+   - parent not yet posted
+   - record not XML-ready
+   - invalid or blocked `PATCH` scenario
+   - invalid `PATCH` version
+   - empty bulk scope
+4. test `Bulk PATCH` in Playground and record both successes and rejections
+5. test `MARKET_INFO.PUT` in Playground and capture the accepted update pattern
+6. only after the feature pass is complete, implement database-backed persistence for:
    - imported workbook rows
    - current accepted device state
    - submission / Playground history
    - baseline review and scenario acceptance state
-5. switch the application from YAML-backed accepted state to database-backed accepted state
-6. refine the UI after the persistence model is in place so:
+7. switch the application from YAML-backed accepted state to database-backed accepted state
+8. refine the UI after the persistence model is in place so:
    - status and lineage messaging come from the database
    - bulk and single-device workspaces reflect persisted accepted state
    - later promotion and reporting flows can be added cleanly

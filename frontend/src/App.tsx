@@ -84,6 +84,14 @@ type SelectionAnchorInput = {
   primary_udi_di: string | null;
 };
 
+type BulkPreviewMode = "bulkPost" | "bulkUdidiPost" | "bulkPatch";
+
+type BulkExclusionSummary = {
+  key: string;
+  title: string;
+  detail: string;
+};
+
 const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
   {
     id: "equivalent_first_patch",
@@ -213,6 +221,155 @@ function patchScenarioOptionLabel(scenario: PatchScenarioDefinition): string {
     return `${scenario.label} (untested)`;
   }
   return scenario.label;
+}
+
+function pluralize(count: number, singular: string, plural?: string): string {
+  return `${count} ${count === 1 ? singular : plural ?? `${singular}s`}`;
+}
+
+function extractBasicUdiDi(reasonMessage: string): string | null {
+  const match = reasonMessage.match(/Basic UDI-DI\s+([A-Za-z0-9.-]+)/i);
+  return match?.[1] ?? null;
+}
+
+function summarizeBulkExcludedRecords(
+  mode: BulkPreviewMode,
+  preview: BulkPostPreview | BulkUdidiPostPreview | BulkPatchPreview,
+): BulkExclusionSummary[] {
+  const familyVariantLabel = `${preview.product_family} / ${preview.product_variant}`;
+  const excludedRecords = preview.excluded_records;
+  if (!excludedRecords.length) {
+    return [];
+  }
+
+  if (mode === "bulkPost") {
+    const duplicateByBasicUdi = new Map<string, number>();
+    let parentAlreadyRegistered = 0;
+    let missingBasicUdi = 0;
+    let notPostOperation = 0;
+    let notXmlReady = 0;
+
+    for (const record of excludedRecords) {
+      if (record.reason_code === "duplicate_basic_udi_di") {
+        const basicUdiDi = extractBasicUdiDi(record.reason_message) ?? "Unknown";
+        duplicateByBasicUdi.set(basicUdiDi, (duplicateByBasicUdi.get(basicUdiDi) ?? 0) + 1);
+      } else if (record.reason_code === "parent_already_registered") {
+        parentAlreadyRegistered += 1;
+      } else if (record.reason_code === "missing_basic_udi_di") {
+        missingBasicUdi += 1;
+      } else if (record.reason_code === "not_post_operation") {
+        notPostOperation += 1;
+      } else if (record.reason_code === "xml_not_ready") {
+        notXmlReady += 1;
+      }
+    }
+
+    const summaries: BulkExclusionSummary[] = Array.from(duplicateByBasicUdi.entries()).map(([basicUdiDi, count]) => ({
+      key: `duplicate-${basicUdiDi}`,
+      title: basicUdiDi,
+      detail: `${pluralize(count, "record")} in ${familyVariantLabel} ${count === 1 ? "is" : "are"} associated with Basic UDI-DI ${basicUdiDi}. Bulk Basic UDI POST keeps only one parent seed row for that Basic UDI-DI group.`,
+    }));
+
+    if (parentAlreadyRegistered > 0) {
+      summaries.push({
+        key: "parent-already-registered",
+        title: "Already posted parents",
+        detail: `${pluralize(parentAlreadyRegistered, "record")} in ${familyVariantLabel} ${parentAlreadyRegistered === 1 ? "belongs" : "belong"} to Basic UDI-DI parent groups that already have a successful parent DEVICE.POST.`,
+      });
+    }
+    if (missingBasicUdi > 0) {
+      summaries.push({
+        key: "missing-basic-udi",
+        title: "Missing Basic UDI-DI",
+        detail: `${pluralize(missingBasicUdi, "record")} in ${familyVariantLabel} ${missingBasicUdi === 1 ? "does" : "do"} not resolve to a Basic UDI-DI and ${missingBasicUdi === 1 ? "cannot" : "cannot"} be used for Bulk Basic UDI POST.`,
+      });
+    }
+    if (notPostOperation > 0) {
+      summaries.push({
+        key: "not-post-operation",
+        title: "Non-POST rows",
+        detail: `${pluralize(notPostOperation, "record")} in ${familyVariantLabel} ${notPostOperation === 1 ? "is" : "are"} not classified as POST rows and ${notPostOperation === 1 ? "was" : "were"} excluded from Bulk Basic UDI POST consideration.`,
+      });
+    }
+    if (notXmlReady > 0) {
+      summaries.push({
+        key: "not-xml-ready",
+        title: "Not XML-ready",
+        detail: `${pluralize(notXmlReady, "record")} in ${familyVariantLabel} ${notXmlReady === 1 ? "is" : "are"} not XML-ready and ${notXmlReady === 1 ? "was" : "were"} excluded from Bulk Basic UDI POST consideration.`,
+      });
+    }
+    return summaries;
+  }
+
+  if (mode === "bulkUdidiPost") {
+    let parentNotRegistered = 0;
+    let childAlreadyRegistered = 0;
+    let missingBasicUdi = 0;
+    let notPostOperation = 0;
+    let notXmlReady = 0;
+
+    for (const record of excludedRecords) {
+      if (record.reason_code === "parent_not_registered") {
+        parentNotRegistered += 1;
+      } else if (record.reason_code === "child_already_registered") {
+        childAlreadyRegistered += 1;
+      } else if (record.reason_code === "missing_basic_udi_di") {
+        missingBasicUdi += 1;
+      } else if (record.reason_code === "not_post_operation") {
+        notPostOperation += 1;
+      } else if (record.reason_code === "xml_not_ready") {
+        notXmlReady += 1;
+      }
+    }
+
+    const summaries: BulkExclusionSummary[] = [];
+    if (parentNotRegistered > 0) {
+      summaries.push({
+        key: "parent-not-registered",
+        title: "Parent not yet posted",
+        detail: `${pluralize(parentNotRegistered, "record")} in ${familyVariantLabel} ${parentNotRegistered === 1 ? "is" : "are"} waiting for a successful parent DEVICE.POST before Bulk UDI-DI POST can generate child registrations.`,
+      });
+    }
+    if (childAlreadyRegistered > 0) {
+      summaries.push({
+        key: "child-already-registered",
+        title: "Already registered child UDI-DI",
+        detail: `${pluralize(childAlreadyRegistered, "record")} in ${familyVariantLabel} ${childAlreadyRegistered === 1 ? "already has" : "already have"} a tracked successful child registration and ${childAlreadyRegistered === 1 ? "was" : "were"} excluded from Bulk UDI-DI POST generation.`,
+      });
+    }
+    if (missingBasicUdi > 0) {
+      summaries.push({
+        key: "missing-basic-udi",
+        title: "Missing Basic UDI-DI",
+        detail: `${pluralize(missingBasicUdi, "record")} in ${familyVariantLabel} ${missingBasicUdi === 1 ? "does" : "do"} not resolve to a Basic UDI-DI and ${missingBasicUdi === 1 ? "cannot" : "cannot"} be used for Bulk UDI-DI POST.`,
+      });
+    }
+    if (notPostOperation > 0) {
+      summaries.push({
+        key: "not-post-operation",
+        title: "Non-POST rows",
+        detail: `${pluralize(notPostOperation, "record")} in ${familyVariantLabel} ${notPostOperation === 1 ? "is" : "are"} not classified as POST rows and ${notPostOperation === 1 ? "was" : "were"} excluded from Bulk UDI-DI POST consideration.`,
+      });
+    }
+    if (notXmlReady > 0) {
+      summaries.push({
+        key: "not-xml-ready",
+        title: "Not XML-ready",
+        detail: `${pluralize(notXmlReady, "record")} in ${familyVariantLabel} ${notXmlReady === 1 ? "is" : "are"} not XML-ready and ${notXmlReady === 1 ? "was" : "were"} excluded from Bulk UDI-DI POST consideration.`,
+      });
+    }
+    return summaries;
+  }
+
+  const byReason = new Map<string, number>();
+  for (const record of excludedRecords) {
+    byReason.set(record.reason_message, (byReason.get(record.reason_message) ?? 0) + 1);
+  }
+  return Array.from(byReason.entries()).map(([reasonMessage, count], index) => ({
+    key: `bulk-patch-${index}`,
+    title: pluralize(count, "record"),
+    detail: `${pluralize(count, "record")} in ${familyVariantLabel} ${count === 1 ? "was" : "were"} excluded from Bulk PATCH: ${reasonMessage}`,
+  }));
 }
 
 type DraftAction = {
@@ -1527,11 +1684,17 @@ export function App() {
   const selectedBulkPreview =
     xmlMode === "bulkPost"
       ? xmlBulkPostPreview
-      : xmlMode === "bulkUdidiPost"
+        : xmlMode === "bulkUdidiPost"
         ? xmlBulkUdidiPostPreview
         : xmlMode === "bulkPatch"
           ? xmlBulkPatchPreview
           : null;
+  const selectedBulkExclusionSummaries = selectedBulkPreview
+    ? summarizeBulkExcludedRecords(
+        xmlMode === "bulkPost" ? "bulkPost" : xmlMode === "bulkUdidiPost" ? "bulkUdidiPost" : "bulkPatch",
+        selectedBulkPreview,
+      )
+    : [];
   const bulkPostReadinessMessage =
     selectedBulkUnpostedBasicUdiCount > 0
       ? `Ready to generate ${selectedBulkUnpostedBasicUdiCount} unposted Basic UDI-DI parent${selectedBulkUnpostedBasicUdiCount === 1 ? "" : "s"}.`
@@ -1668,7 +1831,7 @@ export function App() {
     Boolean(selectedPairRequestArgs) &&
     !xmlPairPreview;
   useEffect(() => {
-    if (!(xmlMode === "post" || xmlMode === "patch" || xmlMode === "marketInfo") || !selectedPairRequestArgs) {
+    if (!(xmlMode === "patch" || xmlMode === "marketInfo") || !selectedPairRequestArgs) {
       return;
     }
 
@@ -2021,16 +2184,17 @@ export function App() {
               : "Ready to generate a derived PATCH preview from the current accepted device state.";
   const selectedPairAnchor =
     xmlPairPreview?.registered_device_anchor ??
-    (selectedPairRequestArgs ? buildSelectionAnchor(selectedPairRequestArgs) : null);
+    ((xmlMode === "patch" || xmlMode === "marketInfo") && selectedPairRequestArgs
+      ? buildSelectionAnchor(selectedPairRequestArgs)
+      : null);
   const selectedMarketInfoAnchor =
     xmlMarketInfoPreview?.registered_device_anchor ??
     (selectedMarketInfoRequestArgs ? buildSelectionAnchor(selectedMarketInfoRequestArgs) : null);
   const selectedTestingAnchor =
-    xmlMode === "post"
-      ? selectedPairAnchor
-      : xmlMode === "marketInfo"
+    xmlMode === "marketInfo"
         ? selectedMarketInfoAnchor
         : xmlPatchPreview?.registered_device_anchor ?? selectedPairAnchor;
+  const isPostWorkspaceReady = Boolean(selectedXmlFamilySummary && selectedXmlVariantSummary);
   const isPairWorkspaceReady = Boolean(selectedPairRequestArgs);
   const acceptedXmlModes = [
     {
@@ -2460,13 +2624,12 @@ export function App() {
     setXmlActionMessage(null);
     try {
       if (xmlMode === "post") {
-        if (!selectedPairRequestArgs) {
+        if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) {
           return;
         }
-        const preview = await api.previewXmlPostRegistration(
-          selectedPairRequestArgs.product_family,
-          selectedPairRequestArgs.product_variant,
-          selectedPairRequestArgs.catalogue_number,
+        const preview = await api.previewNextXmlPostRegistration(
+          selectedXmlFamilySummary.product_family,
+          selectedXmlVariantSummary.product_variant,
         );
         setXmlPairPreview(preview);
       } else if (xmlMode === "single") {
@@ -2556,8 +2719,9 @@ export function App() {
         );
       }
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Failed to generate XML preview.");
-      setXmlActionMessage(null);
+      const message = requestError instanceof Error ? requestError.message : "Failed to generate XML preview.";
+      setError(message);
+      setXmlActionMessage(message);
     } finally {
       setIsGeneratingXml(false);
     }
@@ -2575,11 +2739,11 @@ export function App() {
     setXmlActionMessage("Preparing download...");
     try {
       const downloadResult =
-        xmlMode === "post" && selectedPairRequestArgs
+        xmlMode === "post" && xmlPairPreview
           ? await api.downloadXmlPostPackage(
-              selectedPairRequestArgs.product_family,
-              selectedPairRequestArgs.product_variant,
-              selectedPairRequestArgs.catalogue_number,
+              xmlPairPreview.product_family ?? "",
+              xmlPairPreview.product_variant ?? "",
+              xmlPairPreview.catalogue_number,
             )
         : xmlMode === "single" && selectedXmlRecord?.catalogue_number
           ? await api.downloadXmlRecord(
@@ -4264,24 +4428,28 @@ export function App() {
                 </div>
                 <div className="xml-header-context-block">
                   <span className="summary-label">Current Scope</span>
-                  <strong>
+                    <strong>
                     {xmlMode === "post" || xmlMode === "marketInfo" || xmlMode === "patch"
-                      ? xmlMode === "patch" && !hasReviewedPatchBaselinePost
-                        ? "No reviewed POST"
-                        : selectedTestingAnchor?.product_family ?? "No testing anchor"
+                      ? xmlMode === "post"
+                        ? selectedXmlFamilySummary?.product_family ?? "No family selected"
+                        : xmlMode === "patch" && !hasReviewedPatchBaselinePost
+                          ? "No reviewed POST"
+                          : selectedTestingAnchor?.product_family ?? "No testing anchor"
                       : selectedXmlFamilySummary?.product_family ?? "No family selected"}
                   </strong>
                   <p>
                     {xmlMode === "post" || xmlMode === "marketInfo" || xmlMode === "patch"
-                      ? xmlMode === "patch" && !hasReviewedPatchBaselinePost
-                        ? "Select a variant with an XML-ready POST record"
-                        : selectedTestingAnchor?.product_variant ?? "No anchor variant"
+                      ? xmlMode === "post"
+                        ? selectedXmlVariantSummary?.product_variant ?? "No variant selected"
+                        : xmlMode === "patch" && !hasReviewedPatchBaselinePost
+                          ? "Select a variant with an XML-ready POST record"
+                          : selectedTestingAnchor?.product_variant ?? "No anchor variant"
                       : selectedXmlVariantSummary?.product_variant ?? "No variant selected"}
                   </p>
                 </div>
               </div>
             </div>
-            {xmlMode === "post" || xmlMode === "marketInfo" || xmlMode === "patch" ? (
+            {xmlMode === "marketInfo" || xmlMode === "patch" ? (
               <div className="xml-anchor-panel">
                 <div className="xml-anchor-header">
                   <div>
@@ -4530,7 +4698,7 @@ export function App() {
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      (xmlMode === "post" && !isPairWorkspaceReady) ||
+                      (xmlMode === "post" && !isPostWorkspaceReady) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && !isPatchScenarioReady) ||
@@ -4561,7 +4729,7 @@ export function App() {
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      (xmlMode === "post" && !isPairWorkspaceReady) ||
+                      (xmlMode === "post" && !isPostWorkspaceReady) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && !isPatchScenarioReady) ||
@@ -4578,7 +4746,7 @@ export function App() {
                     type="button"
                     onClick={() => void downloadXmlRecord()}
                     disabled={
-                      (xmlMode === "post" && !isPairWorkspaceReady) ||
+                      (xmlMode === "post" && !xmlPairPreview) ||
                       (xmlMode === "single" && !selectedXmlRecord) ||
                       (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
                       (xmlMode === "patch" && (!hasReviewedPatchBaselinePost || !hasReviewedGeneratedPatchPreview)) ||
@@ -5894,12 +6062,12 @@ export function App() {
                           </div>
                         ))}
                       </div>
-                      {selectedBulkPreview.excluded_records.length ? (
+                      {selectedBulkExclusionSummaries.length ? (
                         <div className="roadmap-list">
-                          {selectedBulkPreview.excluded_records.slice(0, 5).map((record, index) => (
-                            <div className="roadmap-item" key={`${record.catalogue_number ?? "unknown"}-${index}`}>
-                              <strong>{record.catalogue_number ?? record.primary_udi_di ?? "Unknown record"}</strong>
-                              <p>{record.reason_message}</p>
+                          {selectedBulkExclusionSummaries.map((summary) => (
+                            <div className="roadmap-item" key={summary.key}>
+                              <strong>{summary.title}</strong>
+                              <p>{summary.detail}</p>
                             </div>
                           ))}
                         </div>

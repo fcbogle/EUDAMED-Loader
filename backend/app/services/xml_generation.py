@@ -136,6 +136,23 @@ class XmlGenerationService:
             "Generate and review the baseline POST for this exact selected record before drafting a PATCH."
         )
 
+    def _require_tracked_successful_post_baseline(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        primary_udi_di: str | None,
+    ) -> None:
+        if primary_udi_di and self.testing_state_store.has_successful_primary_udi_post(
+            product_family=product_family,
+            product_variant=product_variant,
+            primary_udi_di=primary_udi_di,
+        ):
+            return
+        raise ValueError(
+            "This device does not yet have a tracked successful Playground registration, so PATCH cannot be generated."
+        )
+
     def _variant_xml_ready_records(
         self,
         *,
@@ -282,8 +299,26 @@ class XmlGenerationService:
                 )
                 continue
 
-            eligible_child_records += len(group)
-            included.extend(group)
+            for record in group:
+                if self.testing_state_store.has_successful_primary_udi_post(
+                    product_family=product_family,
+                    product_variant=product_variant,
+                    primary_udi_di=record.primary_udi_di,
+                ):
+                    excluded_records.append(
+                        BulkXmlExcludedRecord(
+                            catalogue_number=record.catalogue_number,
+                            primary_udi_di=record.primary_udi_di,
+                            reason_code="child_already_registered",
+                            reason_message=(
+                                f"Primary UDI-DI {record.primary_udi_di} already has a successful child registration in tracked state."
+                            ),
+                        )
+                    )
+                    continue
+
+                eligible_child_records += 1
+                included.append(record)
 
         return included, excluded_records, eligible_child_records
 
@@ -387,6 +422,63 @@ class XmlGenerationService:
             if catalogue in record_lookup
         ][:record_count]
         return selected_records, eligible_child_records, missing_variant_records
+
+    def _next_valid_post_record(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+    ) -> CanonicalValidationRecord:
+        candidate_records, _, _ = self._variant_post_records_with_exclusions(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=None,
+        )
+        parent_and_child_known = 0
+        parent_known_child_unknown = 0
+        child_known_parent_unknown = 0
+
+        for record in candidate_records:
+            summary = self._bulk_record_summary(record)
+            basic_udi_di = summary.basic_udi_di
+            if not basic_udi_di or not record.primary_udi_di:
+                continue
+            parent_known = self.testing_state_store.has_successful_basic_udi_post(
+                product_family=product_family,
+                product_variant=product_variant,
+                basic_udi_di=basic_udi_di,
+            )
+            child_known = self.testing_state_store.has_successful_primary_udi_post(
+                product_family=product_family,
+                product_variant=product_variant,
+                primary_udi_di=record.primary_udi_di,
+            )
+            if parent_known and child_known:
+                parent_and_child_known += 1
+                continue
+            if parent_known and not child_known:
+                parent_known_child_unknown += 1
+                continue
+            if child_known and not parent_known:
+                child_known_parent_unknown += 1
+                continue
+            return record
+
+        if parent_known_child_unknown:
+            raise ValueError(
+                f"Parent Basic UDI-DI already exists for {product_family} / {product_variant}. Use Bulk UDI-DI POST to add child devices."
+            )
+        if child_known_parent_unknown:
+            raise ValueError(
+                f"Tracked state is inconsistent for {product_family} / {product_variant}: one or more child UDI-DIs appear registered while the parent Basic UDI-DI is not recorded as posted."
+            )
+        if parent_and_child_known:
+            raise ValueError(
+                f"No new DEVICE.POST candidate is currently available for {product_family} / {product_variant}."
+            )
+        raise ValueError(
+            f"No XML-ready POST candidate is currently available for {product_family} / {product_variant}."
+        )
 
     def preview_bulk_post(
         self,
@@ -1017,6 +1109,11 @@ class XmlGenerationService:
         registered_device_anchor = self._registered_device_anchor(post_record)
 
         if normalized_version == "2":
+            self._require_tracked_successful_post_baseline(
+                product_family=product_family,
+                product_variant=product_variant,
+                primary_udi_di=post_record.primary_udi_di,
+            )
             scenario_base_record = post_record
             base_message_type = "POST"
             base_version = "1"
@@ -1230,6 +1327,22 @@ class XmlGenerationService:
             post_file_name=post_file_name,
             post_xml=post_xml_bytes.decode("utf-8"),
             post_validation=self.xml_validation_service.validate_message(post_xml_bytes),
+        )
+
+    def preview_next_post_registration(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+    ) -> PostRegistrationPreview:
+        record = self._next_valid_post_record(
+            product_family=product_family,
+            product_variant=product_variant,
+        )
+        return self.preview_post_registration(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            catalogue_number=record.catalogue_number or "",
         )
 
     def preview_market_info_put(

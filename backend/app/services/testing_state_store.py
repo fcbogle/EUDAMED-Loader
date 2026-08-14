@@ -171,6 +171,32 @@ class TestingStateStore:
                 return True
         return False
 
+    def has_successful_primary_udi_post(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        primary_udi_di: str,
+    ) -> bool:
+        for subject in self._subjects():
+            if (
+                not self._matches_identity(subject.get("product_family"), product_family)
+                or not self._matches_identity(subject.get("product_variant"), product_variant)
+                or not self._matches_identity(subject.get("primary_udi_di"), primary_udi_di)
+            ):
+                continue
+            test_events = subject.get("test_events")
+            if not isinstance(test_events, list):
+                continue
+            if any(
+                isinstance(event, dict)
+                and event.get("status") == "SUCCESS"
+                and event.get("message_type") in {"DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH"}
+                for event in test_events
+            ):
+                return True
+        return False
+
     def mark_reviewed_post(
         self,
         *,

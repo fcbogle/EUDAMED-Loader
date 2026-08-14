@@ -122,6 +122,11 @@ export const api = {
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
     }),
+  previewNextXmlPostRegistration: (productFamily: string, productVariant: string) =>
+    sendJson<PostRegistrationPreview>("/xml/preview-next-post-registration", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+    }),
   previewXmlMarketInfoPut: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendJson<MarketInfoPutPreview>("/xml/preview-market-info-put", "POST", {
       product_family: productFamily,

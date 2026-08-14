@@ -101,6 +101,25 @@ def preview_xml_post_registration(payload: dict[str, str]) -> dict:
     return preview.model_dump(mode="json")
 
 
+@router.post("/xml/preview-next-post-registration")
+def preview_xml_next_post_registration(payload: dict[str, str]) -> dict:
+    product_family = payload.get("product_family")
+    product_variant = payload.get("product_variant")
+    if not product_family or not product_variant:
+        raise HTTPException(
+            status_code=400,
+            detail="product_family and product_variant are required.",
+        )
+    try:
+        preview = XmlGenerationService().preview_next_post_registration(
+            product_family=product_family,
+            product_variant=product_variant,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return preview.model_dump(mode="json")
+
+
 @router.post("/xml/download-post-package")
 def download_xml_post_package(payload: dict[str, str]) -> Response:
     product_family = payload.get("product_family")

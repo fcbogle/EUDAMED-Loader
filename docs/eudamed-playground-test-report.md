@@ -102,6 +102,21 @@ Related documents:
   - follow-on child `UDI_DI.POST` bulk upload then tested successfully for five sibling UDI-DI records under the accepted parent
   - these child UDI-DI registrations are now valid candidates for first `PATCH` testing at version `2`
 
+### Subject 5
+
+- Product family: `Epirus`
+- Product variant: `Esprit`
+- Catalogue number: `ESP22L1S`
+- Primary UDI-DI: `05050649058189`
+- Basic UDI-DI: `5050649ESPRITVZ`
+- Source workbook: `Template for Epirus_Esprit EUDAMED.xlsx`
+- Source sheet: `Esprit`
+- Source row index: `3`
+- Current status:
+  - baseline `POST` tested successfully
+  - this subject should now be excluded from future baseline `POST` waves unless deliberate re-test is required
+  - this subject is now a valid candidate for first `PATCH` testing at version `2`
+
 ## Confirmed Test Executions
 
 ### Single-Device Testing
@@ -457,6 +472,61 @@ Notes:
 - The payload was processed but rejected at EUDAMED business-rule level.
 - This does not create a new accepted device state and must not replace the accepted version `2` trade-name PATCH as the current base state.
 - The next candidate `PATCH` for this subject should still derive from the accepted version `2` state and continue to use `e:version = 3` until a later scenario succeeds.
+
+#### Device D: `Epirus` / `Esprit` / `ESP22L1S`
+
+Device identity:
+
+- Product family: `Epirus`
+- Product variant: `Esprit`
+- Catalogue number: `ESP22L1S`
+- Primary UDI-DI: `05050649058189`
+- Basic UDI-DI: `5050649ESPRITVZ`
+
+##### D1. Baseline `DEVICE.POST`
+
+- Playground acceptance time: `2026-08-14T17:08:36.957+02:00`
+- Message type: `DEVICE.POST`
+- Subject:
+  - `Epirus`
+  - `Esprit`
+  - `ESP22L1S`
+  - `05050649058189`
+- Outcome: `SUCCESS`
+- Transaction id: `9460fa42-fae4-4858-a565-dbe0134a0afd`
+- Submission id: `4bf695e2-0c23-4549-8bbf-e98c7d0b7931`
+
+Notes:
+
+- This confirmed a successful new single-device `DEVICE.POST` for the `Epirus / Esprit` lineage after the single `POST` workspace was updated to auto-select the next valid candidate from the selected family and variant.
+- The accepted parent `Basic UDI-DI` is `5050649ESPRITVZ`.
+- The tested record should now be treated as a known registered Playground subject for follow-on `PATCH` testing.
+
+##### D2. Scenario `UDI_DI.PATCH` for trade name
+
+- Playground acceptance time: `2026-08-14T17:13:58.939+02:00`
+- Message type: `UDI_DI.PATCH`
+- Scenario id: `trade_name_edit`
+- Subject:
+  - `Epirus`
+  - `Esprit`
+  - `ESP22L1S`
+  - `05050649058189`
+- `e:version`: `2`
+- Outcome: `SUCCESS`
+- Transaction id: `60bc8111-de28-4733-9adb-8162ef8b0070`
+- Submission id: `4ea4066f-7cab-4e07-9d9f-5313e2171152`
+
+Confirmed business delta:
+
+- changed field: `trade_name`
+- before: `ESPRIT 22L CAT1-EXT. FOOT PROSTHESIS`
+- after: `ESPRIT 22L CAT1-EXT. FOOT PROSTHESIS UPDATED`
+
+Notes:
+
+- This confirms the first real accepted `UDI_DI.PATCH` for the `Epirus / Esprit / ESP22L1S` subject.
+- This accepted version `2` PATCH now becomes the base state for any later version `3+` PATCH on this same device lineage.
 
 ##### C5. Scenario `UDI_DI.PATCH` for critical warnings
 
