@@ -2,22 +2,23 @@
 
 ## Current Objective
 
-Continue refining the XML workspaces so the UI clearly separates:
+Continue refining the XML workspaces so the UI and backend now clearly separate:
 
-- `EUDAMED Testing`
+- `POST`
+- `Patch XML`
+- `Market Info`
+- `Bulk Basic UDI-DI POST`
+- `Bulk UDI-DI POST`
+- `Bulk PATCH`
 - `EUDAMED Generation`
 
-while keeping `Patch XML` as a controlled testing workflow that:
+with the current implementation focus now being:
 
-- requires a reviewed baseline `POST` in the current session before scenario generation unlocks
-- handles all PATCH generation, including an explicit `Equivalent First Patch` option
-- derives version `2` PATCH drafts directly from the accepted `POST`
-- derives version `3+` PATCH drafts from the latest successful tracked state for that device
-- preserves device lineage by carrying the chosen parent `POST` record identity through scenario generation
-- shows explicit before/after business comparison before XML generation
-- shows toggle-based comparison between baseline and derived `PATCH` XML
-- requires the user to enter the `e:version` integer for each later scenario draft
-- keeps candidate PATCH testing conservative and separate from accepted generation patterns
+- preserve the clean split between parent-only and child-only bulk registration flows
+- keep `Patch XML` as the controlled single-device PATCH workspace
+- keep `Bulk PATCH` aligned to latest successful per-device accepted state
+- make the bulk UI simpler and more operationally accurate
+- prepare for later database-backed persistence to replace YAML testing state
 
 ## Latest Confirmed Decisions
 
@@ -68,10 +69,23 @@ while keeping `Patch XML` as a controlled testing workflow that:
 - Separate `POST` ZIP and `PATCH` ZIP downloads remain the supported baseline-pair download behavior.
 - Workbook-drift detection or workbook-refreshed scenario regeneration can be considered later, after initial testing.
 - Agreed next execution order on Thursday, August 13, 2026:
-  - harden and test `Bulk PATCH`
-  - test `Market Info` update in Playground
+  - complete and harden the clean bulk registration split
+  - continue `Bulk PATCH` and `Market Info` Playground testing
   - implement database-backed persistence
-  - refine the UI after the database-backed state model is in place
+  - continue UI refinement after the database-backed state model is in place
+- Latest implemented decisions on Friday, August 14, 2026:
+  - `Single XML` has been removed from the user-facing `EUDAMED Testing` workspace
+  - `Bulk Basic UDI-DI POST` is now treated as a parent-only flow
+  - `Bulk UDI-DI POST` is now treated as a child-only flow
+  - parent existence is now resolved from successful tracked testing state, currently `data/testing/playground-tested-subjects.yaml`
+  - if a parent `Basic UDI-DI` already has a successful `DEVICE.POST`, `Bulk Basic UDI-DI POST` should not generate a new parent seed
+  - in that case the clean backend message is now:
+    - `Parent Basic UDI-DI already exists for {family} / {variant}. Use Bulk UDI-DI POST to add child devices.`
+  - if a parent `Basic UDI-DI` does not yet have a successful `DEVICE.POST`, `Bulk UDI-DI POST` should not silently reserve a seed row any longer
+  - instead it now blocks child generation and tells the user to run `Bulk Basic UDI-DI POST` first
+  - the bulk POST router responses for these business-rule stops now return `400 Bad Request` rather than `404 Not Found`
+  - the simplified bulk summary cards now use the full available width in the UI
+  - `Bulk Basic UDI-DI POST` UI readiness now uses unposted-parent count rather than total-parent count
 
 ## Current Implemented Behavior
 
@@ -79,44 +93,33 @@ while keeping `Patch XML` as a controlled testing workflow that:
 
 Current pill order:
 
-- `Post + Patch`
+- `POST`
 - `Patch XML`
 - `Market Info`
 - divider
-- `Single XML`
 - `Bulk Basic UDI POST`
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
 
 Shared-device testing group:
 
-- `Post + Patch`
+- `POST`
 - `Patch XML`
 - `Market Info`
 
 General XML tools:
 
-- `Single XML`
 - `Bulk Basic UDI POST`
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
 
-### Post + Patch
+### POST
 
-- Uses the parent `POST` record determined by current selection logic:
-  - the exact selected record if it is an XML-ready `POST`
-  - otherwise the first available XML-ready `POST` in the selected variant
-- Generates:
-  - one baseline `POST`
-  - one equivalent first child `PATCH`
-- Validates both locally against the schema set.
-- Provides explicit separate `POST` and `PATCH` ZIP downloads after preparation from one download action.
-- As of Sunday, August 9, 2026, the baseline `POST` and equivalent first-child `PATCH` have both been accepted successfully in Playground for at least one tested device lineage.
-- This is now the current implemented behavior, but it is no longer the agreed target design.
-- Agreed target design:
-  - this workspace should become `POST` only
-  - it should generate only the registration `POST`
-  - the equivalent first-child `PATCH` should move into `Patch XML` as an explicit PATCH option
+- Uses the shared registered-device anchor for the selected variant.
+- Generates one registration `POST`.
+- Validates locally against the schema set.
+- Supports `POST` ZIP download.
+- The old combined `Post + Patch` baseline workspace is no longer the user-facing design and should be treated as replaced by `POST` plus `Patch XML`.
 
 ### Patch XML
 
@@ -163,16 +166,14 @@ Important limitation:
 - Generates one standalone `MARKET_INFO.PUT` message
 - Validates locally and supports download
 
-### Single XML / Bulk XML
+### Bulk XML
 
-- `Single XML` still operates from the broader XML-ready family/variant selection model.
+- `Single XML` is now removed from the user-facing workspace and should be treated as an internal preview capability only unless reintroduced deliberately.
 - `Bulk Basic UDI POST` now represents parent registration waves only.
-- In a parent wave, only the first eligible row for a given `Basic UDI-DI` should emit a `DEVICE.POST`; later duplicate-parent rows in that same wave should be omitted to avoid duplicate parent creation errors.
 - `Bulk UDI-DI POST` now represents child registration waves only.
-- In a child wave, each generated message should be a standalone `UDI_DI.POST` for one device under an already accepted parent `Basic UDI-DI`.
-- The validated standalone child wrapper is `device:UDIDIData` with `xsi:type="udidi:MDRUDIDIDataType"`.
-- `Bulk PATCH` is the next bulk mode and should reuse the same per-device accepted-state lineage rules as single-device `Patch XML`.
-- Bulk modes do not use the in-memory reviewed baseline-pair gate used by the current single-device testing flow.
+- `Bulk PATCH` remains the bulk update mode.
+- Bulk modes do not use the in-memory reviewed baseline gate used by the current single-device PATCH flow.
+- `Bulk PATCH` should continue to reuse the same per-device accepted-state lineage rules as single-device `Patch XML`.
 
 ## Current PATCH Workflow
 
@@ -232,7 +233,10 @@ Important limitation:
 - Service profile: `DEVICE.POST`.
 - Emission rule: one parent message per distinct `Basic UDI-DI`.
 - If several selected rows belong to the same new parent, only the first eligible row should generate the parent payload.
-- This rule has now been validated by Playground behavior where repeated parent creation for the same `Basic UDI-DI` was rejected as a duplicate.
+- If that parent `Basic UDI-DI` already has a successful `DEVICE.POST` in tracked testing state, it should not generate any new parent payload.
+- The current clean message for that case is:
+  - `Parent Basic UDI-DI already exists for {family} / {variant}. Use Bulk UDI-DI POST to add child devices.`
+- The UI now needs to present readiness using unposted parent count, not total parent count.
 
 ### Bulk UDI-DI POST
 
@@ -241,6 +245,9 @@ Important limitation:
 - Message shape: standalone child registration payload, not parent `DEVICE.POST`.
 - XML wrapper: `device:UDIDIData` with `xsi:type="udidi:MDRUDIDIDataType"`.
 - Parent linkage is carried through `basicUDIIdentifier`; the parent `MDRBasicUDI` block is not repeated in this flow.
+- If the parent `Basic UDI-DI` already exists, all selected eligible child rows should be included.
+- The old prototype behavior that reserved the first row as a fallback parent seed is no longer the target model.
+- If the parent does not exist yet, this flow should stop and instruct the user to run `Bulk Basic UDI-DI POST` first.
 - This flow has now been validated in Playground for five child UDI-DIs under one accepted `Elite VT` parent.
 
 ### Bulk PATCH
@@ -263,6 +270,34 @@ Important limitation:
   - catalogue number
 - If the currently selected XML-ready row is not itself a `POST`, the current UI still falls back to the first available XML-ready `POST` in the selected variant.
 - The UI no longer allows scenario generation from a variant without a reviewed baseline pair.
+- Bulk parent existence is now resolved from successful tracked testing state via the testing-state store.
+- Bulk Basic UDI-DI POST and Bulk UDI-DI POST router stops now return `400` rather than `404`.
+
+## Current UI Notes
+
+- The bulk summary cards for:
+  - `Bulk PATCH Summary`
+  - `Bulk UDI-DI POST Summary`
+  - `Bulk POST Summary`
+  now use a full-width multi-column layout so the cards expand across the available space rather than collapsing into a narrow content strip.
+- `Single XML` has been removed from the top XML mode selector.
+- `Bulk Basic UDI-DI POST` currently shows:
+  - unposted parent count
+  - a readiness message when all parents already exist
+- The current expected message for `Elite / EliteVT` is:
+  - `All Basic UDI-DI parents for this variant already have successful parent DEVICE.POST entries. Use Bulk UDI-DI POST for additional child devices.`
+
+## Immediate Next Checks
+
+- restart the backend after the latest router and message changes
+- verify the UI now shows the cleaner parent-exists stop instead of a confusing failed action
+- continue Playground testing for:
+  - `Bulk UDI-DI POST`
+  - `Bulk PATCH`
+  - `Market Info`
+- keep all new successful or rejected Playground results reflected in:
+  - `data/testing/playground-tested-subjects.yaml`
+  - `docs/eudamed-playground-test-report.md`
 
 ## Current Scenario Scope
 

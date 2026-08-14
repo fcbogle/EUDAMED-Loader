@@ -119,6 +119,23 @@ class XmlGenerationService:
         limited_posts = eligible_posts if record_count is None else eligible_posts[:record_count]
         return limited_posts, excluded, len(eligible_posts)
 
+    def _require_reviewed_post_baseline(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> None:
+        if self.testing_state_store.has_reviewed_post(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        ):
+            return
+        raise ValueError(
+            "Generate and review the baseline POST for this exact selected record before drafting a PATCH."
+        )
+
     def _variant_xml_ready_records(
         self,
         *,
@@ -157,6 +174,9 @@ class XmlGenerationService:
 
     def _deduplicate_bulk_basic_udi_posts(
         self,
+        *,
+        product_family: str,
+        product_variant: str,
         records: list[CanonicalValidationRecord],
         excluded_records: list[BulkXmlExcludedRecord],
     ) -> tuple[list[CanonicalValidationRecord], list[BulkXmlExcludedRecord], int]:
@@ -178,7 +198,24 @@ class XmlGenerationService:
                 )
                 continue
 
-            eligible_basic_udi_dis.add(basic_udi_di)
+            parent_already_posted = self.testing_state_store.has_successful_basic_udi_post(
+                product_family=product_family,
+                product_variant=product_variant,
+                basic_udi_di=basic_udi_di,
+            )
+            if parent_already_posted:
+                excluded_records.append(
+                    BulkXmlExcludedRecord(
+                        catalogue_number=record.catalogue_number,
+                        primary_udi_di=record.primary_udi_di,
+                        reason_code="parent_already_registered",
+                        reason_message=(
+                            f"Basic UDI-DI {basic_udi_di} already has a successful parent DEVICE.POST, so no new parent seed will be generated."
+                        ),
+                    )
+                )
+                continue
+
             if basic_udi_di in seen_basic_udi_dis:
                 excluded_records.append(
                     BulkXmlExcludedRecord(
@@ -192,6 +229,7 @@ class XmlGenerationService:
                 )
                 continue
 
+            eligible_basic_udi_dis.add(basic_udi_di)
             seen_basic_udi_dis.add(basic_udi_di)
             included.append(record)
 
@@ -199,6 +237,9 @@ class XmlGenerationService:
 
     def _bulk_udidi_post_candidates(
         self,
+        *,
+        product_family: str,
+        product_variant: str,
         records: list[CanonicalValidationRecord],
         excluded_records: list[BulkXmlExcludedRecord],
     ) -> tuple[list[CanonicalValidationRecord], list[BulkXmlExcludedRecord], int]:
@@ -222,21 +263,27 @@ class XmlGenerationService:
 
         included: list[CanonicalValidationRecord] = []
         for basic_udi_di, group in grouped_records.items():
-            if group:
-                parent_seed = group[0]
-                excluded_records.append(
-                    BulkXmlExcludedRecord(
-                        catalogue_number=parent_seed.catalogue_number,
-                        primary_udi_di=parent_seed.primary_udi_di,
-                        reason_code="parent_seed_row",
-                        reason_message=(
-                            f"First eligible row for Basic UDI-DI {basic_udi_di} is reserved as the parent registration seed."
-                        ),
+            parent_already_posted = self.testing_state_store.has_successful_basic_udi_post(
+                product_family=product_family,
+                product_variant=product_variant,
+                basic_udi_di=basic_udi_di,
+            )
+            if not parent_already_posted:
+                for record in group:
+                    excluded_records.append(
+                        BulkXmlExcludedRecord(
+                            catalogue_number=record.catalogue_number,
+                            primary_udi_di=record.primary_udi_di,
+                            reason_code="parent_not_registered",
+                            reason_message=(
+                                f"Basic UDI-DI {basic_udi_di} does not yet have a successful parent DEVICE.POST. Run Bulk Basic UDI-DI POST first."
+                            ),
                     )
                 )
-            children = group[1:]
-            eligible_child_records += len(children)
-            included.extend(children)
+                continue
+
+            eligible_child_records += len(group)
+            included.extend(group)
 
         return included, excluded_records, eligible_child_records
 
@@ -353,14 +400,23 @@ class XmlGenerationService:
         candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
             product_family=product_family,
             product_variant=product_variant,
-            record_count=self.settings.eudamed_max_batch_records,
+            record_count=None,
         )
         deduplicated_records, excluded_records, eligible_basic_udi_posts = self._deduplicate_bulk_basic_udi_posts(
-            candidate_records,
-            excluded_records,
+            product_family=product_family,
+            product_variant=product_variant,
+            records=candidate_records,
+            excluded_records=excluded_records,
         )
         included_records_raw = deduplicated_records[:normalized_count]
         if not included_records_raw:
+            parent_already_registered = [
+                record for record in excluded_records if record.reason_code == "parent_already_registered"
+            ]
+            if parent_already_registered:
+                raise ValueError(
+                    f"Parent Basic UDI-DI already exists for {product_family} / {product_variant}. Use Bulk UDI-DI POST to add child devices."
+                )
             raise ValueError(
                 f"No eligible Basic UDI-DI POST records are currently available for {product_family} / {product_variant}."
             )
@@ -433,9 +489,14 @@ class XmlGenerationService:
         raw_candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
             product_family=product_family,
             product_variant=product_variant,
-            record_count=self.settings.eudamed_max_batch_records,
+            record_count=None,
         )
-        raw_records, _, _ = self._deduplicate_bulk_basic_udi_posts(raw_candidate_records, excluded_records)
+        raw_records, _, _ = self._deduplicate_bulk_basic_udi_posts(
+            product_family=product_family,
+            product_variant=product_variant,
+            records=raw_candidate_records,
+            excluded_records=excluded_records,
+        )
         raw_records = raw_records[: preview.included_record_count]
         record_chunks = self.selector.chunk_records(raw_records, self.settings.eudamed_max_batch_records)
         total_chunks = len(record_chunks)
@@ -496,11 +557,13 @@ class XmlGenerationService:
         candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
             product_family=product_family,
             product_variant=product_variant,
-            record_count=self.settings.eudamed_max_batch_records,
+            record_count=None,
         )
         included_candidates, excluded_records, eligible_child_records = self._bulk_udidi_post_candidates(
-            candidate_records,
-            excluded_records,
+            product_family=product_family,
+            product_variant=product_variant,
+            records=candidate_records,
+            excluded_records=excluded_records,
         )
         included_records_raw = included_candidates[:normalized_count]
         if not included_records_raw:
@@ -582,9 +645,14 @@ class XmlGenerationService:
         raw_candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
             product_family=product_family,
             product_variant=product_variant,
-            record_count=self.settings.eudamed_max_batch_records,
+            record_count=None,
         )
-        raw_records, _, _ = self._bulk_udidi_post_candidates(raw_candidate_records, excluded_records)
+        raw_records, _, _ = self._bulk_udidi_post_candidates(
+            product_family=product_family,
+            product_variant=product_variant,
+            records=raw_candidate_records,
+            excluded_records=excluded_records,
+        )
         raw_records = raw_records[: preview.included_record_count]
 
         members: list[tuple[str, bytes]] = []
@@ -724,6 +792,7 @@ class XmlGenerationService:
                     scenario_id=scenario_id,
                     patch_version=derived_version,
                     scenario_inputs=scenario_data,
+                    require_reviewed_post_baseline=False,
                 )
             except ValueError as exc:
                 excluded_records.append(
@@ -866,6 +935,7 @@ class XmlGenerationService:
                 scenario_id=scenario_id,
                 patch_version=derived_version,
                 scenario_inputs=scenario_data,
+                require_reviewed_post_baseline=False,
             )
             summary = next(item for item in preview.included_records if item.catalogue_number == record.catalogue_number)
             included_payloads.append((summary, scenario_preview.derived_patch_xml.encode("utf-8")))
@@ -923,7 +993,14 @@ class XmlGenerationService:
         scenario_id: str,
         patch_version: str,
         scenario_inputs: dict[str, Any] | None = None,
+        require_reviewed_post_baseline: bool = True,
     ) -> GeneratedPatchScenarioPreview:
+        if require_reviewed_post_baseline:
+            self._require_reviewed_post_baseline(
+                product_family=product_family,
+                product_variant=product_variant,
+                catalogue_number=catalogue_number,
+            )
         scenario_data = scenario_inputs or {}
         post_source_record = self.selector.find_post_record(
             product_family=product_family,
@@ -1134,6 +1211,11 @@ class XmlGenerationService:
             product_family=record.product_family,
             product_variant=record.product_variant,
             operation="POST",
+            catalogue_number=post_record.catalogue_number,
+        )
+        self.testing_state_store.mark_reviewed_post(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
             catalogue_number=post_record.catalogue_number,
         )
         registered_device_anchor = self._registered_device_anchor(post_record)

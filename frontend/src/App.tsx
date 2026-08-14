@@ -89,7 +89,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     id: "equivalent_first_patch",
     label: "Equivalent First Patch",
     target: "Full UDI-DI payload equality",
-    summary: "Version 2 PATCH derived directly from the POST with no business-field change, used only when you want an explicit baseline PATCH in Playground.",
+    summary: "Baseline Version 2 PATCH with no business-field change.",
     implemented: true,
     testStatus: "success",
   },
@@ -1333,11 +1333,20 @@ export function App() {
     (record) => (record.submission_operation ?? "").toUpperCase() === "POST",
   );
   const selectedBulkEligiblePostCount = selectedBulkEligiblePostRecords.length;
-  const selectedBulkEligibleBasicUdiCount = new Set(
+  const selectedBulkEligibleBasicUdiSet = new Set(
     selectedBulkEligiblePostRecords
       .map((record) => basicUdiDiForRecord(record))
       .filter((value): value is string => Boolean(value)),
-  ).size;
+  );
+  const selectedBulkEligibleBasicUdiCount = selectedBulkEligibleBasicUdiSet.size;
+  const postedBulkParentBasicUdiSet = new Set(
+    bulkPatchPostedParents
+      .map((group) => group.basic_udi_di)
+      .filter((value): value is string => Boolean(value)),
+  );
+  const selectedBulkUnpostedBasicUdiCount = Array.from(selectedBulkEligibleBasicUdiSet).filter(
+    (basicUdiDi) => !postedBulkParentBasicUdiSet.has(basicUdiDi),
+  ).length;
   const selectedBulkEligibleUdidiPostCount = (() => {
     const groupedCounts = new Map<string, number>();
     for (const record of selectedBulkEligiblePostRecords) {
@@ -1425,9 +1434,51 @@ export function App() {
       ? "No posted child devices are currently available under the selected parent."
       : bulkPatchScopeMode === "selected_catalogue_numbers" && selectedBulkPatchSelectedCount < 1
         ? "Select at least one posted catalogue number."
-        : bulkPatchScopeMode === "import_catalogue_list" && selectedBulkPatchSelectedCount < 1
-          ? "Import at least one posted catalogue number that matches the selected parent."
-          : "Ready.";
+      : bulkPatchScopeMode === "import_catalogue_list" && selectedBulkPatchSelectedCount < 1
+        ? "Import at least one posted catalogue number that matches the selected parent."
+        : "Ready.";
+  const bulkPatchScopeLabel =
+    bulkPatchScopeMode === "all_posted"
+      ? "All posted devices"
+      : bulkPatchScopeMode === "selected_catalogue_numbers"
+        ? "Selected catalogue numbers"
+        : "Import catalogue list";
+  const bulkPatchSelectionExamples = effectiveBulkPatchCatalogueNumbers.slice(0, 5);
+  const bulkPatchSelectionOverflowCount = Math.max(selectedBulkPatchSelectedCount - bulkPatchSelectionExamples.length, 0);
+  const bulkPatchSelectionVersions = Array.from(
+    new Set(
+      selectedBulkPatchEntries
+        .map((entry) => entry.latest_version)
+        .filter((version): version is string => Boolean(version)),
+    ),
+  );
+  const bulkPatchVersionSummary =
+    bulkPatchSelectionVersions.length < 1
+      ? null
+      : bulkPatchSelectionVersions.length === 1
+        ? `Current versions: all ${bulkPatchSelectionVersions[0]}`
+        : `Current versions: ${bulkPatchSelectionVersions.join(", ")}`;
+  const bulkPatchPreviewExcludedRecords = xmlBulkPatchPreview?.excluded_records ?? [];
+  const bulkPatchPrePreviewExclusions =
+    xmlMode === "bulkPatch" && bulkPatchScopeMode === "import_catalogue_list"
+      ? bulkPatchImportedNotFoundCatalogueNumbers.map((catalogueNumber) => ({
+          catalogue_number: catalogueNumber,
+          primary_udi_di: null,
+          reason_code: "not_found_under_parent",
+          reason_message: "Catalogue number is not posted under the selected parent.",
+        }))
+      : [];
+  const bulkPatchDisplayedExcludedRecords =
+    bulkPatchPreviewExcludedRecords.length > 0 ? bulkPatchPreviewExcludedRecords : bulkPatchPrePreviewExclusions;
+  const bulkPatchActionStatus = !selectedBulkPatchParentGroup
+    ? "Select a posted Basic UDI-DI parent to continue."
+    : !canRunBulkPatch
+      ? bulkPatchReadinessReason
+      : xmlBulkPatchPreview
+        ? xmlBulkPatchPreview.excluded_record_count > 0
+          ? `Preview ready. ${xmlBulkPatchPreview.included_record_count} devices will be generated and ${xmlBulkPatchPreview.excluded_record_count} will be excluded.`
+          : `Preview ready. ${xmlBulkPatchPreview.included_record_count} devices will be generated.`
+        : `Ready to generate bulk PATCH for ${selectedBulkPatchSelectedCount} device${selectedBulkPatchSelectedCount === 1 ? "" : "s"}.`;
   const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
   const selectedPairRequestArgs =
     selectedXmlPairRecord?.catalogue_number
@@ -1460,7 +1511,7 @@ export function App() {
     : 1;
   const selectedBulkCapacity =
     xmlMode === "bulkPost"
-      ? selectedBulkEligibleBasicUdiCount
+      ? selectedBulkUnpostedBasicUdiCount
       : xmlMode === "bulkUdidiPost"
         ? selectedBulkEligibleUdidiPostCount
         : selectedBulkPatchEligibleCount;
@@ -1481,6 +1532,10 @@ export function App() {
         : xmlMode === "bulkPatch"
           ? xmlBulkPatchPreview
           : null;
+  const bulkPostReadinessMessage =
+    selectedBulkUnpostedBasicUdiCount > 0
+      ? `Ready to generate ${selectedBulkUnpostedBasicUdiCount} unposted Basic UDI-DI parent${selectedBulkUnpostedBasicUdiCount === 1 ? "" : "s"}.`
+      : "All Basic UDI-DI parents for this variant already have successful parent DEVICE.POST entries. Use Bulk UDI-DI POST for additional child devices.";
   useEffect(() => {
     const parentOption = displayedBulkPatchParentOptions[0]?.basic_udi_di ?? "";
     if (
@@ -2103,9 +2158,9 @@ export function App() {
           : xmlMode === "patch"
             ? "Generate one scenario-derived PATCH draft at a time from the accepted POST or the latest accepted PATCH."
             : xmlMode === "bulkPost"
-              ? "Generate a chunked bulk Basic UDI POST package that keeps only the first eligible row for each Basic UDI-DI."
+              ? "Generate one parent DEVICE.POST per Basic UDI-DI that is not already registered."
               : xmlMode === "bulkUdidiPost"
-                ? "Generate standalone child UDI-DI POST messages for sibling rows under an already accepted Basic UDI-DI."
+                ? "Generate child UDI-DI POST messages only for devices under an already accepted Basic UDI-DI parent."
               : "Generate a chunked bulk PATCH package that applies one PATCH scenario across the selected bulk POST cohort.";
   const xmlWorkspaceTitle =
     xmlMode === "post"
@@ -2448,6 +2503,7 @@ export function App() {
         );
         setXmlPatchPreview(preview);
       } else if (xmlMode === "bulkPost") {
+        setXmlActionMessage("Generating Bulk Basic UDI POST preview...");
         const preview = await api.previewBulkPost(
           selectedXmlFamilySummary.product_family,
           selectedXmlVariantSummary.product_variant,
@@ -2455,7 +2511,11 @@ export function App() {
           selectedXmlChunkSequence,
         );
         setXmlBulkPostPreview(preview);
+        setXmlActionMessage(
+          `Bulk Basic UDI POST preview generated for ${selectedXmlFamilySummary.product_family} / ${selectedXmlVariantSummary.product_variant}, chunk ${preview.selected_chunk_sequence}.`
+        );
       } else if (xmlMode === "bulkUdidiPost") {
+        setXmlActionMessage("Generating Bulk UDI-DI POST preview...");
         const preview = await api.previewBulkUdidiPost(
           selectedXmlFamilySummary.product_family,
           selectedXmlVariantSummary.product_variant,
@@ -2463,6 +2523,9 @@ export function App() {
           selectedXmlChunkSequence,
         );
         setXmlBulkUdidiPostPreview(preview);
+        setXmlActionMessage(
+          `Bulk UDI-DI POST preview generated for ${selectedXmlFamilySummary.product_family} / ${selectedXmlVariantSummary.product_variant}, chunk ${preview.selected_chunk_sequence}.`
+        );
       } else {
         setXmlActionMessage("Bulk PATCH action received. Preparing selection...");
         if (!selectedBulkPatchParentGroup) {
@@ -4024,7 +4087,7 @@ export function App() {
             <div className="summary-card">
               <span className="summary-label">XML-ready rows</span>
               <strong>{xmlReadyRecords.length}</strong>
-              <p>Rows currently eligible for generic single-record XML generation.</p>
+              <p>Rows currently eligible for EUDAMED XML generation workflows.</p>
             </div>
             <div className="summary-card">
               <span className="summary-label">Blocked rows</span>
@@ -4050,7 +4113,7 @@ export function App() {
             </div>
             <p className="panel-copy">
               This workspace now consumes the aligned Canonical Validation output. Select a product family,
-              product variant, and then generate either a single sample XML or a variant-scoped batch package.
+              product variant, and then generate either a registered-device message or a variant-scoped batch package.
             </p>
             <div className="queue-summary">
               <div className="queue-chip">
@@ -4167,13 +4230,6 @@ export function App() {
                 </button>
                 <span className="xml-mode-divider" aria-hidden="true" />
                 <button
-                  className={xmlMode === "single" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                  type="button"
-                  onClick={() => setXmlMode("single")}
-                >
-                  Single XML
-                </button>
-                <button
                   className={xmlMode === "bulkPost" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
                   type="button"
                   onClick={() => setXmlMode("bulkPost")}
@@ -4263,7 +4319,110 @@ export function App() {
                 </p>
               </div>
             ) : null}
-            <div className="xml-focus-layout">
+            {(xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && selectedXmlVariantSummary ? (
+              xmlMode === "bulkPost" ? (
+                <div className="draft-card bulk-patch-summary-bar">
+                  <div className="draft-card-head">
+                    <strong>Bulk POST summary</strong>
+                    <span className={selectedBulkRecordCount > 0 ? "status-pill ok compact" : "status-pill warn compact"}>
+                      {selectedBulkRecordCount > 0
+                        ? `${selectedBulkRecordCount} device${selectedBulkRecordCount === 1 ? "" : "s"}`
+                        : "No devices selected"}
+                    </span>
+                  </div>
+                  <div className="bulk-patch-summary-row">
+                    <div className="bulk-patch-summary-metrics">
+                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                        <strong>Basic UDI-DI parents</strong>
+                        <span>{selectedBulkUnpostedBasicUdiCount || "None available"}</span>
+                      </div>
+                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                        <strong>Number of devices</strong>
+                        <span>{selectedBulkRecordCount || "Not selected"}</span>
+                      </div>
+                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                        <strong>Variant</strong>
+                        <span>{selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}</span>
+                      </div>
+                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                        <strong>Preview chunk</strong>
+                        <span>Chunk {selectedXmlChunkSequence} of {selectedBulkChunkCount}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="panel-copy bulk-patch-summary-status">
+                    {bulkPostReadinessMessage}
+                  </p>
+                </div>
+              ) : xmlMode === "bulkUdidiPost" ? (
+                <div className="draft-card bulk-patch-summary-bar">
+                  <div className="draft-card-head">
+                    <strong>Bulk UDI-DI POST summary</strong>
+                    <span className={selectedBulkRecordCount > 0 ? "status-pill ok compact" : "status-pill warn compact"}>
+                      {selectedBulkRecordCount > 0
+                        ? `${selectedBulkRecordCount} device${selectedBulkRecordCount === 1 ? "" : "s"}`
+                        : "No devices selected"}
+                    </span>
+                  </div>
+                  <div className="bulk-patch-summary-row">
+                    <div className="bulk-patch-summary-metrics">
+                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                        <strong>Eligible child devices</strong>
+                        <span>{selectedBulkEligibleUdidiPostCount || "None available"}</span>
+                      </div>
+                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                        <strong>Number of devices</strong>
+                        <span>{selectedBulkRecordCount || "Not selected"}</span>
+                      </div>
+                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                        <strong>Variant</strong>
+                        <span>{selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}</span>
+                      </div>
+                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                        <strong>Preview chunk</strong>
+                        <span>Chunk {selectedXmlChunkSequence} of {selectedBulkChunkCount}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="panel-copy bulk-patch-summary-status">
+                    {selectedXmlVariantSummary.xml_blocked_records} row{selectedXmlVariantSummary.xml_blocked_records === 1 ? "" : "s"} remain excluded until resolved.
+                  </p>
+                </div>
+              ) : (
+              <div className="draft-card bulk-patch-summary-bar">
+                <div className="draft-card-head">
+                  <strong>Bulk PATCH summary</strong>
+                  <span className={selectedBulkPatchSelectedCount > 0 ? "status-pill ok compact" : "status-pill warn compact"}>
+                    {selectedBulkPatchSelectedCount > 0
+                      ? `${selectedBulkPatchSelectedCount} child device${selectedBulkPatchSelectedCount === 1 ? "" : "s"}`
+                      : "No posted devices"}
+                  </span>
+                </div>
+                <div className="bulk-patch-summary-row">
+                  <div className="bulk-patch-summary-metrics">
+                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                      <strong>Basic UDI-DI</strong>
+                      <span>{selectedBulkPatchParentGroup?.basic_udi_di ?? "No posted parent"}</span>
+                    </div>
+                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                      <strong>Number of devices</strong>
+                      <span>{selectedBulkPatchSelectedCount > 0 ? selectedBulkPatchSelectedCount : "No posted devices"}</span>
+                    </div>
+                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                      <strong>PATCH option</strong>
+                      <span>{patchScenarioOptionLabel(selectedPatchScenario)}</span>
+                    </div>
+                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                      <strong>Scope</strong>
+                      <span>{selectedBulkPatchSelectedCount > 0 ? bulkPatchScopeLabel : "Not available"}</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="panel-copy bulk-patch-summary-status">{bulkPatchActionStatus}</p>
+              </div>
+              )
+            ) : null}
+            <div className={xmlMode === "bulkPatch" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" ? "xml-focus-layout bulk-patch-focus-layout" : "xml-focus-layout"}>
               <div className="xml-preview-surface">
                 <div className="section-heading xml-preview-heading">
                   <div>
@@ -4303,7 +4462,7 @@ export function App() {
                     </div>
                   ) : null}
                 </div>
-                <div className="xml-preview-meta">
+                <div className={xmlMode === "bulkPatch" || xmlMode === "bulkPost" ? "xml-preview-meta bulk-patch-preview-meta" : "xml-preview-meta"}>
                   <div className="xml-preview-meta-block">
                     <span className="summary-label">Active view</span>
                     <strong>{activePreviewLabel}</strong>
@@ -4896,194 +5055,125 @@ export function App() {
                   <div className="draft-list xml-record-stack">
                     <div className="draft-card xml-record-card">
                       <div className="draft-card-head">
-                        <strong>{selectedXmlVariantSummary.product_variant}</strong>
-                        <span className="status-pill ok compact">{selectedXmlVariantSummary.submission_operation ?? "No operation"}</span>
+                        <strong>
+                          {xmlMode === "bulkPatch" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost"
+                            ? `${selectedXmlFamilySummary?.product_family} / ${selectedXmlVariantSummary.product_variant}`
+                            : selectedXmlVariantSummary.product_variant}
+                        </strong>
+                        <span className="status-pill ok compact">
+                          {xmlMode === "bulkPatch"
+                            ? "Bulk PATCH"
+                            : xmlMode === "bulkPost"
+                              ? "Bulk POST"
+                              : xmlMode === "bulkUdidiPost"
+                                ? "Bulk UDI-DI POST"
+                              : (selectedXmlVariantSummary.submission_operation ?? "No operation")}
+                        </span>
                       </div>
-                      <p className="draft-meta">
-                        {selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}
-                      </p>
-                      <p className="panel-copy">
-                        {xmlMode === "bulkPost"
-                          ? "Select how many unique Basic UDI-DI parent registrations to include in the bulk package."
-                          : xmlMode === "bulkUdidiPost"
-                            ? "Select how many sibling child UDI-DI registrations to include under the already accepted Basic UDI-DI parent."
-                          : "Select one accepted Basic UDI-DI parent, then apply one PATCH scenario across the related child devices."}
-                      </p>
-                      <p className="panel-copy">
-                        {xmlMode === "bulkPost"
-                          ? `${selectedBulkEligibleBasicUdiCount} eligible Basic UDI-DI registration${selectedBulkEligibleBasicUdiCount === 1 ? "" : "s"} in this variant can be used for Bulk Basic UDI POST.`
-                          : xmlMode === "bulkUdidiPost"
-                            ? `${selectedBulkEligibleUdidiPostCount} eligible child UDI-DI registration${selectedBulkEligibleUdidiPostCount === 1 ? "" : "s"} in this variant can be used for Bulk UDI-DI POST.`
-                            : `${selectedBulkPatchEligibleCount} eligible child device${selectedBulkPatchEligibleCount === 1 ? "" : "s"} are available under the selected Basic UDI-DI parent for Bulk PATCH.`}
-                      </p>
-                      <p className="panel-copy">
-                        {selectedXmlVariantSummary.xml_blocked_records} row{selectedXmlVariantSummary.xml_blocked_records === 1 ? "" : "s"} remain excluded until resolved.
-                      </p>
+                      {xmlMode !== "bulkPatch" && xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" ? (
+                        <>
+                          <p className="draft-meta">
+                            {selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}
+                          </p>
+                          <p className="panel-copy">
+                            Select how many sibling child UDI-DI registrations to include under the already accepted Basic UDI-DI parent.
+                          </p>
+                          <p className="panel-copy">
+                            {selectedBulkEligibleUdidiPostCount} eligible child UDI-DI registration{selectedBulkEligibleUdidiPostCount === 1 ? "" : "s"} in this variant can be used for Bulk UDI-DI POST.
+                          </p>
+                          <p className="panel-copy">
+                            {selectedXmlVariantSummary.xml_blocked_records} row{selectedXmlVariantSummary.xml_blocked_records === 1 ? "" : "s"} remain excluded until resolved.
+                          </p>
+                        </>
+                      ) : null}
                       {xmlMode === "bulkPatch" ? (
                         <>
-                          <div className="workflow-note patch-readiness-note">
-                            <strong>Bulk PATCH UI revision</strong>
-                            <span>posted-parent scope selector active</span>
-                          </div>
-                          <label className="field-label" htmlFor="xml-bulk-patch-parent-selector">
-                            Basic UDI-DI parent
-                          </label>
-                          <select
-                            id="xml-bulk-patch-parent-selector"
-                            className="rule-select"
-                            value={selectedBulkPatchParentGroup?.basic_udi_di ?? ""}
-                            onChange={(event) => {
-                              setSelectedBulkPatchBasicUdiDi(event.target.value);
-                              setSelectedXmlChunkSequence(1);
-                              setXmlBulkPatchPreview(null);
-                            }}
-                          >
-                            {displayedBulkPatchParentOptions.map((group) => (
-                              <option key={group.basic_udi_di} value={group.basic_udi_di}>
-                                {group.basic_udi_di} ({group.posted_child_count} posted child{group.posted_child_count === 1 ? "" : "ren"})
-                              </option>
-                            ))}
-                          </select>
-                          {displayedBulkPatchParentOptions.length ? (
+                          <div className="bulk-patch-layout">
+                            <div className="bulk-patch-config-column">
                             <div className="draft-card">
                               <div className="draft-card-head">
-                                <strong>Available posted parents</strong>
+                                <strong>1. Choose posted parent</strong>
                                 <span className="status-pill ok compact">
                                   {displayedBulkPatchParentOptions.length} available
                                 </span>
                               </div>
-                              <div className="bulk-parent-chip-row">
-                                {displayedBulkPatchParentOptions.map((group) => {
-                                  const isSelected = group.basic_udi_di === selectedBulkPatchParentGroup?.basic_udi_di;
-                                  return (
-                                    <button
-                                      key={group.basic_udi_di}
-                                      type="button"
-                                      className={isSelected ? "action-button bulk-parent-chip active" : "ghost-button bulk-parent-chip"}
-                                      onClick={() => {
-                                        setSelectedBulkPatchBasicUdiDi(group.basic_udi_di);
-                                        setSelectedXmlChunkSequence(1);
-                                        setXmlBulkPatchPreview(null);
-                                      }}
-                                    >
-                                      {group.basic_udi_di} ({group.posted_child_count})
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ) : null}
-                          {bulkPatchPostedParents.length === 0 && displayedBulkPatchParentOptions.length > 0 ? (
-                            <p className="panel-copy">
-                              Posted parent data did not load yet in the UI, so the parent selector is using the current variant&apos;s eligible Basic UDI-DI fallback.
-                            </p>
-                          ) : null}
-                          <label className="field-label" htmlFor="xml-bulk-patch-scope-mode">
-                            Scope mode
-                          </label>
-                          <select
-                            id="xml-bulk-patch-scope-mode"
-                            className="rule-select"
-                            value={bulkPatchScopeMode}
-                            onChange={(event) => {
-                              setBulkPatchScopeMode(event.target.value as BulkPatchScopeMode);
-                              setSelectedXmlChunkSequence(1);
-                              setXmlBulkPatchPreview(null);
-                            }}
-                          >
-                            <option value="all_posted">All posted devices</option>
-                            <option value="selected_catalogue_numbers">Selected catalogue numbers</option>
-                            <option value="import_catalogue_list">Import catalogue list</option>
-                          </select>
-                          <label className="field-label" htmlFor="xml-bulk-patch-scenario-selector">
-                            Bulk PATCH scenario
-                          </label>
-                          <select
-                            id="xml-bulk-patch-scenario-selector"
-                            className="rule-select"
-                            value={selectedPatchScenario.id}
-                            onChange={(event) => setSelectedPatchScenarioId(event.target.value as PatchScenarioId)}
-                          >
-                            {PATCH_SCENARIOS.map((scenario) => (
-                              <option key={scenario.id} value={scenario.id}>
-                                {patchScenarioOptionLabel(scenario)}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="workflow-note patch-readiness-note">
-                            <strong>Selected scope</strong>
-                            <span>
-                              {selectedBulkPatchParentGroup
-                                ? `${selectedBulkPatchSelectedCount} selected posted device${selectedBulkPatchSelectedCount === 1 ? "" : "s"} under ${selectedBulkPatchParentGroup.basic_udi_di}. Versions are calculated per device.`
-                                : "Select a Basic UDI-DI parent to load the child devices for bulk PATCH."}
-                            </span>
-                          </div>
-                          <div className="workflow-note patch-readiness-note">
-                            <strong>Bulk PATCH status</strong>
-                            <span>
-                              Parent: {selectedBulkPatchParentGroup?.basic_udi_di ?? "None"} | Scope: {bulkPatchScopeMode} | Eligible posted devices: {selectedBulkPatchEligibleCount} | Selected devices: {selectedBulkPatchSelectedCount} | Ready: {canRunBulkPatch ? "Yes" : "No"}
-                            </span>
-                          </div>
-                          <div className="workflow-note patch-readiness-note">
-                            <strong>Bulk PATCH readiness</strong>
-                            <span>{bulkPatchReadinessReason}</span>
-                          </div>
-                          {selectedBulkPatchParentGroup ? (
-                            <>
-                              <div className="draft-card">
-                                <div className="draft-card-head">
-                                  <strong>Already posted entries</strong>
-                                  <span className="status-pill ok compact">
-                                    {bulkPatchPostedEntries.length} posted
-                                  </span>
-                                </div>
-                                {bulkPatchPostedEntries.length ? (
-                                  <>
-                                    {bulkPatchPostedEntries.length <= 10 ? (
-                                      <div className="bulk-posted-grid">
-                                        {bulkPatchPostedEntries.map((entry, index) => (
-                                          <div className="roadmap-item compact-structured-item" key={`${entry.catalogue_number ?? "unknown"}-${index}`}>
-                                            <strong>{entry.catalogue_number ?? entry.primary_udi_di ?? "Unknown device"}</strong>
-                                            <p>{entry.primary_udi_di ?? "Primary UDI-DI pending"}</p>
-                                            <p>Version {entry.latest_version ?? "1"}</p>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <p className="panel-copy">
-                                        Many posted devices available ({bulkPatchPostedEntries.length}). Use `All posted devices`,
-                                        `Selected catalogue numbers`, or `Import catalogue list` to define the scope without loading the full list.
-                                      </p>
-                                    )}
-                                  </>
-                                ) : (
-                                  <p className="panel-copy">
-                                    No previously posted entries are currently tracked in YAML for this Basic UDI-DI parent.
-                                  </p>
-                                )}
-                              </div>
-                              {bulkPatchScopeMode === "all_posted" ? (
-                                <div className="draft-card">
-                                  <div className="draft-card-head">
-                                    <strong>All posted devices</strong>
-                                    <span className="status-pill ok compact">{bulkPatchPostedEntries.length} included</span>
-                                  </div>
-                                  <p className="panel-copy">
-                                    All posted child devices under this Basic UDI-DI parent will be included in the bulk PATCH.
-                                  </p>
-                                  {bulkPatchPostedEntries.length === 0 && selectedBulkPatchFallbackCatalogueNumbers.length > 0 ? (
-                                    <p className="panel-copy">
-                                      Using the tracked posted catalogue list for this parent until the detailed child entry list finishes loading.
-                                    </p>
-                                  ) : null}
+                              <p className="panel-copy">
+                                Confirm Basic UDI-DI for this PATCH.
+                              </p>
+                              <label className="field-label" htmlFor="xml-bulk-patch-parent-selector">
+                                Basic UDI-DI parent
+                              </label>
+                              <select
+                                id="xml-bulk-patch-parent-selector"
+                                className="rule-select"
+                                value={selectedBulkPatchParentGroup?.basic_udi_di ?? ""}
+                                onChange={(event) => {
+                                  setSelectedBulkPatchBasicUdiDi(event.target.value);
+                                  setSelectedXmlChunkSequence(1);
+                                  setXmlBulkPatchPreview(null);
+                                }}
+                              >
+                                {displayedBulkPatchParentOptions.map((group) => (
+                                  <option key={group.basic_udi_di} value={group.basic_udi_di}>
+                                    {group.basic_udi_di} · {group.posted_child_count} posted device{group.posted_child_count === 1 ? "" : "s"}
+                                  </option>
+                                ))}
+                              </select>
+                              {displayedBulkPatchParentOptions.length ? (
+                                <div className="bulk-parent-chip-row">
+                                  {displayedBulkPatchParentOptions.map((group) => {
+                                    const isSelected = group.basic_udi_di === selectedBulkPatchParentGroup?.basic_udi_di;
+                                    return (
+                                      <button
+                                        key={group.basic_udi_di}
+                                        type="button"
+                                        className={isSelected ? "bulk-parent-chip active" : "bulk-parent-chip"}
+                                        onClick={() => {
+                                          setSelectedBulkPatchBasicUdiDi(group.basic_udi_di);
+                                          setSelectedXmlChunkSequence(1);
+                                          setXmlBulkPatchPreview(null);
+                                        }}
+                                      >
+                                        {group.basic_udi_di} ({group.posted_child_count})
+                                      </button>
+                                    );
+                                  })}
                                 </div>
                               ) : null}
+                            </div>
+
+                            <div className="draft-card">
+                              <div className="draft-card-head">
+                                <strong>2. Choose device scope</strong>
+                                <span className="status-pill ok compact">{selectedBulkPatchSelectedCount} selected</span>
+                              </div>
+                              <p className="panel-copy">
+                                Determine scope of this PATCH.
+                              </p>
+                              <label className="field-label" htmlFor="xml-bulk-patch-scope-mode">
+                                Scope mode
+                              </label>
+                              <select
+                                id="xml-bulk-patch-scope-mode"
+                                className="rule-select"
+                                value={bulkPatchScopeMode}
+                                onChange={(event) => {
+                                  setBulkPatchScopeMode(event.target.value as BulkPatchScopeMode);
+                                  setSelectedXmlChunkSequence(1);
+                                  setXmlBulkPatchPreview(null);
+                                }}
+                              >
+                                <option value="all_posted">All posted devices</option>
+                                <option value="selected_catalogue_numbers">Select catalogue numbers</option>
+                                <option value="import_catalogue_list">Import catalogue list</option>
+                              </select>
+                              {bulkPatchScopeMode === "all_posted" ? (
+                                <p className="panel-copy">
+                                  Apply this PATCH to every posted child device under the selected parent.
+                                </p>
+                              ) : null}
                               {bulkPatchScopeMode === "selected_catalogue_numbers" ? (
-                                <div className="draft-card">
-                                  <div className="draft-card-head">
-                                    <strong>Select catalogue numbers</strong>
-                                    <span className="status-pill ok compact">{selectedBulkPatchCatalogueNumbers.length} selected</span>
-                                  </div>
+                                <>
                                   <label className="field-label" htmlFor="xml-bulk-patch-catalogue-filter">
                                     Catalogue number filter
                                   </label>
@@ -5097,53 +5187,42 @@ export function App() {
                                   />
                                   {bulkPatchPostedEntries.length > 10 && !bulkPatchCatalogueFilter.trim() ? (
                                     <p className="panel-copy">
-                                      Many posted devices available ({bulkPatchPostedEntries.length}). Enter a catalogue number filter to choose a subset.
+                                      Many posted devices are available. Enter a catalogue number filter to choose a subset.
                                     </p>
                                   ) : (
                                     <div className="bulk-posted-grid">
                                       {bulkPatchFilteredPostedEntries.map((entry, index) => {
                                         const catalogueNumber = entry.catalogue_number ?? "";
-                                        const includedRecord = bulkPatchIncludedByCatalogue.get(catalogueNumber);
-                                        const excludedRecord = bulkPatchExcludedByCatalogue.get(catalogueNumber);
                                         const isSelected = selectedBulkPatchCatalogueNumbers.includes(catalogueNumber);
                                         return (
-                                          <div className="roadmap-item compact-structured-item" key={`${catalogueNumber}-${index}`}>
-                                            <strong>{catalogueNumber || entry.primary_udi_di || "Unknown device"}</strong>
-                                            <p>{entry.primary_udi_di ?? "Primary UDI-DI pending"}</p>
-                                            <p>Version {entry.latest_version ?? "1"}</p>
-                                            <p>
-                                              <label>
-                                                <input
-                                                  type="checkbox"
-                                                  checked={isSelected}
-                                                  onChange={() => {
-                                                    setSelectedBulkPatchCatalogueNumbers((current) => (
-                                                      current.includes(catalogueNumber)
-                                                        ? current.filter((value) => value !== catalogueNumber)
-                                                        : [...current, catalogueNumber]
-                                                    ));
-                                                    setSelectedXmlChunkSequence(1);
-                                                    setXmlBulkPatchPreview(null);
-                                                  }}
-                                                />{" "}
-                                                Select
-                                              </label>
-                                            </p>
-                                            {includedRecord ? <p>Next version {includedRecord.derived_version ?? "Pending"}</p> : null}
-                                            {excludedRecord ? <p>{excludedRecord.reason_message}</p> : null}
-                                          </div>
+                                          <label className="roadmap-item compact-structured-item bulk-selection-card" key={`${catalogueNumber}-${index}`}>
+                                            <input
+                                              type="checkbox"
+                                              checked={isSelected}
+                                              onChange={() => {
+                                                setSelectedBulkPatchCatalogueNumbers((current) => (
+                                                  current.includes(catalogueNumber)
+                                                    ? current.filter((value) => value !== catalogueNumber)
+                                                    : [...current, catalogueNumber]
+                                                ));
+                                                setSelectedXmlChunkSequence(1);
+                                                setXmlBulkPatchPreview(null);
+                                              }}
+                                            />
+                                            <span>
+                                              <strong>{catalogueNumber || entry.primary_udi_di || "Unknown device"}</strong>
+                                              <p>{entry.primary_udi_di ?? "Primary UDI-DI pending"}</p>
+                                              <p>Current version {entry.latest_version ?? "1"}</p>
+                                            </span>
+                                          </label>
                                         );
                                       })}
                                     </div>
                                   )}
-                                </div>
+                                </>
                               ) : null}
                               {bulkPatchScopeMode === "import_catalogue_list" ? (
-                                <div className="draft-card">
-                                  <div className="draft-card-head">
-                                    <strong>Import catalogue list</strong>
-                                    <span className="status-pill ok compact">{bulkPatchImportedMatchedCatalogueNumbers.length} matched</span>
-                                  </div>
+                                <>
                                   <label className="field-label" htmlFor="xml-bulk-patch-import-list">
                                     Catalogue numbers
                                   </label>
@@ -5156,53 +5235,446 @@ export function App() {
                                     onChange={(event) => setBulkPatchImportText(event.target.value)}
                                   />
                                   <p className="panel-copy">
-                                    Imported {bulkPatchImportedCatalogueNumbers.length}. Matched posted devices: {bulkPatchImportedMatchedCatalogueNumbers.length}. Not found under this parent: {bulkPatchImportedNotFoundCatalogueNumbers.length}.
+                                    Imported {bulkPatchImportedCatalogueNumbers.length}. Matched {bulkPatchImportedMatchedCatalogueNumbers.length}. Not found {bulkPatchImportedNotFoundCatalogueNumbers.length}.
                                   </p>
-                                  {bulkPatchImportedMatchedEntries.length ? (
-                                    <div className="bulk-posted-grid">
-                                      {bulkPatchImportedMatchedEntries.slice(0, 10).map((entry, index) => (
-                                        <div className="roadmap-item compact-structured-item" key={`${entry.catalogue_number ?? "unknown"}-${index}`}>
-                                          <strong>{entry.catalogue_number ?? entry.primary_udi_di ?? "Unknown device"}</strong>
-                                          <p>{entry.primary_udi_di ?? "Primary UDI-DI pending"}</p>
-                                          <p>Version {entry.latest_version ?? "1"}</p>
-                                        </div>
-                                      ))}
+                                </>
+                              ) : null}
+                            </div>
+
+                            <div className="draft-card">
+                              <div className="draft-card-head">
+                                <strong>3. Choose PATCH scenario</strong>
+                                <span className="status-pill ok compact">{selectedPatchScenario.testStatus}</span>
+                              </div>
+                              <p className="panel-copy">
+                                Select PATCH operation for your chosen scope.
+                              </p>
+                              <label className="field-label" htmlFor="xml-bulk-patch-scenario-selector">
+                                Bulk PATCH scenario
+                              </label>
+                              <select
+                                id="xml-bulk-patch-scenario-selector"
+                                className="rule-select"
+                                value={selectedPatchScenario.id}
+                                onChange={(event) => setSelectedPatchScenarioId(event.target.value as PatchScenarioId)}
+                              >
+                                {PATCH_SCENARIOS.map((scenario) => (
+                                  <option key={scenario.id} value={scenario.id}>
+                                    {patchScenarioOptionLabel(scenario)}
+                                  </option>
+                                ))}
+                              </select>
+                              <p className="panel-copy">{selectedPatchScenario.summary}</p>
+                              {selectedPatchScenario.optionsSummary ? (
+                                <p className="panel-copy">Options: {selectedPatchScenario.optionsSummary}</p>
+                              ) : null}
+                              {!selectedPatchScenarioImplemented ? (
+                                <div className="workflow-note patch-readiness-note">
+                                  <strong>Design placeholder</strong>
+                                  <span>
+                                    This candidate scenario is listed for design review, but XML generation is not implemented yet.
+                                  </span>
+                                </div>
+                              ) : null}
+                              {selectedPatchScenario.id === "equivalent_first_patch" ? (
+                                <p className="panel-copy">This option creates the explicit version `2` PATCH with no business-field change.</p>
+                              ) : null}
+                              {selectedPatchScenario.id === "trade_name_edit" ? (
+                                <div className="patch-field patch-field-full">
+                                  <label className="field-label" htmlFor="bulk-patch-trade-name-input">
+                                    New trade name
+                                  </label>
+                                  <input
+                                    id="bulk-patch-trade-name-input"
+                                    className="rule-select patch-select"
+                                    type="text"
+                                    value={patchTradeNameInput}
+                                    onChange={(event) => setPatchTradeNameInput(event.target.value)}
+                                  />
+                                </div>
+                              ) : null}
+                              {selectedPatchScenario.id === "base_quantity_edit" ? (
+                                <div className="patch-field patch-field-full">
+                                  <label className="field-label" htmlFor="bulk-patch-base-quantity-input">
+                                    New base quantity
+                                  </label>
+                                  <input
+                                    id="bulk-patch-base-quantity-input"
+                                    className="rule-select patch-select"
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    value={patchBaseQuantityInput}
+                                    onChange={(event) => setPatchBaseQuantityInput(event.target.value)}
+                                  />
+                                </div>
+                              ) : null}
+                              {selectedPatchScenario.id === "status_code_edit" ? (
+                                <div className="patch-field patch-field-full">
+                                  <label className="field-label" htmlFor="bulk-patch-status-code-input">
+                                    Status code
+                                  </label>
+                                  <select
+                                    id="bulk-patch-status-code-input"
+                                    className="rule-select patch-select"
+                                    value={patchStatusCodeInput}
+                                    onChange={(event) => setPatchStatusCodeInput(event.target.value)}
+                                  >
+                                    <option value="">Select value</option>
+                                    <option value="NOT_INTENDED_FOR_EU_MARKET">NOT_INTENDED_FOR_EU_MARKET</option>
+                                    <option value="ON_THE_MARKET">ON_THE_MARKET</option>
+                                    <option value="NO_LONGER_PLACED_ON_THE_MARKET">NO_LONGER_PLACED_ON_THE_MARKET</option>
+                                  </select>
+                                </div>
+                              ) : null}
+                              {selectedPatchScenario.id === "sterile_edit" ? (
+                                <div className="patch-field patch-field-full">
+                                  <label className="field-label" htmlFor="bulk-patch-sterile-input">
+                                    Sterile
+                                  </label>
+                                  <select
+                                    id="bulk-patch-sterile-input"
+                                    className="rule-select patch-select"
+                                    value={patchSterileInput}
+                                    onChange={(event) => setPatchSterileInput(event.target.value)}
+                                  >
+                                    <option value="">Select value</option>
+                                    <option value="true">true</option>
+                                    <option value="false">false</option>
+                                  </select>
+                                </div>
+                              ) : null}
+                              {selectedPatchScenario.id === "latex_edit" ? (
+                                <div className="patch-field patch-field-full">
+                                  <label className="field-label" htmlFor="bulk-patch-latex-input">
+                                    Latex
+                                  </label>
+                                  <select
+                                    id="bulk-patch-latex-input"
+                                    className="rule-select patch-select"
+                                    value={patchLatexInput}
+                                    onChange={(event) => setPatchLatexInput(event.target.value)}
+                                  >
+                                    <option value="">Select value</option>
+                                    <option value="true">true</option>
+                                    <option value="false">false</option>
+                                  </select>
+                                </div>
+                              ) : null}
+                              {selectedPatchScenario.id === "warning_add" ? (
+                                <>
+                                  <div className="patch-field patch-field-full">
+                                    <label className="field-label" htmlFor="bulk-patch-warning-code-input">
+                                      Replacement warning code
+                                    </label>
+                                    <input
+                                      id="bulk-patch-warning-code-input"
+                                      className="rule-select patch-select"
+                                      type="text"
+                                      list="critical-warning-code-options"
+                                      value={patchWarningCodeInput}
+                                      onChange={(event) => setPatchWarningCodeInput(event.target.value)}
+                                    />
+                                  </div>
+                                  {selectedWarningRequiresComment || patchWarningCommentInput.trim() ? (
+                                    <div className="patch-field patch-field-full">
+                                      <label className="field-label" htmlFor="bulk-patch-warning-comment-input">
+                                        Warning comment
+                                      </label>
+                                      <input
+                                        id="bulk-patch-warning-comment-input"
+                                        className="rule-select patch-select"
+                                        type="text"
+                                        value={patchWarningCommentInput}
+                                        onChange={(event) => setPatchWarningCommentInput(event.target.value)}
+                                      />
                                     </div>
                                   ) : null}
-                                  {bulkPatchImportedNotFoundCatalogueNumbers.length ? (
-                                    <p className="panel-copy">
-                                      Not found: {bulkPatchImportedNotFoundCatalogueNumbers.join(", ")}
-                                    </p>
-                                  ) : null}
-                                </div>
+                                </>
                               ) : null}
-                              {xmlBulkPatchPreview ? (
-                                <div className="draft-card">
-                                  <div className="draft-card-head">
-                                    <strong>Selected devices</strong>
-                                    <span className="status-pill ok compact">{selectedBulkPatchEntries.length} selected</span>
+                              {selectedPatchScenario.id === "storage_condition_edit" ? (
+                                <>
+                                  <div className="patch-field">
+                                    <label className="field-label" htmlFor="bulk-patch-storage-shc006-input">
+                                      Storage condition SHC006
+                                    </label>
+                                    <input
+                                      id="bulk-patch-storage-shc006-input"
+                                      className="rule-select patch-select"
+                                      type="text"
+                                      value={patchStorageConditionInputs.SHC006 ?? ""}
+                                      onChange={(event) =>
+                                        setPatchStorageConditionInputs((current) => ({
+                                          ...current,
+                                          SHC006: event.target.value,
+                                        }))
+                                      }
+                                    />
                                   </div>
-                                  <div className="roadmap-list">
-                                    {selectedBulkPatchEntries.slice(0, 10).map((entry, index) => {
-                                      const catalogueNumber = entry.catalogue_number ?? "";
-                                      const includedRecord = bulkPatchIncludedByCatalogue.get(catalogueNumber);
-                                      const excludedRecord = bulkPatchExcludedByCatalogue.get(catalogueNumber);
-                                      return (
-                                        <div className="roadmap-item" key={`${catalogueNumber}-${index}`}>
-                                          <strong>{catalogueNumber || entry.primary_udi_di || "Unknown device"}</strong>
-                                          <p>{entry.primary_udi_di ?? "Primary UDI-DI pending"}</p>
-                                          <p>
-                                            Current accepted version: {includedRecord?.base_version ?? entry.latest_version ?? "1"} | Next PATCH version: {includedRecord?.derived_version ?? "Awaiting preview"}
-                                          </p>
-                                          {excludedRecord ? <p>{excludedRecord.reason_message}</p> : null}
-                                        </div>
-                                      );
-                                    })}
+                                  <div className="patch-field">
+                                    <label className="field-label" htmlFor="bulk-patch-storage-shc007-input">
+                                      Storage condition SHC007
+                                    </label>
+                                    <input
+                                      id="bulk-patch-storage-shc007-input"
+                                      className="rule-select patch-select"
+                                      type="text"
+                                      value={patchStorageConditionInputs.SHC007 ?? ""}
+                                      onChange={(event) =>
+                                        setPatchStorageConditionInputs((current) => ({
+                                          ...current,
+                                          SHC007: event.target.value,
+                                        }))
+                                      }
+                                    />
                                   </div>
-                                </div>
+                                </>
                               ) : null}
-                            </>
-                          ) : null}
+                            </div>
+                            </div>
+                          </div>
+                          <div className="validation-pill-row bulk-patch-pill-row">
+                            <span className="status-pill ok compact bulk-patch-status-pill">
+                              Schema target: Message.xsd
+                            </span>
+                            <span
+                              className={
+                                selectedBatchValidation?.valid
+                                  ? "status-pill ok compact bulk-patch-status-pill"
+                                  : "status-pill warn compact bulk-patch-status-pill"
+                              }
+                            >
+                              Validation output:{" "}
+                              {selectedBatchValidation
+                                ? selectedBatchValidation.valid
+                                  ? "Schema valid"
+                                  : "Schema invalid"
+                                : "Awaiting preview"}
+                            </span>
+                          </div>
+                        </>
+                      ) : xmlMode === "bulkPost" ? (
+                        <>
+                          <div className="bulk-patch-layout">
+                            <div className="bulk-patch-config-column">
+                              <div className="draft-card">
+                                <div className="draft-card-head">
+                                  <strong>1. Confirm parent candidates</strong>
+                                  <span className="status-pill ok compact">
+                                    {selectedBulkUnpostedBasicUdiCount} available
+                                  </span>
+                                </div>
+                                <p className="panel-copy">
+                                  Confirm Basic UDI-DI parent scope for this POST.
+                                </p>
+                                <label className="field-label" htmlFor="xml-bulk-post-parent-count">
+                                  Basic UDI-DI parents
+                                </label>
+                                <div className="bulk-parent-chip-row">
+                                  <span className="bulk-parent-chip active">
+                                    {selectedBulkUnpostedBasicUdiCount} unposted parent{selectedBulkUnpostedBasicUdiCount === 1 ? "" : "s"}
+                                  </span>
+                                </div>
+                                <p className="panel-copy">
+                                  {bulkPostReadinessMessage}
+                                </p>
+                              </div>
+
+                              <div className="draft-card">
+                                <div className="draft-card-head">
+                                  <strong>2. Choose record count</strong>
+                                  <span className="status-pill ok compact">
+                                    {selectedBulkRecordCount} selected
+                                  </span>
+                                </div>
+                                <p className="panel-copy">
+                                  Determine scope of this POST.
+                                </p>
+                                <label className="field-label" htmlFor="xml-bulk-record-count">
+                                  Number of devices
+                                </label>
+                                <select
+                                  id="xml-bulk-record-count"
+                                  className="rule-select"
+                                  value={selectedBulkRecordCount}
+                                  onChange={(event) => {
+                                    setSelectedBulkRecordCount(Number(event.target.value));
+                                    setSelectedXmlChunkSequence(1);
+                                  }}
+                                >
+                                  {Array.from(
+                                    { length: Math.max(Math.min(selectedBulkCapacity, 300), 1) },
+                                    (_, index) => index + 1,
+                                  ).map((count) => (
+                                    <option key={count} value={count}>
+                                      {count} device{count === 1 ? "" : "s"}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="draft-card">
+                                <div className="draft-card-head">
+                                  <strong>3. Prepare output</strong>
+                                  <span className="status-pill ok compact">
+                                    Chunk {selectedXmlChunkSequence} of {selectedBulkChunkCount}
+                                  </span>
+                                </div>
+                                <p className="panel-copy">
+                                  Select preview output for your chosen scope.
+                                </p>
+                                <label className="field-label" htmlFor="xml-batch-chunk-sequence">
+                                  Preview chunk
+                                </label>
+                                <select
+                                  id="xml-batch-chunk-sequence"
+                                  className="rule-select"
+                                  value={selectedXmlChunkSequence}
+                                  onChange={(event) => setSelectedXmlChunkSequence(Number(event.target.value))}
+                                >
+                                  {Array.from({ length: selectedBulkChunkCount }, (_, index) => index + 1).map((sequence) => (
+                                    <option key={sequence} value={sequence}>
+                                      Chunk {sequence} of {selectedBulkChunkCount}
+                                    </option>
+                                  ))}
+                                </select>
+                                <p className="panel-copy">
+                                  {selectedBulkPreview
+                                    ? `Selected file: ${selectedBulkPreview.selected_chunk_file_name} · ${selectedBulkPreview.selected_chunk_record_count} rows`
+                                    : "Generate a preview to inspect the selected chunk."}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="validation-pill-row bulk-patch-pill-row">
+                            <span className="status-pill ok compact bulk-patch-status-pill">
+                              Schema target: Message.xsd
+                            </span>
+                            <span
+                              className={
+                                selectedBatchValidation?.valid
+                                  ? "status-pill ok compact bulk-patch-status-pill"
+                                  : "status-pill warn compact bulk-patch-status-pill"
+                              }
+                            >
+                              Validation output:{" "}
+                              {selectedBatchValidation
+                                ? selectedBatchValidation.valid
+                                  ? "Schema valid"
+                                  : "Schema invalid"
+                                : "Awaiting preview"}
+                            </span>
+                          </div>
+                        </>
+                      ) : xmlMode === "bulkUdidiPost" ? (
+                        <>
+                          <div className="bulk-patch-layout">
+                            <div className="bulk-patch-config-column">
+                              <div className="draft-card">
+                                <div className="draft-card-head">
+                                  <strong>1. Confirm existing parent</strong>
+                                  <span className="status-pill ok compact">
+                                    {selectedBulkEligibleUdidiPostCount} available
+                                  </span>
+                                </div>
+                                <p className="panel-copy">
+                                  Confirm child scope under an existing Basic UDI-DI parent.
+                                </p>
+                                <label className="field-label" htmlFor="xml-bulk-udidi-post-count">
+                                  Eligible child UDI-DIs
+                                </label>
+                                <div className="bulk-parent-chip-row">
+                                  <span className="bulk-parent-chip active">
+                                    {selectedBulkEligibleUdidiPostCount} eligible device{selectedBulkEligibleUdidiPostCount === 1 ? "" : "s"}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="draft-card">
+                                <div className="draft-card-head">
+                                  <strong>2. Choose record count</strong>
+                                  <span className="status-pill ok compact">
+                                    {selectedBulkRecordCount} selected
+                                  </span>
+                                </div>
+                                <p className="panel-copy">
+                                  Determine scope of this POST.
+                                </p>
+                                <label className="field-label" htmlFor="xml-bulk-record-count">
+                                  Number of devices
+                                </label>
+                                <select
+                                  id="xml-bulk-record-count"
+                                  className="rule-select"
+                                  value={selectedBulkRecordCount}
+                                  onChange={(event) => {
+                                    setSelectedBulkRecordCount(Number(event.target.value));
+                                    setSelectedXmlChunkSequence(1);
+                                  }}
+                                >
+                                  {Array.from(
+                                    { length: Math.max(Math.min(selectedBulkCapacity, 300), 1) },
+                                    (_, index) => index + 1,
+                                  ).map((count) => (
+                                    <option key={count} value={count}>
+                                      {count} device{count === 1 ? "" : "s"}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="draft-card">
+                                <div className="draft-card-head">
+                                  <strong>3. Prepare output</strong>
+                                  <span className="status-pill ok compact">
+                                    Chunk {selectedXmlChunkSequence} of {selectedBulkChunkCount}
+                                  </span>
+                                </div>
+                                <p className="panel-copy">
+                                  Select preview output for your chosen scope.
+                                </p>
+                                <label className="field-label" htmlFor="xml-batch-chunk-sequence">
+                                  Preview chunk
+                                </label>
+                                <select
+                                  id="xml-batch-chunk-sequence"
+                                  className="rule-select"
+                                  value={selectedXmlChunkSequence}
+                                  onChange={(event) => setSelectedXmlChunkSequence(Number(event.target.value))}
+                                >
+                                  {Array.from({ length: selectedBulkChunkCount }, (_, index) => index + 1).map((sequence) => (
+                                    <option key={sequence} value={sequence}>
+                                      Chunk {sequence} of {selectedBulkChunkCount}
+                                    </option>
+                                  ))}
+                                </select>
+                                <p className="panel-copy">
+                                  {selectedBulkPreview
+                                    ? `Selected file: ${selectedBulkPreview.selected_chunk_file_name} · ${selectedBulkPreview.selected_chunk_record_count} rows`
+                                    : "Generate a preview to inspect the selected chunk."}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="validation-pill-row bulk-patch-pill-row">
+                            <span className="status-pill ok compact bulk-patch-status-pill">
+                              Schema target: Message.xsd
+                            </span>
+                            <span
+                              className={
+                                selectedBatchValidation?.valid
+                                  ? "status-pill ok compact bulk-patch-status-pill"
+                                  : "status-pill warn compact bulk-patch-status-pill"
+                              }
+                            >
+                              Validation output:{" "}
+                              {selectedBatchValidation
+                                ? selectedBatchValidation.valid
+                                  ? "Schema valid"
+                                  : "Schema invalid"
+                                : "Awaiting preview"}
+                            </span>
+                          </div>
                         </>
                       ) : (
                         <>
@@ -5229,144 +5701,142 @@ export function App() {
                           </select>
                         </>
                       )}
-                      <label className="field-label" htmlFor="xml-batch-chunk-sequence">
-                        Preview chunk
-                      </label>
-                      <select
-                        id="xml-batch-chunk-sequence"
-                        className="rule-select"
-                        value={selectedXmlChunkSequence}
-                        onChange={(event) => setSelectedXmlChunkSequence(Number(event.target.value))}
-                      >
-                        {Array.from({ length: selectedBulkChunkCount }, (_, index) => index + 1).map((sequence) => (
-                          <option key={sequence} value={sequence}>
-                            Chunk {sequence} of {selectedBulkChunkCount}
-                          </option>
-                        ))}
-                      </select>
-                      {selectedBulkPreview ? (
+                      {xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" ? (
                         <>
-                          <p className="panel-copy">
-                            Included {selectedBulkPreview.included_record_count} record{selectedBulkPreview.included_record_count === 1 ? "" : "s"}.
-                            Excluded {selectedBulkPreview.excluded_record_count}.
-                          </p>
-                          <p className="panel-copy">
-                            Selected file: {selectedBulkPreview.selected_chunk_file_name} · {selectedBulkPreview.selected_chunk_record_count} rows
-                          </p>
+                          <label className="field-label" htmlFor="xml-batch-chunk-sequence">
+                            Preview chunk
+                          </label>
+                          <select
+                            id="xml-batch-chunk-sequence"
+                            className="rule-select"
+                            value={selectedXmlChunkSequence}
+                            onChange={(event) => setSelectedXmlChunkSequence(Number(event.target.value))}
+                          >
+                            {Array.from({ length: selectedBulkChunkCount }, (_, index) => index + 1).map((sequence) => (
+                              <option key={sequence} value={sequence}>
+                                Chunk {sequence} of {selectedBulkChunkCount}
+                              </option>
+                            ))}
+                          </select>
+                          {selectedBulkPreview ? (
+                            <>
+                              <p className="panel-copy">
+                                Included {selectedBulkPreview.included_record_count} record{selectedBulkPreview.included_record_count === 1 ? "" : "s"}.
+                                Excluded {selectedBulkPreview.excluded_record_count}.
+                              </p>
+                              <p className="panel-copy">
+                                Selected file: {selectedBulkPreview.selected_chunk_file_name} · {selectedBulkPreview.selected_chunk_record_count} rows
+                              </p>
+                            </>
+                          ) : !selectedBulkCapacity ? (
+                            <p className="panel-copy">
+                              No eligible child UDI-DI registrations are available for this variant, so Bulk UDI-DI POST cannot be generated here.
+                            </p>
+                          ) : null}
                         </>
-                      ) : !selectedBulkCapacity ? (
-                        <p className="panel-copy">
-                          No eligible {xmlMode === "bulkPost" ? "Basic UDI-DI parent registrations" : xmlMode === "bulkUdidiPost" ? "child UDI-DI registrations" : "child devices for the selected Basic UDI-DI"} are available for this variant, so Bulk {xmlMode === "bulkPost" ? "Basic UDI POST" : xmlMode === "bulkUdidiPost" ? "UDI-DI POST" : "PATCH"} cannot be generated here.
-                        </p>
                       ) : null}
                     </div>
                   </div>
                 ) : (
                   <p className="panel-copy">No XML-ready bulk scope is currently available for the selected family and variant.</p>
                 )}
-                <div className="workflow-note">
-                  <strong>
-                    {xmlMode === "post"
-                      ? "POST review"
-                      : xmlMode === "single"
-                        ? "Single-record review"
-                        : xmlMode === "marketInfo"
-                          ? "Standalone market-info review"
-                          : xmlMode === "patch"
-                            ? "Scenario PATCH review"
-                            : xmlMode === "bulkPost"
-                              ? "Bulk Basic UDI POST scope"
-                              : xmlMode === "bulkUdidiPost"
-                                ? "Bulk UDI-DI POST scope"
-                              : "Bulk PATCH scope"}
-                  </strong>
-                  <span>
-                    {xmlMode === "post"
-                      ? "Use one current POST-classified device to confirm the accepted registration payload before generating PATCH scenarios."
-                      : xmlMode === "single"
-                        ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
-                        : xmlMode === "marketInfo"
-                          ? "Use one XML-ready record to inspect the standalone MARKET_INFO.PUT wrapper and its current marketInfos collection."
-                        : xmlMode === "patch"
-                          ? "Use one selected POST parent, then compare the derived scenario PATCH against the accepted POST or latest accepted PATCH before external EUDAMED testing."
-                          : xmlMode === "bulkPost"
-                            ? "Bulk Basic UDI POST remains within the selected product variant and includes one first eligible row per Basic UDI-DI."
-                            : xmlMode === "bulkUdidiPost"
-                              ? "Bulk UDI-DI POST emits standalone child UDI-DI registrations and assumes the referenced Basic UDI-DI parent has already been accepted."
-                            : "Bulk PATCH reuses the selected product variant cohort and derives each PATCH from that device's latest successful accepted state."}
-                  </span>
-                </div>
-                <div className="draft-list xml-validation-stack">
-                  <div className="draft-card">
-                    <div className="draft-card-head">
-                      <strong>Schema target</strong>
-                      <span className="status-pill ok compact">Message.xsd</span>
-                    </div>
-                    <p className="panel-copy">
-                      Generated XML is validated against the wrapped EUDAMED service-message schema set rooted at `Message.xsd`.
-                    </p>
+                {xmlMode !== "bulkPatch" && xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" ? (
+                  <div className="workflow-note">
+                      <strong>
+                        {xmlMode === "post"
+                          ? "POST review"
+                          : xmlMode === "single"
+                            ? "Single-record review"
+                            : xmlMode === "marketInfo"
+                              ? "Standalone market-info review"
+                              : xmlMode === "patch"
+                                ? "Scenario PATCH review"
+                                : "Bulk UDI-DI POST scope"}
+                    </strong>
+                    <span>
+                      {xmlMode === "post"
+                        ? "Use one current POST-classified device to confirm the accepted registration payload before generating PATCH scenarios."
+                        : xmlMode === "single"
+                          ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
+                          : xmlMode === "marketInfo"
+                            ? "Use one XML-ready record to inspect the standalone MARKET_INFO.PUT wrapper and its current marketInfos collection."
+                            : xmlMode === "patch"
+                              ? "Use one selected POST parent, then compare the derived scenario PATCH against the accepted POST or latest accepted PATCH before external EUDAMED testing."
+                                : "Bulk UDI-DI POST emits standalone child UDI-DI registrations and assumes the referenced Basic UDI-DI parent has already been accepted."}
+                    </span>
                   </div>
-                  <div className="draft-card">
-                    <div className="draft-card-head">
-                      <strong>{xmlMode === "post" ? "Active preview validation" : "Validation output"}</strong>
-                      <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                        {selectedBatchValidation
-                          ? selectedBatchValidation.valid
-                            ? "Schema valid"
-                            : "Schema invalid"
-                          : "Awaiting preview"}
-                      </span>
-                    </div>
-                    {selectedBatchValidation ? (
-                      <>
-                        <p className="panel-copy">{selectedBatchValidation.schema_path}</p>
-                        {selectedBatchValidation.errors.length ? (
-                          <div className="roadmap-list">
-                            {selectedBatchValidation.errors.slice(0, 5).map((issue, index) => (
-                              <div className="roadmap-item" key={`${issue.line ?? 0}-${issue.column ?? 0}-${index}`}>
-                                <strong>
-                                  Line {issue.line ?? "?"}, column {issue.column ?? "?"}
-                                </strong>
-                                <p>{issue.message}</p>
+                ) : null}
+                <div className={xmlMode === "bulkPatch" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" ? "draft-list xml-validation-stack bulk-patch-validation-stack" : "draft-list xml-validation-stack"}>
+                  {xmlMode !== "bulkPatch" && xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" ? (
+                    <>
+                      <div className="draft-card">
+                        <div className="draft-card-head">
+                          <strong>Schema target</strong>
+                          <span className="status-pill ok compact">Message.xsd</span>
+                        </div>
+                        <p className="panel-copy">
+                          Generated XML is validated against the wrapped EUDAMED service-message schema set rooted at `Message.xsd`.
+                        </p>
+                      </div>
+                      <div className="draft-card">
+                        <div className="draft-card-head">
+                          <strong>{xmlMode === "post" ? "Active preview validation" : "Validation output"}</strong>
+                          <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                            {selectedBatchValidation
+                              ? selectedBatchValidation.valid
+                                ? "Schema valid"
+                                : "Schema invalid"
+                              : "Awaiting preview"}
+                          </span>
+                        </div>
+                        {selectedBatchValidation ? (
+                          <>
+                            <p className="panel-copy">{selectedBatchValidation.schema_path}</p>
+                            {selectedBatchValidation.errors.length ? (
+                              <div className="roadmap-list">
+                                {selectedBatchValidation.errors.slice(0, 5).map((issue, index) => (
+                                  <div className="roadmap-item" key={`${issue.line ?? 0}-${issue.column ?? 0}-${index}`}>
+                                    <strong>
+                                      Line {issue.line ?? "?"}, column {issue.column ?? "?"}
+                                    </strong>
+                                    <p>{issue.message}</p>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
+                            ) : (
+                              <p className="panel-copy">
+                                {xmlMode === "post"
+                                  ? "The generated POST preview validates cleanly."
+                                  : xmlMode === "single"
+                                    ? "The generated single-record Push message validates cleanly."
+                                    : xmlMode === "marketInfo"
+                                    ? "The generated MARKET_INFO.PUT Push message validates cleanly."
+                                    : xmlMode === "patch"
+                                        ? `The generated ${patchPreviewView === "base" ? "base" : "derived"} PATCH preview validates cleanly against the local schema set.`
+                                      : xmlMode === "bulkUdidiPost"
+                                          ? "The generated bulk UDI-DI POST Push message validates cleanly."
+                                        : "The generated bulk PATCH Push message validates cleanly."}
+                              </p>
+                            )}
+                          </>
                         ) : (
                           <p className="panel-copy">
                             {xmlMode === "post"
-                              ? "The generated POST preview validates cleanly."
+                              ? "Generate a POST preview to inspect the schema validation outcome."
                               : xmlMode === "single"
-                                ? "The generated single-record Push message validates cleanly."
+                                ? "Generate a single-record preview to inspect the schema validation outcome."
                                 : xmlMode === "marketInfo"
-                                ? "The generated MARKET_INFO.PUT Push message validates cleanly."
-                                : xmlMode === "patch"
-                                    ? `The generated ${patchPreviewView === "base" ? "base" : "derived"} PATCH preview validates cleanly against the local schema set.`
-                                  : xmlMode === "bulkPost"
-                                    ? "The generated bulk Basic UDI POST Push message validates cleanly."
-                                    : xmlMode === "bulkUdidiPost"
-                                      ? "The generated bulk UDI-DI POST Push message validates cleanly."
-                                    : "The generated bulk PATCH Push message validates cleanly."}
+                                  ? "Generate a MARKET_INFO.PUT preview to inspect the schema validation outcome."
+                                  : xmlMode === "patch"
+                                    ? "Generate the baseline and derived PATCH previews to inspect their schema validation outcomes."
+                                  : xmlMode === "bulkUdidiPost"
+                                      ? "Generate a bulk UDI-DI POST preview to inspect the schema validation outcome."
+                                    : "Generate a bulk PATCH preview to inspect the schema validation outcome."}
                           </p>
                         )}
-                      </>
-                    ) : (
-                      <p className="panel-copy">
-                        {xmlMode === "post"
-                          ? "Generate a POST preview to inspect the schema validation outcome."
-                          : xmlMode === "single"
-                            ? "Generate a single-record preview to inspect the schema validation outcome."
-                            : xmlMode === "marketInfo"
-                              ? "Generate a MARKET_INFO.PUT preview to inspect the schema validation outcome."
-                              : xmlMode === "patch"
-                                ? "Generate the baseline and derived PATCH previews to inspect their schema validation outcomes."
-                              : xmlMode === "bulkPost"
-                                ? "Generate a bulk Basic UDI POST preview to inspect the schema validation outcome."
-                                : xmlMode === "bulkUdidiPost"
-                                  ? "Generate a bulk UDI-DI POST preview to inspect the schema validation outcome."
-                                : "Generate a bulk PATCH preview to inspect the schema validation outcome."}
-                      </p>
-                    )}
-                  </div>
+                      </div>
+                    </>
+                  ) : null}
                   {xmlMode === "patch" && xmlPatchPreview ? (
                     <>
                       <div className="draft-card">

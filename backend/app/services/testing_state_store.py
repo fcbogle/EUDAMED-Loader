@@ -16,6 +16,8 @@ class PatchStateResolution:
 
 
 class TestingStateStore:
+    _reviewed_post_keys: set[tuple[str, str, str]] = set()
+
     def __init__(self) -> None:
         self.settings = get_settings()
 
@@ -142,6 +144,64 @@ class TestingStateStore:
             }
             for basic_udi_di, subjects in sorted(grouped.items(), key=lambda item: item[0])
         ]
+
+    def has_successful_basic_udi_post(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        basic_udi_di: str,
+    ) -> bool:
+        for subject in self._subjects():
+            if (
+                not self._matches_identity(subject.get("product_family"), product_family)
+                or not self._matches_identity(subject.get("product_variant"), product_variant)
+                or not self._matches_identity(subject.get("basic_udi_di"), basic_udi_di)
+            ):
+                continue
+            test_events = subject.get("test_events")
+            if not isinstance(test_events, list):
+                continue
+            if any(
+                isinstance(event, dict)
+                and event.get("status") == "SUCCESS"
+                and event.get("message_type") == "DEVICE.POST"
+                for event in test_events
+            ):
+                return True
+        return False
+
+    def mark_reviewed_post(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> None:
+        self._reviewed_post_keys.add(
+            (
+                self._normalize_identity(product_family),
+                self._normalize_identity(product_variant),
+                self._normalize_identity(catalogue_number),
+            )
+        )
+
+    def has_reviewed_post(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> bool:
+        return (
+            self._normalize_identity(product_family),
+            self._normalize_identity(product_variant),
+            self._normalize_identity(catalogue_number),
+        ) in self._reviewed_post_keys
+
+    @classmethod
+    def clear_reviewed_posts(cls) -> None:
+        cls._reviewed_post_keys.clear()
 
     @staticmethod
     def _is_posted_patch_candidate(subject: dict[str, object]) -> bool:

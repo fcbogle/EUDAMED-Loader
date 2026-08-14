@@ -5,9 +5,10 @@ from types import SimpleNamespace
 from typing import cast
 from zipfile import ZipFile
 
+from fastapi import HTTPException
+
 from app.config import get_settings
 from app.services.canonical_validation import CanonicalValidationService
-
 from app.routers.xml_generation import (
     download_generated_patch_scenario,
     download_xml_bulk_patch,
@@ -218,6 +219,11 @@ def test_generic_batch_download_route_returns_zip_package() -> None:
         assert "echelon-echelon-vt-batch-06-of-06.xml" in names
 
 def test_generated_trade_name_patch_scenario_reuses_latest_successful_patch_state() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -247,6 +253,11 @@ def test_generated_trade_name_patch_scenario_reuses_latest_successful_patch_stat
 
 
 def test_equivalent_first_patch_scenario_uses_post_as_base_for_version_two() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -265,6 +276,11 @@ def test_equivalent_first_patch_scenario_uses_post_as_base_for_version_two() -> 
 
 
 def test_generated_trade_name_patch_scenario_preserves_registered_device_identity() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -288,6 +304,11 @@ def test_generated_trade_name_patch_scenario_preserves_registered_device_identit
 
 
 def test_generated_trade_name_patch_scenario_preserves_latest_successful_trade_name_as_base() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Elan",
+        product_variant="Elan IC",
+        catalogue_number="ELANIC22L1S",
+    )
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Elan",
         product_variant="Elan IC",
@@ -308,6 +329,11 @@ def test_generated_trade_name_patch_scenario_preserves_latest_successful_trade_n
 
 
 def test_generated_warning_patch_scenario_replaces_warning_set() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -327,6 +353,11 @@ def test_generated_warning_patch_scenario_replaces_warning_set() -> None:
 
 
 def test_generated_storage_condition_patch_scenario_updates_comments() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -356,6 +387,11 @@ def test_generated_storage_condition_patch_scenario_updates_comments() -> None:
 
 
 def test_generated_base_quantity_patch_scenario_updates_quantity() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -372,6 +408,11 @@ def test_generated_base_quantity_patch_scenario_updates_quantity() -> None:
 
 
 def test_generated_sterile_patch_scenario_updates_boolean() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -388,6 +429,11 @@ def test_generated_sterile_patch_scenario_updates_boolean() -> None:
 
 
 def test_generated_latex_patch_scenario_updates_boolean() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -404,6 +450,11 @@ def test_generated_latex_patch_scenario_updates_boolean() -> None:
 
 
 def test_generated_status_code_patch_scenario_updates_enum() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -423,6 +474,11 @@ def test_generated_status_code_patch_scenario_updates_enum() -> None:
 
 
 def test_generated_patch_scenario_route_returns_comparison_payload() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
     payload = preview_generated_patch_scenario(
         {
             "product_family": "Echelon",
@@ -443,6 +499,11 @@ def test_generated_patch_scenario_route_returns_comparison_payload() -> None:
 
 
 def test_generated_patch_scenario_download_route_returns_zip_package() -> None:
+    XmlGenerationService().preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
     response = download_generated_patch_scenario(
         {
             "product_family": "Echelon",
@@ -460,9 +521,167 @@ def test_generated_patch_scenario_download_route_returns_zip_package() -> None:
     assert 'filename="echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.zip"' in response.headers["Content-Disposition"]
     with ZipFile(BytesIO(response.body)) as archive:
         members = archive.namelist()
-        assert "echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.xml" in members
-        assert "manifest.json" in members
-        assert b"<e:version>5</e:version>" in archive.read("echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.xml")
+        patch_xml = archive.read("echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.xml")
+    assert "echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.xml" in members
+    assert "manifest.json" in members
+    assert b"<e:version>5</e:version>" in patch_xml
+
+
+def test_generated_patch_scenario_requires_reviewed_post_baseline() -> None:
+    try:
+        XmlGenerationService().preview_generated_patch_scenario(
+            product_family="Echelon",
+            product_variant="Echelon VAC",
+            catalogue_number="EVAC22L1S",
+            scenario_id="trade_name_edit",
+            patch_version="5",
+            scenario_inputs={
+                "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
+            },
+        )
+    except ValueError as exc:
+        assert str(exc) == "Generate and review the baseline POST for this exact selected record before drafting a PATCH."
+    else:
+        raise AssertionError("Expected reviewed POST baseline requirement to be enforced.")
+
+
+def test_generated_patch_scenario_route_requires_reviewed_post_baseline() -> None:
+    try:
+        preview_generated_patch_scenario(
+            {
+                "product_family": "Echelon",
+                "product_variant": "Echelon VAC",
+                "catalogue_number": "EVAC22L1S",
+                "scenario_id": "trade_name_edit",
+                "patch_version": 5,
+                "scenario_inputs": {
+                    "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
+                },
+            }
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 404
+        assert exc.detail == "Generate and review the baseline POST for this exact selected record before drafting a PATCH."
+    else:
+        raise AssertionError("Expected HTTPException when baseline POST has not been reviewed.")
+
+
+def test_post_preview_marks_reviewed_post_for_following_patch_generation() -> None:
+    service = XmlGenerationService()
+    service.preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
+
+    assert service.testing_state_store.has_reviewed_post(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
+
+    preview = service.preview_generated_patch_scenario(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+        scenario_id="trade_name_edit",
+        patch_version="5",
+        scenario_inputs={
+            "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
+        },
+    )
+
+    assert preview.derived_patch_validation.valid is True
+
+
+def test_preview_bulk_post_scans_full_variant_population_before_message_cap(monkeypatch) -> None:
+    service = XmlGenerationService()
+    original = service._variant_post_records_with_exclusions
+    requested_counts: list[int | None] = []
+
+    def spy(*, product_family: str, product_variant: str, record_count: int | None):
+        requested_counts.append(record_count)
+        return original(product_family=product_family, product_variant=product_variant, record_count=record_count)
+
+    monkeypatch.setattr(service, "_variant_post_records_with_exclusions", spy)
+    monkeypatch.setattr(
+        service,
+        "_deduplicate_bulk_basic_udi_posts",
+        lambda **kwargs: (kwargs["records"][:1], kwargs["excluded_records"], 1),
+    )
+
+    service.preview_bulk_post(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        record_count=1,
+    )
+
+    assert requested_counts == [None]
+
+
+def test_download_bulk_post_scans_full_variant_population_before_message_cap(monkeypatch) -> None:
+    service = XmlGenerationService()
+    original = service._variant_post_records_with_exclusions
+    requested_counts: list[int | None] = []
+
+    def spy(*, product_family: str, product_variant: str, record_count: int | None):
+        requested_counts.append(record_count)
+        return original(product_family=product_family, product_variant=product_variant, record_count=record_count)
+
+    monkeypatch.setattr(service, "_variant_post_records_with_exclusions", spy)
+    monkeypatch.setattr(
+        service,
+        "_deduplicate_bulk_basic_udi_posts",
+        lambda **kwargs: (kwargs["records"][:1], kwargs["excluded_records"], 1),
+    )
+
+    service.download_bulk_post(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        record_count=1,
+    )
+
+    assert requested_counts == [None, None]
+
+
+def test_preview_bulk_udidi_post_scans_full_variant_population_before_message_cap(monkeypatch) -> None:
+    service = XmlGenerationService()
+    original = service._variant_post_records_with_exclusions
+    requested_counts: list[int | None] = []
+
+    def spy(*, product_family: str, product_variant: str, record_count: int | None):
+        requested_counts.append(record_count)
+        return original(product_family=product_family, product_variant=product_variant, record_count=record_count)
+
+    monkeypatch.setattr(service, "_variant_post_records_with_exclusions", spy)
+
+    service.preview_bulk_udidi_post(
+        product_family="Elite",
+        product_variant="EliteVT",
+        record_count=1,
+    )
+
+    assert requested_counts == [None]
+
+
+def test_download_bulk_udidi_post_scans_full_variant_population_before_message_cap(monkeypatch) -> None:
+    service = XmlGenerationService()
+    original = service._variant_post_records_with_exclusions
+    requested_counts: list[int | None] = []
+
+    def spy(*, product_family: str, product_variant: str, record_count: int | None):
+        requested_counts.append(record_count)
+        return original(product_family=product_family, product_variant=product_variant, record_count=record_count)
+
+    monkeypatch.setattr(service, "_variant_post_records_with_exclusions", spy)
+
+    service.download_bulk_udidi_post(
+        product_family="Elite",
+        product_variant="EliteVT",
+        record_count=1,
+    )
+
+    assert requested_counts == [None, None]
 
 
 def test_post_record_selector_requires_exact_catalogue_number_for_variant_post_lineage() -> None:
@@ -566,27 +785,98 @@ def test_bulk_patch_routes_require_basic_udi_parent_scope() -> None:
 
 def test_bulk_patch_preview_excludes_posted_children_that_are_not_xml_ready() -> None:
     service = XmlGenerationService()
+    posted_entries = service.testing_state_store.posted_entries(
+        product_family="Elite",
+        product_variant="EliteVT",
+        basic_udi_di="5050649ELITEVTV4",
+    )
+    selected_catalogue_numbers = [
+        str(entry.get("catalogue_number") or "").strip()
+        for entry in posted_entries
+        if str(entry.get("catalogue_number") or "").strip()
+    ]
+    xml_ready_catalogues = {
+        record.catalogue_number
+        for record in service._variant_xml_ready_records(
+            product_family="Elite",
+            product_variant="EliteVT",
+        )
+        if record.catalogue_number
+    }
+    expected_included_catalogues = set(selected_catalogue_numbers).intersection(xml_ready_catalogues)
+    expected_missing_catalogues = set(selected_catalogue_numbers).difference(xml_ready_catalogues)
 
     preview = service.preview_bulk_patch(
         product_family="Elite",
         product_variant="EliteVT",
         basic_udi_di="5050649ELITEVTV4",
-        record_count=5,
+        record_count=len(selected_catalogue_numbers),
         scenario_id="equivalent_first_patch",
         scenario_inputs={},
-        selected_catalogue_numbers=["EVT22L11SD", "EVT22L12S", "EVT22L13S", "EVT22L14S", "EVT22L15S"],
+        selected_catalogue_numbers=selected_catalogue_numbers,
     )
 
     assert preview.selected_basic_udi_di == "5050649ELITEVTV4"
-    assert preview.eligible_child_records == 5
-    assert preview.included_record_count == 4
-    assert {record.catalogue_number for record in preview.included_records} == {
-        "EVT22L11SD",
-        "EVT22L12S",
-        "EVT22L13S",
-        "EVT22L14S",
-    }
-    assert preview.excluded_record_count == 1
-    assert len(preview.excluded_records) == 1
-    assert preview.excluded_records[0].catalogue_number == "EVT22L15S"
-    assert preview.excluded_records[0].reason_code == "not_xml_ready"
+    assert preview.eligible_child_records == len(selected_catalogue_numbers)
+    assert preview.included_record_count == len(expected_included_catalogues)
+    assert {record.catalogue_number for record in preview.included_records} == expected_included_catalogues
+    assert {
+        record.catalogue_number
+        for record in preview.excluded_records
+        if record.reason_code == "not_xml_ready"
+    } == expected_missing_catalogues
+
+
+def test_bulk_basic_udi_post_excludes_parent_when_basic_udi_is_already_registered() -> None:
+    service = XmlGenerationService()
+
+    try:
+        service.preview_bulk_post(
+            product_family="Elite",
+            product_variant="EliteVT",
+            record_count=1,
+        )
+    except ValueError as exc:
+        assert (
+            str(exc)
+            == "Parent Basic UDI-DI already exists for Elite / EliteVT. Use Bulk UDI-DI POST to add child devices."
+        )
+    else:
+        raise AssertionError("Expected Bulk Basic UDI-DI POST preview to stop when the parent DEVICE.POST already exists.")
+
+
+def test_bulk_udidi_post_includes_all_xml_ready_children_when_parent_is_already_registered() -> None:
+    service = XmlGenerationService()
+
+    preview = service.preview_bulk_udidi_post(
+        product_family="Elite",
+        product_variant="EliteVT",
+        record_count=5,
+    )
+
+    assert preview.eligible_child_records >= 5
+    assert preview.included_record_count == 5
+    assert len({record.catalogue_number for record in preview.included_records if record.catalogue_number}) == 5
+    assert all(record.reason_code != "parent_seed_row" for record in preview.excluded_records)
+    assert all(record.reason_code != "parent_not_registered" for record in preview.excluded_records)
+
+
+def test_bulk_udidi_post_blocks_when_parent_device_post_has_not_been_recorded(monkeypatch) -> None:
+    service = XmlGenerationService()
+
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_basic_udi_post",
+        lambda **_: False,
+    )
+
+    try:
+        service.preview_bulk_udidi_post(
+            product_family="Elite",
+            product_variant="EliteVT",
+            record_count=5,
+        )
+    except ValueError as exc:
+        assert str(exc) == "No eligible child UDI-DI POST records are currently available for Elite / EliteVT."
+    else:
+        raise AssertionError("Expected Bulk UDI-DI POST preview to stop when the parent DEVICE.POST has not been recorded.")

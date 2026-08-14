@@ -222,7 +222,7 @@ def preview_xml_bulk_post(payload: dict[str, str | int] | None = None) -> dict:
             chunk_sequence=chunk_sequence,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return preview.model_dump(mode="json")
 
 
@@ -241,7 +241,7 @@ def download_xml_bulk_post(payload: dict[str, str | int] | None = None) -> Respo
             record_count=record_count,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
     return Response(content=zip_bytes, media_type="application/zip", headers=headers)
 
@@ -263,7 +263,7 @@ def preview_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) -> 
             chunk_sequence=chunk_sequence,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return preview.model_dump(mode="json")
 
 
@@ -282,7 +282,7 @@ def download_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) ->
             record_count=record_count,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
     return Response(content=zip_bytes, media_type="application/zip", headers=headers)
 
