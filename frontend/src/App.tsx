@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { api } from "./api";
+import { ApiError, api } from "./api";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
 import canonicalDocumentation from "./content/docs/canonical.md?raw";
 import canonicalValidationDocumentation from "./content/docs/canonical-validation.md?raw";
@@ -23,6 +23,8 @@ import type {
   CanonicalValidationBundle,
   CanonicalReviewBundle,
   CriticalWarningCodeOption,
+  DatabaseHealthSummary,
+  DatabaseSchemaSummary,
   DistinctValueProfile,
   GeneratedPatchScenarioPreview,
   ImportedWorkbookSummary,
@@ -35,6 +37,7 @@ import type {
   SheetProfile,
   SheetSummary,
   SingleRecordXmlPreview,
+  WorkbookImportDiffSummary,
   WorkbookImportDuplicateGroup,
   WorkbookImportSnapshotSummary,
   WorkbookSummary,
@@ -885,7 +888,13 @@ export function App() {
   const [workbooks, setWorkbooks] = useState<WorkbookSummary[]>([]);
   const [referenceWorkbooks, setReferenceWorkbooks] = useState<ReferenceWorkbookSummary[]>([]);
   const [latestWorkbookImportSummary, setLatestWorkbookImportSummary] = useState<WorkbookImportSnapshotSummary | null>(null);
+  const [databaseSchemaSummary, setDatabaseSchemaSummary] = useState<DatabaseSchemaSummary | null>(null);
+  const [databaseHealthSummary, setDatabaseHealthSummary] = useState<DatabaseHealthSummary | null>(null);
+  const [latestWorkbookImportDiffSummary, setLatestWorkbookImportDiffSummary] = useState<WorkbookImportDiffSummary | null>(null);
   const [workbookImportSummaryError, setWorkbookImportSummaryError] = useState<string | null>(null);
+  const [hasWorkbookImportSnapshot, setHasWorkbookImportSnapshot] = useState<boolean>(false);
+  const [isRunningWorkbookImport, setIsRunningWorkbookImport] = useState<boolean>(false);
+  const [workbookImportActionMessage, setWorkbookImportActionMessage] = useState<string | null>(null);
   const [sheets, setSheets] = useState<SheetSummary[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<SheetSummary | null>(null);
   const [sheetProfile, setSheetProfile] = useState<SheetProfile | null>(null);
@@ -1132,27 +1141,106 @@ export function App() {
     );
   }
 
+  async function loadWorkbookImportMonitoring(): Promise<void> {
+    const workbookImportSummaryResult = await api
+      .latestWorkbookImportSummary()
+      .then((data) => ({ data, error: null as string | null, hasSnapshot: true }))
+      .catch((requestError: Error) => {
+        if (requestError instanceof ApiError && requestError.status === 404) {
+          return { data: null, error: null, hasSnapshot: false };
+        }
+        return {
+          data: null,
+          error: requestError.message || "Workbook import summary is unavailable.",
+          hasSnapshot: false,
+        };
+      });
+
+    const databaseSchemaSummaryResult = await api
+      .workbookImportSchemaSummary()
+      .then((data) => ({ data, error: null as string | null }))
+      .catch((requestError: Error) => ({
+        data: null,
+        error: requestError.message || "Database schema summary is unavailable.",
+      }));
+
+    const databaseHealthSummaryResult = await api
+      .workbookImportHealthSummary()
+      .then((data) => ({ data, error: null as string | null }))
+      .catch((requestError: Error) => ({
+        data: null,
+        error: requestError.message || "Database health summary is unavailable.",
+      }));
+
+    const workbookImportDiffResult = await api
+      .latestWorkbookImportDiff()
+      .then((data) => ({ data, error: null as string | null }))
+      .catch((requestError: Error) => {
+        if (requestError instanceof ApiError && requestError.status === 404) {
+          return { data: null, error: null as string | null };
+        }
+        return {
+          data: null,
+          error: requestError.message || "Latest import diff is unavailable.",
+        };
+      });
+
+    setLatestWorkbookImportSummary(workbookImportSummaryResult.data);
+    setDatabaseSchemaSummary(databaseSchemaSummaryResult.data);
+    setDatabaseHealthSummary(databaseHealthSummaryResult.data);
+    setLatestWorkbookImportDiffSummary(workbookImportDiffResult.data);
+    setHasWorkbookImportSnapshot(workbookImportSummaryResult.hasSnapshot);
+    const monitoringErrors = [
+      workbookImportSummaryResult.error,
+      databaseSchemaSummaryResult.error,
+      databaseHealthSummaryResult.error,
+      workbookImportDiffResult.error,
+    ].filter(Boolean);
+    setWorkbookImportSummaryError(monitoringErrors.length ? monitoringErrors.join(" ") : null);
+  }
+
+  async function runWorkbookImportFromUi(): Promise<void> {
+    setIsRunningWorkbookImport(true);
+    setWorkbookImportActionMessage(null);
+    setError(null);
+    try {
+      const result = await api.runWorkbookImport({
+        imported_by: "ui",
+        label: `UI import ${new Date().toISOString()}`,
+      });
+      await loadWorkbookImportMonitoring();
+      setWorkbookImportActionMessage(
+        `Workbook import completed. Batch #${result.import_batch_id} captured ${pluralize(result.source_row_count, "row")} across ${pluralize(result.workbook_count, "workbook")}.`,
+      );
+    } catch (requestError) {
+      setWorkbookImportActionMessage(null);
+      setError(requestError instanceof Error ? requestError.message : "Failed to run workbook import.");
+    } finally {
+      setIsRunningWorkbookImport(false);
+    }
+  }
+
   useEffect(() => {
     void Promise.all([
       api.workbooks(),
       api.referenceWorkbooks(),
-      api
-        .latestWorkbookImportSummary()
-        .then((data) => ({ data, error: null as string | null }))
-        .catch((requestError: Error) => ({
-          data: null,
-          error: requestError.message || "Workbook import summary is unavailable.",
-        })),
+      loadWorkbookImportMonitoring(),
       api.sheets(),
       api.normalizationRules(),
       api.distinctValues(selectedColumn),
       api.criticalWarningCodes(),
     ])
-      .then(([workbookData, referenceWorkbookData, workbookImportSummaryResult, sheetData, ruleData, distinctData, criticalWarningCodes]) => {
+      .then(([
+        workbookData,
+        referenceWorkbookData,
+        _workbookImportMonitoringLoaded,
+        sheetData,
+        ruleData,
+        distinctData,
+        criticalWarningCodes,
+      ]) => {
         setWorkbooks(workbookData);
         setReferenceWorkbooks(referenceWorkbookData);
-        setLatestWorkbookImportSummary(workbookImportSummaryResult.data);
-        setWorkbookImportSummaryError(workbookImportSummaryResult.error);
         setSheets(sheetData);
         setRules(ruleData);
         setDistinctValues(distinctData);
@@ -1498,6 +1586,12 @@ export function App() {
   const duplicateSourceRowDelta = latestWorkbookImportSummary?.duplicate_source_row_delta ?? 0;
   const duplicateSubjectCount = latestWorkbookImportSummary?.duplicate_subject_count ?? 0;
   const topDuplicateGroups = latestWorkbookImportSummary?.top_duplicate_groups ?? [];
+  const monitoredTables = databaseSchemaSummary?.tables ?? [];
+  const healthTableSummaries = databaseHealthSummary?.table_summaries ?? [];
+  const healthIssues = databaseHealthSummary?.issues ?? [];
+  const changedWorkbooks = latestWorkbookImportDiffSummary?.changed_workbooks.filter((item) => item.change_type !== "unchanged") ?? [];
+  const indexedTableCount = monitoredTables.filter((table) => table.indexes.length > 0).length;
+  const foreignKeyCount = monitoredTables.reduce((sum, table) => sum + table.foreign_keys.length, 0);
   const postDeviceSubjectCount =
     importOperationCounts.find((entry) => entry.submission_operation === "POST")?.device_subject_count ?? 0;
   const patchDeviceSubjectCount =
@@ -3046,20 +3140,33 @@ export function App() {
               <span className={latestImportBatch ? "status-pill ok" : "status-pill warn"}>
                 {latestImportBatch
                   ? "Imported"
-                  : workbookImportSummaryError
+                  : hasWorkbookImportSnapshot
+                    ? "Snapshot pending"
+                    : workbookImportSummaryError
                     ? "Snapshot unavailable"
-                    : `${workbooks.length} workbooks indexed`}
+                    : "Import required"}
               </span>
               <p className="status-detail">
                 {latestImportBatch
                   ? `Workbook to database`
+                  : !hasWorkbookImportSnapshot && !workbookImportSummaryError
+                    ? "No workbook import snapshot exists yet. Run the initial import to populate the database-backed submission view."
                   : workbookImportSummaryError
-                    ? `${workbookImportSummaryError} Restart the backend if Phase 2 endpoints were added after the current server process started.`
+                    ? workbookImportSummaryError
                     : `${sheets.length} sheets available for source review and ${schemas?.total_files ?? 0} schema files inventoried.`}
               </p>
               {latestImportBatch ? (
                 <p className="status-detail status-detail-tight">{formatIsoDateTime(latestImportBatch.imported_at)}</p>
               ) : null}
+              <button
+                className="action-button import-workbooks-button"
+                type="button"
+                onClick={() => void runWorkbookImportFromUi()}
+                disabled={isRunningWorkbookImport}
+              >
+                {isRunningWorkbookImport ? "Importing Workbooks..." : "Import Workbooks"}
+              </button>
+              {workbookImportActionMessage ? <p className="status-detail status-detail-tight">{workbookImportActionMessage}</p> : null}
             </>
           ) : null}
           {activeTab === "canonical" ? (
@@ -3120,10 +3227,35 @@ export function App() {
       {error ? <div className="panel error-banner">{error}</div> : null}
       {activeTab === "workbooks" ? (
         <>
+          {!hasWorkbookImportSnapshot && !workbookImportSummaryError ? (
+            <div className="panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Database Snapshot</span>
+                  <h2>Run Initial Import</h2>
+                </div>
+              </div>
+              <p className="panel-copy">
+                No workbook import snapshot exists yet. The live workbook files are visible below, but the database-backed
+                submission view and monitoring panels will populate only after the first import batch is created.
+              </p>
+              <div className="action-summary">
+                <button
+                  className="action-button import-workbooks-button"
+                  type="button"
+                  onClick={() => void runWorkbookImportFromUi()}
+                  disabled={isRunningWorkbookImport}
+                >
+                  {isRunningWorkbookImport ? "Importing Workbooks..." : "Import Workbooks"}
+                </button>
+                {workbookImportActionMessage ? <span className="save-message">{workbookImportActionMessage}</span> : null}
+              </div>
+            </div>
+          ) : null}
           {workbookImportSummaryError ? (
             <div className="panel error-banner">
-              Workbook import snapshot unavailable: {workbookImportSummaryError}. The UI is showing the live
-              workbook files below, but the database-backed snapshot summary has not loaded.
+              Workbook import monitoring is partially unavailable: {workbookImportSummaryError}. The UI is showing the live
+              workbook files below, and any available database-backed snapshot data will continue to render.
             </div>
           ) : null}
           <section className="summary-grid workbook-kpi-grid">
@@ -3267,6 +3399,140 @@ export function App() {
                         <td>{workbook.row_count}</td>
                         <td><code>{shortenHash(workbook.file_hash)}</code></td>
                         <td>{formatIsoDateTime(workbook.loaded_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="content-grid">
+            <div className="panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Database Monitoring</span>
+                  <h2>Schema, Health, and Drift</h2>
+                </div>
+              </div>
+              <div className="queue-summary">
+                <div className="queue-chip">
+                  <strong>{databaseSchemaSummary?.table_count ?? "N/A"}</strong>
+                  <span>tables</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{databaseSchemaSummary ? indexedTableCount : "N/A"}</strong>
+                  <span>indexed tables</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{databaseSchemaSummary ? foreignKeyCount : "N/A"}</strong>
+                  <span>foreign keys</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{databaseHealthSummary ? healthIssues.length : "N/A"}</strong>
+                  <span>health issues</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{latestImportBatch ? duplicateSubjectCount : "N/A"}</strong>
+                  <span>duplicate subjects</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{latestImportBatch ? mergedWorkbookRowCount : "N/A"}</strong>
+                  <span>merged rows</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{latestImportBatch ? unclassifiedDeviceSubjectCount : "N/A"}</strong>
+                  <span>unclassified subjects</span>
+                </div>
+              </div>
+              {latestWorkbookImportDiffSummary ? (
+                <p className="panel-copy">
+                  Latest diff compares import batch <strong>#{latestWorkbookImportDiffSummary.current_import_batch_id}</strong>
+                  {latestWorkbookImportDiffSummary.previous_import_batch_id
+                    ? ` against #${latestWorkbookImportDiffSummary.previous_import_batch_id}.`
+                    : " against no earlier import batch."}{" "}
+                  Source rows delta: <strong>{latestWorkbookImportDiffSummary.source_row_delta}</strong>. Stable subjects delta:{" "}
+                  <strong>{latestWorkbookImportDiffSummary.device_subject_delta}</strong>.
+                </p>
+              ) : (
+                <p className="panel-copy">Import diff is not yet available.</p>
+              )}
+              {healthIssues.length ? (
+                <div className="roadmap-list">
+                  {healthIssues.slice(0, 6).map((issue) => (
+                    <div className="roadmap-item" key={`${issue.code}-${issue.table_name ?? "global"}-${issue.message}`}>
+                      <strong>{issue.table_name ? `${issue.table_name} · ${issue.code}` : issue.code}</strong>
+                      <p>{issue.message}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="panel-copy">No current schema-health issues were reported by the monitoring snapshot.</p>
+              )}
+              {topDuplicateGroups.length ? (
+                <div className="roadmap-list">
+                  {topDuplicateGroups.slice(0, 4).map((group) => (
+                    <div className="roadmap-item" key={group.subject_key}>
+                      <strong>{group.product_family ?? "Unknown"} / {group.product_variant ?? "Unknown"} / {group.catalogue_number ?? group.primary_udi_di ?? group.subject_key}</strong>
+                      <p>{group.source_row_count} source rows currently merge into this stable subject.</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">Latest Drift</span>
+                  <h2>Workbook Delta</h2>
+                </div>
+              </div>
+              {changedWorkbooks.length ? (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Workbook</th>
+                      <th>Change</th>
+                      <th>Rows</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {changedWorkbooks.map((workbook) => (
+                      <tr key={`${workbook.workbook_name}-${workbook.change_type}`}>
+                        <td><strong>{workbook.workbook_name}</strong></td>
+                        <td>{workbook.change_type}</td>
+                        <td>
+                          {workbook.previous_row_count ?? 0} → {workbook.current_row_count ?? 0}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="panel-copy">
+                  {latestWorkbookImportDiffSummary
+                    ? "No workbook-level drift was detected between the latest two import batches."
+                    : "Workbook delta is not yet available."}
+                </p>
+              )}
+              {healthTableSummaries.length ? (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Table</th>
+                      <th>Rows</th>
+                      <th>Orphans</th>
+                      <th>Identity gaps</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {healthTableSummaries.map((summary) => (
+                      <tr key={summary.table_name}>
+                        <td><strong>{summary.table_name}</strong></td>
+                        <td>{summary.row_count}</td>
+                        <td>{summary.orphan_count}</td>
+                        <td>{summary.identity_gap_count}</td>
                       </tr>
                     ))}
                   </tbody>

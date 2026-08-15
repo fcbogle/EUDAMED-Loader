@@ -9,6 +9,8 @@ import type {
   CanonicalValidationBundle,
   CanonicalReviewBundle,
   CriticalWarningCodeOption,
+  DatabaseHealthSummary,
+  DatabaseSchemaSummary,
   DistinctValueProfile,
   GeneratedPatchScenarioPreview,
   MarketInfoPutPreview,
@@ -20,6 +22,7 @@ import type {
   SheetProfile,
   SheetSummary,
   SingleRecordXmlPreview,
+  WorkbookImportDiffSummary,
   WorkbookImportRunResponse,
   WorkbookImportSnapshotSummary,
   WorkbookSummary,
@@ -27,6 +30,16 @@ import type {
 } from "./types";
 
 const API_ROOT = "http://localhost:8000/api";
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
 async function readErrorMessage(response: Response): Promise<string> {
   try {
@@ -43,7 +56,7 @@ async function readErrorMessage(response: Response): Promise<string> {
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_ROOT}${path}`);
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
+    throw new ApiError(await readErrorMessage(response), response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -57,7 +70,7 @@ async function sendJson<T>(path: string, method: string, body: unknown): Promise
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
+    throw new ApiError(await readErrorMessage(response), response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -77,7 +90,7 @@ async function sendDownload(path: string, method: string, body?: unknown): Promi
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
+    throw new ApiError(await readErrorMessage(response), response.status);
   }
   return {
     blob: await response.blob(),
@@ -89,6 +102,9 @@ export const api = {
   workbooks: () => getJson<WorkbookSummary[]>("/workbooks"),
   referenceWorkbooks: () => getJson<ReferenceWorkbookSummary[]>("/reference-workbooks"),
   latestWorkbookImportSummary: () => getJson<WorkbookImportSnapshotSummary>("/workbook-imports/latest/summary"),
+  workbookImportSchemaSummary: () => getJson<DatabaseSchemaSummary>("/workbook-imports/schema-summary"),
+  workbookImportHealthSummary: () => getJson<DatabaseHealthSummary>("/workbook-imports/health"),
+  latestWorkbookImportDiff: () => getJson<WorkbookImportDiffSummary>("/workbook-imports/latest/diff"),
   runWorkbookImport: (payload?: { imported_by?: string; label?: string; notes?: string }) =>
     sendJson<WorkbookImportRunResponse>("/workbook-imports/run", "POST", payload ?? {}),
   sheets: () => getJson<SheetSummary[]>("/sheets"),

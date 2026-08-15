@@ -78,3 +78,21 @@ def latest_workbook_import_summary() -> dict:
     if summary is None:
         raise HTTPException(status_code=404, detail="No workbook imports have been recorded.")
     return summary.model_dump(mode="json")
+
+
+@router.get("/workbook-imports/schema-summary")
+def workbook_import_schema_summary() -> dict:
+    return WorkbookImportService().schema_summary().model_dump(mode="json")
+
+
+@router.get("/workbook-imports/health")
+def workbook_import_health_summary() -> dict:
+    return WorkbookImportService().database_health_summary().model_dump(mode="json")
+
+
+@router.get("/workbook-imports/latest/diff")
+def latest_workbook_import_diff() -> dict:
+    summary = WorkbookImportService().latest_import_diff_summary()
+    if summary is None:
+        raise HTTPException(status_code=404, detail="No workbook imports have been recorded.")
+    return summary.model_dump(mode="json")

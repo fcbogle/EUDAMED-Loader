@@ -178,3 +178,78 @@ class WorkbookImportSnapshotSummary(BaseModel):
     duplicate_source_row_delta: int
     duplicate_subject_count: int
     top_duplicate_groups: list[WorkbookImportDuplicateGroup] = Field(default_factory=list)
+
+
+class DatabaseColumnSummary(BaseModel):
+    name: str
+    data_type: str
+    nullable: bool
+    primary_key_position: int = 0
+
+
+class DatabaseForeignKeySummary(BaseModel):
+    from_column: str
+    target_table: str
+    target_column: str
+    on_delete: str
+
+
+class DatabaseIndexSummary(BaseModel):
+    name: str
+    unique: bool
+    columns: list[str] = Field(default_factory=list)
+
+
+class DatabaseTableSchemaSummary(BaseModel):
+    table_name: str
+    row_count: int
+    columns: list[DatabaseColumnSummary] = Field(default_factory=list)
+    foreign_keys: list[DatabaseForeignKeySummary] = Field(default_factory=list)
+    indexes: list[DatabaseIndexSummary] = Field(default_factory=list)
+
+
+class DatabaseSchemaSummary(BaseModel):
+    db_path: str
+    table_count: int
+    tables: list[DatabaseTableSchemaSummary] = Field(default_factory=list)
+
+
+class DatabaseHealthIssue(BaseModel):
+    level: str
+    code: str
+    message: str
+    table_name: str | None = None
+
+
+class DatabaseTableHealthSummary(BaseModel):
+    table_name: str
+    row_count: int
+    orphan_count: int
+    identity_gap_count: int
+
+
+class DatabaseHealthSummary(BaseModel):
+    db_path: str
+    generated_at: str
+    table_summaries: list[DatabaseTableHealthSummary] = Field(default_factory=list)
+    issues: list[DatabaseHealthIssue] = Field(default_factory=list)
+
+
+class WorkbookImportWorkbookDiff(BaseModel):
+    workbook_name: str
+    change_type: str
+    previous_row_count: int | None = None
+    current_row_count: int | None = None
+    previous_hash: str | None = None
+    current_hash: str | None = None
+
+
+class WorkbookImportDiffSummary(BaseModel):
+    current_import_batch_id: int
+    previous_import_batch_id: int | None = None
+    current_label: str
+    previous_label: str | None = None
+    source_row_delta: int
+    device_subject_delta: int
+    workbook_count_delta: int
+    changed_workbooks: list[WorkbookImportWorkbookDiff] = Field(default_factory=list)

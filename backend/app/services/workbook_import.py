@@ -12,8 +12,18 @@ from openpyxl import load_workbook
 
 from app.config import get_settings
 from app.models import (
+    DatabaseColumnSummary,
+    DatabaseForeignKeySummary,
+    DatabaseHealthIssue,
+    DatabaseHealthSummary,
+    DatabaseIndexSummary,
+    DatabaseSchemaSummary,
+    DatabaseTableHealthSummary,
+    DatabaseTableSchemaSummary,
     ImportedWorkbookSummary,
+    WorkbookImportDiffSummary,
     WorkbookImportBatchSummary,
+    WorkbookImportWorkbookDiff,
     WorkbookImportDuplicateGroup,
     WorkbookImportOperationCount,
     WorkbookImportRunResponse,
@@ -217,10 +227,11 @@ class WorkbookImportService:
 
         imported_workbooks = self.imported_workbooks(import_batch_id=latest_batch.import_batch_id)
         with self._connect() as connection:
+            available_tables = set(self._table_names(connection))
             table_counts = [
                 WorkbookImportTableCount(
                     table_name=table_name,
-                    row_count=int(connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]),
+                    row_count=self._safe_row_count(connection, table_name),
                     summary_label=summary_label,
                 )
                 for table_name, summary_label in (
@@ -232,6 +243,7 @@ class WorkbookImportService:
                     ("testing_events", "Tracked testing events"),
                     ("reviewed_post_baselines", "Reviewed POST baselines"),
                 )
+                if table_name in available_tables
             ]
             operation_rows = connection.execute(
                 """
@@ -324,6 +336,247 @@ class WorkbookImportService:
             duplicate_source_row_delta=max(latest_batch.source_row_count - latest_batch.device_subject_count, 0),
             duplicate_subject_count=duplicate_subject_count,
             top_duplicate_groups=duplicate_groups,
+        )
+
+    def schema_summary(self) -> DatabaseSchemaSummary:
+        with self._connect() as connection:
+            table_summaries = [
+                DatabaseTableSchemaSummary(
+                    table_name=table_name,
+                    row_count=self._safe_row_count(connection, table_name),
+                    columns=self._columns_for_table(connection, table_name),
+                    foreign_keys=self._foreign_keys_for_table(connection, table_name),
+                    indexes=self._indexes_for_table(connection, table_name),
+                )
+                for table_name in self._table_names(connection)
+            ]
+        return DatabaseSchemaSummary(
+            db_path=str(self.db_path),
+            table_count=len(table_summaries),
+            tables=table_summaries,
+        )
+
+    def database_health_summary(self) -> DatabaseHealthSummary:
+        generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+        with self._connect() as connection:
+            available_tables = set(self._table_names(connection))
+            issues: list[DatabaseHealthIssue] = []
+            expected_tables = {
+                "import_batch",
+                "source_workbook",
+                "source_row",
+                "device_subject",
+                "testing_subjects",
+                "testing_events",
+                "reviewed_post_baselines",
+            }
+            for table_name in sorted(expected_tables.difference(available_tables)):
+                issues.append(
+                    DatabaseHealthIssue(
+                        level="warning",
+                        code="missing_table",
+                        message=f"Expected table {table_name} is not present in the current SQLite file.",
+                        table_name=table_name,
+                    )
+                )
+
+            table_summaries = [
+                DatabaseTableHealthSummary(
+                    table_name="import_batch",
+                    row_count=self._safe_row_count(connection, "import_batch"),
+                    orphan_count=0,
+                    identity_gap_count=0,
+                ),
+                DatabaseTableHealthSummary(
+                    table_name="source_workbook",
+                    row_count=self._safe_row_count(connection, "source_workbook"),
+                    orphan_count=self._safe_scalar(
+                        connection,
+                        """
+                        SELECT COUNT(*)
+                        FROM source_workbook workbook
+                        LEFT JOIN import_batch batch ON batch.id = workbook.import_batch_id
+                        WHERE batch.id IS NULL
+                        """,
+                        "source_workbook",
+                    ),
+                    identity_gap_count=0,
+                ),
+                DatabaseTableHealthSummary(
+                    table_name="source_row",
+                    row_count=self._safe_row_count(connection, "source_row"),
+                    orphan_count=self._safe_scalar(
+                        connection,
+                        """
+                        SELECT COUNT(*)
+                        FROM source_row row
+                        LEFT JOIN source_workbook workbook ON workbook.id = row.source_workbook_id
+                        WHERE workbook.id IS NULL
+                        """,
+                        "source_row",
+                    ),
+                    identity_gap_count=self._safe_scalar(
+                        connection,
+                        """
+                        SELECT COUNT(*)
+                        FROM source_row
+                        WHERE COALESCE(TRIM(product_family), '') = ''
+                           OR COALESCE(TRIM(product_variant), '') = ''
+                           OR (
+                               COALESCE(TRIM(catalogue_number), '') = ''
+                               AND COALESCE(TRIM(primary_udi_di), '') = ''
+                           )
+                        """,
+                        "source_row",
+                    ),
+                ),
+                DatabaseTableHealthSummary(
+                    table_name="device_subject",
+                    row_count=self._safe_row_count(connection, "device_subject"),
+                    orphan_count=self._safe_scalar(
+                        connection,
+                        """
+                        SELECT COUNT(*)
+                        FROM device_subject subject
+                        LEFT JOIN source_row row ON row.id = subject.current_source_row_id
+                        WHERE subject.current_source_row_id IS NOT NULL
+                          AND row.id IS NULL
+                        """,
+                        "device_subject",
+                    ),
+                    identity_gap_count=self._safe_scalar(
+                        connection,
+                        """
+                        SELECT COUNT(*)
+                        FROM device_subject
+                        WHERE COALESCE(TRIM(product_family), '') = ''
+                           OR COALESCE(TRIM(product_variant), '') = ''
+                           OR (
+                               COALESCE(TRIM(catalogue_number), '') = ''
+                               AND COALESCE(TRIM(primary_udi_di), '') = ''
+                           )
+                        """,
+                        "device_subject",
+                    ),
+                ),
+                DatabaseTableHealthSummary(
+                    table_name="testing_subjects",
+                    row_count=self._safe_row_count(connection, "testing_subjects"),
+                    orphan_count=0,
+                    identity_gap_count=self._safe_scalar(
+                        connection,
+                        """
+                        SELECT COUNT(*)
+                        FROM testing_subjects
+                        WHERE COALESCE(TRIM(product_family), '') = ''
+                           OR COALESCE(TRIM(product_variant), '') = ''
+                           OR (
+                               COALESCE(TRIM(catalogue_number), '') = ''
+                               AND COALESCE(TRIM(primary_udi_di), '') = ''
+                           )
+                        """,
+                        "testing_subjects",
+                    ),
+                ),
+                DatabaseTableHealthSummary(
+                    table_name="testing_events",
+                    row_count=self._safe_row_count(connection, "testing_events"),
+                    orphan_count=self._safe_scalar(
+                        connection,
+                        """
+                        SELECT COUNT(*)
+                        FROM testing_events event
+                        LEFT JOIN testing_subjects subject ON subject.id = event.subject_id
+                        WHERE subject.id IS NULL
+                        """,
+                        "testing_events",
+                    ),
+                    identity_gap_count=0,
+                ),
+                DatabaseTableHealthSummary(
+                    table_name="reviewed_post_baselines",
+                    row_count=self._safe_row_count(connection, "reviewed_post_baselines"),
+                    orphan_count=0,
+                    identity_gap_count=self._safe_scalar(
+                        connection,
+                        """
+                        SELECT COUNT(*)
+                        FROM reviewed_post_baselines
+                        WHERE COALESCE(TRIM(product_family), '') = ''
+                           OR COALESCE(TRIM(product_variant), '') = ''
+                           OR COALESCE(TRIM(catalogue_number), '') = ''
+                        """,
+                        "reviewed_post_baselines",
+                    ),
+                ),
+            ]
+
+        for summary in table_summaries:
+            if summary.orphan_count:
+                issues.append(
+                    DatabaseHealthIssue(
+                        level="error",
+                        code="orphan_rows",
+                        message=f"{summary.orphan_count} orphaned row(s) detected in {summary.table_name}.",
+                        table_name=summary.table_name,
+                    )
+                )
+            if summary.identity_gap_count:
+                issues.append(
+                    DatabaseHealthIssue(
+                        level="warning",
+                        code="identity_gap",
+                        message=f"{summary.identity_gap_count} row(s) in {summary.table_name} are missing core identity fields.",
+                        table_name=summary.table_name,
+                    )
+                )
+
+        return DatabaseHealthSummary(
+            db_path=str(self.db_path),
+            generated_at=generated_at,
+            table_summaries=[summary for summary in table_summaries if summary.row_count or summary.table_name in available_tables],
+            issues=issues,
+        )
+
+    def latest_import_diff_summary(self) -> WorkbookImportDiffSummary | None:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    batch.id,
+                    batch.label,
+                    COUNT(DISTINCT workbook.id) AS workbook_count,
+                    COUNT(DISTINCT source_row.id) AS source_row_count
+                FROM import_batch batch
+                LEFT JOIN source_workbook workbook ON workbook.import_batch_id = batch.id
+                LEFT JOIN source_row ON source_row.source_workbook_id = workbook.id
+                GROUP BY batch.id
+                ORDER BY batch.id DESC
+                LIMIT 2
+                """
+            ).fetchall()
+            if not rows:
+                return None
+            current_row = rows[0]
+            previous_row = rows[1] if len(rows) > 1 else None
+            current_device_subject_count = self._device_subject_count_for_batch(connection, int(current_row["id"]))
+            previous_device_subject_count = (
+                self._device_subject_count_for_batch(connection, int(previous_row["id"])) if previous_row is not None else 0
+            )
+            changed_workbooks = self._workbook_diffs(
+                connection,
+                current_import_batch_id=int(current_row["id"]),
+                previous_import_batch_id=int(previous_row["id"]) if previous_row is not None else None,
+            )
+        return WorkbookImportDiffSummary(
+            current_import_batch_id=int(current_row["id"]),
+            previous_import_batch_id=int(previous_row["id"]) if previous_row is not None else None,
+            current_label=str(current_row["label"]),
+            previous_label=self._optional_string(previous_row["label"]) if previous_row is not None else None,
+            source_row_delta=int(current_row["source_row_count"]) - int(previous_row["source_row_count"]) if previous_row is not None else int(current_row["source_row_count"]),
+            device_subject_delta=current_device_subject_count - previous_device_subject_count if previous_row is not None else current_device_subject_count,
+            workbook_count_delta=int(current_row["workbook_count"]) - int(previous_row["workbook_count"]) if previous_row is not None else int(current_row["workbook_count"]),
+            changed_workbooks=changed_workbooks,
         )
 
     def _ensure_schema(self) -> None:
@@ -585,3 +838,164 @@ class WorkbookImportService:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
+
+    @staticmethod
+    def _table_names(connection: sqlite3.Connection) -> list[str]:
+        rows = connection.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+            """
+        ).fetchall()
+        return [str(row["name"]) for row in rows]
+
+    @classmethod
+    def _safe_row_count(cls, connection: sqlite3.Connection, table_name: str) -> int:
+        return cls._safe_scalar(connection, f"SELECT COUNT(*) FROM {table_name}", table_name)
+
+    @staticmethod
+    def _safe_scalar(connection: sqlite3.Connection, query: str, table_name: str) -> int:
+        try:
+            row = connection.execute(query).fetchone()
+        except sqlite3.OperationalError:
+            return 0
+        if row is None:
+            return 0
+        return int(row[0])
+
+    def _columns_for_table(self, connection: sqlite3.Connection, table_name: str) -> list[DatabaseColumnSummary]:
+        rows = connection.execute(f"PRAGMA table_info('{table_name}')").fetchall()
+        return [
+            DatabaseColumnSummary(
+                name=str(row["name"]),
+                data_type=str(row["type"] or ""),
+                nullable=not bool(row["notnull"]),
+                primary_key_position=int(row["pk"]),
+            )
+            for row in rows
+        ]
+
+    def _foreign_keys_for_table(self, connection: sqlite3.Connection, table_name: str) -> list[DatabaseForeignKeySummary]:
+        rows = connection.execute(f"PRAGMA foreign_key_list('{table_name}')").fetchall()
+        return [
+            DatabaseForeignKeySummary(
+                from_column=str(row["from"]),
+                target_table=str(row["table"]),
+                target_column=str(row["to"]),
+                on_delete=str(row["on_delete"]),
+            )
+            for row in rows
+        ]
+
+    def _indexes_for_table(self, connection: sqlite3.Connection, table_name: str) -> list[DatabaseIndexSummary]:
+        rows = connection.execute(f"PRAGMA index_list('{table_name}')").fetchall()
+        indexes: list[DatabaseIndexSummary] = []
+        for row in rows:
+            index_name = str(row["name"])
+            column_rows = connection.execute(f"PRAGMA index_info('{index_name}')").fetchall()
+            indexes.append(
+                DatabaseIndexSummary(
+                    name=index_name,
+                    unique=bool(row["unique"]),
+                    columns=[str(column_row["name"]) for column_row in column_rows if column_row["name"]],
+                )
+            )
+        return indexes
+
+    def _workbook_diffs(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        current_import_batch_id: int,
+        previous_import_batch_id: int | None,
+    ) -> list[WorkbookImportWorkbookDiff]:
+        current_rows = connection.execute(
+            """
+            SELECT workbook_name, file_hash, COUNT(source_row.id) AS row_count
+            FROM source_workbook workbook
+            LEFT JOIN source_row ON source_row.source_workbook_id = workbook.id
+            WHERE workbook.import_batch_id = ?
+            GROUP BY workbook.id
+            """,
+            (current_import_batch_id,),
+        ).fetchall()
+        previous_lookup: dict[str, sqlite3.Row] = {}
+        if previous_import_batch_id is not None:
+            previous_rows = connection.execute(
+                """
+                SELECT workbook_name, file_hash, COUNT(source_row.id) AS row_count
+                FROM source_workbook workbook
+                LEFT JOIN source_row ON source_row.source_workbook_id = workbook.id
+                WHERE workbook.import_batch_id = ?
+                GROUP BY workbook.id
+                """,
+                (previous_import_batch_id,),
+            ).fetchall()
+            previous_lookup = {str(row["workbook_name"]): row for row in previous_rows}
+
+        diffs: list[WorkbookImportWorkbookDiff] = []
+        current_names = {str(row["workbook_name"]) for row in current_rows}
+        for row in current_rows:
+            workbook_name = str(row["workbook_name"])
+            previous_row = previous_lookup.pop(workbook_name, None)
+            current_hash = self._optional_string(row["file_hash"])
+            previous_hash = self._optional_string(previous_row["file_hash"]) if previous_row is not None else None
+            current_row_count = int(row["row_count"])
+            previous_row_count = int(previous_row["row_count"]) if previous_row is not None else None
+            change_type = "unchanged"
+            if previous_row is None:
+                change_type = "added"
+            elif current_hash != previous_hash or current_row_count != previous_row_count:
+                change_type = "changed"
+            diffs.append(
+                WorkbookImportWorkbookDiff(
+                    workbook_name=workbook_name,
+                    change_type=change_type,
+                    previous_row_count=previous_row_count,
+                    current_row_count=current_row_count,
+                    previous_hash=previous_hash,
+                    current_hash=current_hash,
+                )
+            )
+        for workbook_name, previous_row in previous_lookup.items():
+            diffs.append(
+                WorkbookImportWorkbookDiff(
+                    workbook_name=workbook_name,
+                    change_type="removed",
+                    previous_row_count=int(previous_row["row_count"]),
+                    current_row_count=None,
+                    previous_hash=self._optional_string(previous_row["file_hash"]),
+                    current_hash=None,
+                )
+            )
+        return sorted(
+            diffs,
+            key=lambda item: (
+                {"changed": 0, "added": 1, "removed": 2, "unchanged": 3}.get(item.change_type, 9),
+                item.workbook_name,
+            ),
+        )
+
+    def _device_subject_count_for_batch(self, connection: sqlite3.Connection, import_batch_id: int) -> int:
+        row = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM (
+                SELECT ds.subject_key
+                FROM device_subject ds
+                JOIN source_row sr
+                  ON COALESCE(sr.catalogue_number, '') = COALESCE(ds.catalogue_number, '')
+                 AND COALESCE(sr.primary_udi_di, '') = COALESCE(ds.primary_udi_di, '')
+                 AND COALESCE(sr.product_family, '') = COALESCE(ds.product_family, '')
+                 AND COALESCE(sr.product_variant, '') = COALESCE(ds.product_variant, '')
+                JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                WHERE sw.import_batch_id = ?
+                GROUP BY ds.subject_key
+            )
+            """,
+            (import_batch_id,),
+        ).fetchone()
+        return int(row[0]) if row is not None else 0

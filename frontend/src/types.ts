@@ -156,6 +156,81 @@ export type WorkbookImportSnapshotSummary = {
   top_duplicate_groups: WorkbookImportDuplicateGroup[];
 };
 
+export type DatabaseColumnSummary = {
+  name: string;
+  data_type: string;
+  nullable: boolean;
+  primary_key_position: number;
+};
+
+export type DatabaseForeignKeySummary = {
+  from_column: string;
+  target_table: string;
+  target_column: string;
+  on_delete: string;
+};
+
+export type DatabaseIndexSummary = {
+  name: string;
+  unique: boolean;
+  columns: string[];
+};
+
+export type DatabaseTableSchemaSummary = {
+  table_name: string;
+  row_count: number;
+  columns: DatabaseColumnSummary[];
+  foreign_keys: DatabaseForeignKeySummary[];
+  indexes: DatabaseIndexSummary[];
+};
+
+export type DatabaseSchemaSummary = {
+  db_path: string;
+  table_count: number;
+  tables: DatabaseTableSchemaSummary[];
+};
+
+export type DatabaseHealthIssue = {
+  level: string;
+  code: string;
+  message: string;
+  table_name: string | null;
+};
+
+export type DatabaseTableHealthSummary = {
+  table_name: string;
+  row_count: number;
+  orphan_count: number;
+  identity_gap_count: number;
+};
+
+export type DatabaseHealthSummary = {
+  db_path: string;
+  generated_at: string;
+  table_summaries: DatabaseTableHealthSummary[];
+  issues: DatabaseHealthIssue[];
+};
+
+export type WorkbookImportWorkbookDiff = {
+  workbook_name: string;
+  change_type: string;
+  previous_row_count: number | null;
+  current_row_count: number | null;
+  previous_hash: string | null;
+  current_hash: string | null;
+};
+
+export type WorkbookImportDiffSummary = {
+  current_import_batch_id: number;
+  previous_import_batch_id: number | null;
+  current_label: string;
+  previous_label: string | null;
+  source_row_delta: number;
+  device_subject_delta: number;
+  workbook_count_delta: number;
+  changed_workbooks: WorkbookImportWorkbookDiff[];
+};
+
 export type CriticalWarningCodeOption = {
   code: string;
   description: string;

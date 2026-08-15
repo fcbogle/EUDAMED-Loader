@@ -972,6 +972,12 @@ a.ghost-button:visited {
   box-shadow: 0 8px 18px rgba(0, 68, 90, 0.16);
 }
 
+.import-workbooks-button {
+  margin-top: 14px;
+  padding: 8px 12px;
+  font-size: 0.84rem;
+}
+
 .ghost-button:hover,
 .ghost-button:focus-visible {
   background: rgba(0, 68, 90, 0.06);
