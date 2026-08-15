@@ -875,7 +875,10 @@ class XmlGenerationService:
                 product_variant=record.product_variant,
                 catalogue_number=post_record.catalogue_number,
             )
-            derived_version = "2" if not patch_state_resolution else str(int(patch_state_resolution.state.version) + 1)
+            if scenario_id == "equivalent_first_patch":
+                derived_version = "2"
+            else:
+                derived_version = "2" if not patch_state_resolution else str(int(patch_state_resolution.state.version) + 1)
             try:
                 preview = self.preview_generated_patch_scenario(
                     product_family=record.product_family,
@@ -1019,7 +1022,10 @@ class XmlGenerationService:
                 product_variant=record.product_variant,
                 catalogue_number=record.catalogue_number or "",
             )
-            derived_version = "2" if not patch_state_resolution else str(int(patch_state_resolution.state.version) + 1)
+            if scenario_id == "equivalent_first_patch":
+                derived_version = "2"
+            else:
+                derived_version = "2" if not patch_state_resolution else str(int(patch_state_resolution.state.version) + 1)
             scenario_preview = self.preview_generated_patch_scenario(
                 product_family=record.product_family,
                 product_variant=record.product_variant,

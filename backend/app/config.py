@@ -15,6 +15,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 class Settings(BaseModel):
     excel_dir: Path
     schema_dir: Path
+    testing_state_db_path: Path
     basic_udi_reference_dir: Path
     basic_udi_reference_workbook: Path
     legacy_basic_udi_reference_workbook: Path
@@ -70,6 +71,11 @@ def get_settings() -> Settings:
             project_root,
             "EUDAMED_SCHEMA_DIR",
             project_root / "data" / "schemas",
+        ),
+        testing_state_db_path=_path_setting(
+            project_root,
+            "EUDAMED_TESTING_STATE_DB_PATH",
+            project_root / "data" / "testing" / "testing-state.sqlite3",
         ),
         basic_udi_reference_dir=basic_udi_reference_dir,
         basic_udi_reference_workbook=basic_udi_reference_dir / "BasicUDIs.xlsx",
