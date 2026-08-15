@@ -96,6 +96,23 @@ with the current implementation focus now being:
   - current automated verification status at handoff:
     - backend `pytest`: `51 passed`
     - frontend production build: `npm run build` passed
+- Latest implemented and verified decisions on Friday, August 14, 2026 and Saturday, August 15, 2026:
+  - single `POST` now selects the next valid candidate from tracked state rather than blindly offering the first row in the chosen family and variant
+  - single `PATCH` now requires both:
+    - reviewed baseline `POST` preview for the exact selected record in the current session
+    - tracked successful Playground registration for that same device before version `2` `PATCH` can be generated
+  - `Bulk UDI-DI POST` now excludes child `primary UDI-DI` values already known as successfully registered in tracked state
+  - current automated verification after these changes:
+    - backend `pytest`: `58 passed`
+    - frontend production build: `npm run build` passed
+  - successful Playground test results now recorded in `data/testing/playground-tested-subjects.yaml` and `docs/eudamed-playground-test-report.md` include:
+    - successful single `DEVICE.POST` for `Epirus / Esprit / ESP22L1S` on Thursday, August 14, 2026
+    - successful single `UDI_DI.PATCH` version `2` trade-name update for `Epirus / Esprit / ESP22L1S` on Thursday, August 14, 2026
+    - successful second `Elite / Elite VT` bulk child `UDI_DI.POST` wave of five new child devices on Thursday, August 14, 2026
+    - successful `Elite / Elite VT` bulk `UDI_DI.PATCH` equivalent-first wave across ten child devices on Thursday, August 14, 2026
+  - latest traced single-`POST` eligibility findings on Saturday, August 15, 2026:
+    - `Echelon VAC` is blocked because the parent `Basic UDI-DI` is already known in tracked state, so additional registrations should use `Bulk UDI-DI POST`
+    - `Echelon VT` is blocked because every validated row in that variant is currently classified as `PATCH`, not `POST`
 
 ## Current Implemented Behavior
 
@@ -125,8 +142,12 @@ General XML tools:
 
 ### POST
 
-- Uses the shared registered-device anchor for the selected variant.
-- Generates one registration `POST`.
+- Single `POST` no longer relies on a shared anchor panel.
+- It generates one registration `POST` for the next valid candidate in the selected family and variant.
+- Current single `POST` selection rules are:
+  - if both parent `Basic UDI-DI` and child `UDI-DI` are already known, the record is skipped
+  - if the parent is known but the child is not, single `POST` stops and directs the user to `Bulk UDI-DI POST`
+  - if neither parent nor child is known, that record may be offered as a genuine new registration candidate
 - Validates locally against the schema set.
 - Supports `POST` ZIP download.
 - The old combined `Post + Patch` baseline workspace is no longer the user-facing design and should be treated as replaced by `POST` plus `Patch XML`.
@@ -142,6 +163,7 @@ It now:
   - `product_variant`
   - `catalogue_number`
 - requires the user to generate and review the baseline `POST` first for that parent record
+- also requires tracked successful Playground registration for that same device before a version `2` `PATCH` can be drafted
 - keeps the `Patch XML` workspace visible, but should block generation and download until that reviewed baseline `POST` exists in the current session
 - should support:
   - `Equivalent First Patch`
@@ -256,8 +278,23 @@ Important limitation:
 - XML wrapper: `device:UDIDIData` with `xsi:type="udidi:MDRUDIDIDataType"`.
 - Parent linkage is carried through `basicUDIIdentifier`; the parent `MDRBasicUDI` block is not repeated in this flow.
 - If the parent `Basic UDI-DI` already exists, all selected eligible child rows should be included.
+- Child rows already known as successfully registered in tracked state must be excluded before XML generation.
 - The old prototype behavior that reserved the first row as a fallback parent seed is no longer the target model.
 - If the parent does not exist yet, this flow should stop and instruct the user to run `Bulk Basic UDI-DI POST` first.
+- If no genuinely new child rows remain after tracked-state filtering, the UI should say so explicitly rather than generate duplicate child XML.
+
+## Latest Playground Evidence
+
+- `Epirus / Esprit`
+  - single `DEVICE.POST` for `ESP22L1S` succeeded on Thursday, August 14, 2026
+  - single `UDI_DI.PATCH` version `2` trade-name update for `ESP22L1S` succeeded on Thursday, August 14, 2026
+- `Elite / Elite VT`
+  - first bulk child `UDI_DI.POST` wave of five devices had already been recorded as successful
+  - second bulk child `UDI_DI.POST` wave of five new devices also succeeded on Thursday, August 14, 2026
+  - bulk `UDI_DI.PATCH` equivalent-first wave across ten child devices succeeded on Thursday, August 14, 2026
+- `Echelon`
+  - `Echelon VAC` is not currently eligible for single `POST` because the parent lineage is already known in tracked state
+  - `Echelon VT` is not currently eligible for single `POST` because all validated rows are classified as `PATCH`
 - This flow has now been validated in Playground for five child UDI-DIs under one accepted `Elite VT` parent.
 
 ### Bulk PATCH

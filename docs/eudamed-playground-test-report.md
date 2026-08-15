@@ -688,6 +688,60 @@ Notes:
   2. `Bulk UDI-DI POST`
   3. `Bulk PATCH`
 
+#### BT3. Second bulk child `UDI_DI.POST` wave for `Elite VT`
+
+- Playground response time: `2026-08-14T18:45:11.617+02:00`
+- Message type: `UDI_DI.POST`
+- Product family: `Elite`
+- Product variant: `Elite VT`
+- Parent Basic UDI-DI: `5050649ELITEVTV4`
+- Outcome: `SUCCESS`
+- Transaction id: `03cf3c4e-6b8f-43b4-b08f-333663f79ea5`
+- Submission id: `b4ac4190-b0b8-4b74-b8ed-20ff039fb826`
+
+Accepted child UDI-DI registrations:
+
+- `05050649110085` `EVT22L14S`
+- `05050649110092` `EVT22L14SD`
+- `05050649110108` `EVT22L21S`
+- `05050649110115` `EVT22L21SD`
+- `05050649110122` `EVT22L22S`
+
+Notes:
+
+- This confirmed that the updated `Bulk UDI-DI POST` filtering moved past the first already-registered five-child wave and generated a genuinely new second child-registration tranche.
+- These five accepted subjects should now be treated as valid candidates for the next lineage-aware bulk `PATCH` test after the testing-state records are updated.
+
+#### BT4. Bulk `UDI_DI.PATCH` equivalent-first wave for `Elite VT`
+
+- Playground response time: `2026-08-14T18:50:17.404+02:00`
+- Message type: `UDI_DI.PATCH`
+- Product family: `Elite`
+- Product variant: `Elite VT`
+- Parent Basic UDI-DI: `5050649ELITEVTV4`
+- Scenario id: `equivalent_first_patch`
+- Outcome: `SUCCESS`
+- Transaction id: `90bffe49-e7b6-41e8-aee4-3ce65a521b84`
+- Submission id: `1c38d59a-b949-41a2-96aa-6cbb238236d0`
+
+Accepted child version `2` PATCH subjects:
+
+- `05050649110030` `EVT22L11SD`
+- `05050649110047` `EVT22L12S`
+- `05050649110054` `EVT22L12SD`
+- `05050649110061` `EVT22L13S`
+- `05050649110078` `EVT22L13SD`
+- `05050649110085` `EVT22L14S`
+- `05050649110092` `EVT22L14SD`
+- `05050649110108` `EVT22L21S`
+- `05050649110115` `EVT22L21SD`
+- `05050649110122` `EVT22L22S`
+
+Notes:
+
+- This confirmed the first successful lineage-aware bulk `PATCH` wave across ten `Elite VT` child devices under the already accepted parent `5050649ELITEVTV4`.
+- The accepted scenario was the equivalent first patch, so each of these ten child devices should now be treated as having an accepted version `2` baseline for later version `3+` scenario PATCH testing.
+
 ## Confirmed Operational Findings
 
 ### Message schema version mismatch

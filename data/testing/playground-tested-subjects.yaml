@@ -292,12 +292,12 @@ tested_subjects:
 
     playground_status:
       post_success: true
-      baseline_patch_success: false
+      baseline_patch_success: true
       exclude_from_post_wave: true
       exclude_from_baseline_patch_wave: false
 
     latest_successful_state:
-      version: 1
+      version: 2
       trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-1"
       base_quantity: 1
       sterile: false
@@ -389,12 +389,12 @@ tested_subjects:
 
     playground_status:
       post_success: true
-      baseline_patch_success: false
+      baseline_patch_success: true
       exclude_from_post_wave: true
       exclude_from_baseline_patch_wave: false
 
     latest_successful_state:
-      version: 1
+      version: 2
       trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-1 DK"
       base_quantity: 1
       sterile: false
@@ -415,6 +415,14 @@ tested_subjects:
         tested_at: "2026-08-12T23:05:04.590+02:00"
         transaction_id: "474d9442-9288-400b-897f-2d8268c421af"
         submission_id: "5a61396a-7563-4ceb-a6d4-b9ea7396276c"
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "equivalent_first_patch"
+        scenario_label: "Equivalent First Patch"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:50:17.404+02:00"
+        transaction_id: "90bffe49-e7b6-41e8-aee4-3ce65a521b84"
+        submission_id: "1c38d59a-b949-41a2-96aa-6cbb238236d0"
 
   - subject_id: "elite|elite-vt|EVT22L12S"
     product_family: "Elite"
@@ -430,12 +438,12 @@ tested_subjects:
 
     playground_status:
       post_success: true
-      baseline_patch_success: false
+      baseline_patch_success: true
       exclude_from_post_wave: true
       exclude_from_baseline_patch_wave: false
 
     latest_successful_state:
-      version: 1
+      version: 2
       trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-2"
       base_quantity: 1
       sterile: false
@@ -456,6 +464,14 @@ tested_subjects:
         tested_at: "2026-08-12T23:05:04.590+02:00"
         transaction_id: "474d9442-9288-400b-897f-2d8268c421af"
         submission_id: "5a61396a-7563-4ceb-a6d4-b9ea7396276c"
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "equivalent_first_patch"
+        scenario_label: "Equivalent First Patch"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:50:17.404+02:00"
+        transaction_id: "90bffe49-e7b6-41e8-aee4-3ce65a521b84"
+        submission_id: "1c38d59a-b949-41a2-96aa-6cbb238236d0"
 
   - subject_id: "elite|elite-vt|EVT22L12SD"
     product_family: "Elite"
@@ -471,12 +487,12 @@ tested_subjects:
 
     playground_status:
       post_success: true
-      baseline_patch_success: false
+      baseline_patch_success: true
       exclude_from_post_wave: true
       exclude_from_baseline_patch_wave: false
 
     latest_successful_state:
-      version: 1
+      version: 2
       trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-2 DK"
       base_quantity: 1
       sterile: false
@@ -497,6 +513,14 @@ tested_subjects:
         tested_at: "2026-08-12T23:05:04.590+02:00"
         transaction_id: "474d9442-9288-400b-897f-2d8268c421af"
         submission_id: "5a61396a-7563-4ceb-a6d4-b9ea7396276c"
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "equivalent_first_patch"
+        scenario_label: "Equivalent First Patch"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:50:17.404+02:00"
+        transaction_id: "90bffe49-e7b6-41e8-aee4-3ce65a521b84"
+        submission_id: "1c38d59a-b949-41a2-96aa-6cbb238236d0"
 
   - subject_id: "elite|elite-vt|EVT22L13S"
     product_family: "Elite"
@@ -512,12 +536,12 @@ tested_subjects:
 
     playground_status:
       post_success: true
-      baseline_patch_success: false
+      baseline_patch_success: true
       exclude_from_post_wave: true
       exclude_from_baseline_patch_wave: false
 
     latest_successful_state:
-      version: 1
+      version: 2
       trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-3"
       base_quantity: 1
       sterile: false
@@ -538,6 +562,14 @@ tested_subjects:
         tested_at: "2026-08-12T23:05:04.590+02:00"
         transaction_id: "474d9442-9288-400b-897f-2d8268c421af"
         submission_id: "5a61396a-7563-4ceb-a6d4-b9ea7396276c"
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "equivalent_first_patch"
+        scenario_label: "Equivalent First Patch"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:50:17.404+02:00"
+        transaction_id: "90bffe49-e7b6-41e8-aee4-3ce65a521b84"
+        submission_id: "1c38d59a-b949-41a2-96aa-6cbb238236d0"
 
   - subject_id: "elite|elite-vt|EVT22L13SD"
     product_family: "Elite"
@@ -553,12 +585,12 @@ tested_subjects:
 
     playground_status:
       post_success: true
-      baseline_patch_success: false
+      baseline_patch_success: true
       exclude_from_post_wave: true
       exclude_from_baseline_patch_wave: false
 
     latest_successful_state:
-      version: 1
+      version: 2
       trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-3 DK"
       base_quantity: 1
       sterile: false
@@ -579,3 +611,256 @@ tested_subjects:
         tested_at: "2026-08-12T23:05:04.590+02:00"
         transaction_id: "474d9442-9288-400b-897f-2d8268c421af"
         submission_id: "5a61396a-7563-4ceb-a6d4-b9ea7396276c"
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "equivalent_first_patch"
+        scenario_label: "Equivalent First Patch"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:50:17.404+02:00"
+        transaction_id: "90bffe49-e7b6-41e8-aee4-3ce65a521b84"
+        submission_id: "1c38d59a-b949-41a2-96aa-6cbb238236d0"
+
+  - subject_id: "elite|elite-vt|EVT22L14S"
+    product_family: "Elite"
+    product_variant: "Elite VT"
+    catalogue_number: "EVT22L14S"
+    primary_udi_di: "05050649110085"
+    basic_udi_di: "5050649ELITEVTV4"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "EliteVT"
+      row_index: 9
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: true
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 2
+      trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-4"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "UDI_DI.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:45:11.617+02:00"
+        transaction_id: "03cf3c4e-6b8f-43b4-b08f-333663f79ea5"
+        submission_id: "b4ac4190-b0b8-4b74-b8ed-20ff039fb826"
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "equivalent_first_patch"
+        scenario_label: "Equivalent First Patch"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:50:17.404+02:00"
+        transaction_id: "90bffe49-e7b6-41e8-aee4-3ce65a521b84"
+        submission_id: "1c38d59a-b949-41a2-96aa-6cbb238236d0"
+
+  - subject_id: "elite|elite-vt|EVT22L14SD"
+    product_family: "Elite"
+    product_variant: "Elite VT"
+    catalogue_number: "EVT22L14SD"
+    primary_udi_di: "05050649110092"
+    basic_udi_di: "5050649ELITEVTV4"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "EliteVT"
+      row_index: 10
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: true
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 2
+      trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-1-4 DK"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "UDI_DI.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:45:11.617+02:00"
+        transaction_id: "03cf3c4e-6b8f-43b4-b08f-333663f79ea5"
+        submission_id: "b4ac4190-b0b8-4b74-b8ed-20ff039fb826"
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "equivalent_first_patch"
+        scenario_label: "Equivalent First Patch"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:50:17.404+02:00"
+        transaction_id: "90bffe49-e7b6-41e8-aee4-3ce65a521b84"
+        submission_id: "1c38d59a-b949-41a2-96aa-6cbb238236d0"
+
+  - subject_id: "elite|elite-vt|EVT22L21S"
+    product_family: "Elite"
+    product_variant: "Elite VT"
+    catalogue_number: "EVT22L21S"
+    primary_udi_di: "05050649110108"
+    basic_udi_di: "5050649ELITEVTV4"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "EliteVT"
+      row_index: 11
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: true
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 2
+      trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-2-1"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "UDI_DI.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:45:11.617+02:00"
+        transaction_id: "03cf3c4e-6b8f-43b4-b08f-333663f79ea5"
+        submission_id: "b4ac4190-b0b8-4b74-b8ed-20ff039fb826"
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "equivalent_first_patch"
+        scenario_label: "Equivalent First Patch"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:50:17.404+02:00"
+        transaction_id: "90bffe49-e7b6-41e8-aee4-3ce65a521b84"
+        submission_id: "1c38d59a-b949-41a2-96aa-6cbb238236d0"
+
+  - subject_id: "elite|elite-vt|EVT22L21SD"
+    product_family: "Elite"
+    product_variant: "Elite VT"
+    catalogue_number: "EVT22L21SD"
+    primary_udi_di: "05050649110115"
+    basic_udi_di: "5050649ELITEVTV4"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "EliteVT"
+      row_index: 12
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: true
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 2
+      trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-2-1 DK"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "UDI_DI.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:45:11.617+02:00"
+        transaction_id: "03cf3c4e-6b8f-43b4-b08f-333663f79ea5"
+        submission_id: "b4ac4190-b0b8-4b74-b8ed-20ff039fb826"
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "equivalent_first_patch"
+        scenario_label: "Equivalent First Patch"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:50:17.404+02:00"
+        transaction_id: "90bffe49-e7b6-41e8-aee4-3ce65a521b84"
+        submission_id: "1c38d59a-b949-41a2-96aa-6cbb238236d0"
+
+  - subject_id: "elite|elite-vt|EVT22L22S"
+    product_family: "Elite"
+    product_variant: "Elite VT"
+    catalogue_number: "EVT22L22S"
+    primary_udi_di: "05050649110122"
+    basic_udi_di: "5050649ELITEVTV4"
+
+    source_reference:
+      workbook: "Template for Elite family EUDAMED.xlsx"
+      sheet: "EliteVT"
+      row_index: 13
+
+    playground_status:
+      post_success: true
+      baseline_patch_success: true
+      exclude_from_post_wave: true
+      exclude_from_baseline_patch_wave: false
+
+    latest_successful_state:
+      version: 2
+      trade_name: "ELITEVT EXT. FOOT PROSTHESIS 22L-2-2"
+      base_quantity: 1
+      sterile: false
+      contains_latex: false
+      status_code: "ON_THE_MARKET"
+      storage_conditions:
+        - code: "SHC006"
+          comment: "Minus 15C"
+        - code: "SHC007"
+          comment: "Plus 50C"
+      critical_warnings:
+        - code: "CW010"
+          comment: null
+
+    test_events:
+      - message_type: "UDI_DI.POST"
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:45:11.617+02:00"
+        transaction_id: "03cf3c4e-6b8f-43b4-b08f-333663f79ea5"
+        submission_id: "b4ac4190-b0b8-4b74-b8ed-20ff039fb826"
+      - message_type: "UDI_DI.PATCH"
+        scenario_id: "equivalent_first_patch"
+        scenario_label: "Equivalent First Patch"
+        version: 2
+        status: "SUCCESS"
+        tested_at: "2026-08-14T18:50:17.404+02:00"
+        transaction_id: "90bffe49-e7b6-41e8-aee4-3ce65a521b84"
+        submission_id: "1c38d59a-b949-41a2-96aa-6cbb238236d0"
