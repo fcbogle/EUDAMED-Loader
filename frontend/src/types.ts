@@ -91,6 +91,71 @@ export type SchemaInventory = {
   service_files: SchemaFileSummary[];
 };
 
+export type WorkbookImportRunResponse = {
+  import_batch_id: number;
+  source_type: string;
+  label: string;
+  imported_at: string;
+  workbook_count: number;
+  source_row_count: number;
+  device_subject_count: number;
+};
+
+export type WorkbookImportBatchSummary = {
+  import_batch_id: number;
+  source_type: string;
+  label: string;
+  imported_at: string;
+  imported_by: string | null;
+  notes: string | null;
+  workbook_count: number;
+  source_row_count: number;
+  device_subject_count: number;
+};
+
+export type ImportedWorkbookSummary = {
+  source_workbook_id: number;
+  import_batch_id: number;
+  workbook_name: string;
+  file_path: string;
+  file_hash: string;
+  loaded_at: string;
+  row_count: number;
+};
+
+export type WorkbookImportTableCount = {
+  table_name: string;
+  row_count: number;
+  summary_label: string;
+};
+
+export type WorkbookImportOperationCount = {
+  submission_operation: string;
+  device_subject_count: number;
+};
+
+export type WorkbookImportDuplicateGroup = {
+  subject_key: string;
+  source_row_count: number;
+  product_family: string | null;
+  product_variant: string | null;
+  catalogue_number: string | null;
+  primary_udi_di: string | null;
+  workbook_names: string[];
+  sheet_names: string[];
+  row_indexes: number[];
+};
+
+export type WorkbookImportSnapshotSummary = {
+  import_batch: WorkbookImportBatchSummary;
+  imported_workbooks: ImportedWorkbookSummary[];
+  table_counts: WorkbookImportTableCount[];
+  operation_counts: WorkbookImportOperationCount[];
+  duplicate_source_row_delta: number;
+  duplicate_subject_count: number;
+  top_duplicate_groups: WorkbookImportDuplicateGroup[];
+};
+
 export type CriticalWarningCodeOption = {
   code: string;
   description: string;

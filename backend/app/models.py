@@ -107,3 +107,74 @@ class SchemaInventory(BaseModel):
     total_files: int
     device_files: list[SchemaFileSummary]
     service_files: list[SchemaFileSummary]
+
+
+class WorkbookImportRunRequest(BaseModel):
+    imported_by: str | None = None
+    label: str | None = None
+    notes: str | None = None
+
+
+class WorkbookImportRunResponse(BaseModel):
+    import_batch_id: int
+    source_type: str
+    label: str
+    imported_at: str
+    workbook_count: int
+    source_row_count: int
+    device_subject_count: int
+
+
+class WorkbookImportBatchSummary(BaseModel):
+    import_batch_id: int
+    source_type: str
+    label: str
+    imported_at: str
+    imported_by: str | None = None
+    notes: str | None = None
+    workbook_count: int
+    source_row_count: int
+    device_subject_count: int
+
+
+class ImportedWorkbookSummary(BaseModel):
+    source_workbook_id: int
+    import_batch_id: int
+    workbook_name: str
+    file_path: str
+    file_hash: str
+    loaded_at: str
+    row_count: int
+
+
+class WorkbookImportTableCount(BaseModel):
+    table_name: str
+    row_count: int
+    summary_label: str
+
+
+class WorkbookImportOperationCount(BaseModel):
+    submission_operation: str
+    device_subject_count: int
+
+
+class WorkbookImportDuplicateGroup(BaseModel):
+    subject_key: str
+    source_row_count: int
+    product_family: str | None = None
+    product_variant: str | None = None
+    catalogue_number: str | None = None
+    primary_udi_di: str | None = None
+    workbook_names: list[str] = Field(default_factory=list)
+    sheet_names: list[str] = Field(default_factory=list)
+    row_indexes: list[int] = Field(default_factory=list)
+
+
+class WorkbookImportSnapshotSummary(BaseModel):
+    import_batch: WorkbookImportBatchSummary
+    imported_workbooks: list[ImportedWorkbookSummary] = Field(default_factory=list)
+    table_counts: list[WorkbookImportTableCount] = Field(default_factory=list)
+    operation_counts: list[WorkbookImportOperationCount] = Field(default_factory=list)
+    duplicate_source_row_delta: int
+    duplicate_subject_count: int
+    top_duplicate_groups: list[WorkbookImportDuplicateGroup] = Field(default_factory=list)

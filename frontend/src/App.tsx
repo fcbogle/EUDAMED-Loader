@@ -25,6 +25,7 @@ import type {
   CriticalWarningCodeOption,
   DistinctValueProfile,
   GeneratedPatchScenarioPreview,
+  ImportedWorkbookSummary,
   MarketInfoPutPreview,
   NormalizationRuleFile,
   PostRegistrationPreview,
@@ -34,6 +35,8 @@ import type {
   SheetProfile,
   SheetSummary,
   SingleRecordXmlPreview,
+  WorkbookImportDuplicateGroup,
+  WorkbookImportSnapshotSummary,
   WorkbookSummary,
 } from "./types";
 
@@ -225,6 +228,32 @@ function patchScenarioOptionLabel(scenario: PatchScenarioDefinition): string {
 
 function pluralize(count: number, singular: string, plural?: string): string {
   return `${count} ${count === 1 ? singular : plural ?? `${singular}s`}`;
+}
+
+function formatIsoDateTime(value: string | null | undefined): string {
+  if (!value) {
+    return "Not recorded";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleString("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  });
+}
+
+function shortenHash(value: string): string {
+  if (value.length <= 16) {
+    return value;
+  }
+  return `${value.slice(0, 8)}...${value.slice(-8)}`;
 }
 
 function extractBasicUdiDi(reasonMessage: string): string | null {
@@ -855,6 +884,8 @@ export function App() {
   >("projectStructure");
   const [workbooks, setWorkbooks] = useState<WorkbookSummary[]>([]);
   const [referenceWorkbooks, setReferenceWorkbooks] = useState<ReferenceWorkbookSummary[]>([]);
+  const [latestWorkbookImportSummary, setLatestWorkbookImportSummary] = useState<WorkbookImportSnapshotSummary | null>(null);
+  const [workbookImportSummaryError, setWorkbookImportSummaryError] = useState<string | null>(null);
   const [sheets, setSheets] = useState<SheetSummary[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<SheetSummary | null>(null);
   const [sheetProfile, setSheetProfile] = useState<SheetProfile | null>(null);
@@ -1105,14 +1136,23 @@ export function App() {
     void Promise.all([
       api.workbooks(),
       api.referenceWorkbooks(),
+      api
+        .latestWorkbookImportSummary()
+        .then((data) => ({ data, error: null as string | null }))
+        .catch((requestError: Error) => ({
+          data: null,
+          error: requestError.message || "Workbook import summary is unavailable.",
+        })),
       api.sheets(),
       api.normalizationRules(),
       api.distinctValues(selectedColumn),
       api.criticalWarningCodes(),
     ])
-      .then(([workbookData, referenceWorkbookData, sheetData, ruleData, distinctData, criticalWarningCodes]) => {
+      .then(([workbookData, referenceWorkbookData, workbookImportSummaryResult, sheetData, ruleData, distinctData, criticalWarningCodes]) => {
         setWorkbooks(workbookData);
         setReferenceWorkbooks(referenceWorkbookData);
+        setLatestWorkbookImportSummary(workbookImportSummaryResult.data);
+        setWorkbookImportSummaryError(workbookImportSummaryResult.error);
         setSheets(sheetData);
         setRules(ruleData);
         setDistinctValues(distinctData);
@@ -1451,6 +1491,36 @@ export function App() {
   const inScopeWorkbookCount = workbooks.filter((workbook) => workbook.in_scope_for_variant_mapping).length;
   const excludedWorkbookCount = workbooks.filter((workbook) => !workbook.in_scope_for_variant_mapping).length;
   const visibleWorkbooks = workbooks.filter((workbook) => workbook.in_scope_for_variant_mapping);
+  const latestImportBatch = latestWorkbookImportSummary?.import_batch ?? null;
+  const importedWorkbooks = latestWorkbookImportSummary?.imported_workbooks ?? [];
+  const importTableCounts = latestWorkbookImportSummary?.table_counts ?? [];
+  const importOperationCounts = latestWorkbookImportSummary?.operation_counts ?? [];
+  const duplicateSourceRowDelta = latestWorkbookImportSummary?.duplicate_source_row_delta ?? 0;
+  const duplicateSubjectCount = latestWorkbookImportSummary?.duplicate_subject_count ?? 0;
+  const topDuplicateGroups = latestWorkbookImportSummary?.top_duplicate_groups ?? [];
+  const postDeviceSubjectCount =
+    importOperationCounts.find((entry) => entry.submission_operation === "POST")?.device_subject_count ?? 0;
+  const patchDeviceSubjectCount =
+    importOperationCounts.find((entry) => entry.submission_operation === "PATCH")?.device_subject_count ?? 0;
+  const unclassifiedDeviceSubjectCount =
+    importOperationCounts
+      .filter((entry) => entry.submission_operation !== "POST" && entry.submission_operation !== "PATCH")
+      .reduce((sum, entry) => sum + entry.device_subject_count, 0);
+  const sourceRowTableCount =
+    importTableCounts.find((entry) => entry.table_name === "source_row")?.row_count ??
+    latestImportBatch?.source_row_count ??
+    0;
+  const deviceSubjectTableCount =
+    importTableCounts.find((entry) => entry.table_name === "device_subject")?.row_count ??
+    latestImportBatch?.device_subject_count ??
+    0;
+  const mergedWorkbookRowCount = Math.max(sourceRowTableCount - deviceSubjectTableCount, 0);
+  const sourceSnapshotTables = importTableCounts.filter((entry) =>
+    ["import_batch", "source_workbook", "source_row", "device_subject"].includes(entry.table_name),
+  );
+  const testingStateTables = importTableCounts.filter((entry) =>
+    ["testing_subjects", "testing_events", "reviewed_post_baselines"].includes(entry.table_name),
+  );
   const selectedWorkbookName = selectedSheet?.workbook ?? visibleWorkbooks[0]?.workbook ?? null;
   const selectedWorkbookSummary =
     visibleWorkbooks.find((workbook) => workbook.workbook === selectedWorkbookName) ?? visibleWorkbooks[0] ?? null;
@@ -2415,6 +2485,8 @@ export function App() {
       patchVariants: variantSummariesForWorkbook.filter((summary) => summary.submission_operation === "PATCH").length,
     };
   });
+  const importedWorkbookRowLeader =
+    [...importedWorkbooks].sort((left, right) => right.row_count - left.row_count)[0] ?? null;
 
   function queueDraftAction(item: DistinctValueProfile["values"][number], suggestion: SuggestedAction): void {
     setDraftActions((current) => {
@@ -2856,7 +2928,7 @@ export function App() {
           <div className="nav-title-block">
             <strong>EUDAMED Profiling Workspace</strong>
             <span className="nav-subtitle">
-              Workbook analysis, canonical preparation, and XML package planning
+              Submission data, canonical mapping, and EUDAMED XML preparation
             </span>
           </div>
         </div>
@@ -2866,7 +2938,7 @@ export function App() {
             type="button"
             onClick={() => setActiveTab("workbooks")}
           >
-            Workbooks
+            Submission Data
           </button>
           <button
             className={activeTab === "canonical" ? "nav-link active" : "nav-link"}
@@ -2911,10 +2983,9 @@ export function App() {
           {activeTab === "workbooks" ? (
             <>
               <p className="eyebrow">Workbook Analysis</p>
-              <h1>Review EUDAMED Excel Input</h1>
+              <h1>EUDAMED Data Details</h1>
               <p className="hero-copy">
-                Review imported workbook evidence, understand sheet structure, and identify data-quality
-                or normalization issues without changing the source Excel files.
+                Imported rows, stable subjects, POST/PATCH split, duplicates, and table footprint.
               </p>
             </>
           ) : null}
@@ -2971,12 +3042,24 @@ export function App() {
         <aside className="status-card">
           {activeTab === "workbooks" ? (
             <>
-              <span className="status-label">Current scope</span>
-              <span className="status-pill ok">{workbooks.length} workbooks indexed</span>
+              <span className="status-label">Current snapshot</span>
+              <span className={latestImportBatch ? "status-pill ok" : "status-pill warn"}>
+                {latestImportBatch
+                  ? "Imported"
+                  : workbookImportSummaryError
+                    ? "Snapshot unavailable"
+                    : `${workbooks.length} workbooks indexed`}
+              </span>
               <p className="status-detail">
-                {sheets.length} sheets available for source review and {schemas?.total_files ?? 0} schema files
-                inventoried.
+                {latestImportBatch
+                  ? `Workbook to database`
+                  : workbookImportSummaryError
+                    ? `${workbookImportSummaryError} Restart the backend if Phase 2 endpoints were added after the current server process started.`
+                    : `${sheets.length} sheets available for source review and ${schemas?.total_files ?? 0} schema files inventoried.`}
               </p>
+              {latestImportBatch ? (
+                <p className="status-detail status-detail-tight">{formatIsoDateTime(latestImportBatch.imported_at)}</p>
+              ) : null}
             </>
           ) : null}
           {activeTab === "canonical" ? (
@@ -3037,69 +3120,45 @@ export function App() {
       {error ? <div className="panel error-banner">{error}</div> : null}
       {activeTab === "workbooks" ? (
         <>
-          <section className="summary-grid">
-            <div className="summary-card">
-              <span className="summary-label">Workbook files</span>
-              <strong>{visibleWorkbooks.length}</strong>
-              <p>Imported Excel workbooks currently shown for active source review.</p>
+          {workbookImportSummaryError ? (
+            <div className="panel error-banner">
+              Workbook import snapshot unavailable: {workbookImportSummaryError}. The UI is showing the live
+              workbook files below, but the database-backed snapshot summary has not loaded.
             </div>
-            <div className="summary-card">
-              <span className="summary-label">Variant mapping scope</span>
-              <strong>{inScopeWorkbookCount}</strong>
-              <p>Accessories_Footspares Template deliberately excluded.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">Workbook tabs</span>
-              <strong>{sheets.length}</strong>
-              <p>Individual sheets available for structure, completeness, and value review.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">Basic UDI source</span>
-              <strong>{authoritativeReferenceWorkbook ? 1 : 0}</strong>
-              <p>
-                {authoritativeReferenceWorkbook
-                  ? `${authoritativeReferenceWorkbook.workbook} is the active reference workbook.`
-                  : "Authoritative Basic UDI source not found."}
+          ) : null}
+          <section className="summary-grid workbook-kpi-grid">
+            <div className="summary-card summary-card-meta">
+              <span className="summary-label">Import Batch</span>
+              <strong>{latestImportBatch ? `#${latestImportBatch.import_batch_id}` : "N/A"}</strong>
+              <p>{latestImportBatch ? formatIsoDateTime(latestImportBatch.imported_at) : "Not available"}</p>
+              <p className="summary-meta-inline">
+                {latestImportBatch ? `Imported by ${latestImportBatch.imported_by ?? "system"}` : "No import recorded"}
               </p>
             </div>
-          </section>
-
-          <section className="panel family-scope-panel">
-            <div className="section-heading">
-              <div>
-                <span className="section-kicker">Product Families</span>
-                <h2>Registration Scope</h2>
-              </div>
+            <div className="summary-card summary-card-kpi summary-card-kpi-primary">
+              <span className="summary-label">Imported Rows</span>
+              <strong>{latestImportBatch ? sourceRowTableCount : "N/A"}</strong>
+              <p>Raw workbook rows</p>
             </div>
-            <p className="panel-copy">
-              Details of HTTP Post versus Patch update, reflecting current EUDAMED registration, by product family.
-            </p>
-            <div className="family-scope-grid">
-              {!canonicalValidation && isLoadingCanonicalValidation ? (
-                <div className="family-scope-card">
-                  <div className="family-scope-head">
-                    <span className="summary-label">Registration Scope</span>
-                    <strong>Loading</strong>
-                  </div>
-                  <div className="family-scope-pill-row">
-                    <span className="status-pill ok compact">Loading POST variants</span>
-                    <span className="status-pill warn compact">Loading PATCH variants</span>
-                  </div>
-                </div>
-              ) : (
-                familyWorkbookSummaries.map((family) => (
-                  <div className="family-scope-card" key={family.family}>
-                    <div className="family-scope-head">
-                      <span className="summary-label">{family.family}</span>
-                      <strong>{family.rows}</strong>
-                    </div>
-                    <div className="family-scope-pill-row">
-                      <span className="status-pill ok compact">{family.postVariants} POST variants</span>
-                      <span className="status-pill warn compact">{family.patchVariants} PATCH variants</span>
-                    </div>
-                  </div>
-                ))
-              )}
+            <div className="summary-card summary-card-kpi summary-card-kpi-secondary">
+              <span className="summary-label">Stable Subjects</span>
+              <strong>{latestImportBatch ? deviceSubjectTableCount : "N/A"}</strong>
+              <p>Current device identities</p>
+            </div>
+            <div className="summary-card summary-card-kpi summary-card-kpi-warn">
+              <span className="summary-label">Overlap</span>
+              <strong>{latestImportBatch ? duplicateSourceRowDelta : "N/A"}</strong>
+              <p>Rows merged into existing subjects</p>
+            </div>
+            <div className="summary-card summary-card-kpi summary-card-kpi-post">
+              <span className="summary-label">POST</span>
+              <strong>{latestImportBatch ? postDeviceSubjectCount : "N/A"}</strong>
+              <p>Registration subjects</p>
+            </div>
+            <div className="summary-card summary-card-kpi summary-card-kpi-patch">
+              <span className="summary-label">PATCH</span>
+              <strong>{latestImportBatch ? patchDeviceSubjectCount : "N/A"}</strong>
+              <p>Update subjects</p>
             </div>
           </section>
 
@@ -3107,531 +3166,115 @@ export function App() {
             <div className="panel">
               <div className="section-heading">
                 <div>
-                  <span className="section-kicker">Inventory</span>
-                  <h2>Workbook Inventory</h2>
-                </div>
-              </div>
-              <p className="panel-copy">
-                Start here to see which source files are in scope. Select a workbook to inspect its sheets and data signals.
-              </p>
-              <div className="draft-list">
-                {visibleWorkbooks.map((workbook) => {
-                  const isActive = selectedWorkbookName === workbook.workbook;
-                  const firstWorkbookSheet = sheets.find((sheet) => sheet.workbook === workbook.workbook);
-                  return (
-                    <button
-                      key={workbook.workbook}
-                      className={isActive ? "sheet-card active" : "sheet-card"}
-                      type="button"
-                      onClick={() => {
-                        if (firstWorkbookSheet) {
-                          setSelectedSheet(firstWorkbookSheet);
-                        }
-                      }}
-                    >
-                      <span className="sheet-title">{workbook.workbook}</span>
-                      <small>{workbook.sheet_count} sheet{workbook.sheet_count === 1 ? "" : "s"}</small>
-                      <small>{workbook.total_rows} rows</small>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="panel">
-              <div className="section-heading">
-                <div>
-                  <span className="section-kicker">Selected Workbook</span>
-                  <h2>{selectedWorkbookSummary?.workbook ?? "No workbook selected"}</h2>
-                </div>
-              </div>
-              {selectedWorkbookSummary ? (
-                <>
-                  <p className="panel-copy">
-                    Read-only workbook detail for the currently selected source file. Use this view to understand sheet structure before looking at lower-level column and normalization detail.
-                  </p>
-                  <p className="panel-copy workbook-note-followup">
-                    In the sheet list below, <strong>Default</strong> marks the sheet currently shown first for this workbook, while <strong>Present</strong> means the sheet exists in the workbook but is not the default sheet shown at startup.
-                  </p>
-                  <div className="queue-summary">
-                    <div className="queue-chip">
-                      <strong>{selectedWorkbookSummary.sheet_count}</strong>
-                      <span>sheets</span>
-                    </div>
-                    <div className="queue-chip">
-                      <strong>{selectedWorkbookSummary.total_rows}</strong>
-                      <span>rows</span>
-                    </div>
-                    <div className="queue-chip">
-                      <strong>{selectedWorkbookSummary.total_columns}</strong>
-                      <span>tracked columns</span>
-                    </div>
-                    <div className="queue-chip">
-                      <strong>{selectedWorkbookSummary.in_scope_for_variant_mapping ? "In scope" : "Excluded"}</strong>
-                      <span>variant mapping</span>
-                    </div>
+                  <span className="section-kicker">Database Tables</span>
+                  <div className="section-title-with-icon">
+                    <span className="section-title-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <ellipse cx="12" cy="5.5" rx="7" ry="3.5" />
+                        <path d="M5 5.5v4c0 1.9 3.1 3.5 7 3.5s7-1.6 7-3.5v-4" />
+                        <path d="M5 9.5v4c0 1.9 3.1 3.5 7 3.5s7-1.6 7-3.5v-4" />
+                        <path d="M5 13.5v4c0 1.9 3.1 3.5 7 3.5s7-1.6 7-3.5v-4" />
+                      </svg>
+                    </span>
+                    <h2>Table Footprint</h2>
                   </div>
-                  {selectedWorkbookSummary.notes.length ? (
-                    <p className="panel-copy workbook-note-followup">{selectedWorkbookSummary.notes.join(" ")}</p>
-                  ) : null}
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Sheet</th>
-                        <th>Basic UDI match</th>
-                        <th>Rows</th>
-                        <th>Populated columns</th>
-                        <th>Inspect</th>
+                </div>
+              </div>
+              {!latestImportBatch ? (
+                <p className="panel-copy">
+                  Table counts are unavailable.
+                </p>
+              ) : null}
+              <div className="table-footprint-grid">
+                <div className="table-footprint-card">
+                  <span className="summary-label">Workbook snapshot tables</span>
+                  <strong>{latestImportBatch ? sourceSnapshotTables.reduce((sum, table) => sum + table.row_count, 0) : "N/A"}</strong>
+                  <p>Import snapshot storage.</p>
+                </div>
+                <div className="table-footprint-card">
+                  <span className="summary-label">Testing state tables</span>
+                  <strong>{latestImportBatch ? testingStateTables.reduce((sum, table) => sum + table.row_count, 0) : "N/A"}</strong>
+                  <p>Testing-state storage.</p>
+                </div>
+              </div>
+              {latestImportBatch ? (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Table</th>
+                      <th>Rows</th>
+                      <th>Meaning</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importTableCounts.map((tableCount) => (
+                      <tr key={tableCount.table_name}>
+                        <td><strong>{tableCount.table_name}</strong></td>
+                        <td>{tableCount.row_count}</td>
+                        <td>{tableCount.summary_label}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {workbookSheets.map((sheet) => {
-                        const isActive = selectedSheet?.workbook === sheet.workbook && selectedSheet?.sheet === sheet.sheet;
-                        const mapping =
-                          selectedWorkbookVariantMappings.find((item) => item.sheet === sheet.sheet) ?? null;
-                        return (
-                          <tr key={`${sheet.workbook}-${sheet.sheet}`}>
-                            <td>
-                              <strong>{sheet.sheet}</strong>
-                            </td>
-                            <td>
-                              <span
-                                className={
-                                  mapping?.match_status === "matched"
-                                    ? "status-pill ok compact"
-                                    : mapping?.match_status === "excluded"
-                                      ? "status-pill warn compact"
-                                      : "status-pill warn compact"
-                                }
-                              >
-                                {mapping?.match_status === "matched"
-                                  ? mapping.device_model
-                                  : mapping?.match_status === "excluded"
-                                    ? "Excluded"
-                                    : "Unmatched"}
-                              </span>
-                            </td>
-                            <td>{sheet.data_rows}</td>
-                            <td>{sheet.populated_columns}</td>
-                            <td>
-                              <button
-                                className="table-select-button"
-                                type="button"
-                                onClick={() => setSelectedSheet(sheet)}
-                                disabled={isActive}
-                              >
-                                {isActive ? "Default" : "Present"}
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </>
-              ) : (
-                <p className="panel-copy">No workbook is currently selected.</p>
-              )}
+                    ))}
+                  </tbody>
+                </table>
+              ) : null}
             </div>
-          </section>
 
-          <section className="panel selected-sheet-panel workbook-stack-gap">
-            <div className="section-heading">
-              <div>
-                <span className="section-kicker">Selected Sheet</span>
-                <h2>{selectedSheet ? `${selectedSheet.workbook} / ${selectedSheet.sheet}` : "No sheet selected"}</h2>
-              </div>
-            </div>
-            {sheetProfile ? (
-                <>
-                  <p className="panel-copy">
-                    This is the active sheet detail view. It provides a quick structure summary before deeper column or value-level review.
-                  </p>
-                  {selectedSheetVariantMapping ? (
-                    <div className="queue-summary sheet-mapping-summary">
-                      <div className="queue-chip">
-                        <strong>
-                          {selectedSheetVariantMapping.match_status === "matched"
-                            ? selectedSheetVariantMapping.device_model
-                            : titleCaseToken(selectedSheetVariantMapping.match_status)}
-                        </strong>
-                        <span>Basic UDI variant</span>
-                      </div>
-                      <div className="queue-chip">
-                        <strong>{selectedSheetVariantMapping.submission_operation ?? "N/A"}</strong>
-                        <span>operation</span>
-                      </div>
-                      <div className="queue-chip">
-                        <strong>{selectedSheetVariantMapping.basic_udi_di ?? "N/A"}</strong>
-                        <span>basic UDI-DI</span>
-                      </div>
-                      <div className="queue-chip">
-                        <strong>{selectedSheetVariantMapping.available_market_country_count}</strong>
-                        <span>market countries</span>
-                      </div>
-                    </div>
-                  ) : null}
-                  <ul className="supporting-bullets">
-                    <li>
-                      <strong>Data Rows:</strong> the number of populated source rows currently profiled in this sheet.
-                    </li>
-                    <li>
-                      <strong>Profiled Columns:</strong> the number of columns with headers that the profiler is currently tracking for structure and value review.
-                    </li>
-                    <li>
-                      <strong>Header Row:</strong> the worksheet row identified as the effective header row for profiling this sheet.
-                    </li>
-                  </ul>
-                  <div className="queue-summary">
-                    <div className="queue-chip">
-                      <strong>{sheetProfile.data_rows}</strong>
-                      <span>data rows</span>
-                    </div>
-                  <div className="queue-chip">
-                    <strong>{sheetProfile.columns.length}</strong>
-                    <span>profiled columns</span>
-                  </div>
-                  <div className="queue-chip">
-                    <strong>{selectedSheet?.header_row ?? "Unknown"}</strong>
-                      <span>header row</span>
-                    </div>
-                  </div>
-                </>
-            ) : (
-              <p className="panel-copy">Select a sheet.</p>
-            )}
-          </section>
-
-          <section className="summary-grid workbook-stack-gap">
-            <div className="summary-card">
-              <span className="summary-label">Selected sheet rows</span>
-              <strong>{sheetProfile?.data_rows ?? 0}</strong>
-              <p>Rows currently available for completeness review in the selected workbook tab.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">High null fields</span>
-              <strong>{highNullColumns.length}</strong>
-              <p>Fields with more than 25% null values in the selected sheet.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">Critical null fields</span>
-              <strong>{criticalNullColumns.length}</strong>
-              <p>Fields with more than 75% null values and likely needing closer review.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">Empty fields</span>
-              <strong>{emptyColumns.length}</strong>
-              <p>Fields with no populated values at all in the selected sheet.</p>
-            </div>
-          </section>
-
-          <section className="content-grid">
             <div className="panel">
               <div className="section-heading">
                 <div>
-                  <span className="section-kicker">Review Signals</span>
-                  <h2>Missing Data Highlights</h2>
+                  <span className="section-kicker">Workbook Snapshot</span>
+                  <div className="section-title-with-icon">
+                    <span className="section-title-icon section-title-icon-excel" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" />
+                        <path d="M14 2v5h5" />
+                        <path d="M8.5 10.5l3 5" />
+                        <path d="M11.5 10.5l-3 5" />
+                      </svg>
+                    </span>
+                    <h2>Workbook Files</h2>
+                  </div>
                 </div>
               </div>
-              <p className="panel-copy">
-                This summary highlights where the selected sheet looks sparse or incomplete before any
-                deeper canonical review begins.
-              </p>
               <div className="queue-summary">
                 <div className="queue-chip">
-                  <strong>{highNullColumns.length}</strong>
-                  <span>high null fields</span>
+                  <strong>{latestImportBatch?.workbook_count ?? "N/A"}</strong>
+                  <span>workbooks</span>
                 </div>
                 <div className="queue-chip">
-                  <strong>{criticalNullColumns.length}</strong>
-                  <span>critical null fields</span>
+                  <strong>{latestImportBatch ? importedWorkbookRowLeader?.row_count ?? 0 : "N/A"}</strong>
+                  <span>largest row count</span>
                 </div>
                 <div className="queue-chip">
-                  <strong>{emptyColumns.length}</strong>
-                  <span>empty fields</span>
+                  <strong>{latestImportBatch ? importedWorkbookRowLeader?.workbook_name ?? "N/A" : "N/A"}</strong>
+                  <span>largest workbook</span>
                 </div>
               </div>
-              <div className="draft-list">
-                {topNullColumns.length ? (
-                  topNullColumns.map((column) => {
-                    const nullRate =
-                      sheetProfile?.data_rows && sheetProfile.data_rows > 0
-                        ? Math.round((column.null_count / sheetProfile.data_rows) * 100)
-                        : 0;
-                    return (
-                      <div className="draft-card" key={column.header}>
-                        <div className="draft-card-head">
-                          <strong>{column.header}</strong>
-                          <span
-                            className={
-                              nullRate === 100
-                                ? "status-pill warn compact"
-                                : nullRate > 75
-                                  ? "status-pill warn compact"
-                                  : "status-pill ok compact"
-                            }
-                          >
-                            {nullRate}% null
-                          </span>
-                        </div>
-                        <p className="draft-meta">
-                          {column.null_count} null / {column.non_null_count} populated / {column.distinct_count} distinct
-                        </p>
-                        <p className="panel-copy">
-                          {column.sample_values.length
-                            ? `Sample values: ${column.sample_values.join(", ")}`
-                            : "No sample values are available because the field is fully empty in this sheet."}
-                        </p>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="panel-copy">Select a sheet to review missing-data highlights.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="panel">
-              <div className="section-heading section-heading-spread">
-                <div>
-                  <span className="section-kicker">Normalization</span>
-                  <h2>Normalization Status</h2>
-                </div>
-                <div className="control-row">
-                  <span className="status-pill ok compact">{selectedColumn}</span>
-                  <span className="status-pill ok compact">{scopeLabel}</span>
-                </div>
-              </div>
-              <p className="panel-copy">
-                Review the normalization status for the selected field across <strong>{scopeLabel}</strong>. This is a
-                summary of how inconsistent values have been handled, not the main data-quality view.
-              </p>
-              <div className="action-summary">
-                <div className="summary-chip">
-                  <strong>{unmappedCount}</strong>
-                  <span>unresolved values</span>
-                </div>
-                <div className="summary-chip">
-                  <strong>{mappedCount}</strong>
-                  <span>resolved by rules</span>
-                </div>
-                <div className="summary-chip">
-                  <strong>{reviewIssues.length}</strong>
-                  <span>manual review</span>
-                </div>
-                <div className="summary-chip">
-                  <strong>{selectedRuleFile?.rules.length ?? 0}</strong>
-                  <span>applied rules</span>
-                </div>
-              </div>
-              <p className="panel-copy resolution-status">
-                {detectedIssues.length
-                  ? "Some values for this field still need normalization attention or manual review."
-                  : "Normalization needs for this field are currently addressed by the existing ruleset."}
-              </p>
-              <details className="group-accordion">
-                <summary>
-                  <span>Sheet Profile Detail</span>
-                  <span className="status-pill ok compact">{sheetProfile?.columns.length ?? 0} columns</span>
-                </summary>
-                <div className="accordion-body">
-                  {sheetProfile ? (
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Column</th>
-                          <th>Distinct</th>
-                          <th>Nulls</th>
-                          <th>Samples</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sheetProfile.columns.slice(0, 12).map((column) => (
-                          <tr key={column.index}>
-                            <td>{column.header}</td>
-                            <td>{column.distinct_count}</td>
-                            <td>{column.null_count}</td>
-                            <td>{column.sample_values.join(", ")}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <p className="panel-copy">Select a sheet to inspect column profile detail.</p>
-                  )}
-                </div>
-              </details>
-              <details className="group-accordion">
-                <summary>
-                  <span>Normalization Detail</span>
-                  <span className="status-pill warn compact">{detectedIssues.length}</span>
-                </summary>
-                <div className="accordion-body">
-                  <div className="toolbar">
-                    <label className="toggle">
-                      <input
-                        type="checkbox"
-                        checked={showUnmappedOnly}
-                        onChange={(event) => setShowUnmappedOnly(event.target.checked)}
-                      />
-                      <span>Show unresolved only</span>
-                    </label>
-                    <input
-                      className="filter-input"
-                      type="search"
-                      value={valueFilter}
-                      onChange={(event) => setValueFilter(event.target.value)}
-                      placeholder="Filter values"
-                    />
-                  </div>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Raw value</th>
-                        <th>Count</th>
-                        <th>Normalized</th>
-                        <th>Status</th>
-                        <th>Suggested action</th>
+              {latestImportBatch ? (
+                <table className="workbook-files-table">
+                  <thead>
+                    <tr>
+                      <th>Workbook</th>
+                      <th>Rows</th>
+                      <th>Hash</th>
+                      <th>Loaded</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importedWorkbooks.map((workbook: ImportedWorkbookSummary) => (
+                      <tr key={workbook.source_workbook_id}>
+                        <td><strong>{workbook.workbook_name}</strong></td>
+                        <td>{workbook.row_count}</td>
+                        <td><code>{shortenHash(workbook.file_hash)}</code></td>
+                        <td>{formatIsoDateTime(workbook.loaded_at)}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {filteredDistinctValues.slice(0, 24).map((item) => {
-                        const suggestion =
-                          item.status === "mapped"
-                            ? {
-                                action: "review" as const,
-                                label: "Covered by rule",
-                                suggestedNormalized: item.normalized_value,
-                                reason: "This value is already represented in the accepted normalization rules.",
-                              }
-                            : suggestAction(item.raw_value, acceptedValues, currentRuleMappings);
-                        return (
-                          <tr key={item.raw_value}>
-                            <td>{item.raw_value}</td>
-                            <td>{item.count}</td>
-                            <td>{item.normalized_value ?? "Pending"}</td>
-                            <td>
-                              <span className={item.status === "mapped" ? "status-pill ok compact" : "status-pill warn compact"}>
-                                {item.status === "mapped" ? "resolved" : "needs review"}
-                              </span>
-                            </td>
-                            <td>
-                              <div className="action-cell">
-                                <strong>{suggestion.label}</strong>
-                                <span>{suggestion.reason}</span>
-                                {item.status !== "mapped" ? (
-                                  <button
-                                    className="action-button"
-                                    type="button"
-                                    onClick={() => queueDraftAction(item, suggestion)}
-                                  >
-                                    {suggestion.action === "map" ? "Queue rule draft" : "Queue review note"}
-                                  </button>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </details>
-              <details className="group-accordion">
-                <summary>
-                  <span>Queued Changes</span>
-                  <span className="status-pill warn compact">{selectedColumnDrafts.length}</span>
-                </summary>
-                <div className="accordion-body">
-                  <div className="draft-actions-bar">
-                    <button
-                      className="action-button"
-                      type="button"
-                      onClick={queueRecommendedFixes}
-                      disabled={!autoFixableIssues.length}
-                    >
-                      {autoFixableIssues.length
-                        ? `Queue ${autoFixableIssues.length} recommended fix${autoFixableIssues.length === 1 ? "" : "es"}`
-                        : "No recommended fixes"}
-                    </button>
-                    <button
-                      className="action-button"
-                      type="button"
-                      onClick={() => void applyDraftRules(selectedColumn)}
-                      disabled={isApplyingRules || !selectedColumnMapDrafts.length}
-                    >
-                      {isApplyingRules
-                        ? "Applying..."
-                        : selectedColumnMapDrafts.length
-                          ? `Apply ${selectedColumnMapDrafts.length} queued fix${selectedColumnMapDrafts.length === 1 ? "" : "es"}`
-                          : "No queued fixes for this column"}
-                    </button>
-                    {saveMessage ? <span className="save-message">{saveMessage}</span> : null}
-                  </div>
-                  <div className="draft-list">
-                    {selectedColumnDrafts.length ? (
-                      selectedColumnDrafts.map((draft) => (
-                        <div key={`${draft.column}-${draft.rawValue}`} className="draft-card">
-                          <div className="draft-card-head">
-                            <strong>{draft.rawValue}</strong>
-                            <button
-                              className="ghost-button"
-                              type="button"
-                              onClick={() => removeDraftAction(draft.column, draft.rawValue)}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                          <p className="draft-meta">
-                            {draft.count} occurrences · {draft.workbook && draft.sheet ? `${draft.workbook} / ${draft.sheet}` : "All sheets"}
-                          </p>
-                          <p className="panel-copy">{draft.reason}</p>
-                          <span className={draft.action === "map" ? "status-pill ok compact" : "status-pill warn compact"}>
-                            {draft.action === "map"
-                              ? `Map${draft.suggestedNormalized ? ` to ${draft.suggestedNormalized}` : ""}`
-                              : "Manual review"}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="panel-copy">No queued changes for the selected field.</p>
-                    )}
-                  </div>
-                </div>
-              </details>
-              <details className="group-accordion">
-                <summary>
-                  <span>Applied Normalization Rules</span>
-                  <span className="status-pill ok compact">{selectedRuleFile?.rules.length ?? 0}</span>
-                </summary>
-                <div className="accordion-body">
-                  {selectedRuleFile ? (
-                    <div className="rule-block">
-                      <strong>{selectedRuleFile.column}</strong>
-                      <p className="panel-copy">{selectedRuleFile.description}</p>
-                      {selectedRuleFile.rules.map((rule) => (
-                        <div key={`${rule.raw}-${rule.normalized}`} className="rule-row">
-                          <span>{rule.raw}</span>
-                          <span>{rule.normalized}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="panel-copy">No applied normalization rules are currently loaded for this field.</p>
-                  )}
-                </div>
-              </details>
-              <details className="group-accordion">
-                <summary>
-                  <span>Rule YAML Preview</span>
-                  <span className="status-pill ok compact">{selectedColumnMapDrafts.length}</span>
-                </summary>
-                <div className="yaml-preview accordion-body">
-                  <pre>{yamlDraft || "# No additional normalization YAML is currently queued for this field."}</pre>
-                </div>
-              </details>
+                    ))}
+                  </tbody>
+                </table>
+              ) : null}
             </div>
           </section>
+
         </>
       ) : null}
 

@@ -206,6 +206,10 @@ input {
   color: #4c6f7a;
 }
 
+.status-card .status-detail {
+  font-size: 0.82rem;
+}
+
 .status-detail-tight {
   margin-top: 10px;
 }
@@ -243,9 +247,45 @@ input {
   margin-bottom: 20px;
 }
 
+.workbook-kpi-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
 .summary-card {
   padding: 18px 20px;
   border-radius: 18px;
+}
+
+.summary-card-meta {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 249, 250, 0.94)),
+    rgba(255, 255, 255, 0.96);
+  border-top: 4px solid #0b8ba5;
+}
+
+.summary-card-kpi {
+  padding: 16px 18px;
+  border-top: 4px solid transparent;
+}
+
+.summary-card-kpi-primary {
+  border-top-color: #0b8ba5;
+}
+
+.summary-card-kpi-secondary {
+  border-top-color: #00795f;
+}
+
+.summary-card-kpi-warn {
+  border-top-color: #c43d2f;
+}
+
+.summary-card-kpi-post {
+  border-top-color: #14804a;
+}
+
+.summary-card-kpi-patch {
+  border-top-color: #14804a;
 }
 
 .summary-card strong {
@@ -257,10 +297,64 @@ input {
   color: #002a3a;
 }
 
+.summary-card-meta strong {
+  font-size: 1.32rem;
+}
+
+.summary-card-kpi strong {
+  margin-bottom: 4px;
+  font-size: 1.9rem;
+  line-height: 1;
+}
+
 .summary-card p,
 .panel-copy {
   margin: 0;
   color: #4c6f7a;
+}
+
+.summary-card-meta p {
+  font-size: 0.8rem;
+  color: #007a12;
+}
+
+.summary-card-kpi p {
+  font-size: 0.84rem;
+  color: #007a12;
+}
+
+.summary-meta-inline {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: #007a12;
+}
+
+.table-footprint-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 18px 0;
+}
+
+.table-footprint-card {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(76, 111, 122, 0.16);
+  background: rgba(0, 68, 90, 0.04);
+}
+
+.table-footprint-card strong {
+  display: block;
+  margin-bottom: 4px;
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: 1.45rem;
+  color: #002a3a;
+}
+
+.table-footprint-card p {
+  margin: 0;
+  color: #4c6f7a;
+  font-size: 0.85rem;
 }
 
 .workbook-note-followup {
@@ -411,6 +505,39 @@ input {
 
 .section-heading-spread {
   align-items: center;
+}
+
+.section-title-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: rgba(0, 68, 90, 0.08);
+  color: #00445a;
+  flex: 0 0 auto;
+}
+
+.section-title-icon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.section-title-icon-excel {
+  background: rgba(0, 122, 18, 0.1);
+  color: #0c6a1e;
 }
 
 .panel h2 {
@@ -576,6 +703,25 @@ th {
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.workbook-files-table th,
+.workbook-files-table td {
+  font-size: 0.82rem;
+}
+
+.workbook-files-table th {
+  font-size: 0.72rem;
+}
+
+.workbook-files-table td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.workbook-files-table td strong,
+.workbook-files-table td code {
+  font-size: 0.8rem;
 }
 
 .sheet-list {
@@ -2146,7 +2292,15 @@ a.ghost-button:visited {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .workbook-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .table-footprint-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2174,6 +2328,10 @@ a.ghost-button:visited {
   }
 
   .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workbook-kpi-grid {
     grid-template-columns: 1fr;
   }
 

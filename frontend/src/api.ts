@@ -20,6 +20,8 @@ import type {
   SheetProfile,
   SheetSummary,
   SingleRecordXmlPreview,
+  WorkbookImportRunResponse,
+  WorkbookImportSnapshotSummary,
   WorkbookSummary,
   XmlGenerationScopeBundle,
 } from "./types";
@@ -86,6 +88,9 @@ async function sendDownload(path: string, method: string, body?: unknown): Promi
 export const api = {
   workbooks: () => getJson<WorkbookSummary[]>("/workbooks"),
   referenceWorkbooks: () => getJson<ReferenceWorkbookSummary[]>("/reference-workbooks"),
+  latestWorkbookImportSummary: () => getJson<WorkbookImportSnapshotSummary>("/workbook-imports/latest/summary"),
+  runWorkbookImport: (payload?: { imported_by?: string; label?: string; notes?: string }) =>
+    sendJson<WorkbookImportRunResponse>("/workbook-imports/run", "POST", payload ?? {}),
   sheets: () => getJson<SheetSummary[]>("/sheets"),
   sheetProfile: (workbook: string, sheet: string) =>
     getJson<SheetProfile>(

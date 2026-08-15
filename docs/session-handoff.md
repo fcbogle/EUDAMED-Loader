@@ -7,7 +7,7 @@ Continue refining the XML workspaces so the UI and backend now clearly separate:
 - `POST`
 - `Patch XML`
 - `Market Info`
-- `Bulk Basic UDI-DI POST`
+- `Bulk Basic UDI POST`
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
 - `EUDAMED Generation`
@@ -18,7 +18,13 @@ with the current implementation focus now being:
 - keep `Patch XML` as the controlled single-device PATCH workspace
 - keep `Bulk PATCH` aligned to latest successful per-device accepted state
 - make the bulk UI simpler and more operationally accurate
-- prepare for later database-backed persistence to replace YAML testing state
+- stabilize the SQLite-backed testing-state store and prepare for later PostgreSQL-backed application persistence
+
+## Reading Guide
+
+- `Current Repo State` sections below should be treated as authoritative for the next session.
+- `Historical Playground Findings` sections capture dated evidence and prior decisions.
+- Any recorded test counts in this document are historical snapshots only. Re-run verification from the current worktree before relying on them.
 
 ## Latest Confirmed Decisions
 
@@ -71,29 +77,30 @@ with the current implementation focus now being:
 - Agreed next execution order on Thursday, August 13, 2026:
   - complete and harden the clean bulk registration split
   - continue `Bulk PATCH` and `Market Info` Playground testing
-  - implement database-backed persistence
+  - implement broader database-backed persistence beyond the current testing-state store
   - continue UI refinement after the database-backed state model is in place
 - Latest implemented decisions on Friday, August 14, 2026:
   - `Single XML` has been removed from the user-facing `EUDAMED Testing` workspace
-  - `Bulk Basic UDI-DI POST` is now treated as a parent-only flow
+  - `Bulk Basic UDI POST` is now treated as a parent-only flow
   - `Bulk UDI-DI POST` is now treated as a child-only flow
-  - parent existence is now resolved from successful tracked testing state, currently `data/testing/playground-tested-subjects.yaml`
-  - if a parent `Basic UDI-DI` already has a successful `DEVICE.POST`, `Bulk Basic UDI-DI POST` should not generate a new parent seed
+  - parent existence is now resolved from the testing-state store, currently backed by `data/testing/testing-state.sqlite3`
+  - legacy `data/testing/playground-tested-subjects.yaml` remains a bootstrap import source when the SQLite store is empty
+  - if a parent `Basic UDI-DI` already has a successful `DEVICE.POST`, `Bulk Basic UDI POST` should not generate a new parent seed
   - in that case the clean backend message is now:
     - `Parent Basic UDI-DI already exists for {family} / {variant}. Use Bulk UDI-DI POST to add child devices.`
   - if a parent `Basic UDI-DI` does not yet have a successful `DEVICE.POST`, `Bulk UDI-DI POST` should not silently reserve a seed row any longer
-  - instead it now blocks child generation and tells the user to run `Bulk Basic UDI-DI POST` first
+  - instead it now blocks child generation and tells the user to run `Bulk Basic UDI POST` first
   - the bulk POST router responses for these business-rule stops now return `400 Bad Request` rather than `404 Not Found`
   - the simplified bulk summary cards now use the full available width in the UI
-  - `Bulk Basic UDI-DI POST` UI readiness now uses unposted-parent count rather than total-parent count
+  - `Bulk Basic UDI POST` UI readiness now uses unposted-parent count rather than total-parent count
   - bulk parent / child eligibility now scans the full XML-ready variant population before applying the `300` message cap
   - the `300` cap therefore limits emitted package size, not eligibility discovery
   - single-device `Patch XML` generation is now backend-gated as well as frontend-gated
   - the backend now requires the exact baseline `POST` for the selected `product_family` / `product_variant` / `catalogue_number` to have been generated and reviewed in the current process before `PATCH` preview or download is allowed
-  - bulk `PATCH` remains exempt from that in-memory single-device reviewed-baseline gate
-  - `Bulk Basic UDI-DI POST` frontend readiness now resolves by actual unposted `Basic UDI-DI` set difference rather than by subtracting unrelated posted-parent counts
-  - explicit action feedback is now shown when generating `Bulk Basic UDI-DI POST` and `Bulk UDI-DI POST` previews
-  - current automated verification status at handoff:
+  - bulk `PATCH` remains exempt from that single-device reviewed-baseline gate
+  - `Bulk Basic UDI POST` frontend readiness now resolves by actual unposted `Basic UDI-DI` set difference rather than by subtracting unrelated posted-parent counts
+  - explicit action feedback is now shown when generating `Bulk Basic UDI POST` and `Bulk UDI-DI POST` previews
+  - historical verification snapshot on Friday, August 14, 2026:
     - backend `pytest`: `51 passed`
     - frontend production build: `npm run build` passed
 - Latest implemented and verified decisions on Friday, August 14, 2026 and Saturday, August 15, 2026:
@@ -102,10 +109,10 @@ with the current implementation focus now being:
     - reviewed baseline `POST` preview for the exact selected record in the current session
     - tracked successful Playground registration for that same device before version `2` `PATCH` can be generated
   - `Bulk UDI-DI POST` now excludes child `primary UDI-DI` values already known as successfully registered in tracked state
-  - current automated verification after these changes:
+  - historical verification snapshot on Friday, August 14, 2026 and Saturday, August 15, 2026:
     - backend `pytest`: `58 passed`
     - frontend production build: `npm run build` passed
-  - successful Playground test results now recorded in `data/testing/playground-tested-subjects.yaml` and `docs/eudamed-playground-test-report.md` include:
+  - successful Playground test results are persisted in `data/testing/testing-state.sqlite3`, with legacy YAML bootstrap data in `data/testing/playground-tested-subjects.yaml`, and are documented in `docs/eudamed-playground-test-report.md`
     - successful single `DEVICE.POST` for `Epirus / Esprit / ESP22L1S` on Thursday, August 14, 2026
     - successful single `UDI_DI.PATCH` version `2` trade-name update for `Epirus / Esprit / ESP22L1S` on Thursday, August 14, 2026
     - successful second `Elite / Elite VT` bulk child `UDI_DI.POST` wave of five new child devices on Thursday, August 14, 2026
@@ -113,6 +120,8 @@ with the current implementation focus now being:
   - latest traced single-`POST` eligibility findings on Saturday, August 15, 2026:
     - `Echelon VAC` is blocked because the parent `Basic UDI-DI` is already known in tracked state, so additional registrations should use `Bulk UDI-DI POST`
     - `Echelon VT` is blocked because every validated row in that variant is currently classified as `PATCH`, not `POST`
+
+## Current Repo State
 
 ## Current Implemented Behavior
 
@@ -169,12 +178,14 @@ It now:
   - `Equivalent First Patch`
   - real first-update version `2` PATCH generation from accepted `POST`
   - later version `3+` PATCH generation from latest accepted tracked state
-- current implementation still derives scenario drafts from the latest successful device state recorded in `data/testing/playground-tested-subjects.yaml` when available
+- current implementation derives scenario drafts from the latest successful device state resolved through the testing-state store, currently backed by `data/testing/testing-state.sqlite3`
+  - the SQLite store is initially seeded from `data/testing/playground-tested-subjects.yaml` when empty
   - and falls back to the baseline first child `PATCH` only when no later accepted state has been recorded for that device
-- supports the active scenarios:
-  - `trade_name_edit`
-  - `warning_add`
-  - `storage_condition_edit`
+- current scenario status:
+  - implemented and Playground-successful: `equivalent_first_patch`, `trade_name_edit`, `warning_add`, `storage_condition_edit`, `base_quantity_edit`
+  - implemented but not Playground-accepted: `status_code_edit`
+  - blocked by Playground business rules: `sterile_edit`, `latex_edit`
+  - present in the UI but still unimplemented / untested: `production_identifier_edit`, `sterilization_edit`, `reprocessed_edit`, `number_of_reuses_edit`, `mdn_codes_edit`
 - requires explicit user-supplied `PATCH` version input
 - shows:
   - baseline-versus-draft business comparison
@@ -185,10 +196,9 @@ It now:
 
 Important limitation:
 
-- baseline-pair review state is in-memory only for the current session
-- PATCH scenario status remains UI state only
-- it is not persisted
-- latest successful accepted device state is still persisted in YAML rather than in a database
+- reviewed baseline `POST` state is persisted in the testing-state SQLite store, not only in-memory
+- PATCH scenario promotion state such as `EUDAMED Candidate` versus `EUDAMED Accepted` still remains UI/application state rather than a broader workflow model
+- the testing-state store is SQLite-backed today and not yet the final PostgreSQL application persistence layer
 - the current implementation still assumes the reviewed equivalent first-child `PATCH` as the starting point before later scenario drafting
 - this is now an acknowledged design constraint to replace
 
@@ -204,7 +214,7 @@ Important limitation:
 - `Bulk Basic UDI POST` now represents parent registration waves only.
 - `Bulk UDI-DI POST` now represents child registration waves only.
 - `Bulk PATCH` remains the bulk update mode.
-- Bulk modes do not use the in-memory reviewed baseline gate used by the current single-device PATCH flow.
+- Bulk modes do not use the single-device reviewed baseline gate used by the current single-device PATCH flow.
 - `Bulk PATCH` should continue to reuse the same per-device accepted-state lineage rules as single-device `Patch XML`.
 
 ## Current PATCH Workflow
@@ -280,8 +290,10 @@ Important limitation:
 - If the parent `Basic UDI-DI` already exists, all selected eligible child rows should be included.
 - Child rows already known as successfully registered in tracked state must be excluded before XML generation.
 - The old prototype behavior that reserved the first row as a fallback parent seed is no longer the target model.
-- If the parent does not exist yet, this flow should stop and instruct the user to run `Bulk Basic UDI-DI POST` first.
+- If the parent does not exist yet, this flow should stop and instruct the user to run `Bulk Basic UDI POST` first.
 - If no genuinely new child rows remain after tracked-state filtering, the UI should say so explicitly rather than generate duplicate child XML.
+
+## Historical Playground Findings
 
 ## Latest Playground Evidence
 
@@ -311,14 +323,14 @@ Important limitation:
   - family
   - variant
   - catalogue number
-- `Patch XML` scenario generation stays blocked unless the reviewed baseline state in memory matches the same:
+- `Patch XML` scenario generation stays blocked unless the persisted reviewed baseline state matches the same:
   - product family
   - product variant
   - catalogue number
 - If the currently selected XML-ready row is not itself a `POST`, the current UI still falls back to the first available XML-ready `POST` in the selected variant.
 - The UI no longer allows scenario generation from a variant without a reviewed baseline pair.
 - Bulk parent existence is now resolved from successful tracked testing state via the testing-state store.
-- Bulk Basic UDI-DI POST and Bulk UDI-DI POST router stops now return `400` rather than `404`.
+- Bulk Basic UDI POST and Bulk UDI-DI POST router stops now return `400` rather than `404`.
 
 ## Current UI Notes
 
@@ -328,7 +340,7 @@ Important limitation:
   - `Bulk POST Summary`
   now use a full-width multi-column layout so the cards expand across the available space rather than collapsing into a narrow content strip.
 - `Single XML` has been removed from the top XML mode selector.
-- `Bulk Basic UDI-DI POST` currently shows:
+- `Bulk Basic UDI POST` currently shows:
   - unposted parent count
   - a readiness message when all parents already exist
 - The current expected message for `Elite / EliteVT` is:
@@ -343,7 +355,8 @@ Important limitation:
   - `Bulk PATCH`
   - `Market Info`
 - keep all new successful or rejected Playground results reflected in:
-  - `data/testing/playground-tested-subjects.yaml`
+  - `data/testing/testing-state.sqlite3`
+  - `data/testing/playground-tested-subjects.yaml` only when bootstrap source data is intentionally refreshed
   - `docs/eudamed-playground-test-report.md`
 
 ## Current Scenario Scope
@@ -384,14 +397,14 @@ Active generated scenarios:
     - before `SHC006`: `Minus 15C`
     - after `SHC006`: `Store in a dry location`
 
-Candidate design-only scenarios now listed in the dropdown:
+Additional UI-present but not yet implemented scenarios:
 
 - `Sterilization`
 - `Reprocessed`
 - `Number Of Reuses`
 - `MDN Codes`
 
-Next implemented simple scenarios:
+Implemented or partially implemented scenarios with caveats:
 
 - `Base Quantity`
   - target: `udidi:baseQuantity`
@@ -436,7 +449,7 @@ Next implemented simple scenarios:
   - `DEVICE.POST` -> `SUCCESS`
   - `UDI_DI.PATCH` with `e:version = 2` -> `SUCCESS`
 - Current implementation:
-  - scenario-derived later `PATCH` payloads now use the latest successful tracked device state when available, falling back to the baseline first child `PATCH` otherwise
+  - scenario-derived later `PATCH` payloads now use the latest successful tracked device state from the SQLite-backed testing-state store when available, falling back to the baseline first child `PATCH` otherwise
 - Agreed target direction:
   - version `2` PATCH payloads should derive directly from the accepted `POST`
   - version `3+` PATCH payloads should derive from the latest accepted tracked `PATCH`
@@ -470,19 +483,18 @@ Next implemented simple scenarios:
 - Removed stale fixture-anchor fields from `RegisteredDeviceAnchor`.
 - Removed the unused combined baseline-pair download route and frontend client method:
   - `/api/xml/download-post-patch-pair`
-- Active tests now rely on the current generated, YAML-backed workflow only.
+- Active tests now rely on the current generated, SQLite-backed testing-state workflow, with legacy YAML used only for initial store seeding.
 
-## Latest Verification
+## Verification Notes
 
-- Focused backend XML generation suite:
-  - `PYTHONPATH=backend .venv/bin/python -m pytest -q backend/tests/test_echelon_xml_generation.py`
-  - result: `18 passed`
-- Full backend suite:
-  - `PYTHONPATH=backend .venv/bin/python -m pytest -q backend/tests`
-  - result: `32 passed`
-- Frontend verification:
+- Historical verification snapshots recorded above should be treated as dated evidence only.
+- Re-run current verification from the present worktree before relying on pass counts.
+- Recommended backend command from the current repo layout:
+  - `cd backend`
+  - `PYTHONPATH=. ../.venv/bin/pytest -q`
+- Recommended frontend command:
+  - `cd frontend`
   - `npm run build`
-  - result: passed
 
 ## Frontend Testing Position
 
@@ -670,7 +682,6 @@ Files refreshed in this pass:
 
 - persistence for PATCH scenario status (`EUDAMED Candidate` / `EUDAMED Accepted`)
 - persistence for baseline-family acceptance state
-- persistence for baseline-pair review / existence state
 - PostgreSQL-backed persistence for imported workbook rows, accepted device state, and Playground testing history
 - automatic promotion of accepted PATCH scenarios into `EUDAMED Generation`
 - redesign of baseline `Post + Patch` workspace into `POST` only
@@ -683,15 +694,15 @@ Files refreshed in this pass:
 - workbook-drift detection between the reviewed baseline pair and newer workbook state
 - any later decision on workbook-refreshed scenario PATCH regeneration
 
-## Recommended Next Step
+## Open Work / Next Steps
 
-Focus next on proving all current testing workflows before replacing YAML with database-backed state:
+Focus next on proving all current testing workflows before replacing the current SQLite testing-state layer with broader PostgreSQL-backed application persistence:
 
 1. run a full feature pass in this order:
    - `POST`
    - `Patch XML`
    - `Market Info`
-   - `Bulk Basic UDI-DI POST`
+   - `Bulk Basic UDI POST`
    - `Bulk UDI-DI POST`
    - `Bulk PATCH`
 2. for each workspace, verify:
@@ -713,7 +724,7 @@ Focus next on proving all current testing workflows before replacing YAML with d
    - current accepted device state
    - submission / Playground history
    - baseline review and scenario acceptance state
-7. switch the application from YAML-backed accepted state to database-backed accepted state
+7. switch the broader application from the current SQLite testing-state model to PostgreSQL-backed accepted state and history where appropriate
 8. refine the UI after the persistence model is in place so:
    - status and lineage messaging come from the database
    - bulk and single-device workspaces reflect persisted accepted state
