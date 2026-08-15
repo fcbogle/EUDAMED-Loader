@@ -18,7 +18,7 @@ with the current implementation focus now being:
 - keep `Patch XML` as the controlled single-device PATCH workspace
 - keep `Bulk PATCH` aligned to latest successful per-device accepted state
 - make the bulk UI simpler and more operationally accurate
-- stabilize the SQLite-backed testing-state store and prepare for later PostgreSQL-backed application persistence
+- stabilize the SQLite-backed application persistence layer
 
 ## Reading Guide
 
@@ -125,6 +125,35 @@ with the current implementation focus now being:
 
 ## Current Implemented Behavior
 
+### Submission Data
+
+- The `Submission Data` workspace now mixes:
+  - live workbook inventory from direct Excel inspection
+  - SQLite-backed import snapshot and monitoring panels
+- The current SQLite import layer persists:
+  - `import_batch`
+  - `source_workbook`
+  - `source_row`
+  - `device_subject`
+- The UI now surfaces database-backed panels for:
+  - `Database Tables`
+  - `Workbook Snapshot`
+  - `Database Monitoring`
+  - `Latest Drift`
+- The UI now treats missing workbook-import data as an empty state rather than a hard error:
+  - if no import batch exists yet, the page shows `Import Workbooks`
+  - the same control remains available in the status card for reruns
+- The current workbook-import monitoring endpoints are:
+  - `/api/workbook-imports/latest/summary`
+  - `/api/workbook-imports/schema-summary`
+  - `/api/workbook-imports/health`
+  - `/api/workbook-imports/latest/diff`
+- `latest/summary` and `latest/diff` may legitimately return `404` when no import batch exists yet
+  - the frontend now treats that as first-run state, not as a fatal failure
+- Current design boundary:
+  - monitoring and import controls are in place
+  - the SQLite layer is not yet the main read model for `device_subject` and `source_row` workflows
+
 ### EUDAMED Testing
 
 Current pill order:
@@ -198,7 +227,7 @@ Important limitation:
 
 - reviewed baseline `POST` state is persisted in the testing-state SQLite store, not only in-memory
 - PATCH scenario promotion state such as `EUDAMED Candidate` versus `EUDAMED Accepted` still remains UI/application state rather than a broader workflow model
-- the testing-state store is SQLite-backed today and not yet the final PostgreSQL application persistence layer
+- the testing-state store is SQLite-backed today and is expected to evolve within SQLite rather than be replaced by a different database platform
 - the current implementation still assumes the reviewed equivalent first-child `PATCH` as the starting point before later scenario drafting
 - this is now an acknowledged design constraint to replace
 
@@ -489,6 +518,10 @@ Implemented or partially implemented scenarios with caveats:
 
 - Historical verification snapshots recorded above should be treated as dated evidence only.
 - Re-run current verification from the present worktree before relying on pass counts.
+- Latest current verification on Saturday, August 15, 2026:
+  - focused workbook-import tests: `3 passed`
+  - full backend suite: `61 passed`
+  - frontend production build: `npm run build` passed
 - Recommended backend command from the current repo layout:
   - `cd backend`
   - `PYTHONPATH=. ../.venv/bin/pytest -q`
@@ -519,8 +552,8 @@ Implemented or partially implemented scenarios with caveats:
 ## Proposed Database Direction
 
 - Excel workbooks remain the upstream source files.
-- PostgreSQL becomes the application source of truth after import.
-- The application should read runtime testing state, accepted device state, submission history, and later generation workflows from PostgreSQL rather than directly from workbook files or YAML.
+- SQLite is the current and planned application database for imported source state, testing state, and later canonical persistence.
+- The application should read runtime testing state, accepted device state, submission history, and later generation workflows from SQLite rather than directly from workbook files or YAML.
 
 ### Minimal Proposed Schema
 
@@ -638,6 +671,34 @@ Implemented or partially implemented scenarios with caveats:
 5. Move YAML `test_events` into `submission` and `submission_change`.
 6. Switch the application to read current accepted state from the database rather than from YAML.
 
+### Current Agreed Identity Direction
+
+- `device_subject` should become the single stable device-identity table for the application.
+- The next relational cleanup step is to stop treating testing-state tables as parallel identity stores.
+- Specifically:
+  - `reviewed_post_baselines` should gain `device_subject_id`
+  - `testing_subjects` should gain `device_subject_id` or be replaced by a better history table tied to `device_subject`
+- Transitional matching should still use:
+  - `product_family`
+  - `product_variant`
+  - `catalogue_number`
+  - fallback `primary_udi_di` when needed
+- Steady-state application lookups should move from string matching to foreign-key joins once that linkage exists.
+
+### Next Database Steps
+
+1. Add SQLite-backed read endpoints for:
+   - `device_subject` list and detail
+   - `source_row` list and detail
+   - filters by family, variant, catalogue number, submission operation, and import batch
+2. Move the `Submission Data` workspace from summary-only database panels to real SQLite-backed record views.
+3. Add `device_subject_id` to `reviewed_post_baselines` and backfill it from current text identity matching.
+4. Add `device_subject_id` to `testing_subjects` or replace that table with a better linked testing-history structure.
+5. Change reviewed-baseline and testing-state lookups from string matching to foreign-key joins.
+6. After those links are stable, add canonical persistence tied to `device_subject`.
+7. Only after the SQLite relational shape settles, introduce migration tooling if needed for controlled SQLite schema evolution.
+7. Only after the SQLite relational shape settles, introduce migration tooling if needed for controlled SQLite schema evolution.
+
 ## Documentation Alignment
 
 The current docs now need to describe:
@@ -682,7 +743,7 @@ Files refreshed in this pass:
 
 - persistence for PATCH scenario status (`EUDAMED Candidate` / `EUDAMED Accepted`)
 - persistence for baseline-family acceptance state
-- PostgreSQL-backed persistence for imported workbook rows, accepted device state, and Playground testing history
+- broader SQLite persistence for imported workbook rows, accepted device state, and Playground testing history
 - automatic promotion of accepted PATCH scenarios into `EUDAMED Generation`
 - redesign of baseline `Post + Patch` workspace into `POST` only
 - hardening and test coverage for `Bulk PATCH`
@@ -696,36 +757,21 @@ Files refreshed in this pass:
 
 ## Open Work / Next Steps
 
-Focus next on proving all current testing workflows before replacing the current SQLite testing-state layer with broader PostgreSQL-backed application persistence:
+Focus next on making the current SQLite layer a real read model and extending it carefully:
 
-1. run a full feature pass in this order:
-   - `POST`
-   - `Patch XML`
-   - `Market Info`
-   - `Bulk Basic UDI POST`
-   - `Bulk UDI-DI POST`
-   - `Bulk PATCH`
-2. for each workspace, verify:
-   - preview generation
-   - local XSD validation feedback
-   - download behavior and archive contents
-   - expected business-rule stop messages
-3. explicitly exercise negative paths:
-   - parent already posted
-   - parent not yet posted
-   - record not XML-ready
-   - invalid or blocked `PATCH` scenario
-   - invalid `PATCH` version
-   - empty bulk scope
-4. test `Bulk PATCH` in Playground and record both successes and rejections
-5. test `MARKET_INFO.PUT` in Playground and capture the accepted update pattern
-6. only after the feature pass is complete, implement database-backed persistence for:
-   - imported workbook rows
-   - current accepted device state
-   - submission / Playground history
-   - baseline review and scenario acceptance state
-7. switch the broader application from the current SQLite testing-state model to PostgreSQL-backed accepted state and history where appropriate
-8. refine the UI after the persistence model is in place so:
-   - status and lineage messaging come from the database
-   - bulk and single-device workspaces reflect persisted accepted state
-   - later promotion and reporting flows can be added cleanly
+1. add backend read endpoints for:
+   - `device_subject` list and detail
+   - imported `source_row` list and detail
+   - filters by family, variant, catalogue number, operation, and import batch
+2. move the `Submission Data` workspace to use those SQLite-backed endpoints for database panels rather than treating the import DB as summary-only storage
+3. implement the next relational identity step:
+   - add `device_subject_id` to `reviewed_post_baselines`
+   - add `device_subject_id` to `testing_subjects` or replace that table with a better linked history structure
+4. backfill those links using:
+   - `product_family`
+   - `product_variant`
+   - `catalogue_number`
+   - fallback `primary_udi_di`
+5. switch testing-state and reviewed-baseline lookups from string matching to foreign-key joins
+6. after the source/read-model layer is stable, add canonical persistence tied to `device_subject`
+7. only after those relationships are stable, introduce migration tooling if needed for controlled SQLite schema evolution
