@@ -82,6 +82,13 @@ class WorkbookImportService:
     def db_path(self) -> Path:
         return self.settings.testing_state_db_path
 
+    @staticmethod
+    def _require_lastrowid(cursor: sqlite3.Cursor, *, entity_name: str) -> int:
+        row_id = cursor.lastrowid
+        if row_id is None:
+            raise RuntimeError(f"SQLite did not return a row id for inserted {entity_name}.")
+        return int(row_id)
+
     def run_import(
         self,
         *,
@@ -102,7 +109,7 @@ class WorkbookImportService:
                 """,
                 (source_type, resolved_label, imported_at, imported_by, notes),
             )
-            import_batch_id = int(cursor.lastrowid)
+            import_batch_id = self._require_lastrowid(cursor, entity_name="import batch")
             workbook_count = 0
             source_row_count = 0
             device_subject_count = 0
@@ -124,7 +131,7 @@ class WorkbookImportService:
                         imported_at,
                     ),
                 )
-                source_workbook_id = int(workbook_cursor.lastrowid)
+                source_workbook_id = self._require_lastrowid(workbook_cursor, entity_name="source workbook")
                 workbook_rows = self._load_source_rows(workbook_path)
                 for row in workbook_rows:
                     source_row_count += 1
@@ -167,7 +174,7 @@ class WorkbookImportService:
                             imported_at,
                         ),
                     )
-                    source_row_id = int(row_cursor.lastrowid)
+                    source_row_id = self._require_lastrowid(row_cursor, entity_name="source row")
                     decision = self._match_device_subject(
                         connection=connection,
                         product_family=product_family,
@@ -181,7 +188,7 @@ class WorkbookImportService:
                     if decision.created:
                         device_subject_count += 1
 
-        backup_path = self._create_import_backup(import_batch_id=import_batch_id)
+        self._create_import_backup(import_batch_id=import_batch_id)
 
         return WorkbookImportRunResponse(
             import_batch_id=import_batch_id,
