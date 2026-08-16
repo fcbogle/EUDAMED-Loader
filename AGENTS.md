@@ -2,19 +2,25 @@
 
 ## Project Context
 
-This project is a Python/React web application for preparing EUDAMED regulatory submission data from multiple Excel device-data workbooks and EUDAMED schema files.
+This project is a Python/React web application for preparing, validating, and tracking EUDAMED submission data from multiple Excel device-data workbooks and EUDAMED schema files.
 
-The immediate objective is analysis and controlled transformation, not immediate live submission.
+The immediate objective is controlled XML generation and Playground-backed workflow refinement, with clear separation between:
+- single-device `POST`
+- single-device `Patch XML`
+- `Market Info`
+- `Bulk Basic UDI POST`
+- `Bulk UDI-DI POST`
+- `Bulk PATCH`
+- `EUDAMED Generation`
 
-The first delivery goal is to:
-- inspect and profile the six input Excel device data files
-- inspect the available EUDAMED schema/XSD/supporting files
-- identify data quality issues
-- propose a canonical regulatory device model
-- create an initial source-to-canonical mapping approach
-- report gaps between available source data and schema/submission requirements
+The current delivery goal is to:
+- preserve the clean split between parent-only and child-only bulk registration flows
+- keep `Patch XML` as the controlled single-device PATCH workspace
+- keep `Bulk PATCH` aligned to the latest successful per-device accepted state
+- make the bulk UI simpler and more operationally accurate
+- stabilize and extend the SQLite-backed application persistence layer
 
-Later phases may generate EUDAMED XML payloads, support manual upload, record submission responses, and eventually integrate through the EUDAMED M2M/eDelivery/AS4 digital gateway.
+Workbook/source analysis remains relevant, but it is no longer the sole active phase. Current work also includes XML generation, local validation, Playground testing support, and persistence for reviewed/testing state.
 
 ---
 
@@ -29,8 +35,8 @@ Codex must consult the project owner before making material changes, including:
 - changing mapping strategy
 - changing validation/rule strategy
 - deleting or restructuring files
-- adding database persistence
-- implementing XML generation
+- replacing the current SQLite persistence direction with a different database platform
+- changing the XML generation workflow or message lineage rules
 - implementing EUDAMED upload/M2M logic
 
 Codex may make small, reversible changes without prior approval, such as:
@@ -60,91 +66,81 @@ Build toward a schema-aware regulatory data preparation platform with clear sepa
 - submission/audit history
 - future M2M transport integration
 
+The current implementation direction also assumes:
+- SQLite is the active persistence layer for testing, import, and read-model state
+- Playground testing outcomes inform operational workflow decisions
+- bulk parent registration, bulk child registration, and bulk PATCH are distinct regulatory flows, not one generic batch mode
+
 ---
 
 # Current Delivery Priority
 
-The current priority is analysis of data and schemas.
+The current priority is EUDAMED XML workflow refinement, Playground-backed testing support, and SQLite-backed state management.
 
 Prioritise:
-1. Understanding the six Excel workbooks
-2. Profiling workbook/sheet/column structure
-3. Identifying common and variable fields across workbooks
-4. Identifying incomplete, duplicate, inconsistent or suspicious data
-5. Understanding EUDAMED schema files at a high level
-6. Proposing canonical model candidates
-7. Proposing initial mapping YAML
-8. Creating clear reports for human review
+1. Maintaining the clean split between `Bulk Basic UDI POST`, `Bulk UDI-DI POST`, and `Bulk PATCH`
+2. Keeping `Patch XML` as the only single-device PATCH generation workspace
+3. Enforcing the current reviewed-baseline and accepted-state guardrails for PATCH generation
+4. Continuing controlled Playground testing for `Bulk UDI-DI POST`, `Bulk PATCH`, and `Market Info`
+5. Stabilizing and extending the SQLite-backed testing/import/read-model layer
+6. Improving the `Submission Data` workspace so database-backed panels become a real read model
+7. Keeping documentation aligned with implemented XML/testing behavior
+8. Preserving workbook/source analysis as supporting context for the workflows above
 
-Do not implement EUDAMED upload yet.
+Do not implement EUDAMED upload or M2M transport yet.
 
 ---
 
 # Intended Phased Delivery
 
-## Phase 1 — Data and Schema Discovery
+## Phase 1 — XML Workspace And Testing Flow Stabilization
 
-Build scripts/reports to:
-- inventory all input files
-- profile Excel sheets and columns
-- infer datatypes and null counts
-- detect duplicate candidate identifiers
-- identify candidate controlled values
-- detect inconsistent values
-- inventory schema/XSD files
-- identify likely schema entry points
-- summarize required elements where practical
+Refine and verify:
+- single-device `POST`
+- `Patch XML`
+- `Market Info`
+- `Bulk Basic UDI POST`
+- `Bulk UDI-DI POST`
+- `Bulk PATCH`
+- the current reviewed-baseline and accepted-state guardrails
+- current local XSD validation and preview/download behavior
 
-## Phase 2 — Canonical Model Proposal
+## Phase 2 — SQLite Read Model And Persistence Expansion
 
-Draft Pydantic canonical/domain classes representing regulatory device meaning.
+Build out the current SQLite-backed application state so it becomes the main operational store for:
+- reviewed baseline `POST` state
+- successful Playground testing state
+- workbook import snapshots and monitoring
+- `device_subject` and `source_row` read paths
+- later accepted-device state and submission history
 
-Candidate concepts may include:
-- RegulatorySubmission
-- SubmissionBatch
-- EconomicOperator
-- Manufacturer
-- BasicDevice
-- DeviceRecord
-- UdiDevice
-- Certificate
-- PackagingLevel
-- MarketAvailability
-- ValidationIssue
-- MappingDefinition
-- SchemaVersion
+## Phase 3 — Relational Identity Cleanup
 
-Do not assume this list is final. Refine it from the real data and schemas.
+Move from text-matched lineage to linked relational identity by:
+- treating `device_subject` as the stable application identity
+- linking reviewed baselines and testing state to `device_subject_id`
+- replacing string matching with foreign-key joins where practical
+- preserving workbook/source lineage through `source_row`
 
-## Phase 3 — Mapping and Validation
+## Phase 4 — Documentation And Workflow Hardening
 
-Create:
-- source-to-canonical mapping YAML
-- YAML-based business rule definitions
-- Python rule execution engine
-- validation report structures
-- canonical preview output
+Keep the operator-facing implementation coherent by:
+- aligning docs with actual XML/testing behavior
+- documenting Playground findings and operational constraints
+- expanding test coverage around bulk flow guardrails and PATCH lineage
+- improving UI feedback for blocked or ineligible actions
 
-## Phase 4 — XML Package Generation
+## Phase 5 — Broader Canonical Persistence
 
-Only after mapping and validation are understood, add:
-- schema registry
-- XML generator
-- XSD validation
-- XML preview/download
-- generated payload archive
-
-## Phase 5 — Manual Submission Support
-
-Support:
-- manual EUDAMED upload package preparation
-- user-entered upload result/status
-- batch-level and object-level status tracking
-- audit trail
+After the current SQLite relational shape is stable, extend persistence for:
+- accepted device state
+- submission/audit history
+- scenario change tracking
+- later canonical/device workflow views
 
 ## Phase 6 — Future M2M Transport
 
-Only after manual XML package generation is proven, add:
+Only after the manual XML/testing workflow is proven, add:
 - AS4/eDelivery gateway integration
 - automated message submission
 - response polling/receipt handling
@@ -160,7 +156,7 @@ Only after manual XML package generation is proven, add:
 - Pydantic
 - SQLAlchemy
 - Alembic
-- PostgreSQL
+- SQLite for the active application/testing/import state
 - pandas/openpyxl for Excel handling
 - lxml/xmlschema for XML/XSD handling
 - PyYAML for mapping and business rules

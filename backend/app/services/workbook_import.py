@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import hashlib
 import json
+import logging
+import shutil
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -12,6 +14,10 @@ from openpyxl import load_workbook
 
 from app.config import get_settings
 from app.models import (
+    DeviceIdentityIssueDetail,
+    DeviceIdentityIssueSummary,
+    DeviceSubjectDetail,
+    DeviceSubjectSummary,
     DatabaseColumnSummary,
     DatabaseForeignKeySummary,
     DatabaseHealthIssue,
@@ -21,6 +27,8 @@ from app.models import (
     DatabaseTableHealthSummary,
     DatabaseTableSchemaSummary,
     ImportedWorkbookSummary,
+    SourceRowDetail,
+    SourceRowSummary,
     WorkbookImportDiffSummary,
     WorkbookImportBatchSummary,
     WorkbookImportWorkbookDiff,
@@ -42,6 +50,26 @@ class ImportedSourceRow:
     sheet_name: str
     row_index: int
     values: dict[str, object | None]
+
+
+@dataclass(frozen=True)
+class DeviceSubjectRecord:
+    id: int
+    subject_key: str
+    product_family: str | None
+    product_variant: str | None
+    catalogue_number: str | None
+    primary_udi_di: str | None
+    basic_udi_di: str | None
+    current_source_row_id: int | None
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class DeviceSubjectMatchDecision:
+    created: bool
+    issue_code: str | None = None
 
 
 class WorkbookImportService:
@@ -80,6 +108,8 @@ class WorkbookImportService:
             device_subject_count = 0
 
             for workbook_path in sorted(self.settings.excel_dir.glob("*.xlsx")):
+                if workbook_path.name in self.settings.excluded_excel_workbook_names:
+                    continue
                 workbook_count += 1
                 workbook_cursor = connection.execute(
                     """
@@ -138,7 +168,7 @@ class WorkbookImportService:
                         ),
                     )
                     source_row_id = int(row_cursor.lastrowid)
-                    if self._upsert_device_subject(
+                    decision = self._match_device_subject(
                         connection=connection,
                         product_family=product_family,
                         product_variant=product_variant,
@@ -147,8 +177,11 @@ class WorkbookImportService:
                         basic_udi_di=basic_udi_di,
                         current_source_row_id=source_row_id,
                         updated_at=imported_at,
-                    ):
+                    )
+                    if decision.created:
                         device_subject_count += 1
+
+        backup_path = self._create_import_backup(import_batch_id=import_batch_id)
 
         return WorkbookImportRunResponse(
             import_batch_id=import_batch_id,
@@ -159,6 +192,11 @@ class WorkbookImportService:
             source_row_count=source_row_count,
             device_subject_count=device_subject_count,
         )
+
+    def import_batch_count(self) -> int:
+        with self._connect() as connection:
+            row = connection.execute("SELECT COUNT(*) FROM import_batch").fetchone()
+        return int(row[0]) if row is not None else 0
 
     def latest_import_batch(self) -> WorkbookImportBatchSummary | None:
         with self._connect() as connection:
@@ -228,20 +266,33 @@ class WorkbookImportService:
         imported_workbooks = self.imported_workbooks(import_batch_id=latest_batch.import_batch_id)
         with self._connect() as connection:
             available_tables = set(self._table_names(connection))
+            latest_batch_identity_issue_count = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM device_identity_issue di
+                    JOIN source_row sr ON sr.id = di.source_row_id
+                    JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                    WHERE sw.import_batch_id = ?
+                    """,
+                    (latest_batch.import_batch_id,),
+                ).fetchone()[0]
+            )
             table_counts = [
                 WorkbookImportTableCount(
                     table_name=table_name,
-                    row_count=self._safe_row_count(connection, table_name),
+                    row_count=row_count,
                     summary_label=summary_label,
                 )
-                for table_name, summary_label in (
-                    ("import_batch", "Import batches"),
-                    ("source_workbook", "Workbook snapshots"),
-                    ("source_row", "Imported workbook rows"),
-                    ("device_subject", "Stable device subjects"),
-                    ("testing_subjects", "Tracked testing subjects"),
-                    ("testing_events", "Tracked testing events"),
-                    ("reviewed_post_baselines", "Reviewed POST baselines"),
+                for table_name, summary_label, row_count in (
+                    ("import_batch", "Import batches", 1),
+                    ("source_workbook", "Workbook snapshots", latest_batch.workbook_count),
+                    ("source_row", "Imported workbook rows", latest_batch.source_row_count),
+                    ("device_subject", "Stable device subjects", latest_batch.device_subject_count),
+                    ("device_identity_issue", "Identity issues", latest_batch_identity_issue_count),
+                    ("testing_subjects", "Tracked testing subjects", self._safe_row_count(connection, "testing_subjects")),
+                    ("testing_events", "Tracked testing events", self._safe_row_count(connection, "testing_events")),
+                    ("reviewed_post_baselines", "Reviewed POST baselines", self._safe_row_count(connection, "reviewed_post_baselines")),
                 )
                 if table_name in available_tables
             ]
@@ -249,10 +300,13 @@ class WorkbookImportService:
                 """
                 SELECT COALESCE(sr.submission_operation, 'UNCLASSIFIED') AS submission_operation, COUNT(*) AS device_subject_count
                 FROM device_subject ds
-                LEFT JOIN source_row sr ON sr.id = ds.current_source_row_id
+                JOIN source_row sr ON sr.id = ds.current_source_row_id
+                JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                WHERE sw.import_batch_id = ?
                 GROUP BY COALESCE(sr.submission_operation, 'UNCLASSIFIED')
                 ORDER BY submission_operation
-                """
+                """,
+                (latest_batch.import_batch_id,),
             ).fetchall()
             duplicate_subject_rows = connection.execute(
                 """
@@ -276,6 +330,7 @@ class WorkbookImportService:
                  AND COALESCE(sr.product_variant, '') = COALESCE(ds.product_variant, '')
                 JOIN source_workbook sw ON sw.id = sr.source_workbook_id
                 WHERE current_workbook.import_batch_id = ?
+                  AND sw.import_batch_id = current_workbook.import_batch_id
                 GROUP BY ds.subject_key
                 HAVING COUNT(sr.id) > 1
                 ORDER BY source_row_count DESC, ds.subject_key
@@ -293,14 +348,38 @@ class WorkbookImportService:
                         JOIN source_row current_row ON current_row.id = ds.current_source_row_id
                         JOIN source_workbook current_workbook ON current_workbook.id = current_row.source_workbook_id
                         JOIN source_row sr
-                          ON COALESCE(sr.catalogue_number, '') = COALESCE(ds.catalogue_number, '')
+                         ON COALESCE(sr.catalogue_number, '') = COALESCE(ds.catalogue_number, '')
                          AND COALESCE(sr.primary_udi_di, '') = COALESCE(ds.primary_udi_di, '')
                          AND COALESCE(sr.product_family, '') = COALESCE(ds.product_family, '')
                          AND COALESCE(sr.product_variant, '') = COALESCE(ds.product_variant, '')
+                        JOIN source_workbook sw ON sw.id = sr.source_workbook_id
                         WHERE current_workbook.import_batch_id = ?
+                          AND sw.import_batch_id = current_workbook.import_batch_id
                         GROUP BY ds.subject_key
                         HAVING COUNT(sr.id) > 1
                     )
+                    """,
+                    (latest_batch.import_batch_id,),
+                ).fetchone()[0]
+            )
+            workbook_duplicate_row_count = int(
+                connection.execute(
+                    """
+                    SELECT COALESCE(SUM(duplicate_group.row_count), 0)
+                    FROM (
+                        SELECT COUNT(*) AS row_count
+                        FROM source_row sr
+                        JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                        WHERE sw.import_batch_id = ?
+                          AND COALESCE(TRIM(sr.product_family), '') <> ''
+                          AND COALESCE(TRIM(sr.product_variant), '') <> ''
+                          AND COALESCE(TRIM(sr.catalogue_number), '') <> ''
+                        GROUP BY
+                            COALESCE(TRIM(sr.product_family), ''),
+                            COALESCE(TRIM(sr.product_variant), ''),
+                            COALESCE(TRIM(sr.catalogue_number), '')
+                        HAVING COUNT(*) > 1
+                    ) duplicate_group
                     """,
                     (latest_batch.import_batch_id,),
                 ).fetchone()[0]
@@ -327,14 +406,21 @@ class WorkbookImportService:
             )
             for row in duplicate_subject_rows
         ]
+        unresolved_identity_row_count = self._unresolved_identity_row_count_for_batch(
+            latest_batch.import_batch_id,
+        )
 
         return WorkbookImportSnapshotSummary(
             import_batch=latest_batch,
             imported_workbooks=imported_workbooks,
             table_counts=table_counts,
             operation_counts=operation_counts,
-            duplicate_source_row_delta=max(latest_batch.source_row_count - latest_batch.device_subject_count, 0),
+            duplicate_source_row_delta=max(
+                latest_batch.source_row_count - latest_batch.device_subject_count - unresolved_identity_row_count,
+                0,
+            ),
             duplicate_subject_count=duplicate_subject_count,
+            workbook_duplicate_row_count=workbook_duplicate_row_count,
             top_duplicate_groups=duplicate_groups,
         )
 
@@ -366,6 +452,7 @@ class WorkbookImportService:
                 "source_workbook",
                 "source_row",
                 "device_subject",
+                "device_identity_issue",
                 "testing_subjects",
                 "testing_events",
                 "reviewed_post_baselines",
@@ -458,6 +545,26 @@ class WorkbookImportService:
                         """,
                         "device_subject",
                     ),
+                ),
+                DatabaseTableHealthSummary(
+                    table_name="device_identity_issue",
+                    row_count=self._safe_row_count(connection, "device_identity_issue"),
+                    orphan_count=self._safe_scalar(
+                        connection,
+                        """
+                        SELECT COUNT(*)
+                        FROM device_identity_issue issue
+                        LEFT JOIN source_row row ON row.id = issue.source_row_id
+                        LEFT JOIN device_subject subject ON subject.id = issue.device_subject_id
+                        WHERE row.id IS NULL
+                           OR (
+                               issue.device_subject_id IS NOT NULL
+                               AND subject.id IS NULL
+                           )
+                        """,
+                        "device_identity_issue",
+                    ),
+                    identity_gap_count=0,
                 ),
                 DatabaseTableHealthSummary(
                     table_name="testing_subjects",
@@ -579,6 +686,351 @@ class WorkbookImportService:
             changed_workbooks=changed_workbooks,
         )
 
+    def list_device_subjects(
+        self,
+        *,
+        product_family: str | None = None,
+        product_variant: str | None = None,
+        catalogue_number: str | None = None,
+        import_batch_id: int | None = None,
+        limit: int = 200,
+    ) -> list[DeviceSubjectSummary]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if product_family:
+            clauses.append("COALESCE(ds.product_family, '') = ?")
+            params.append(product_family)
+        if product_variant:
+            clauses.append("COALESCE(ds.product_variant, '') = ?")
+            params.append(product_variant)
+        if catalogue_number:
+            clauses.append("COALESCE(ds.catalogue_number, '') = ?")
+            params.append(catalogue_number)
+        if import_batch_id is not None:
+            clauses.append("sw.import_batch_id = ?")
+            params.append(import_batch_id)
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    ds.id,
+                    ds.subject_key,
+                    ds.product_family,
+                    ds.product_variant,
+                    ds.catalogue_number,
+                    ds.primary_udi_di,
+                    ds.basic_udi_di,
+                    ds.current_source_row_id,
+                    sw.import_batch_id AS current_import_batch_id,
+                    ds.created_at,
+                    ds.updated_at
+                FROM device_subject ds
+                LEFT JOIN source_row sr ON sr.id = ds.current_source_row_id
+                LEFT JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                {where_clause}
+                ORDER BY ds.product_family, ds.product_variant, ds.catalogue_number, ds.id
+                LIMIT ?
+                """,
+                (*params, limit),
+            ).fetchall()
+        return [
+            DeviceSubjectSummary(
+                id=int(row["id"]),
+                subject_key=str(row["subject_key"]),
+                product_family=self._optional_string(row["product_family"]),
+                product_variant=self._optional_string(row["product_variant"]),
+                catalogue_number=self._optional_string(row["catalogue_number"]),
+                primary_udi_di=self._optional_string(row["primary_udi_di"]),
+                basic_udi_di=self._optional_string(row["basic_udi_di"]),
+                current_source_row_id=int(row["current_source_row_id"]) if row["current_source_row_id"] is not None else None,
+                current_import_batch_id=int(row["current_import_batch_id"]) if row["current_import_batch_id"] is not None else None,
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+            )
+            for row in rows
+        ]
+
+    def get_device_subject(self, subject_id: int) -> DeviceSubjectDetail | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    ds.id,
+                    ds.subject_key,
+                    ds.product_family,
+                    ds.product_variant,
+                    ds.catalogue_number,
+                    ds.primary_udi_di,
+                    ds.basic_udi_di,
+                    ds.current_source_row_id,
+                    sw.import_batch_id AS current_import_batch_id,
+                    ds.created_at,
+                    ds.updated_at,
+                    sw.workbook_name AS current_source_workbook_name,
+                    sr.sheet_name AS current_source_sheet_name,
+                    sr.row_index AS current_source_row_index
+                FROM device_subject ds
+                LEFT JOIN source_row sr ON sr.id = ds.current_source_row_id
+                LEFT JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                WHERE ds.id = ?
+                """,
+                (subject_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return DeviceSubjectDetail(
+            id=int(row["id"]),
+            subject_key=str(row["subject_key"]),
+            product_family=self._optional_string(row["product_family"]),
+            product_variant=self._optional_string(row["product_variant"]),
+            catalogue_number=self._optional_string(row["catalogue_number"]),
+            primary_udi_di=self._optional_string(row["primary_udi_di"]),
+            basic_udi_di=self._optional_string(row["basic_udi_di"]),
+            current_source_row_id=int(row["current_source_row_id"]) if row["current_source_row_id"] is not None else None,
+            current_import_batch_id=int(row["current_import_batch_id"]) if row["current_import_batch_id"] is not None else None,
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+            current_source_workbook_name=self._optional_string(row["current_source_workbook_name"]),
+            current_source_sheet_name=self._optional_string(row["current_source_sheet_name"]),
+            current_source_row_index=int(row["current_source_row_index"]) if row["current_source_row_index"] is not None else None,
+        )
+
+    def list_source_rows(
+        self,
+        *,
+        product_family: str | None = None,
+        product_variant: str | None = None,
+        catalogue_number: str | None = None,
+        submission_operation: str | None = None,
+        import_batch_id: int | None = None,
+        limit: int = 200,
+    ) -> list[SourceRowSummary]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if product_family:
+            clauses.append("COALESCE(sr.product_family, '') = ?")
+            params.append(product_family)
+        if product_variant:
+            clauses.append("COALESCE(sr.product_variant, '') = ?")
+            params.append(product_variant)
+        if catalogue_number:
+            clauses.append("COALESCE(sr.catalogue_number, '') = ?")
+            params.append(catalogue_number)
+        if submission_operation:
+            clauses.append("COALESCE(sr.submission_operation, '') = ?")
+            params.append(submission_operation)
+        if import_batch_id is not None:
+            clauses.append("sw.import_batch_id = ?")
+            params.append(import_batch_id)
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    sr.id,
+                    sr.source_workbook_id,
+                    sw.import_batch_id,
+                    sw.workbook_name,
+                    sr.sheet_name,
+                    sr.row_index,
+                    sr.product_family,
+                    sr.product_variant,
+                    sr.catalogue_number,
+                    sr.primary_udi_di,
+                    sr.submission_operation,
+                    sr.canonical_status,
+                    sr.created_at
+                FROM source_row sr
+                JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                {where_clause}
+                ORDER BY sw.import_batch_id DESC, sw.workbook_name, sr.sheet_name, sr.row_index
+                LIMIT ?
+                """,
+                (*params, limit),
+            ).fetchall()
+        return [
+            SourceRowSummary(
+                id=int(row["id"]),
+                source_workbook_id=int(row["source_workbook_id"]),
+                import_batch_id=int(row["import_batch_id"]),
+                workbook_name=str(row["workbook_name"]),
+                sheet_name=str(row["sheet_name"]),
+                row_index=int(row["row_index"]),
+                product_family=self._optional_string(row["product_family"]),
+                product_variant=self._optional_string(row["product_variant"]),
+                catalogue_number=self._optional_string(row["catalogue_number"]),
+                primary_udi_di=self._optional_string(row["primary_udi_di"]),
+                submission_operation=self._optional_string(row["submission_operation"]),
+                canonical_status=self._optional_string(row["canonical_status"]),
+                created_at=str(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    def get_source_row(self, source_row_id: int) -> SourceRowDetail | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    sr.id,
+                    sr.source_workbook_id,
+                    sw.import_batch_id,
+                    sw.workbook_name,
+                    sr.sheet_name,
+                    sr.row_index,
+                    sr.product_family,
+                    sr.product_variant,
+                    sr.catalogue_number,
+                    sr.primary_udi_di,
+                    sr.submission_operation,
+                    sr.canonical_status,
+                    sr.created_at,
+                    sr.raw_payload_json,
+                    ds.id AS linked_device_subject_id,
+                    ds.subject_key AS linked_device_subject_key
+                FROM source_row sr
+                JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                LEFT JOIN device_subject ds ON ds.current_source_row_id = sr.id
+                WHERE sr.id = ?
+                """,
+                (source_row_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return SourceRowDetail(
+            id=int(row["id"]),
+            source_workbook_id=int(row["source_workbook_id"]),
+            import_batch_id=int(row["import_batch_id"]),
+            workbook_name=str(row["workbook_name"]),
+            sheet_name=str(row["sheet_name"]),
+            row_index=int(row["row_index"]),
+            product_family=self._optional_string(row["product_family"]),
+            product_variant=self._optional_string(row["product_variant"]),
+            catalogue_number=self._optional_string(row["catalogue_number"]),
+            primary_udi_di=self._optional_string(row["primary_udi_di"]),
+            submission_operation=self._optional_string(row["submission_operation"]),
+            canonical_status=self._optional_string(row["canonical_status"]),
+            created_at=str(row["created_at"]),
+            raw_payload_json=str(row["raw_payload_json"]),
+            linked_device_subject_id=int(row["linked_device_subject_id"]) if row["linked_device_subject_id"] is not None else None,
+            linked_device_subject_key=self._optional_string(row["linked_device_subject_key"]),
+        )
+
+    def list_device_identity_issues(
+        self,
+        *,
+        issue_code: str | None = None,
+        product_family: str | None = None,
+        product_variant: str | None = None,
+        catalogue_number: str | None = None,
+        import_batch_id: int | None = None,
+        limit: int = 200,
+    ) -> list[DeviceIdentityIssueSummary]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if issue_code:
+            clauses.append("issue.issue_code = ?")
+            params.append(issue_code)
+        if product_family:
+            clauses.append("COALESCE(sr.product_family, '') = ?")
+            params.append(product_family)
+        if product_variant:
+            clauses.append("COALESCE(sr.product_variant, '') = ?")
+            params.append(product_variant)
+        if catalogue_number:
+            clauses.append("COALESCE(sr.catalogue_number, '') = ?")
+            params.append(catalogue_number)
+        if import_batch_id is not None:
+            clauses.append("sw.import_batch_id = ?")
+            params.append(import_batch_id)
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    issue.id,
+                    issue.source_row_id,
+                    issue.device_subject_id,
+                    issue.issue_code,
+                    issue.severity,
+                    issue.created_at,
+                    sr.product_family,
+                    sr.product_variant,
+                    sr.catalogue_number,
+                    sr.primary_udi_di,
+                    sw.import_batch_id
+                FROM device_identity_issue issue
+                JOIN source_row sr ON sr.id = issue.source_row_id
+                JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                {where_clause}
+                ORDER BY issue.created_at DESC, issue.id DESC
+                LIMIT ?
+                """,
+                (*params, limit),
+            ).fetchall()
+        return [
+            DeviceIdentityIssueSummary(
+                id=int(row["id"]),
+                source_row_id=int(row["source_row_id"]),
+                device_subject_id=int(row["device_subject_id"]) if row["device_subject_id"] is not None else None,
+                issue_code=str(row["issue_code"]),
+                severity=str(row["severity"]),
+                created_at=str(row["created_at"]),
+                product_family=self._optional_string(row["product_family"]),
+                product_variant=self._optional_string(row["product_variant"]),
+                catalogue_number=self._optional_string(row["catalogue_number"]),
+                primary_udi_di=self._optional_string(row["primary_udi_di"]),
+                import_batch_id=int(row["import_batch_id"]) if row["import_batch_id"] is not None else None,
+            )
+            for row in rows
+        ]
+
+    def get_device_identity_issue(self, issue_id: int) -> DeviceIdentityIssueDetail | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    issue.id,
+                    issue.source_row_id,
+                    issue.device_subject_id,
+                    issue.issue_code,
+                    issue.severity,
+                    issue.details_json,
+                    issue.created_at,
+                    issue.resolved_at,
+                    issue.resolution_note,
+                    sr.product_family,
+                    sr.product_variant,
+                    sr.catalogue_number,
+                    sr.primary_udi_di,
+                    sw.import_batch_id
+                FROM device_identity_issue issue
+                JOIN source_row sr ON sr.id = issue.source_row_id
+                JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                WHERE issue.id = ?
+                """,
+                (issue_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return DeviceIdentityIssueDetail(
+            id=int(row["id"]),
+            source_row_id=int(row["source_row_id"]),
+            device_subject_id=int(row["device_subject_id"]) if row["device_subject_id"] is not None else None,
+            issue_code=str(row["issue_code"]),
+            severity=str(row["severity"]),
+            created_at=str(row["created_at"]),
+            product_family=self._optional_string(row["product_family"]),
+            product_variant=self._optional_string(row["product_variant"]),
+            catalogue_number=self._optional_string(row["catalogue_number"]),
+            primary_udi_di=self._optional_string(row["primary_udi_di"]),
+            import_batch_id=int(row["import_batch_id"]) if row["import_batch_id"] is not None else None,
+            details_json=self._json_object(row["details_json"]),
+            resolved_at=self._optional_string(row["resolved_at"]),
+            resolution_note=self._optional_string(row["resolution_note"]),
+        )
+
     def _ensure_schema(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
@@ -643,6 +1095,23 @@ class WorkbookImportService:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS device_identity_issue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_row_id INTEGER NOT NULL,
+                    device_subject_id INTEGER,
+                    issue_code TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    details_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    resolved_at TEXT,
+                    resolution_note TEXT,
+                    FOREIGN KEY(source_row_id) REFERENCES source_row(id) ON DELETE CASCADE,
+                    FOREIGN KEY(device_subject_id) REFERENCES device_subject(id) ON DELETE SET NULL
+                )
+                """
+            )
 
     def _promotion_lookup(self) -> dict[tuple[str, str, int], dict[str, str | None]]:
         bundle = self.validation_service.build_validation_bundle()
@@ -696,7 +1165,7 @@ class WorkbookImportService:
                 rows.append(ImportedSourceRow(sheet_name=sheet_name, row_index=row_index, values=mapped_values))
         return rows
 
-    def _upsert_device_subject(
+    def _match_device_subject(
         self,
         *,
         connection: sqlite3.Connection,
@@ -707,41 +1176,271 @@ class WorkbookImportService:
         basic_udi_di: str | None,
         current_source_row_id: int,
         updated_at: str,
-    ) -> bool:
+    ) -> DeviceSubjectMatchDecision:
+        normalized_primary = self._normalize_identity(primary_udi_di)
+        fallback_reliable = self._fallback_identity_is_complete(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        primary_matches = self._find_device_subjects_by_primary(connection, primary_udi_di=primary_udi_di)
+        fallback_matches = self._find_device_subjects_by_fallback(
+            connection,
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+
+        if normalized_primary:
+            if len(primary_matches) == 1:
+                primary_match = primary_matches[0]
+                conflicting_fallbacks = [subject for subject in fallback_matches if subject.id != primary_match.id]
+                if conflicting_fallbacks:
+                    self._record_identity_issue(
+                        connection,
+                        source_row_id=current_source_row_id,
+                        device_subject_id=primary_match.id,
+                        issue_code="identifier_conflict",
+                        details={
+                            "match_strategy": "primary_udi_di",
+                            "conflicting_fallback_subject_ids": [subject.id for subject in conflicting_fallbacks],
+                            "primary_udi_di": primary_udi_di,
+                            "product_family": product_family,
+                            "product_variant": product_variant,
+                            "catalogue_number": catalogue_number,
+                        },
+                        created_at=updated_at,
+                    )
+                    return DeviceSubjectMatchDecision(created=False, issue_code="identifier_conflict")
+                self._save_device_subject(
+                    connection,
+                    existing_subject=primary_match,
+                    product_family=product_family,
+                    product_variant=product_variant,
+                    catalogue_number=catalogue_number,
+                    primary_udi_di=primary_udi_di,
+                    basic_udi_di=basic_udi_di,
+                    current_source_row_id=current_source_row_id,
+                    updated_at=updated_at,
+                )
+                if self._has_identity_label_drift(
+                    primary_match,
+                    product_family=product_family,
+                    product_variant=product_variant,
+                    catalogue_number=catalogue_number,
+                ):
+                    self._record_identity_issue(
+                        connection,
+                        source_row_id=current_source_row_id,
+                        device_subject_id=primary_match.id,
+                        issue_code="identity_label_drift",
+                        details={
+                            "match_strategy": "primary_udi_di",
+                            "previous_product_family": primary_match.product_family,
+                            "previous_product_variant": primary_match.product_variant,
+                            "previous_catalogue_number": primary_match.catalogue_number,
+                            "next_product_family": product_family,
+                            "next_product_variant": product_variant,
+                            "next_catalogue_number": catalogue_number,
+                            "primary_udi_di": primary_udi_di,
+                        },
+                        created_at=updated_at,
+                    )
+                    return DeviceSubjectMatchDecision(created=False, issue_code="identity_label_drift")
+                return DeviceSubjectMatchDecision(created=False)
+            if len(primary_matches) > 1:
+                self._record_identity_issue(
+                    connection,
+                    source_row_id=current_source_row_id,
+                    device_subject_id=None,
+                    issue_code="identifier_conflict",
+                    details={
+                        "reason": "multiple_subjects_share_primary_udi_di",
+                        "primary_udi_di": primary_udi_di,
+                        "matching_subject_ids": [subject.id for subject in primary_matches],
+                    },
+                    created_at=updated_at,
+                )
+                return DeviceSubjectMatchDecision(created=False, issue_code="identifier_conflict")
+            if len(fallback_matches) == 1:
+                fallback_match = fallback_matches[0]
+                existing_primary = self._normalize_identity(fallback_match.primary_udi_di)
+                if existing_primary and existing_primary != normalized_primary:
+                    self._record_identity_issue(
+                        connection,
+                        source_row_id=current_source_row_id,
+                        device_subject_id=fallback_match.id,
+                        issue_code="identifier_conflict",
+                        details={
+                            "match_strategy": "fallback_tuple",
+                            "existing_primary_udi_di": fallback_match.primary_udi_di,
+                            "incoming_primary_udi_di": primary_udi_di,
+                            "product_family": product_family,
+                            "product_variant": product_variant,
+                            "catalogue_number": catalogue_number,
+                        },
+                        created_at=updated_at,
+                    )
+                    return DeviceSubjectMatchDecision(created=False, issue_code="identifier_conflict")
+                self._save_device_subject(
+                    connection,
+                    existing_subject=fallback_match,
+                    product_family=product_family,
+                    product_variant=product_variant,
+                    catalogue_number=catalogue_number,
+                    primary_udi_di=primary_udi_di,
+                    basic_udi_di=basic_udi_di,
+                    current_source_row_id=current_source_row_id,
+                    updated_at=updated_at,
+                )
+                return DeviceSubjectMatchDecision(created=False)
+            if len(fallback_matches) > 1:
+                self._record_identity_issue(
+                    connection,
+                    source_row_id=current_source_row_id,
+                    device_subject_id=None,
+                    issue_code="ambiguous_fallback_match",
+                    details={
+                        "primary_udi_di": primary_udi_di,
+                        "product_family": product_family,
+                        "product_variant": product_variant,
+                        "catalogue_number": catalogue_number,
+                        "matching_subject_ids": [subject.id for subject in fallback_matches],
+                    },
+                    created_at=updated_at,
+                )
+                return DeviceSubjectMatchDecision(created=False, issue_code="ambiguous_fallback_match")
+            self._save_device_subject(
+                connection,
+                existing_subject=None,
+                product_family=product_family,
+                product_variant=product_variant,
+                catalogue_number=catalogue_number,
+                primary_udi_di=primary_udi_di,
+                basic_udi_di=basic_udi_di,
+                current_source_row_id=current_source_row_id,
+                updated_at=updated_at,
+            )
+            return DeviceSubjectMatchDecision(created=True)
+
+        if fallback_reliable:
+            if len(fallback_matches) == 1:
+                self._save_device_subject(
+                    connection,
+                    existing_subject=fallback_matches[0],
+                    product_family=product_family,
+                    product_variant=product_variant,
+                    catalogue_number=catalogue_number,
+                    primary_udi_di=primary_udi_di,
+                    basic_udi_di=basic_udi_di,
+                    current_source_row_id=current_source_row_id,
+                    updated_at=updated_at,
+                )
+                return DeviceSubjectMatchDecision(created=False)
+            if len(fallback_matches) > 1:
+                self._record_identity_issue(
+                    connection,
+                    source_row_id=current_source_row_id,
+                    device_subject_id=None,
+                    issue_code="ambiguous_fallback_match",
+                    details={
+                        "product_family": product_family,
+                        "product_variant": product_variant,
+                        "catalogue_number": catalogue_number,
+                        "matching_subject_ids": [subject.id for subject in fallback_matches],
+                    },
+                    created_at=updated_at,
+                )
+                return DeviceSubjectMatchDecision(created=False, issue_code="ambiguous_fallback_match")
+            self._save_device_subject(
+                connection,
+                existing_subject=None,
+                product_family=product_family,
+                product_variant=product_variant,
+                catalogue_number=catalogue_number,
+                primary_udi_di=primary_udi_di,
+                basic_udi_di=basic_udi_di,
+                current_source_row_id=current_source_row_id,
+                updated_at=updated_at,
+            )
+            return DeviceSubjectMatchDecision(created=True)
+
+        self._record_identity_issue(
+            connection,
+            source_row_id=current_source_row_id,
+            device_subject_id=None,
+            issue_code="insufficient_identity_data",
+            details={
+                "product_family": product_family,
+                "product_variant": product_variant,
+                "catalogue_number": catalogue_number,
+                "primary_udi_di": primary_udi_di,
+            },
+            created_at=updated_at,
+        )
+        return DeviceSubjectMatchDecision(created=False, issue_code="insufficient_identity_data")
+
+    def _save_device_subject(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        existing_subject: DeviceSubjectRecord | None,
+        product_family: str | None,
+        product_variant: str | None,
+        catalogue_number: str | None,
+        primary_udi_di: str | None,
+        basic_udi_di: str | None,
+        current_source_row_id: int,
+        updated_at: str,
+    ) -> None:
         subject_key = self._subject_key(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
             primary_udi_di=primary_udi_di,
-        )
+        ) or (existing_subject.subject_key if existing_subject is not None else None)
         if subject_key is None:
-            return False
-        existing = connection.execute(
-            "SELECT 1 FROM device_subject WHERE subject_key = ? LIMIT 1",
-            (subject_key,),
-        ).fetchone()
+            return
+        if existing_subject is None:
+            connection.execute(
+                """
+                INSERT INTO device_subject (
+                    subject_key,
+                    product_family,
+                    product_variant,
+                    catalogue_number,
+                    primary_udi_di,
+                    basic_udi_di,
+                    current_source_row_id,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    subject_key,
+                    product_family,
+                    product_variant,
+                    catalogue_number,
+                    primary_udi_di,
+                    basic_udi_di,
+                    current_source_row_id,
+                    updated_at,
+                    updated_at,
+                ),
+            )
+            return
         connection.execute(
             """
-            INSERT INTO device_subject (
-                subject_key,
-                product_family,
-                product_variant,
-                catalogue_number,
-                primary_udi_di,
-                basic_udi_di,
-                current_source_row_id,
-                created_at,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(subject_key)
-            DO UPDATE SET
-                product_family = excluded.product_family,
-                product_variant = excluded.product_variant,
-                catalogue_number = excluded.catalogue_number,
-                primary_udi_di = excluded.primary_udi_di,
-                basic_udi_di = excluded.basic_udi_di,
-                current_source_row_id = excluded.current_source_row_id,
-                updated_at = excluded.updated_at
+            UPDATE device_subject
+            SET subject_key = ?,
+                product_family = ?,
+                product_variant = ?,
+                catalogue_number = ?,
+                primary_udi_di = ?,
+                basic_udi_di = ?,
+                current_source_row_id = ?,
+                updated_at = ?
+            WHERE id = ?
             """,
             (
                 subject_key,
@@ -752,10 +1451,149 @@ class WorkbookImportService:
                 basic_udi_di,
                 current_source_row_id,
                 updated_at,
-                updated_at,
+                existing_subject.id,
             ),
         )
-        return existing is None
+
+    def _find_device_subjects_by_primary(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        primary_udi_di: str | None,
+    ) -> list[DeviceSubjectRecord]:
+        normalized_primary = self._normalize_identity(primary_udi_di)
+        if not normalized_primary:
+            return []
+        rows = connection.execute(
+            """
+            SELECT
+                id,
+                subject_key,
+                product_family,
+                product_variant,
+                catalogue_number,
+                primary_udi_di,
+                basic_udi_di,
+                current_source_row_id,
+                created_at,
+                updated_at
+            FROM device_subject
+            WHERE COALESCE(TRIM(primary_udi_di), '') <> ''
+            ORDER BY id
+            """
+        ).fetchall()
+        return [
+            self._device_subject_from_row(row)
+            for row in rows
+            if self._normalize_identity(row["primary_udi_di"]) == normalized_primary
+        ]
+
+    def _find_device_subjects_by_fallback(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        product_family: str | None,
+        product_variant: str | None,
+        catalogue_number: str | None,
+    ) -> list[DeviceSubjectRecord]:
+        if not self._fallback_identity_is_complete(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        ):
+            return []
+        normalized_family = self._normalize_identity(product_family)
+        normalized_variant = self._normalize_identity(product_variant)
+        normalized_catalogue = self._normalize_identity(catalogue_number)
+        rows = connection.execute(
+            """
+            SELECT
+                id,
+                subject_key,
+                product_family,
+                product_variant,
+                catalogue_number,
+                primary_udi_di,
+                basic_udi_di,
+                current_source_row_id,
+                created_at,
+                updated_at
+            FROM device_subject
+            WHERE COALESCE(TRIM(product_family), '') <> ''
+              AND COALESCE(TRIM(product_variant), '') <> ''
+              AND COALESCE(TRIM(catalogue_number), '') <> ''
+            ORDER BY id
+            """
+        ).fetchall()
+        return [
+            self._device_subject_from_row(row)
+            for row in rows
+            if self._normalize_identity(row["product_family"]) == normalized_family
+            and self._normalize_identity(row["product_variant"]) == normalized_variant
+            and self._normalize_identity(row["catalogue_number"]) == normalized_catalogue
+        ]
+
+    def _record_identity_issue(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        source_row_id: int,
+        device_subject_id: int | None,
+        issue_code: str,
+        details: dict[str, Any],
+        created_at: str,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO device_identity_issue (
+                source_row_id,
+                device_subject_id,
+                issue_code,
+                severity,
+                details_json,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                source_row_id,
+                device_subject_id,
+                issue_code,
+                "warning",
+                json.dumps(details, default=str, sort_keys=True),
+                created_at,
+            ),
+        )
+
+    @classmethod
+    def _has_identity_label_drift(
+        cls,
+        existing_subject: DeviceSubjectRecord,
+        *,
+        product_family: str | None,
+        product_variant: str | None,
+        catalogue_number: str | None,
+    ) -> bool:
+        return any(
+            cls._normalize_identity(current) != cls._normalize_identity(next_value)
+            for current, next_value in (
+                (existing_subject.product_family, product_family),
+                (existing_subject.product_variant, product_variant),
+                (existing_subject.catalogue_number, catalogue_number),
+            )
+        )
+
+    @classmethod
+    def _fallback_identity_is_complete(
+        cls,
+        *,
+        product_family: str | None,
+        product_variant: str | None,
+        catalogue_number: str | None,
+    ) -> bool:
+        return all(
+            cls._normalize_identity(value)
+            for value in (product_family, product_variant, catalogue_number)
+        )
 
     @staticmethod
     def _file_hash(path: Path) -> str:
@@ -790,13 +1628,30 @@ class WorkbookImportService:
         catalogue_number: str | None,
         primary_udi_di: str | None,
     ) -> str | None:
+        primary = cls._normalize_identity(primary_udi_di)
+        if primary:
+            return f"primary:{primary}"
         family = cls._normalize_identity(product_family)
         variant = cls._normalize_identity(product_variant)
         catalogue = cls._normalize_identity(catalogue_number)
-        primary = cls._normalize_identity(primary_udi_di)
-        if not family or not variant or (not catalogue and not primary):
+        if not family or not variant or not catalogue:
             return None
-        return "|".join(part for part in (family, variant, catalogue or primary) if part)
+        return f"fallback:{family}|{variant}|{catalogue}"
+
+    @classmethod
+    def _device_subject_from_row(cls, row: sqlite3.Row) -> DeviceSubjectRecord:
+        return DeviceSubjectRecord(
+            id=int(row["id"]),
+            subject_key=str(row["subject_key"]),
+            product_family=cls._optional_string(row["product_family"]),
+            product_variant=cls._optional_string(row["product_variant"]),
+            catalogue_number=cls._optional_string(row["catalogue_number"]),
+            primary_udi_di=cls._optional_string(row["primary_udi_di"]),
+            basic_udi_di=cls._optional_string(row["basic_udi_di"]),
+            current_source_row_id=int(row["current_source_row_id"]) if row["current_source_row_id"] is not None else None,
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
 
     @staticmethod
     def _batch_summary_from_row(row: sqlite3.Row) -> WorkbookImportBatchSummary:
@@ -833,11 +1688,42 @@ class WorkbookImportService:
                 continue
         return items
 
+    @staticmethod
+    def _json_object(value: object) -> dict[str, Any]:
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            return value
+        try:
+            parsed = json.loads(str(value))
+        except (TypeError, ValueError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
+
+    def _create_import_backup(self, *, import_batch_id: int) -> Path:
+        backup_dir = self.settings.testing_state_backup_dir
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        backup_path = backup_dir / f"testing-state-batch-{import_batch_id}-{timestamp}.sqlite3"
+        shutil.copy2(self.db_path, backup_path)
+        self._prune_import_backups(backup_dir)
+        return backup_path
+
+    def _prune_import_backups(self, backup_dir: Path) -> None:
+        keep_count = max(self.settings.testing_state_backup_keep_count, 1)
+        backups = sorted(
+            backup_dir.glob("testing-state-batch-*.sqlite3"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        for stale_backup in backups[keep_count:]:
+            stale_backup.unlink(missing_ok=True)
 
     @staticmethod
     def _table_names(connection: sqlite3.Connection) -> list[str]:
@@ -998,4 +1884,20 @@ class WorkbookImportService:
             """,
             (import_batch_id,),
         ).fetchone()
+        return int(row[0]) if row is not None else 0
+
+    def _unresolved_identity_row_count_for_batch(self, import_batch_id: int) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(DISTINCT sr.id)
+                FROM source_row sr
+                JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                JOIN device_identity_issue issue ON issue.source_row_id = sr.id
+                LEFT JOIN device_subject ds ON ds.current_source_row_id = sr.id
+                WHERE sw.import_batch_id = ?
+                  AND ds.id IS NULL
+                """,
+                (import_batch_id,),
+            ).fetchone()
         return int(row[0]) if row is not None else 0

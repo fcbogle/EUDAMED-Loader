@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ApiError, api } from "./api";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
@@ -25,6 +25,7 @@ import type {
   CriticalWarningCodeOption,
   DatabaseHealthSummary,
   DatabaseSchemaSummary,
+  DeviceSubjectSummary,
   DistinctValueProfile,
   GeneratedPatchScenarioPreview,
   ImportedWorkbookSummary,
@@ -37,7 +38,6 @@ import type {
   SheetProfile,
   SheetSummary,
   SingleRecordXmlPreview,
-  WorkbookImportDiffSummary,
   WorkbookImportDuplicateGroup,
   WorkbookImportSnapshotSummary,
   WorkbookSummary,
@@ -880,6 +880,14 @@ function suggestAction(
   };
 }
 
+function matchesReadModelFilter(values: Array<string | number | null | undefined>, filterValue: string): boolean {
+  const normalizedFilter = filterValue.trim().toLowerCase();
+  if (!normalizedFilter) {
+    return true;
+  }
+  return values.some((value) => String(value ?? "").toLowerCase().includes(normalizedFilter));
+}
+
 export function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("workbooks");
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
@@ -890,7 +898,8 @@ export function App() {
   const [latestWorkbookImportSummary, setLatestWorkbookImportSummary] = useState<WorkbookImportSnapshotSummary | null>(null);
   const [databaseSchemaSummary, setDatabaseSchemaSummary] = useState<DatabaseSchemaSummary | null>(null);
   const [databaseHealthSummary, setDatabaseHealthSummary] = useState<DatabaseHealthSummary | null>(null);
-  const [latestWorkbookImportDiffSummary, setLatestWorkbookImportDiffSummary] = useState<WorkbookImportDiffSummary | null>(null);
+  const [deviceSubjects, setDeviceSubjects] = useState<DeviceSubjectSummary[]>([]);
+  const workbookImportMonitoringRequestRef = useRef<number>(0);
   const [workbookImportSummaryError, setWorkbookImportSummaryError] = useState<string | null>(null);
   const [hasWorkbookImportSnapshot, setHasWorkbookImportSnapshot] = useState<boolean>(false);
   const [isRunningWorkbookImport, setIsRunningWorkbookImport] = useState<boolean>(false);
@@ -908,6 +917,8 @@ export function App() {
   const [selectedValidationRecordKey, setSelectedValidationRecordKey] = useState<string | null>(null);
   const [selectedValidationFamily, setSelectedValidationFamily] = useState<string | null>(null);
   const [selectedValidationVariant, setSelectedValidationVariant] = useState<string | null>(null);
+  const [selectedDeviceSubjectFamily, setSelectedDeviceSubjectFamily] = useState<string>("");
+  const [selectedDeviceSubjectVariant, setSelectedDeviceSubjectVariant] = useState<string>("");
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
   const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
   const [selectedXmlRecordKey, setSelectedXmlRecordKey] = useState<string | null>(null);
@@ -1142,6 +1153,8 @@ export function App() {
   }
 
   async function loadWorkbookImportMonitoring(): Promise<void> {
+    const requestId = workbookImportMonitoringRequestRef.current + 1;
+    workbookImportMonitoringRequestRef.current = requestId;
     const workbookImportSummaryResult = await api
       .latestWorkbookImportSummary()
       .then((data) => ({ data, error: null as string | null, hasSnapshot: true }))
@@ -1172,29 +1185,30 @@ export function App() {
         error: requestError.message || "Database health summary is unavailable.",
       }));
 
-    const workbookImportDiffResult = await api
-      .latestWorkbookImportDiff()
+    const deviceSubjectsResult = await api
+      .workbookImportDeviceSubjects({
+        limit: 10000,
+      })
       .then((data) => ({ data, error: null as string | null }))
-      .catch((requestError: Error) => {
-        if (requestError instanceof ApiError && requestError.status === 404) {
-          return { data: null, error: null as string | null };
-        }
-        return {
-          data: null,
-          error: requestError.message || "Latest import diff is unavailable.",
-        };
-      });
+      .catch((requestError: Error) => ({
+        data: [] as DeviceSubjectSummary[],
+        error: requestError.message || "Device subject summary is unavailable.",
+      }));
+
+    if (requestId !== workbookImportMonitoringRequestRef.current) {
+      return;
+    }
 
     setLatestWorkbookImportSummary(workbookImportSummaryResult.data);
     setDatabaseSchemaSummary(databaseSchemaSummaryResult.data);
     setDatabaseHealthSummary(databaseHealthSummaryResult.data);
-    setLatestWorkbookImportDiffSummary(workbookImportDiffResult.data);
+    setDeviceSubjects(deviceSubjectsResult.data);
     setHasWorkbookImportSnapshot(workbookImportSummaryResult.hasSnapshot);
     const monitoringErrors = [
       workbookImportSummaryResult.error,
       databaseSchemaSummaryResult.error,
       databaseHealthSummaryResult.error,
-      workbookImportDiffResult.error,
+      deviceSubjectsResult.error,
     ].filter(Boolean);
     setWorkbookImportSummaryError(monitoringErrors.length ? monitoringErrors.join(" ") : null);
   }
@@ -1277,6 +1291,21 @@ export function App() {
       void loadSchemaInventory();
     }
   }, [activeTab, schemas]);
+
+  useEffect(() => {
+    const availableVariants = (canonicalValidation?.variant_summaries ?? []).filter(
+      (summary) =>
+        (!selectedDeviceSubjectFamily || summary.product_family === selectedDeviceSubjectFamily) &&
+        summary.xml_ready_records > 0,
+    );
+    if (!selectedDeviceSubjectVariant) {
+      return;
+    }
+    if (availableVariants.some((summary) => summary.product_variant === selectedDeviceSubjectVariant)) {
+      return;
+    }
+    setSelectedDeviceSubjectVariant("");
+  }, [canonicalValidation, selectedDeviceSubjectFamily, selectedDeviceSubjectVariant]);
 
   useEffect(() => {
     if (!selectedSheet) {
@@ -1518,6 +1547,26 @@ export function App() {
   const canonicalValidationRecords = canonicalValidation?.records ?? [];
   const validationFamilySummaries = canonicalValidation?.family_summaries ?? [];
   const validationVariantSummaries = canonicalValidation?.variant_summaries ?? [];
+  const deviceSubjectFamilyOptions = Array.from(
+    new Set(
+      validationFamilySummaries
+        .filter((summary) => summary.xml_ready_records > 0)
+        .map((summary) => summary.product_family)
+        .filter(Boolean),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
+  const deviceSubjectVariantOptions = Array.from(
+    new Set(
+      validationVariantSummaries
+        .filter(
+          (summary) =>
+            summary.xml_ready_records > 0 &&
+            (!selectedDeviceSubjectFamily || summary.product_family === selectedDeviceSubjectFamily),
+        )
+        .map((summary) => summary.product_variant)
+        .filter(Boolean),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
   const validationVariantOperationLookup = new Map(
     validationVariantSummaries.map((summary) => [
       `${summary.source_workbook}::${summary.source_sheet}`,
@@ -1584,12 +1633,19 @@ export function App() {
   const importTableCounts = latestWorkbookImportSummary?.table_counts ?? [];
   const importOperationCounts = latestWorkbookImportSummary?.operation_counts ?? [];
   const duplicateSourceRowDelta = latestWorkbookImportSummary?.duplicate_source_row_delta ?? 0;
-  const duplicateSubjectCount = latestWorkbookImportSummary?.duplicate_subject_count ?? 0;
+  const distinctSubjectCount = latestImportBatch?.device_subject_count ?? 0;
+  const workbookDuplicateRowCount = latestWorkbookImportSummary?.workbook_duplicate_row_count ?? 0;
   const topDuplicateGroups = latestWorkbookImportSummary?.top_duplicate_groups ?? [];
+  const sourceRowTableCount = latestImportBatch?.source_row_count ?? 0;
+  const deviceSubjectTableCount = latestImportBatch?.device_subject_count ?? 0;
+  const filteredDeviceSubjects = deviceSubjects.filter(
+    (subject) =>
+      (!selectedDeviceSubjectFamily || subject.product_family === selectedDeviceSubjectFamily) &&
+      (!selectedDeviceSubjectVariant || subject.product_variant === selectedDeviceSubjectVariant),
+  );
   const monitoredTables = databaseSchemaSummary?.tables ?? [];
   const healthTableSummaries = databaseHealthSummary?.table_summaries ?? [];
   const healthIssues = databaseHealthSummary?.issues ?? [];
-  const changedWorkbooks = latestWorkbookImportDiffSummary?.changed_workbooks.filter((item) => item.change_type !== "unchanged") ?? [];
   const indexedTableCount = monitoredTables.filter((table) => table.indexes.length > 0).length;
   const foreignKeyCount = monitoredTables.reduce((sum, table) => sum + table.foreign_keys.length, 0);
   const postDeviceSubjectCount =
@@ -1600,21 +1656,52 @@ export function App() {
     importOperationCounts
       .filter((entry) => entry.submission_operation !== "POST" && entry.submission_operation !== "PATCH")
       .reduce((sum, entry) => sum + entry.device_subject_count, 0);
-  const sourceRowTableCount =
-    importTableCounts.find((entry) => entry.table_name === "source_row")?.row_count ??
-    latestImportBatch?.source_row_count ??
+  const identityIssueTableCount =
+    importTableCounts.find((entry) => entry.table_name === "device_identity_issue")?.row_count ??
     0;
-  const deviceSubjectTableCount =
-    importTableCounts.find((entry) => entry.table_name === "device_subject")?.row_count ??
-    latestImportBatch?.device_subject_count ??
-    0;
-  const mergedWorkbookRowCount = Math.max(sourceRowTableCount - deviceSubjectTableCount, 0);
   const sourceSnapshotTables = importTableCounts.filter((entry) =>
-    ["import_batch", "source_workbook", "source_row", "device_subject"].includes(entry.table_name),
+    ["import_batch", "source_workbook", "source_row", "device_subject", "device_identity_issue"].includes(entry.table_name),
   );
   const testingStateTables = importTableCounts.filter((entry) =>
     ["testing_subjects", "testing_events", "reviewed_post_baselines"].includes(entry.table_name),
   );
+  const selectedDeviceSubjectFamilySummary =
+    validationFamilySummaries.find((summary) => summary.product_family === selectedDeviceSubjectFamily) ?? null;
+  const selectedDeviceSubjectVariantSummary =
+    validationVariantSummaries.find(
+      (summary) =>
+        summary.product_family === selectedDeviceSubjectFamily &&
+        summary.product_variant === selectedDeviceSubjectVariant,
+    ) ?? null;
+  const selectedDeviceSubjectScopeRows =
+    selectedDeviceSubjectVariantSummary?.total_records ??
+    selectedDeviceSubjectFamilySummary?.total_records ??
+    canonicalValidation?.total_source_records ??
+    0;
+  const selectedDeviceSubjectXmlReadyRows =
+    selectedDeviceSubjectVariantSummary?.xml_ready_records ??
+    selectedDeviceSubjectFamilySummary?.xml_ready_records ??
+    canonicalValidation?.xml_ready_records ??
+    0;
+  const selectedDeviceSubjectBlockedRows =
+    selectedDeviceSubjectVariantSummary?.blocked_records ??
+    selectedDeviceSubjectFamilySummary?.blocked_records ??
+    0;
+  const selectedDeviceSubjectStatus =
+    selectedDeviceSubjectScopeRows === 0 || filteredDeviceSubjects.length === 0 || selectedDeviceSubjectXmlReadyRows === 0
+      ? {
+          label: "Stop",
+          className: "danger",
+        }
+      : selectedDeviceSubjectBlockedRows > 0 || filteredDeviceSubjects.length < selectedDeviceSubjectXmlReadyRows
+        ? {
+            label: "Warning",
+            className: "warn",
+          }
+        : {
+            label: "Ready",
+            className: "ok",
+          };
   const selectedWorkbookName = selectedSheet?.workbook ?? visibleWorkbooks[0]?.workbook ?? null;
   const selectedWorkbookSummary =
     visibleWorkbooks.find((workbook) => workbook.workbook === selectedWorkbookName) ?? visibleWorkbooks[0] ?? null;
@@ -3294,6 +3381,85 @@ export function App() {
             </div>
           </section>
 
+          <section className="panel device-subject-summary-panel">
+            <div className="device-subject-filter-column">
+              <span className="section-kicker">Device Subjects</span>
+              <label className="read-model-filter-control">
+                <span>Family</span>
+                <select
+                  value={selectedDeviceSubjectFamily}
+                  onChange={(event) => setSelectedDeviceSubjectFamily(event.target.value)}
+                >
+                  <option value="">All families</option>
+                  {deviceSubjectFamilyOptions.map((family) => (
+                    <option key={family} value={family}>
+                      {family}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="read-model-filter-control">
+                <span>Variant</span>
+                <select
+                  value={selectedDeviceSubjectVariant}
+                  onChange={(event) => setSelectedDeviceSubjectVariant(event.target.value)}
+                  disabled={!deviceSubjectVariantOptions.length}
+                >
+                  <option value="">All variants</option>
+                  {deviceSubjectVariantOptions.map((variant) => (
+                    <option key={variant} value={variant}>
+                      {variant}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="device-subject-detail-column">
+              <div className="device-subject-summary-head">
+                <div>
+                  <strong>
+                    {selectedDeviceSubjectVariant
+                      ? `${selectedDeviceSubjectFamily || "All families"} / ${selectedDeviceSubjectVariant}`
+                      : selectedDeviceSubjectFamily || "All Device Subjects"}
+                  </strong>
+                  <p className="panel-copy">
+                    {selectedDeviceSubjectVariantSummary
+                      ? `${selectedDeviceSubjectVariantSummary.total_records} workbook rows mapped to this variant, ${selectedDeviceSubjectVariantSummary.xml_ready_records} XML-ready.`
+                      : selectedDeviceSubjectFamilySummary
+                        ? `${selectedDeviceSubjectFamilySummary.variant_count} variants in scope, ${selectedDeviceSubjectFamilySummary.total_records} workbook rows, ${selectedDeviceSubjectFamilySummary.xml_ready_records} XML-ready.`
+                      : `${validationFamilySummaries.length} in-scope families and ${validationVariantSummaries.length} XML-ready variants are currently represented.`}
+                  </p>
+                </div>
+                <span className="status-pill ok compact">
+                  {filteredDeviceSubjects.length} stable subjects
+                </span>
+              </div>
+              <div className="device-subject-metric-grid">
+                <div className="queue-chip">
+                  <strong>{selectedDeviceSubjectScopeRows}</strong>
+                  <span>rows in scope</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{filteredDeviceSubjects.length}</strong>
+                  <span>stable subjects</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{selectedDeviceSubjectXmlReadyRows}</strong>
+                  <span>XML-ready</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{selectedDeviceSubjectBlockedRows}</strong>
+                  <span>blocked</span>
+                </div>
+                <div className="device-subject-status-card">
+                  <span className={`status-pill ${selectedDeviceSubjectStatus.className}`}>
+                    {selectedDeviceSubjectStatus.label}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="content-grid">
             <div className="panel">
               <div className="section-heading">
@@ -3317,20 +3483,18 @@ export function App() {
                   Table counts are unavailable.
                 </p>
               ) : null}
-              <div className="table-footprint-grid">
-                <div className="table-footprint-card">
-                  <span className="summary-label">Workbook snapshot tables</span>
+              <div className="queue-summary">
+                <div className="queue-chip">
                   <strong>{latestImportBatch ? sourceSnapshotTables.reduce((sum, table) => sum + table.row_count, 0) : "N/A"}</strong>
-                  <p>Import snapshot storage.</p>
+                  <span>workbook snapshot tables</span>
                 </div>
-                <div className="table-footprint-card">
-                  <span className="summary-label">Testing state tables</span>
+                <div className="queue-chip">
                   <strong>{latestImportBatch ? testingStateTables.reduce((sum, table) => sum + table.row_count, 0) : "N/A"}</strong>
-                  <p>Testing-state storage.</p>
+                  <span>testing state tables</span>
                 </div>
               </div>
               {latestImportBatch ? (
-                <table>
+                <table className="table-footprint-table">
                   <thead>
                     <tr>
                       <th>Table</th>
@@ -3407,15 +3571,15 @@ export function App() {
             </div>
           </section>
 
-          <section className="content-grid">
+          <section className="content-grid single-panel-grid">
             <div className="panel">
               <div className="section-heading">
                 <div>
                   <span className="section-kicker">Database Monitoring</span>
-                  <h2>Schema, Health, and Drift</h2>
+                  <h2>Schema and Health</h2>
                 </div>
               </div>
-              <div className="queue-summary">
+              <div className="monitoring-chip-grid">
                 <div className="queue-chip">
                   <strong>{databaseSchemaSummary?.table_count ?? "N/A"}</strong>
                   <span>tables</span>
@@ -3433,111 +3597,42 @@ export function App() {
                   <span>health issues</span>
                 </div>
                 <div className="queue-chip">
-                  <strong>{latestImportBatch ? duplicateSubjectCount : "N/A"}</strong>
-                  <span>duplicate subjects</span>
+                  <strong>{latestImportBatch ? distinctSubjectCount : "N/A"}</strong>
+                  <span>distinct subjects</span>
                 </div>
                 <div className="queue-chip">
-                  <strong>{latestImportBatch ? mergedWorkbookRowCount : "N/A"}</strong>
-                  <span>merged rows</span>
+                  <strong>{latestImportBatch ? workbookDuplicateRowCount : "N/A"}</strong>
+                  <span>workbook duplicates</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{latestImportBatch ? identityIssueTableCount : "N/A"}</strong>
+                  <span>identity issues</span>
                 </div>
                 <div className="queue-chip">
                   <strong>{latestImportBatch ? unclassifiedDeviceSubjectCount : "N/A"}</strong>
                   <span>unclassified subjects</span>
                 </div>
               </div>
-              {latestWorkbookImportDiffSummary ? (
-                <p className="panel-copy">
-                  Latest diff compares import batch <strong>#{latestWorkbookImportDiffSummary.current_import_batch_id}</strong>
-                  {latestWorkbookImportDiffSummary.previous_import_batch_id
-                    ? ` against #${latestWorkbookImportDiffSummary.previous_import_batch_id}.`
-                    : " against no earlier import batch."}{" "}
-                  Source rows delta: <strong>{latestWorkbookImportDiffSummary.source_row_delta}</strong>. Stable subjects delta:{" "}
-                  <strong>{latestWorkbookImportDiffSummary.device_subject_delta}</strong>.
-                </p>
-              ) : (
-                <p className="panel-copy">Import diff is not yet available.</p>
-              )}
-              {healthIssues.length ? (
-                <div className="roadmap-list">
-                  {healthIssues.slice(0, 6).map((issue) => (
-                    <div className="roadmap-item" key={`${issue.code}-${issue.table_name ?? "global"}-${issue.message}`}>
-                      <strong>{issue.table_name ? `${issue.table_name} · ${issue.code}` : issue.code}</strong>
-                      <p>{issue.message}</p>
+              <div className="monitoring-detail-grid">
+                <section className="monitoring-section">
+                  <div className="monitoring-section-head">
+                    <strong>Schema Health</strong>
+                    <span>{databaseHealthSummary ? `${healthIssues.length} flagged` : "Unavailable"}</span>
+                  </div>
+                  {healthIssues.length ? (
+                    <div className="roadmap-list monitoring-roadmap-list">
+                      {healthIssues.slice(0, 6).map((issue) => (
+                        <div className="roadmap-item" key={`${issue.code}-${issue.table_name ?? "global"}-${issue.message}`}>
+                          <strong>{issue.table_name ? `${issue.table_name} · ${issue.code}` : issue.code}</strong>
+                          <p>{issue.message}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="panel-copy">No current schema-health issues were reported by the monitoring snapshot.</p>
-              )}
-              {topDuplicateGroups.length ? (
-                <div className="roadmap-list">
-                  {topDuplicateGroups.slice(0, 4).map((group) => (
-                    <div className="roadmap-item" key={group.subject_key}>
-                      <strong>{group.product_family ?? "Unknown"} / {group.product_variant ?? "Unknown"} / {group.catalogue_number ?? group.primary_udi_di ?? group.subject_key}</strong>
-                      <p>{group.source_row_count} source rows currently merge into this stable subject.</p>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="panel">
-              <div className="section-heading">
-                <div>
-                  <span className="section-kicker">Latest Drift</span>
-                  <h2>Workbook Delta</h2>
-                </div>
+                  ) : (
+                    <p className="panel-copy">No current schema-health issues were reported by the monitoring snapshot.</p>
+                  )}
+                </section>
               </div>
-              {changedWorkbooks.length ? (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Workbook</th>
-                      <th>Change</th>
-                      <th>Rows</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {changedWorkbooks.map((workbook) => (
-                      <tr key={`${workbook.workbook_name}-${workbook.change_type}`}>
-                        <td><strong>{workbook.workbook_name}</strong></td>
-                        <td>{workbook.change_type}</td>
-                        <td>
-                          {workbook.previous_row_count ?? 0} → {workbook.current_row_count ?? 0}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="panel-copy">
-                  {latestWorkbookImportDiffSummary
-                    ? "No workbook-level drift was detected between the latest two import batches."
-                    : "Workbook delta is not yet available."}
-                </p>
-              )}
-              {healthTableSummaries.length ? (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Table</th>
-                      <th>Rows</th>
-                      <th>Orphans</th>
-                      <th>Identity gaps</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {healthTableSummaries.map((summary) => (
-                      <tr key={summary.table_name}>
-                        <td><strong>{summary.table_name}</strong></td>
-                        <td>{summary.row_count}</td>
-                        <td>{summary.orphan_count}</td>
-                        <td>{summary.identity_gap_count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : null}
             </div>
           </section>
 

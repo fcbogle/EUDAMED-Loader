@@ -16,6 +16,8 @@ class Settings(BaseModel):
     excel_dir: Path
     schema_dir: Path
     testing_state_db_path: Path
+    testing_state_backup_dir: Path
+    testing_state_backup_keep_count: int
     basic_udi_reference_dir: Path
     basic_udi_reference_workbook: Path
     legacy_basic_udi_reference_workbook: Path
@@ -77,6 +79,12 @@ def get_settings() -> Settings:
             "EUDAMED_TESTING_STATE_DB_PATH",
             project_root / "data" / "testing" / "testing-state.sqlite3",
         ),
+        testing_state_backup_dir=_path_setting(
+            project_root,
+            "EUDAMED_TESTING_STATE_BACKUP_DIR",
+            project_root / "data" / "testing" / "backups",
+        ),
+        testing_state_backup_keep_count=int(os.getenv("EUDAMED_TESTING_STATE_BACKUP_KEEP_COUNT", "10")),
         basic_udi_reference_dir=basic_udi_reference_dir,
         basic_udi_reference_workbook=basic_udi_reference_dir / "BasicUDIs.xlsx",
         legacy_basic_udi_reference_workbook=basic_udi_reference_dir

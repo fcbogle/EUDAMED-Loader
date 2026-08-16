@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -177,6 +178,7 @@ class WorkbookImportSnapshotSummary(BaseModel):
     operation_counts: list[WorkbookImportOperationCount] = Field(default_factory=list)
     duplicate_source_row_delta: int
     duplicate_subject_count: int
+    workbook_duplicate_row_count: int
     top_duplicate_groups: list[WorkbookImportDuplicateGroup] = Field(default_factory=list)
 
 
@@ -253,3 +255,65 @@ class WorkbookImportDiffSummary(BaseModel):
     device_subject_delta: int
     workbook_count_delta: int
     changed_workbooks: list[WorkbookImportWorkbookDiff] = Field(default_factory=list)
+
+
+class DeviceSubjectSummary(BaseModel):
+    id: int
+    subject_key: str
+    product_family: str | None = None
+    product_variant: str | None = None
+    catalogue_number: str | None = None
+    primary_udi_di: str | None = None
+    basic_udi_di: str | None = None
+    current_source_row_id: int | None = None
+    current_import_batch_id: int | None = None
+    created_at: str
+    updated_at: str
+
+
+class DeviceSubjectDetail(DeviceSubjectSummary):
+    current_source_workbook_name: str | None = None
+    current_source_sheet_name: str | None = None
+    current_source_row_index: int | None = None
+
+
+class SourceRowSummary(BaseModel):
+    id: int
+    source_workbook_id: int
+    import_batch_id: int
+    workbook_name: str
+    sheet_name: str
+    row_index: int
+    product_family: str | None = None
+    product_variant: str | None = None
+    catalogue_number: str | None = None
+    primary_udi_di: str | None = None
+    submission_operation: str | None = None
+    canonical_status: str | None = None
+    created_at: str
+
+
+class SourceRowDetail(SourceRowSummary):
+    raw_payload_json: str
+    linked_device_subject_id: int | None = None
+    linked_device_subject_key: str | None = None
+
+
+class DeviceIdentityIssueSummary(BaseModel):
+    id: int
+    source_row_id: int
+    device_subject_id: int | None = None
+    issue_code: str
+    severity: str
+    created_at: str
+    product_family: str | None = None
+    product_variant: str | None = None
+    catalogue_number: str | None = None
+    primary_udi_di: str | None = None
+    import_batch_id: int | None = None
+
+
+class DeviceIdentityIssueDetail(DeviceIdentityIssueSummary):
+    details_json: dict[str, Any] = Field(default_factory=dict)
+    resolved_at: str | None = None
+    resolution_note: str | None = None

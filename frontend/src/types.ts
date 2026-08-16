@@ -153,6 +153,7 @@ export type WorkbookImportSnapshotSummary = {
   operation_counts: WorkbookImportOperationCount[];
   duplicate_source_row_delta: number;
   duplicate_subject_count: number;
+  workbook_duplicate_row_count: number;
   top_duplicate_groups: WorkbookImportDuplicateGroup[];
 };
 
@@ -229,6 +230,68 @@ export type WorkbookImportDiffSummary = {
   device_subject_delta: number;
   workbook_count_delta: number;
   changed_workbooks: WorkbookImportWorkbookDiff[];
+};
+
+export type DeviceSubjectSummary = {
+  id: number;
+  subject_key: string;
+  product_family: string | null;
+  product_variant: string | null;
+  catalogue_number: string | null;
+  primary_udi_di: string | null;
+  basic_udi_di: string | null;
+  current_source_row_id: number | null;
+  current_import_batch_id: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DeviceSubjectDetail = DeviceSubjectSummary & {
+  current_source_workbook_name: string | null;
+  current_source_sheet_name: string | null;
+  current_source_row_index: number | null;
+};
+
+export type SourceRowSummary = {
+  id: number;
+  source_workbook_id: number;
+  import_batch_id: number;
+  workbook_name: string;
+  sheet_name: string;
+  row_index: number;
+  product_family: string | null;
+  product_variant: string | null;
+  catalogue_number: string | null;
+  primary_udi_di: string | null;
+  submission_operation: string | null;
+  canonical_status: string | null;
+  created_at: string;
+};
+
+export type SourceRowDetail = SourceRowSummary & {
+  raw_payload_json: string;
+  linked_device_subject_id: number | null;
+  linked_device_subject_key: string | null;
+};
+
+export type DeviceIdentityIssueSummary = {
+  id: number;
+  source_row_id: number;
+  device_subject_id: number | null;
+  issue_code: string;
+  severity: string;
+  created_at: string;
+  product_family: string | null;
+  product_variant: string | null;
+  catalogue_number: string | null;
+  primary_udi_di: string | null;
+  import_batch_id: number | null;
+};
+
+export type DeviceIdentityIssueDetail = DeviceIdentityIssueSummary & {
+  details_json: Record<string, unknown>;
+  resolved_at: string | null;
+  resolution_note: string | null;
 };
 
 export type CriticalWarningCodeOption = {

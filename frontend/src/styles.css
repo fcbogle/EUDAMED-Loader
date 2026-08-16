@@ -25,6 +25,14 @@ input {
   font: inherit;
 }
 
+select {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(76, 111, 122, 0.22);
+  background: rgba(255, 255, 255, 0.94);
+  color: #002a3a;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -404,6 +412,70 @@ input {
   margin-top: 18px;
 }
 
+.device-subject-summary-panel {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 20px;
+  align-items: end;
+}
+
+.device-subject-filter-column,
+.device-subject-detail-column {
+  min-width: 0;
+}
+
+.device-subject-filter-column {
+  display: grid;
+  gap: 14px;
+  padding-right: 6px;
+  align-content: end;
+}
+
+.device-subject-filter-column .read-model-filter-control {
+  min-width: 0;
+  width: 100%;
+}
+
+.device-subject-detail-column {
+  display: grid;
+  gap: 18px;
+}
+
+.device-subject-summary-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.device-subject-summary-head strong {
+  display: block;
+  margin-bottom: 6px;
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: 1.4rem;
+  color: #002a3a;
+}
+
+.device-subject-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.device-subject-metric-grid .queue-chip {
+  min-width: 0;
+}
+
+.device-subject-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: rgba(0, 68, 90, 0.05);
+  border: 1px solid rgba(0, 68, 90, 0.1);
+}
+
 .family-scope-panel {
   margin-top: -2px;
 }
@@ -724,6 +796,10 @@ th {
   font-size: 0.8rem;
 }
 
+.table-footprint-table td strong {
+  font-size: 0.8rem;
+}
+
 .sheet-list {
   display: grid;
   gap: 10px;
@@ -824,6 +900,18 @@ th {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.read-model-filter-control {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+  color: #355864;
+  font-size: 0.82rem;
+}
+
+.read-model-filter-control span {
+  font-weight: 600;
 }
 
 .control-row {
@@ -984,6 +1072,37 @@ a.ghost-button:visited {
   border-color: rgba(0, 68, 90, 0.24);
 }
 
+.active-row-button {
+  background: rgba(0, 68, 90, 0.1);
+  border-color: rgba(0, 68, 90, 0.3);
+}
+
+.read-model-detail {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(0, 68, 90, 0.06);
+}
+
+.read-model-detail p {
+  margin: 0;
+  color: #355864;
+  overflow-wrap: anywhere;
+}
+
+.read-model-json {
+  margin: 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(76, 111, 122, 0.14);
+  color: #002a3a;
+  font-size: 0.8rem;
+  overflow: auto;
+}
+
 .draft-heading {
   margin-top: 28px;
 }
@@ -1050,6 +1169,53 @@ a.ghost-button:visited {
   font-size: 0.76rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.monitoring-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.monitoring-chip-grid .queue-chip {
+  min-width: 0;
+}
+
+.monitoring-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.monitoring-section {
+  min-width: 0;
+}
+
+.monitoring-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.monitoring-section-head strong {
+  font-size: 0.95rem;
+  color: #002a3a;
+}
+
+.monitoring-section-head span {
+  color: #4c6f7a;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.monitoring-roadmap-list {
+  margin-top: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .validation-pill-row {
@@ -2310,6 +2476,23 @@ a.ghost-button:visited {
     grid-template-columns: 1fr;
   }
 
+  .device-subject-summary-panel,
+  .monitoring-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .device-subject-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .monitoring-chip-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .monitoring-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
   .documentation-layout {
     grid-template-columns: 1fr;
   }
@@ -2338,6 +2521,18 @@ a.ghost-button:visited {
   }
 
   .workbook-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .device-subject-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .device-subject-summary-head {
+    flex-direction: column;
+  }
+
+  .monitoring-chip-grid {
     grid-template-columns: 1fr;
   }
 

@@ -9,6 +9,10 @@ import type {
   CanonicalValidationBundle,
   CanonicalReviewBundle,
   CriticalWarningCodeOption,
+  DeviceIdentityIssueDetail,
+  DeviceIdentityIssueSummary,
+  DeviceSubjectDetail,
+  DeviceSubjectSummary,
   DatabaseHealthSummary,
   DatabaseSchemaSummary,
   DistinctValueProfile,
@@ -22,6 +26,8 @@ import type {
   SheetProfile,
   SheetSummary,
   SingleRecordXmlPreview,
+  SourceRowDetail,
+  SourceRowSummary,
   WorkbookImportDiffSummary,
   WorkbookImportRunResponse,
   WorkbookImportSnapshotSummary,
@@ -59,6 +65,18 @@ async function getJson<T>(path: string): Promise<T> {
     throw new ApiError(await readErrorMessage(response), response.status);
   }
   return response.json() as Promise<T>;
+}
+
+function buildQuery(params: Record<string, string | number | null | undefined>): string {
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === "") {
+      continue;
+    }
+    searchParams.set(key, String(value));
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
 }
 
 async function sendJson<T>(path: string, method: string, body: unknown): Promise<T> {
@@ -105,6 +123,64 @@ export const api = {
   workbookImportSchemaSummary: () => getJson<DatabaseSchemaSummary>("/workbook-imports/schema-summary"),
   workbookImportHealthSummary: () => getJson<DatabaseHealthSummary>("/workbook-imports/health"),
   latestWorkbookImportDiff: () => getJson<WorkbookImportDiffSummary>("/workbook-imports/latest/diff"),
+  workbookImportDeviceSubjects: (params?: {
+    product_family?: string;
+    product_variant?: string;
+    catalogue_number?: string;
+    import_batch_id?: number;
+    limit?: number;
+  }) =>
+    getJson<DeviceSubjectSummary[]>(
+      `/workbook-imports/device-subjects${buildQuery({
+        product_family: params?.product_family,
+        product_variant: params?.product_variant,
+        catalogue_number: params?.catalogue_number,
+        import_batch_id: params?.import_batch_id,
+        limit: params?.limit ?? 20,
+      })}`,
+    ),
+  workbookImportDeviceSubject: (subjectId: number) =>
+    getJson<DeviceSubjectDetail>(`/workbook-imports/device-subjects/${subjectId}`),
+  workbookImportSourceRows: (params?: {
+    product_family?: string;
+    product_variant?: string;
+    catalogue_number?: string;
+    submission_operation?: string;
+    import_batch_id?: number;
+    limit?: number;
+  }) =>
+    getJson<SourceRowSummary[]>(
+      `/workbook-imports/source-rows${buildQuery({
+        product_family: params?.product_family,
+        product_variant: params?.product_variant,
+        catalogue_number: params?.catalogue_number,
+        submission_operation: params?.submission_operation,
+        import_batch_id: params?.import_batch_id,
+        limit: params?.limit ?? 20,
+      })}`,
+    ),
+  workbookImportSourceRow: (sourceRowId: number) =>
+    getJson<SourceRowDetail>(`/workbook-imports/source-rows/${sourceRowId}`),
+  workbookImportIdentityIssues: (params?: {
+    issue_code?: string;
+    product_family?: string;
+    product_variant?: string;
+    catalogue_number?: string;
+    import_batch_id?: number;
+    limit?: number;
+  }) =>
+    getJson<DeviceIdentityIssueSummary[]>(
+      `/workbook-imports/identity-issues${buildQuery({
+        issue_code: params?.issue_code,
+        product_family: params?.product_family,
+        product_variant: params?.product_variant,
+        catalogue_number: params?.catalogue_number,
+        import_batch_id: params?.import_batch_id,
+        limit: params?.limit ?? 20,
+      })}`,
+    ),
+  workbookImportIdentityIssue: (issueId: number) =>
+    getJson<DeviceIdentityIssueDetail>(`/workbook-imports/identity-issues/${issueId}`),
   runWorkbookImport: (payload?: { imported_by?: string; label?: string; notes?: string }) =>
     sendJson<WorkbookImportRunResponse>("/workbook-imports/run", "POST", payload ?? {}),
   sheets: () => getJson<SheetSummary[]>("/sheets"),

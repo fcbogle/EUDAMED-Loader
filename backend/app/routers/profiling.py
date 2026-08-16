@@ -96,3 +96,91 @@ def latest_workbook_import_diff() -> dict:
     if summary is None:
         raise HTTPException(status_code=404, detail="No workbook imports have been recorded.")
     return summary.model_dump(mode="json")
+
+
+@router.get("/workbook-imports/device-subjects")
+def list_device_subjects(
+    product_family: str | None = Query(default=None),
+    product_variant: str | None = Query(default=None),
+    catalogue_number: str | None = Query(default=None),
+    import_batch_id: int | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=10000),
+) -> list[dict]:
+    return [
+        item.model_dump(mode="json")
+        for item in WorkbookImportService().list_device_subjects(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+            import_batch_id=import_batch_id,
+            limit=limit,
+        )
+    ]
+
+
+@router.get("/workbook-imports/device-subjects/{subject_id}")
+def get_device_subject(subject_id: int) -> dict:
+    subject = WorkbookImportService().get_device_subject(subject_id)
+    if subject is None:
+        raise HTTPException(status_code=404, detail="Device subject not found.")
+    return subject.model_dump(mode="json")
+
+
+@router.get("/workbook-imports/source-rows")
+def list_source_rows(
+    product_family: str | None = Query(default=None),
+    product_variant: str | None = Query(default=None),
+    catalogue_number: str | None = Query(default=None),
+    submission_operation: str | None = Query(default=None),
+    import_batch_id: int | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=10000),
+) -> list[dict]:
+    return [
+        item.model_dump(mode="json")
+        for item in WorkbookImportService().list_source_rows(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+            submission_operation=submission_operation,
+            import_batch_id=import_batch_id,
+            limit=limit,
+        )
+    ]
+
+
+@router.get("/workbook-imports/source-rows/{source_row_id}")
+def get_source_row(source_row_id: int) -> dict:
+    source_row = WorkbookImportService().get_source_row(source_row_id)
+    if source_row is None:
+        raise HTTPException(status_code=404, detail="Source row not found.")
+    return source_row.model_dump(mode="json")
+
+
+@router.get("/workbook-imports/identity-issues")
+def list_device_identity_issues(
+    issue_code: str | None = Query(default=None),
+    product_family: str | None = Query(default=None),
+    product_variant: str | None = Query(default=None),
+    catalogue_number: str | None = Query(default=None),
+    import_batch_id: int | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=10000),
+) -> list[dict]:
+    return [
+        item.model_dump(mode="json")
+        for item in WorkbookImportService().list_device_identity_issues(
+            issue_code=issue_code,
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+            import_batch_id=import_batch_id,
+            limit=limit,
+        )
+    ]
+
+
+@router.get("/workbook-imports/identity-issues/{issue_id}")
+def get_device_identity_issue(issue_id: int) -> dict:
+    issue = WorkbookImportService().get_device_identity_issue(issue_id)
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Device identity issue not found.")
+    return issue.model_dump(mode="json")

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import get_settings
 from app.routers import canonical, normalization, profiling, schemas, xml_generation
+from app.services.workbook_import import WorkbookImportService
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="EUDAMED Profiling API",
@@ -25,6 +31,18 @@ app.include_router(normalization.router, prefix="/api")
 app.include_router(canonical.router, prefix="/api")
 app.include_router(schemas.router, prefix="/api")
 app.include_router(xml_generation.router, prefix="/api")
+
+
+@app.on_event("startup")
+def log_testing_state_context() -> None:
+    settings = get_settings()
+    service = WorkbookImportService()
+    logger.warning(
+        "Testing state database path: %s | import batches: %s | backup dir: %s",
+        settings.testing_state_db_path,
+        service.import_batch_count(),
+        settings.testing_state_backup_dir,
+    )
 
 
 @app.get("/health")
