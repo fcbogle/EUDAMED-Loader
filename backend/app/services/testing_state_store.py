@@ -31,6 +31,10 @@ class TestingStateStore:
     def db_path(self):
         return self.settings.testing_state_db_path
 
+    def refresh_device_subject_links(self) -> None:
+        with self._connect() as connection:
+            self._backfill_device_subject_links(connection)
+
     def latest_successful_patch_state(
         self,
         *,
@@ -252,20 +256,31 @@ class TestingStateStore:
         catalogue_number: str,
     ) -> None:
         with self._connect() as connection:
+            device_subject_id = self._resolve_device_subject_id(
+                connection,
+                product_family=product_family,
+                product_variant=product_variant,
+                catalogue_number=catalogue_number,
+                primary_udi_di=None,
+            )
             connection.execute(
                 """
                 INSERT INTO reviewed_post_baselines (
+                    device_subject_id,
                     normalized_product_family,
                     normalized_product_variant,
                     normalized_catalogue_number,
                     product_family,
                     product_variant,
                     catalogue_number
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(normalized_product_family, normalized_product_variant, normalized_catalogue_number)
-                DO UPDATE SET reviewed_at = CURRENT_TIMESTAMP
+                DO UPDATE SET
+                    reviewed_at = CURRENT_TIMESTAMP,
+                    device_subject_id = COALESCE(excluded.device_subject_id, reviewed_post_baselines.device_subject_id)
                 """,
                 (
+                    device_subject_id,
                     self._normalize_identity(product_family),
                     self._normalize_identity(product_variant),
                     self._normalize_identity(catalogue_number),
@@ -321,6 +336,7 @@ class TestingStateStore:
                 CREATE TABLE IF NOT EXISTS testing_subjects (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     subject_key TEXT NOT NULL UNIQUE,
+                    device_subject_id INTEGER,
                     normalized_product_family TEXT NOT NULL,
                     normalized_product_variant TEXT NOT NULL,
                     normalized_catalogue_number TEXT NOT NULL,
@@ -339,7 +355,8 @@ class TestingStateStore:
                     exclude_from_post_wave INTEGER NOT NULL DEFAULT 0,
                     exclude_from_baseline_patch_wave INTEGER NOT NULL DEFAULT 0,
                     latest_successful_version TEXT,
-                    latest_successful_state_json TEXT
+                    latest_successful_state_json TEXT,
+                    FOREIGN KEY(device_subject_id) REFERENCES device_subject(id) ON DELETE SET NULL
                 )
                 """
             )
@@ -373,6 +390,7 @@ class TestingStateStore:
                 """
                 CREATE TABLE IF NOT EXISTS reviewed_post_baselines (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_subject_id INTEGER,
                     normalized_product_family TEXT NOT NULL,
                     normalized_product_variant TEXT NOT NULL,
                     normalized_catalogue_number TEXT NOT NULL,
@@ -380,13 +398,33 @@ class TestingStateStore:
                     product_variant TEXT,
                     catalogue_number TEXT,
                     reviewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(device_subject_id) REFERENCES device_subject(id) ON DELETE SET NULL,
                     UNIQUE(normalized_product_family, normalized_product_variant, normalized_catalogue_number)
                 )
                 """
             )
+            self._ensure_column(
+                connection,
+                table_name="testing_subjects",
+                column_name="device_subject_id",
+                column_definition="INTEGER REFERENCES device_subject(id) ON DELETE SET NULL",
+            )
+            self._ensure_column(
+                connection,
+                table_name="reviewed_post_baselines",
+                column_name="device_subject_id",
+                column_definition="INTEGER REFERENCES device_subject(id) ON DELETE SET NULL",
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_testing_subjects_device_subject_id ON testing_subjects(device_subject_id)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_reviewed_post_baselines_device_subject_id ON reviewed_post_baselines(device_subject_id)"
+            )
             subject_count = int(connection.execute("SELECT COUNT(*) FROM testing_subjects").fetchone()[0])
             if not subject_count:
                 self._import_yaml_into_database(connection)
+            self._backfill_device_subject_links(connection)
 
     def _import_yaml_into_database(self, connection: sqlite3.Connection) -> None:
         if not self.yaml_path.exists():
@@ -403,6 +441,7 @@ class TestingStateStore:
                 """
                 INSERT INTO testing_subjects (
                     subject_key,
+                    device_subject_id,
                     normalized_product_family,
                     normalized_product_variant,
                     normalized_catalogue_number,
@@ -422,7 +461,7 @@ class TestingStateStore:
                     exclude_from_baseline_patch_wave,
                     latest_successful_version,
                     latest_successful_state_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     self._optional_string(subject.get("subject_id"))
@@ -435,6 +474,13 @@ class TestingStateStore:
                                 self._normalize_identity(subject.get("catalogue_number")),
                             ],
                         )
+                    ),
+                    self._resolve_device_subject_id(
+                        connection,
+                        product_family=self._optional_string(subject.get("product_family")),
+                        product_variant=self._optional_string(subject.get("product_variant")),
+                        catalogue_number=self._optional_string(subject.get("catalogue_number")),
+                        primary_udi_di=self._optional_string(subject.get("primary_udi_di")),
                     ),
                     self._normalize_identity(subject.get("product_family")),
                     self._normalize_identity(subject.get("product_variant")),
@@ -561,6 +607,131 @@ class TestingStateStore:
                     self._normalize_identity(catalogue_number),
                 ),
             ).fetchone()
+
+    @staticmethod
+    def _table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:
+        rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+        return {str(row[1]) for row in rows}
+
+    @classmethod
+    def _ensure_column(
+        cls,
+        connection: sqlite3.Connection,
+        *,
+        table_name: str,
+        column_name: str,
+        column_definition: str,
+    ) -> None:
+        if column_name in cls._table_columns(connection, table_name):
+            return
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
+
+    @staticmethod
+    def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
+        row = connection.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = ?
+            LIMIT 1
+            """,
+            (table_name,),
+        ).fetchone()
+        return row is not None
+
+    def _backfill_device_subject_links(self, connection: sqlite3.Connection) -> None:
+        if not self._table_exists(connection, "device_subject"):
+            return
+
+        testing_rows = connection.execute(
+            """
+            SELECT id, product_family, product_variant, catalogue_number, primary_udi_di
+            FROM testing_subjects
+            WHERE device_subject_id IS NULL
+            """
+        ).fetchall()
+        for row in testing_rows:
+            device_subject_id = self._resolve_device_subject_id(
+                connection,
+                product_family=self._optional_string(row["product_family"]),
+                product_variant=self._optional_string(row["product_variant"]),
+                catalogue_number=self._optional_string(row["catalogue_number"]),
+                primary_udi_di=self._optional_string(row["primary_udi_di"]),
+            )
+            if device_subject_id is None:
+                continue
+            connection.execute(
+                "UPDATE testing_subjects SET device_subject_id = ? WHERE id = ?",
+                (device_subject_id, int(row["id"])),
+            )
+
+        baseline_rows = connection.execute(
+            """
+            SELECT id, product_family, product_variant, catalogue_number
+            FROM reviewed_post_baselines
+            WHERE device_subject_id IS NULL
+            """
+        ).fetchall()
+        for row in baseline_rows:
+            device_subject_id = self._resolve_device_subject_id(
+                connection,
+                product_family=self._optional_string(row["product_family"]),
+                product_variant=self._optional_string(row["product_variant"]),
+                catalogue_number=self._optional_string(row["catalogue_number"]),
+                primary_udi_di=None,
+            )
+            if device_subject_id is None:
+                continue
+            connection.execute(
+                "UPDATE reviewed_post_baselines SET device_subject_id = ? WHERE id = ?",
+                (device_subject_id, int(row["id"])),
+            )
+
+    def _resolve_device_subject_id(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        product_family: str | None,
+        product_variant: str | None,
+        catalogue_number: str | None,
+        primary_udi_di: str | None,
+    ) -> int | None:
+        normalized_family = self._normalize_identity(product_family)
+        normalized_variant = self._normalize_identity(product_variant)
+        normalized_catalogue = self._normalize_identity(catalogue_number)
+        normalized_primary = self._normalize_identity(primary_udi_di)
+        if not (normalized_family and normalized_variant and normalized_catalogue):
+            return None
+        if not self._table_exists(connection, "device_subject"):
+            return None
+
+        rows = connection.execute(
+            """
+            SELECT id, product_family, product_variant, catalogue_number, primary_udi_di
+            FROM device_subject
+            """
+        ).fetchall()
+
+        exact_primary_matches: list[int] = []
+        fallback_matches: list[int] = []
+        for row in rows:
+            if self._normalize_identity(row["product_family"]) != normalized_family:
+                continue
+            if self._normalize_identity(row["product_variant"]) != normalized_variant:
+                continue
+            if self._normalize_identity(row["catalogue_number"]) != normalized_catalogue:
+                continue
+            fallback_matches.append(int(row["id"]))
+            if normalized_primary and self._normalize_identity(row["primary_udi_di"]) == normalized_primary:
+                exact_primary_matches.append(int(row["id"]))
+
+        if len(exact_primary_matches) == 1:
+            return exact_primary_matches[0]
+        if normalized_primary:
+            return None
+        if len(fallback_matches) == 1:
+            return fallback_matches[0]
+        return None
 
     @staticmethod
     def _optional_string(value: object) -> str | None:

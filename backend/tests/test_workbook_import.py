@@ -23,6 +23,7 @@ from app.routers.profiling import (
     workbook_import_health_summary,
     workbook_import_schema_summary,
 )
+from app.services.testing_state_store import TestingStateStore as PlaygroundStateStore
 from app.services.workbook_import import ImportedSourceRow, WorkbookImportService
 
 
@@ -54,19 +55,44 @@ def isolated_workbook_import_env(
     yield db_path, excel_dir
     get_settings.cache_clear()
 
+def _apply_synthetic_import_stubs(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    rows: list[ImportedSourceRow] | None = None,
+    promotions: dict[tuple[str, str, int], dict[str, str | None]] | None = None,
+) -> None:
+    synthetic_rows = rows or [ImportedSourceRow(sheet_name="Variant A", row_index=2, values={"dummy": "value"})]
+    synthetic_promotions = promotions or {
+        ("synthetic.xlsx", "Variant A", 2): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+            "primary_udi_di": "111111",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        }
+    }
+    monkeypatch.setattr(WorkbookImportService, "_load_source_rows", lambda self, workbook_path: synthetic_rows)
+    monkeypatch.setattr(WorkbookImportService, "_promotion_lookup", lambda self: synthetic_promotions)
 
-def test_workbook_import_service_persists_import_batch_and_subjects(isolated_workbook_import_db: Path) -> None:
+
+def test_workbook_import_service_persists_import_batch_and_subjects(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
     service = WorkbookImportService()
 
     result = service.run_import(imported_by="pytest", label="Phase 2 Import", notes="service test")
 
-    workbook_paths = sorted(service.settings.excel_dir.glob("*.xlsx"))
     assert result.import_batch_id >= 1
     assert result.source_type == "source_excel"
     assert result.label == "Phase 2 Import"
-    assert result.workbook_count == len(workbook_paths)
-    assert result.source_row_count > 0
-    assert result.device_subject_count > 0
+    assert result.workbook_count == 1
+    assert result.source_row_count == 1
+    assert result.device_subject_count == 1
 
     latest = service.latest_import_batch()
     assert latest is not None
@@ -78,13 +104,13 @@ def test_workbook_import_service_persists_import_batch_and_subjects(isolated_wor
     assert len(imported) == result.workbook_count
     assert sum(item.row_count for item in imported) == result.source_row_count
 
-    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection = sqlite3.connect(db_path)
     try:
         subject_row = connection.execute(
             """
             SELECT product_family, product_variant, catalogue_number, primary_udi_di
             FROM device_subject
-            WHERE catalogue_number = 'ELANIC22L1S'
+            WHERE catalogue_number = 'CAT-001'
             LIMIT 1
             """
         ).fetchone()
@@ -92,13 +118,18 @@ def test_workbook_import_service_persists_import_batch_and_subjects(isolated_wor
         connection.close()
 
     assert subject_row is not None
-    assert subject_row[0] == "Elan"
-    assert subject_row[1] == "Elan IC"
-    assert subject_row[2] == "ELANIC22L1S"
-    assert subject_row[3] == "05050649096501"
+    assert subject_row[0] == "Family A"
+    assert subject_row[1] == "Variant A"
+    assert subject_row[2] == "CAT-001"
+    assert subject_row[3] == "111111"
 
 
-def test_workbook_import_routes_return_latest_batch_and_imported_workbooks(isolated_workbook_import_db: Path) -> None:
+def test_workbook_import_routes_return_latest_batch_and_imported_workbooks(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
     payload = WorkbookImportRunRequest(imported_by="pytest", label="Route Import", notes="route test")
 
     result = run_workbook_import(payload)
@@ -112,7 +143,12 @@ def test_workbook_import_routes_return_latest_batch_and_imported_workbooks(isola
     assert sum(int(item["row_count"]) for item in workbooks) == int(result["source_row_count"])
 
 
-def test_workbook_import_creates_sqlite_backup(isolated_workbook_import_db: Path) -> None:
+def test_workbook_import_creates_sqlite_backup(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
     service = WorkbookImportService()
 
     result = service.run_import(imported_by="pytest", label="Backup Import", notes="backup test")
@@ -126,7 +162,12 @@ def test_workbook_import_creates_sqlite_backup(isolated_workbook_import_db: Path
     assert f"batch-{result.import_batch_id}-" in backups[0].name
 
 
-def test_workbook_import_monitoring_routes_return_schema_health_and_diff(isolated_workbook_import_db: Path) -> None:
+def test_workbook_import_monitoring_routes_return_schema_health_and_diff(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
     run_workbook_import(WorkbookImportRunRequest(imported_by="pytest", label="Import One"))
     run_workbook_import(WorkbookImportRunRequest(imported_by="pytest", label="Import Two"))
 
@@ -149,7 +190,7 @@ def test_workbook_import_monitoring_routes_return_schema_health_and_diff(isolate
     assert health_tables["import_batch"]["row_count"] == 2
     assert health_tables["source_workbook"]["orphan_count"] == 0
     assert health_tables["device_subject"]["orphan_count"] == 0
-    assert any(issue["code"] == "missing_table" for issue in health_summary["issues"])
+    assert all(issue["level"] in {"warning", "info"} for issue in health_summary["issues"])
 
     assert latest_summary["import_batch"]["import_batch_id"] == 2
     assert diff_summary["current_import_batch_id"] == 2
@@ -157,6 +198,118 @@ def test_workbook_import_monitoring_routes_return_schema_health_and_diff(isolate
     assert diff_summary["source_row_delta"] == 0
     assert diff_summary["device_subject_delta"] == 0
     assert all(item["change_type"] == "unchanged" for item in diff_summary["changed_workbooks"])
+
+
+def test_workbook_import_creates_canonical_tables_and_backfills_device_subject_links(
+    isolated_workbook_import_env: tuple[Path, Path],
+) -> None:
+    db_path, _excel_dir = isolated_workbook_import_env
+    service = WorkbookImportService()
+    rows = [ImportedSourceRow(sheet_name="Variant A", row_index=2, values={"dummy": "value"})]
+    service._load_source_rows = lambda workbook_path: rows  # type: ignore[method-assign]
+    service._promotion_lookup = lambda: {  # type: ignore[method-assign]
+        ("synthetic.xlsx", "Variant A", 2): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+            "primary_udi_di": "111111",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        }
+    }
+
+    service.run_import(imported_by="pytest", label="Import One")
+
+    connection = sqlite3.connect(db_path)
+    try:
+        subject_id = int(
+            connection.execute(
+                """
+                SELECT id
+                FROM device_subject
+                WHERE product_family = 'Family A'
+                  AND product_variant = 'Variant A'
+                  AND catalogue_number = 'CAT-001'
+                LIMIT 1
+                """
+            ).fetchone()[0]
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_subjects (
+                subject_key,
+                normalized_product_family,
+                normalized_product_variant,
+                normalized_catalogue_number,
+                normalized_primary_udi_di,
+                normalized_basic_udi_di,
+                product_family,
+                product_variant,
+                catalogue_number,
+                primary_udi_di,
+                basic_udi_di
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "family-a|variant-a|cat-001",
+                "familya",
+                "varianta",
+                "cat-001",
+                "111111",
+                "basic-1",
+                "Family A",
+                "Variant A",
+                "CAT-001",
+                "111111",
+                "BASIC-1",
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO reviewed_post_baselines (
+                normalized_product_family,
+                normalized_product_variant,
+                normalized_catalogue_number,
+                product_family,
+                product_variant,
+                catalogue_number
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("familya", "varianta", "cat-001", "Family A", "Variant A", "CAT-001"),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    PlaygroundStateStore().refresh_device_subject_links()
+
+    connection = sqlite3.connect(db_path)
+    try:
+        table_names = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('canonical_device_record', 'canonical_field_value')"
+            ).fetchall()
+        }
+        testing_subject_link = connection.execute(
+            "SELECT device_subject_id FROM testing_subjects WHERE subject_key = 'family-a|variant-a|cat-001'"
+        ).fetchone()
+        baseline_link = connection.execute(
+            """
+            SELECT device_subject_id
+            FROM reviewed_post_baselines
+            WHERE normalized_product_family = 'familya'
+              AND normalized_product_variant = 'varianta'
+              AND normalized_catalogue_number = 'cat-001'
+            """
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert table_names == {"canonical_device_record", "canonical_field_value"}
+    assert testing_subject_link == (subject_id,)
+    assert baseline_link == (subject_id,)
 
 
 def test_workbook_import_matches_existing_subject_by_primary_and_records_drift(

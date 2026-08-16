@@ -188,6 +188,9 @@ class WorkbookImportService:
                     if decision.created:
                         device_subject_count += 1
 
+        from app.services.testing_state_store import TestingStateStore
+
+        TestingStateStore().refresh_device_subject_links()
         self._create_import_backup(import_batch_id=import_batch_id)
 
         return WorkbookImportRunResponse(
@@ -1116,6 +1119,47 @@ class WorkbookImportService:
                     resolution_note TEXT,
                     FOREIGN KEY(source_row_id) REFERENCES source_row(id) ON DELETE CASCADE,
                     FOREIGN KEY(device_subject_id) REFERENCES device_subject(id) ON DELETE SET NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS canonical_device_record (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_subject_id INTEGER NOT NULL UNIQUE,
+                    source_row_id INTEGER,
+                    source_import_batch_id INTEGER,
+                    canonical_version INTEGER NOT NULL DEFAULT 1,
+                    canonical_status TEXT NOT NULL DEFAULT 'draft',
+                    completeness_status TEXT,
+                    xml_readiness_status TEXT,
+                    xml_ready INTEGER NOT NULL DEFAULT 0,
+                    record_json TEXT,
+                    completeness_json TEXT,
+                    blockers_json TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(device_subject_id) REFERENCES device_subject(id) ON DELETE CASCADE,
+                    FOREIGN KEY(source_row_id) REFERENCES source_row(id) ON DELETE SET NULL,
+                    FOREIGN KEY(source_import_batch_id) REFERENCES import_batch(id) ON DELETE SET NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS canonical_field_value (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    canonical_device_record_id INTEGER NOT NULL,
+                    canonical_path TEXT NOT NULL,
+                    field_status TEXT NOT NULL DEFAULT 'pending',
+                    required INTEGER NOT NULL DEFAULT 0,
+                    value_json TEXT,
+                    source_headers_json TEXT,
+                    review_note TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(canonical_device_record_id) REFERENCES canonical_device_record(id) ON DELETE CASCADE,
+                    UNIQUE(canonical_device_record_id, canonical_path)
                 )
                 """
             )
