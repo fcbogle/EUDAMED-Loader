@@ -60,8 +60,9 @@ def test_canonical_validation_service_builds_multi_family_bundle() -> None:
     assert bundle.family_scope == "In-scope non-accessories families"
     assert bundle.total_source_records > 0
     assert bundle.validation_subset_records > 0
+    assert bundle.total_source_records == bundle.validation_subset_records
     assert bundle.matched_reference_records == bundle.validation_subset_records
-    assert bundle.excluded_records > 0
+    assert bundle.excluded_records == 0
     assert bundle.tracked_required_fields > 0
     assert bundle.tracked_xml_required_fields > 0
     assert bundle.ready_records + bundle.blocked_records == bundle.validation_subset_records
@@ -77,7 +78,10 @@ def test_canonical_validation_service_builds_multi_family_bundle() -> None:
     assert len(bundle.variant_summaries) == 14
     assert any(summary.product_variant == "Echelon ER" for summary in bundle.variant_summaries)
     assert any(summary.product_variant == "EliteVT" for summary in bundle.variant_summaries)
-    assert any(summary.sheet_name == "Adaptors_Socket_Accessories" for summary in bundle.deferred_scope_summaries)
+    assert all(
+        summary.workbook != "Template for Accessories_Footspares EUDAMED.xlsx"
+        for summary in bundle.deferred_scope_summaries
+    )
     assert bundle.source_field_total > 0
     assert any(summary.status == "represented" for summary in bundle.source_field_coverage_summaries)
     assert len(bundle.sample_records) == 14

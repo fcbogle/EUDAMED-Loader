@@ -8,6 +8,7 @@ import pytest
 
 from app.config import get_settings
 from app.models import WorkbookImportRunRequest
+from app.routers.canonical import canonical_validation_sqlite
 from app.routers.profiling import (
     get_device_identity_issue,
     get_device_subject,
@@ -25,6 +26,7 @@ from app.routers.profiling import (
 )
 from app.services.testing_state_store import TestingStateStore as PlaygroundStateStore
 from app.services.workbook_import import ImportedSourceRow, WorkbookImportService
+from app.validation_models import CanonicalValidationBundle, CanonicalValidationFieldValue, CanonicalValidationRecord, CompletenessSnapshot
 
 
 @pytest.fixture
@@ -75,6 +77,151 @@ def _apply_synthetic_import_stubs(
     }
     monkeypatch.setattr(WorkbookImportService, "_load_source_rows", lambda self, workbook_path: synthetic_rows)
     monkeypatch.setattr(WorkbookImportService, "_promotion_lookup", lambda self: synthetic_promotions)
+    first_promotion = next(iter(synthetic_promotions.values()))
+    product_family = first_promotion["product_family"] or "Family A"
+    product_variant = first_promotion["product_variant"] or "Variant A"
+    catalogue_number = first_promotion["catalogue_number"] or "CAT-001"
+    primary_udi_di = first_promotion["primary_udi_di"] or "111111"
+    submission_operation = first_promotion["submission_operation"] or "POST"
+    workbook_name, sheet_name, row_index = next(iter(synthetic_promotions.keys()))
+    fields = [
+        CanonicalValidationFieldValue(
+            canonical_path="basic_device.basic_udi_di",
+            business_label="Basic UDI-DI",
+            required=True,
+            xml_required=True,
+            value=first_promotion["basic_udi_di"] or "BASIC-1",
+            source="derived",
+            source_detail="basic_udi_di",
+        ),
+        CanonicalValidationFieldValue(
+            canonical_path="device_record.primary_udi_di",
+            business_label="Primary UDI-DI",
+            required=True,
+            xml_required=True,
+            value=primary_udi_di,
+            source="workbook",
+            source_detail="primary_udi_di",
+        ),
+    ]
+    completeness = CompletenessSnapshot(
+        mapped_required_fields=2,
+        total_required_fields=2,
+        missing_required_fields=0,
+        status="complete",
+    )
+    record = CanonicalValidationRecord(
+        source_workbook=workbook_name,
+        product_family=product_family,
+        product_variant=product_variant,
+        source_sheet=sheet_name,
+        source_row_index=row_index,
+        trade_name="Synthetic Trade Name",
+        primary_udi_di=primary_udi_di,
+        catalogue_number=catalogue_number,
+        issuing_entity="GS1",
+        submission_operation=submission_operation,
+        reference_match_status="matched",
+        completeness=completeness,
+        xml_readiness=completeness,
+        blockers=[],
+        xml_blockers=[],
+        fields=fields,
+    )
+    bundle = CanonicalValidationBundle(
+        family_scope="Synthetic scope",
+        scope_note="Synthetic scope",
+        validation_note="Synthetic validation",
+        total_source_records=len(synthetic_rows),
+        validation_subset_records=1,
+        excluded_records=0,
+        matched_reference_records=1,
+        tracked_required_fields=2,
+        tracked_xml_required_fields=2,
+        ready_records=1,
+        blocked_records=0,
+        xml_ready_records=1,
+        xml_blocked_records=0,
+        sample_records=[record],
+        records=[record],
+    )
+    monkeypatch.setattr(WorkbookImportService, "_validation_bundle", lambda self: bundle)
+
+
+def _synthetic_validation_bundle_from_promotions(
+    promotions: dict[tuple[str, str, int], dict[str, str | None]],
+    *,
+    row_count: int = 1,
+) -> CanonicalValidationBundle:
+    first_promotion = next(iter(promotions.values()))
+    product_family = first_promotion["product_family"] or "Family A"
+    product_variant = first_promotion["product_variant"] or "Variant A"
+    catalogue_number = first_promotion["catalogue_number"] or "CAT-001"
+    primary_udi_di = first_promotion["primary_udi_di"] or "111111"
+    submission_operation = first_promotion["submission_operation"] or "POST"
+    workbook_name, sheet_name, row_index = next(iter(promotions.keys()))
+    basic_udi_di = first_promotion["basic_udi_di"] or "BASIC-1"
+    fields = [
+        CanonicalValidationFieldValue(
+            canonical_path="basic_device.basic_udi_di",
+            business_label="Basic UDI-DI",
+            required=True,
+            xml_required=True,
+            value=basic_udi_di,
+            source="derived",
+            source_detail="basic_udi_di",
+        ),
+        CanonicalValidationFieldValue(
+            canonical_path="device_record.primary_udi_di",
+            business_label="Primary UDI-DI",
+            required=True,
+            xml_required=True,
+            value=primary_udi_di,
+            source="workbook",
+            source_detail="primary_udi_di",
+        ),
+    ]
+    completeness = CompletenessSnapshot(
+        mapped_required_fields=sum(1 for field in fields if field.value is not None),
+        total_required_fields=len(fields),
+        missing_required_fields=sum(1 for field in fields if field.value is None),
+        status="complete" if all(field.value is not None for field in fields) else "incomplete",
+    )
+    record = CanonicalValidationRecord(
+        source_workbook=workbook_name,
+        product_family=product_family,
+        product_variant=product_variant,
+        source_sheet=sheet_name,
+        source_row_index=row_index,
+        trade_name="Synthetic Trade Name",
+        primary_udi_di=primary_udi_di,
+        catalogue_number=catalogue_number,
+        issuing_entity="GS1",
+        submission_operation=submission_operation,
+        reference_match_status="matched",
+        completeness=completeness,
+        xml_readiness=completeness,
+        blockers=[],
+        xml_blockers=[],
+        fields=fields,
+    )
+    return CanonicalValidationBundle(
+        family_scope="Synthetic scope",
+        scope_note="Synthetic scope",
+        validation_note="Synthetic validation",
+        total_source_records=row_count,
+        validation_subset_records=1,
+        excluded_records=0,
+        matched_reference_records=1,
+        tracked_required_fields=len(fields),
+        tracked_xml_required_fields=len(fields),
+        ready_records=int(completeness.status == "complete"),
+        blocked_records=int(completeness.status != "complete"),
+        xml_ready_records=int(completeness.status == "complete"),
+        xml_blocked_records=int(completeness.status != "complete"),
+        sample_records=[record],
+        records=[record],
+    )
 
 
 def test_workbook_import_service_persists_import_batch_and_subjects(
@@ -114,6 +261,14 @@ def test_workbook_import_service_persists_import_batch_and_subjects(
             LIMIT 1
             """
         ).fetchone()
+        canonical_row = connection.execute(
+            """
+            SELECT completeness_status, xml_readiness_status, xml_ready
+            FROM canonical_device_record
+            LIMIT 1
+            """
+        ).fetchone()
+        field_count = connection.execute("SELECT COUNT(*) FROM canonical_field_value").fetchone()[0]
     finally:
         connection.close()
 
@@ -122,6 +277,8 @@ def test_workbook_import_service_persists_import_batch_and_subjects(
     assert subject_row[1] == "Variant A"
     assert subject_row[2] == "CAT-001"
     assert subject_row[3] == "111111"
+    assert canonical_row == ("complete", "complete", 1)
+    assert field_count == 2
 
 
 def test_workbook_import_routes_return_latest_batch_and_imported_workbooks(
@@ -207,7 +364,7 @@ def test_workbook_import_creates_canonical_tables_and_backfills_device_subject_l
     service = WorkbookImportService()
     rows = [ImportedSourceRow(sheet_name="Variant A", row_index=2, values={"dummy": "value"})]
     service._load_source_rows = lambda workbook_path: rows  # type: ignore[method-assign]
-    service._promotion_lookup = lambda: {  # type: ignore[method-assign]
+    promotions = {
         ("synthetic.xlsx", "Variant A", 2): {
             "product_family": "Family A",
             "product_variant": "Variant A",
@@ -218,6 +375,8 @@ def test_workbook_import_creates_canonical_tables_and_backfills_device_subject_l
             "canonical_status": "xml_ready",
         }
     }
+    service._promotion_lookup = lambda: promotions  # type: ignore[method-assign]
+    service._validation_bundle = lambda: _synthetic_validation_bundle_from_promotions(promotions)  # type: ignore[method-assign]
 
     service.run_import(imported_by="pytest", label="Import One")
 
@@ -312,6 +471,67 @@ def test_workbook_import_creates_canonical_tables_and_backfills_device_subject_l
     assert baseline_link == (subject_id,)
 
 
+def test_sqlite_canonical_validation_bundle_matches_persisted_projection(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
+    service = WorkbookImportService()
+
+    service.run_import(imported_by="pytest", label="Import One")
+
+    sqlite_bundle = service.canonical_validation_bundle_from_sqlite()
+    sqlite_route_bundle = canonical_validation_sqlite()
+
+    assert sqlite_bundle is not None
+    assert sqlite_bundle.total_source_records == 1
+    assert sqlite_bundle.validation_subset_records == 1
+    assert sqlite_bundle.ready_records == 1
+    assert sqlite_bundle.xml_ready_records == 1
+    assert len(sqlite_bundle.records) == 1
+    assert sqlite_bundle.records[0].product_family == "Family A"
+    assert sqlite_bundle.records[0].product_variant == "Variant A"
+    assert sqlite_bundle.records[0].catalogue_number == "CAT-001"
+    assert len(sqlite_bundle.family_summaries) == 1
+    assert sqlite_bundle.family_summaries[0].product_family == "Family A"
+    assert len(sqlite_route_bundle["records"]) == 1
+    assert sqlite_route_bundle["records"][0]["catalogue_number"] == "CAT-001"
+
+
+def test_sqlite_canonical_validation_route_rebuilds_stale_snapshot(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
+    service = WorkbookImportService()
+
+    import_result = service.run_import(imported_by="pytest", label="Import One")
+
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute(
+            """
+            UPDATE canonical_projection_snapshot
+            SET total_source_records = 5,
+                excluded_records = 4
+            WHERE source_import_batch_id = ?
+            """,
+            (import_result.import_batch_id,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    sqlite_route_bundle = canonical_validation_sqlite()
+
+    assert sqlite_route_bundle["total_source_records"] == 1
+    assert sqlite_route_bundle["validation_subset_records"] == 1
+    assert sqlite_route_bundle["excluded_records"] == 0
+    assert len(sqlite_route_bundle["records"]) == 1
+
+
 def test_workbook_import_matches_existing_subject_by_primary_and_records_drift(
     isolated_workbook_import_env: tuple[Path, Path],
 ) -> None:
@@ -345,7 +565,17 @@ def test_workbook_import_matches_existing_subject_by_primary_and_records_drift(
         ]
     )
     service._load_source_rows = lambda workbook_path: rows  # type: ignore[method-assign]
-    service._promotion_lookup = lambda: next(promotions)  # type: ignore[method-assign]
+    current_promotions: dict[tuple[str, str, int], dict[str, str | None]] = {}
+
+    def next_promotions() -> dict[tuple[str, str, int], dict[str, str | None]]:
+        current_promotions.clear()
+        current_promotions.update(next(promotions))
+        return dict(current_promotions)
+
+    service._promotion_lookup = next_promotions  # type: ignore[method-assign]
+    service._validation_bundle = (  # type: ignore[method-assign]
+        lambda: _synthetic_validation_bundle_from_promotions(current_promotions or next_promotions())
+    )
 
     first_result = service.run_import(imported_by="pytest", label="Import One")
     second_result = service.run_import(imported_by="pytest", label="Import Two")
@@ -410,7 +640,17 @@ def test_workbook_import_records_conflict_when_fallback_tuple_matches_different_
         ]
     )
     service._load_source_rows = lambda workbook_path: rows  # type: ignore[method-assign]
-    service._promotion_lookup = lambda: next(promotions)  # type: ignore[method-assign]
+    current_promotions: dict[tuple[str, str, int], dict[str, str | None]] = {}
+
+    def next_promotions() -> dict[tuple[str, str, int], dict[str, str | None]]:
+        current_promotions.clear()
+        current_promotions.update(next(promotions))
+        return dict(current_promotions)
+
+    service._promotion_lookup = next_promotions  # type: ignore[method-assign]
+    service._validation_bundle = (  # type: ignore[method-assign]
+        lambda: _synthetic_validation_bundle_from_promotions(current_promotions or next_promotions())
+    )
 
     service.run_import(imported_by="pytest", label="Import One")
     second_result = service.run_import(imported_by="pytest", label="Import Two")
@@ -447,7 +687,7 @@ def test_workbook_import_records_issue_when_identity_is_insufficient(
     service = WorkbookImportService()
     rows = [ImportedSourceRow(sheet_name="Variant A", row_index=2, values={"dummy": "value"})]
     service._load_source_rows = lambda workbook_path: rows  # type: ignore[method-assign]
-    service._promotion_lookup = lambda: {  # type: ignore[method-assign]
+    promotions = {
         ("synthetic.xlsx", "Variant A", 2): {
             "product_family": "Family A",
             "product_variant": "Variant A",
@@ -458,6 +698,8 @@ def test_workbook_import_records_issue_when_identity_is_insufficient(
             "canonical_status": "xml_ready",
         }
     }
+    service._promotion_lookup = lambda: promotions  # type: ignore[method-assign]
+    service._validation_bundle = lambda: _synthetic_validation_bundle_from_promotions(promotions)  # type: ignore[method-assign]
 
     result = service.run_import(imported_by="pytest", label="Import One")
 
@@ -490,7 +732,7 @@ def test_workbook_import_summary_counts_only_clean_duplicate_rows_as_overlap(
         ImportedSourceRow(sheet_name="Variant A", row_index=3, values={"dummy": "second"}),
     ]
     service._load_source_rows = lambda workbook_path: rows  # type: ignore[method-assign]
-    service._promotion_lookup = lambda: {  # type: ignore[method-assign]
+    promotions = {
         ("synthetic.xlsx", "Variant A", 2): {
             "product_family": "Family A",
             "product_variant": "Variant A",
@@ -510,6 +752,8 @@ def test_workbook_import_summary_counts_only_clean_duplicate_rows_as_overlap(
             "canonical_status": "xml_ready",
         },
     }
+    service._promotion_lookup = lambda: promotions  # type: ignore[method-assign]
+    service._validation_bundle = lambda: _synthetic_validation_bundle_from_promotions(promotions, row_count=2)  # type: ignore[method-assign]
 
     service.run_import(imported_by="pytest", label="Import One")
     summary = service.latest_import_snapshot_summary()
@@ -553,7 +797,17 @@ def test_workbook_import_read_model_endpoints_return_subject_rows_and_identity_i
         ]
     )
     service._load_source_rows = lambda workbook_path: rows  # type: ignore[method-assign]
-    service._promotion_lookup = lambda: next(promotions)  # type: ignore[method-assign]
+    current_promotions: dict[tuple[str, str, int], dict[str, str | None]] = {}
+
+    def next_promotions() -> dict[tuple[str, str, int], dict[str, str | None]]:
+        current_promotions.clear()
+        current_promotions.update(next(promotions))
+        return dict(current_promotions)
+
+    service._promotion_lookup = next_promotions  # type: ignore[method-assign]
+    service._validation_bundle = (  # type: ignore[method-assign]
+        lambda: _synthetic_validation_bundle_from_promotions(current_promotions or next_promotions())
+    )
 
     first_result = service.run_import(imported_by="pytest", label="Import One")
     second_result = service.run_import(imported_by="pytest", label="Import Two")
@@ -629,7 +883,7 @@ def test_workbook_import_skips_excluded_footspares_workbook(
     service = WorkbookImportService()
     rows = [ImportedSourceRow(sheet_name="Footspares", row_index=2, values={"dummy": "value"})]
     service._load_source_rows = lambda workbook_path: rows  # type: ignore[method-assign]
-    service._promotion_lookup = lambda: {  # type: ignore[method-assign]
+    promotions = {
         (excluded_name, "Footspares", 2): {
             "product_family": None,
             "product_variant": "Footspares",
@@ -640,6 +894,8 @@ def test_workbook_import_skips_excluded_footspares_workbook(
             "canonical_status": "xml_blocked",
         }
     }
+    service._promotion_lookup = lambda: promotions  # type: ignore[method-assign]
+    service._validation_bundle = lambda: _synthetic_validation_bundle_from_promotions(promotions)  # type: ignore[method-assign]
 
     result = service.run_import(imported_by="pytest", label="Excluded workbook import")
 

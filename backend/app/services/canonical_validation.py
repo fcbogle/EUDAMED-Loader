@@ -124,12 +124,13 @@ class CanonicalValidationService:
         total_source_records = 0
 
         for workbook_path in sorted(self.settings.excel_dir.glob("*.xlsx")):
+            if workbook_path.name in self.settings.excluded_excel_workbook_names:
+                continue
+
             workbook_rows = self._load_source_rows(workbook_path)
             workbook_headers = self._load_source_headers(workbook_path)
             total_source_records += len(workbook_rows)
-
-            if workbook_path.name not in self.settings.excluded_excel_workbook_names:
-                source_headers.extend(workbook_headers)
+            source_headers.extend(workbook_headers)
 
             rows_by_sheet: dict[str, list[SourceRow]] = {}
             for row in workbook_rows:

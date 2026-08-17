@@ -43,6 +43,7 @@ from app.services.canonical_validation import (
     HEADER_SENTINEL,
     CanonicalValidationService,
 )
+from app.validation_models import CanonicalValidationBundle, CanonicalValidationRecord
 
 
 @dataclass(frozen=True)
@@ -191,6 +192,7 @@ class WorkbookImportService:
         from app.services.testing_state_store import TestingStateStore
 
         TestingStateStore().refresh_device_subject_links()
+        self.rebuild_canonical_projection(import_batch_id=import_batch_id)
         self._create_import_backup(import_batch_id=import_batch_id)
 
         return WorkbookImportRunResponse(
@@ -201,6 +203,218 @@ class WorkbookImportService:
             workbook_count=workbook_count,
             source_row_count=source_row_count,
             device_subject_count=device_subject_count,
+        )
+
+    def rebuild_canonical_projection(self, *, import_batch_id: int | None = None) -> int:
+        target_batch_id = import_batch_id
+        if target_batch_id is None:
+            latest_batch = self.latest_import_batch()
+            if latest_batch is None:
+                return 0
+            target_batch_id = latest_batch.import_batch_id
+
+        bundle = self._validation_bundle()
+        with self._connect() as connection:
+            connection.execute("DELETE FROM canonical_projection_snapshot")
+            connection.execute("DELETE FROM canonical_field_value")
+            connection.execute("DELETE FROM canonical_device_record")
+            source_row_lookup = self._source_row_lookup_for_batch(connection, import_batch_id=target_batch_id)
+            persisted_count = 0
+            for record in bundle.records:
+                source_row = source_row_lookup.get((record.source_workbook, record.source_sheet, record.source_row_index))
+                if source_row is None:
+                    continue
+                device_subject_id = self._device_subject_id_for_source_row(connection, source_row_id=source_row["id"])
+                if device_subject_id is None:
+                    continue
+                canonical_cursor = connection.execute(
+                    """
+                    INSERT INTO canonical_device_record (
+                        device_subject_id,
+                        source_row_id,
+                        source_import_batch_id,
+                        canonical_version,
+                        canonical_status,
+                        completeness_status,
+                        xml_readiness_status,
+                        xml_ready,
+                        record_json,
+                        completeness_json,
+                        blockers_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        device_subject_id,
+                        int(source_row["id"]),
+                        target_batch_id,
+                        1,
+                        "xml_ready" if record.xml_readiness.status == "complete" else "xml_blocked",
+                        record.completeness.status,
+                        record.xml_readiness.status,
+                        int(record.xml_readiness.status == "complete"),
+                        json.dumps(record.model_dump(mode="json"), sort_keys=True),
+                        json.dumps(
+                            {
+                                "completeness": record.completeness.model_dump(mode="json"),
+                                "xml_readiness": record.xml_readiness.model_dump(mode="json"),
+                            },
+                            sort_keys=True,
+                        ),
+                        json.dumps(
+                            {
+                                "blockers": record.blockers,
+                                "xml_blockers": record.xml_blockers,
+                            },
+                            sort_keys=True,
+                        ),
+                    ),
+                )
+                canonical_device_record_id = self._require_lastrowid(
+                    canonical_cursor,
+                    entity_name="canonical device record",
+                )
+                for field in record.fields:
+                    connection.execute(
+                        """
+                        INSERT INTO canonical_field_value (
+                            canonical_device_record_id,
+                            canonical_path,
+                            field_status,
+                            required,
+                            value_json,
+                            source_headers_json,
+                            review_note
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            canonical_device_record_id,
+                            field.canonical_path,
+                            "populated" if field.value is not None else "missing",
+                            int(field.required),
+                            json.dumps(field.value) if field.value is not None else None,
+                            json.dumps([field.source_detail], sort_keys=True)
+                            if field.source_detail
+                            else json.dumps([], sort_keys=True),
+                            field.review_note,
+                        ),
+                    )
+                persisted_count += 1
+            connection.execute(
+                """
+                INSERT INTO canonical_projection_snapshot (
+                    source_import_batch_id,
+                    family_scope,
+                    scope_note,
+                    validation_note,
+                    total_source_records,
+                    validation_subset_records,
+                    excluded_records,
+                    matched_reference_records,
+                    tracked_required_fields,
+                    tracked_xml_required_fields,
+                    ready_records,
+                    blocked_records,
+                    xml_ready_records,
+                    xml_blocked_records,
+                    source_field_total,
+                    source_field_coverage_summaries_json,
+                    source_field_coverage_json,
+                    deferred_scope_summaries_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    target_batch_id,
+                    bundle.family_scope,
+                    bundle.scope_note,
+                    bundle.validation_note,
+                    bundle.total_source_records,
+                    bundle.validation_subset_records,
+                    bundle.excluded_records,
+                    bundle.matched_reference_records,
+                    bundle.tracked_required_fields,
+                    bundle.tracked_xml_required_fields,
+                    bundle.ready_records,
+                    bundle.blocked_records,
+                    bundle.xml_ready_records,
+                    bundle.xml_blocked_records,
+                    bundle.source_field_total,
+                    json.dumps(
+                        [summary.model_dump(mode="json") for summary in bundle.source_field_coverage_summaries],
+                        sort_keys=True,
+                    ),
+                    json.dumps(
+                        [entry.model_dump(mode="json") for entry in bundle.source_field_coverage],
+                        sort_keys=True,
+                    ),
+                    json.dumps(
+                        [summary.model_dump(mode="json") for summary in bundle.deferred_scope_summaries],
+                        sort_keys=True,
+                    ),
+                ),
+            )
+        return persisted_count
+
+    def canonical_validation_bundle_from_sqlite(
+        self,
+        *,
+        import_batch_id: int | None = None,
+    ) -> CanonicalValidationBundle | None:
+        target_batch_id = import_batch_id
+        if target_batch_id is None:
+            latest_batch = self.latest_import_batch()
+            if latest_batch is None:
+                return None
+            target_batch_id = latest_batch.import_batch_id
+
+        with self._connect() as connection:
+            snapshot_row = connection.execute(
+                """
+                SELECT *
+                FROM canonical_projection_snapshot
+                WHERE source_import_batch_id = ?
+                LIMIT 1
+                """,
+                (target_batch_id,),
+            ).fetchone()
+            if snapshot_row is None:
+                return None
+            record_rows = connection.execute(
+                """
+                SELECT record_json
+                FROM canonical_device_record
+                WHERE source_import_batch_id = ?
+                ORDER BY id
+                """,
+                (target_batch_id,),
+            ).fetchall()
+
+        records = [
+            CanonicalValidationRecord.model_validate(json.loads(str(row["record_json"])))
+            for row in record_rows
+        ]
+        return CanonicalValidationBundle(
+            family_scope=str(snapshot_row["family_scope"]),
+            scope_note=str(snapshot_row["scope_note"]),
+            validation_note=str(snapshot_row["validation_note"]),
+            total_source_records=int(snapshot_row["total_source_records"]),
+            validation_subset_records=int(snapshot_row["validation_subset_records"]),
+            excluded_records=int(snapshot_row["excluded_records"]),
+            matched_reference_records=int(snapshot_row["matched_reference_records"]),
+            tracked_required_fields=int(snapshot_row["tracked_required_fields"]),
+            tracked_xml_required_fields=int(snapshot_row["tracked_xml_required_fields"]),
+            ready_records=int(snapshot_row["ready_records"]),
+            blocked_records=int(snapshot_row["blocked_records"]),
+            xml_ready_records=int(snapshot_row["xml_ready_records"]),
+            xml_blocked_records=int(snapshot_row["xml_blocked_records"]),
+            family_summaries=self.validation_service._build_family_summaries(records),
+            variant_summaries=self.validation_service._build_variant_summaries(records),
+            blocker_summaries=self.validation_service._build_blocker_summaries(records),
+            source_field_total=int(snapshot_row["source_field_total"]),
+            source_field_coverage_summaries=json.loads(str(snapshot_row["source_field_coverage_summaries_json"]) or "[]"),
+            source_field_coverage=json.loads(str(snapshot_row["source_field_coverage_json"]) or "[]"),
+            sample_records=self.validation_service._build_sample_records(records),
+            deferred_scope_summaries=json.loads(str(snapshot_row["deferred_scope_summaries_json"]) or "[]"),
+            records=records,
         )
 
     def import_batch_count(self) -> int:
@@ -1163,9 +1377,37 @@ class WorkbookImportService:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS canonical_projection_snapshot (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_import_batch_id INTEGER NOT NULL UNIQUE,
+                    family_scope TEXT NOT NULL,
+                    scope_note TEXT NOT NULL,
+                    validation_note TEXT NOT NULL,
+                    total_source_records INTEGER NOT NULL,
+                    validation_subset_records INTEGER NOT NULL,
+                    excluded_records INTEGER NOT NULL,
+                    matched_reference_records INTEGER NOT NULL,
+                    tracked_required_fields INTEGER NOT NULL,
+                    tracked_xml_required_fields INTEGER NOT NULL,
+                    ready_records INTEGER NOT NULL,
+                    blocked_records INTEGER NOT NULL,
+                    xml_ready_records INTEGER NOT NULL,
+                    xml_blocked_records INTEGER NOT NULL,
+                    source_field_total INTEGER NOT NULL DEFAULT 0,
+                    source_field_coverage_summaries_json TEXT NOT NULL DEFAULT '[]',
+                    source_field_coverage_json TEXT NOT NULL DEFAULT '[]',
+                    deferred_scope_summaries_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(source_import_batch_id) REFERENCES import_batch(id) ON DELETE CASCADE
+                )
+                """
+            )
 
     def _promotion_lookup(self) -> dict[tuple[str, str, int], dict[str, str | None]]:
-        bundle = self.validation_service.build_validation_bundle()
+        bundle = self._validation_bundle()
         lookup: dict[tuple[str, str, int], dict[str, str | None]] = {}
         for record in bundle.records:
             basic_udi_di = next(
@@ -1188,6 +1430,9 @@ class WorkbookImportService:
                 "canonical_status": canonical_status,
             }
         return lookup
+
+    def _validation_bundle(self) -> CanonicalValidationBundle:
+        return self.validation_service.build_validation_bundle()
 
     def _load_source_rows(self, workbook_path: Path) -> list[ImportedSourceRow]:
         workbook = load_workbook(workbook_path, read_only=True, data_only=True)
@@ -1215,6 +1460,39 @@ class WorkbookImportService:
                 }
                 rows.append(ImportedSourceRow(sheet_name=sheet_name, row_index=row_index, values=mapped_values))
         return rows
+
+    @staticmethod
+    def _device_subject_id_for_source_row(connection: sqlite3.Connection, *, source_row_id: int) -> int | None:
+        row = connection.execute(
+            """
+            SELECT id
+            FROM device_subject
+            WHERE current_source_row_id = ?
+            LIMIT 1
+            """,
+            (source_row_id,),
+        ).fetchone()
+        return int(row["id"]) if row is not None else None
+
+    @staticmethod
+    def _source_row_lookup_for_batch(
+        connection: sqlite3.Connection,
+        *,
+        import_batch_id: int,
+    ) -> dict[tuple[str, str, int], sqlite3.Row]:
+        rows = connection.execute(
+            """
+            SELECT sr.id, sw.workbook_name, sr.sheet_name, sr.row_index
+            FROM source_row sr
+            JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+            WHERE sw.import_batch_id = ?
+            """,
+            (import_batch_id,),
+        ).fetchall()
+        return {
+            (str(row["workbook_name"]), str(row["sheet_name"]), int(row["row_index"])): row
+            for row in rows
+        }
 
     def _match_device_subject(
         self,

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { ApiError, api } from "./api";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
-import canonicalDocumentation from "./content/docs/canonical.md?raw";
 import canonicalValidationDocumentation from "./content/docs/canonical-validation.md?raw";
 import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
 import eudamedServiceContractFindingsDocumentation from "./content/docs/eudamed-service-contract-findings.md?raw";
@@ -48,7 +47,7 @@ const focusColumns = [
   "Select the language e.g English",
 ];
 
-type MainTab = "workbooks" | "canonical" | "canonicalValidation" | "xml" | "generation" | "documentation";
+type MainTab = "workbooks" | "canonicalValidation" | "xml" | "generation" | "documentation";
 type ScopeMode = "all" | "sheet";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
 type BulkPatchScopeMode = "all_posted" | "selected_catalogue_numbers" | "import_catalogue_list";
@@ -91,6 +90,7 @@ type SelectionAnchorInput = {
 };
 
 type BulkPreviewMode = "bulkPost" | "bulkUdidiPost" | "bulkPatch";
+type ValidationReviewTab = "canonicalMapping" | "sourceSheetBasicUdi";
 
 type BulkExclusionSummary = {
   key: string;
@@ -913,10 +913,10 @@ export function App() {
   const [schemas, setSchemas] = useState<SchemaInventory | null>(null);
   const [canonicalReview, setCanonicalReview] = useState<CanonicalReviewBundle | null>(null);
   const [canonicalValidation, setCanonicalValidation] = useState<CanonicalValidationBundle | null>(null);
-  const [validationStepsOpen, setValidationStepsOpen] = useState<boolean>(false);
   const [selectedValidationRecordKey, setSelectedValidationRecordKey] = useState<string | null>(null);
-  const [selectedValidationFamily, setSelectedValidationFamily] = useState<string | null>(null);
-  const [selectedValidationVariant, setSelectedValidationVariant] = useState<string | null>(null);
+  const [selectedValidationFamily, setSelectedValidationFamily] = useState<string>("");
+  const [selectedValidationVariant, setSelectedValidationVariant] = useState<string>("");
+  const [selectedValidationReviewTab, setSelectedValidationReviewTab] = useState<ValidationReviewTab>("canonicalMapping");
   const [selectedDeviceSubjectFamily, setSelectedDeviceSubjectFamily] = useState<string>("");
   const [selectedDeviceSubjectVariant, setSelectedDeviceSubjectVariant] = useState<string>("");
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
@@ -1004,11 +1004,6 @@ export function App() {
       markdown: workbooksDocumentation,
     },
     {
-      id: "canonical",
-      title: "Canonical",
-      markdown: canonicalDocumentation,
-    },
-    {
       id: "canonicalValidation",
       title: "Canonical Validation",
       markdown: canonicalValidationDocumentation,
@@ -1058,7 +1053,7 @@ export function App() {
     {
       id: "dataCanonical",
       title: "Data And Canonical Interpretation",
-      sectionIds: ["workbooks", "canonical", "canonicalValidation", "dataInterpretation"],
+      sectionIds: ["workbooks", "canonicalValidation", "dataInterpretation"],
     },
     {
       id: "xmlService",
@@ -1082,8 +1077,8 @@ export function App() {
         canonicalValidationData.records[0]?.catalogue_number ??
         null,
     );
-    setSelectedValidationFamily(canonicalValidationData.family_summaries[0]?.product_family ?? null);
-    setSelectedValidationVariant(canonicalValidationData.variant_summaries[0]?.product_variant ?? null);
+    setSelectedValidationFamily(canonicalValidationData.family_summaries[0]?.product_family ?? "");
+    setSelectedValidationVariant(canonicalValidationData.variant_summaries[0]?.product_variant ?? "");
     setSelectedXmlFamily(canonicalValidationData.family_summaries[0]?.product_family ?? null);
     setSelectedXmlVariant(canonicalValidationData.variant_summaries[0]?.product_variant ?? null);
     setSelectedXmlRecordKey(
@@ -1269,15 +1264,14 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if ((activeTab === "workbooks" || activeTab === "canonical") && !canonicalReview) {
+    if ((activeTab === "workbooks" || activeTab === "canonicalValidation") && !canonicalReview) {
       void loadCanonicalReviewBundle();
     }
   }, [activeTab, canonicalReview]);
 
   useEffect(() => {
     if (
-      (activeTab === "workbooks" ||
-        activeTab === "canonicalValidation" ||
+      (activeTab === "canonicalValidation" ||
         activeTab === "xml" ||
         activeTab === "generation") &&
       !canonicalValidation
@@ -1341,36 +1335,36 @@ export function App() {
     if (!canonicalValidation?.family_summaries.length) {
       return;
     }
-    if (
-      selectedValidationFamily &&
-      canonicalValidation.family_summaries.some((summary) => summary.product_family === selectedValidationFamily)
-    ) {
+    if (!selectedValidationFamily) {
       return;
     }
-    setSelectedValidationFamily(canonicalValidation.family_summaries[0]?.product_family ?? null);
+    if (canonicalValidation.family_summaries.some((summary) => summary.product_family === selectedValidationFamily)) {
+      return;
+    }
+    setSelectedValidationFamily(canonicalValidation.family_summaries[0]?.product_family ?? "");
   }, [canonicalValidation, selectedValidationFamily]);
 
   useEffect(() => {
-    const familyVariantSummaries = (canonicalValidation?.variant_summaries ?? []).filter(
-      (summary) => summary.product_family === selectedValidationFamily,
+    const familyVariantSummaries = (canonicalValidation?.variant_summaries ?? []).filter((summary) =>
+      selectedValidationFamily ? summary.product_family === selectedValidationFamily : true,
     );
     if (!familyVariantSummaries.length) {
       return;
     }
-    if (
-      selectedValidationVariant &&
-      familyVariantSummaries.some((summary) => summary.product_variant === selectedValidationVariant)
-    ) {
+    if (!selectedValidationVariant) {
       return;
     }
-    setSelectedValidationVariant(familyVariantSummaries[0]?.product_variant ?? null);
+    if (familyVariantSummaries.some((summary) => summary.product_variant === selectedValidationVariant)) {
+      return;
+    }
+    setSelectedValidationVariant("");
   }, [canonicalValidation, selectedValidationFamily, selectedValidationVariant]);
 
   useEffect(() => {
     const variantRecords = (canonicalValidation?.records ?? []).filter(
       (record) =>
-        record.product_family === selectedValidationFamily &&
-        record.product_variant === selectedValidationVariant,
+        (!selectedValidationFamily || record.product_family === selectedValidationFamily) &&
+        (!selectedValidationVariant || record.product_variant === selectedValidationVariant),
     );
     if (!variantRecords.length) {
       return;
@@ -1547,25 +1541,50 @@ export function App() {
   const canonicalValidationRecords = canonicalValidation?.records ?? [];
   const validationFamilySummaries = canonicalValidation?.family_summaries ?? [];
   const validationVariantSummaries = canonicalValidation?.variant_summaries ?? [];
-  const deviceSubjectFamilyOptions = Array.from(
-    new Set(
-      validationFamilySummaries
-        .filter((summary) => summary.xml_ready_records > 0)
-        .map((summary) => summary.product_family)
-        .filter(Boolean),
-    ),
-  ).sort((left, right) => left.localeCompare(right));
-  const deviceSubjectVariantOptions = Array.from(
-    new Set(
-      validationVariantSummaries
-        .filter(
-          (summary) =>
-            summary.xml_ready_records > 0 &&
-            (!selectedDeviceSubjectFamily || summary.product_family === selectedDeviceSubjectFamily),
+  const deviceSubjectFamilyOptions = (
+    validationFamilySummaries.length
+      ? Array.from(
+          new Set(
+            validationFamilySummaries
+              .filter((summary) => summary.xml_ready_records > 0)
+              .map((summary) => summary.product_family)
+              .filter(Boolean),
+          ),
         )
-        .map((summary) => summary.product_variant)
-        .filter(Boolean),
-    ),
+      : Array.from(
+          new Set(
+            deviceSubjects
+              .map((subject) => subject.product_family)
+              .filter((family): family is string => Boolean(family)),
+          ),
+        )
+  ).sort((left, right) => left.localeCompare(right));
+  const deviceSubjectVariantOptions = (
+    validationVariantSummaries.length
+      ? Array.from(
+          new Set(
+            validationVariantSummaries
+              .filter(
+                (summary) =>
+                  summary.xml_ready_records > 0 &&
+                  (!selectedDeviceSubjectFamily || summary.product_family === selectedDeviceSubjectFamily),
+              )
+              .map((summary) => summary.product_variant)
+              .filter(Boolean),
+          ),
+        )
+      : Array.from(
+          new Set(
+            deviceSubjects
+              .filter(
+                (subject) =>
+                  (!selectedDeviceSubjectFamily || subject.product_family === selectedDeviceSubjectFamily) &&
+                  subject.product_variant,
+              )
+              .map((subject) => subject.product_variant)
+              .filter((variant): variant is string => Boolean(variant)),
+          ),
+        )
   ).sort((left, right) => left.localeCompare(right));
   const validationVariantOperationLookup = new Map(
     validationVariantSummaries.map((summary) => [
@@ -1574,20 +1593,20 @@ export function App() {
     ]),
   );
   const selectedFamilySummary =
-    validationFamilySummaries.find((summary) => summary.product_family === selectedValidationFamily) ??
-    validationFamilySummaries[0] ??
-    null;
+    (selectedValidationFamily
+      ? validationFamilySummaries.find((summary) => summary.product_family === selectedValidationFamily) ?? null
+      : null);
   const selectedFamilyVariantSummaries = validationVariantSummaries.filter(
-    (summary) => summary.product_family === (selectedFamilySummary?.product_family ?? selectedValidationFamily),
+    (summary) => (!selectedValidationFamily || summary.product_family === selectedValidationFamily),
   );
   const selectedVariantSummary =
-    selectedFamilyVariantSummaries.find((summary) => summary.product_variant === selectedValidationVariant) ??
-    selectedFamilyVariantSummaries[0] ??
-    null;
+    (selectedValidationVariant
+      ? selectedFamilyVariantSummaries.find((summary) => summary.product_variant === selectedValidationVariant) ?? null
+      : null);
   const selectedVariantRecords = canonicalValidationRecords.filter(
     (record) =>
-      record.product_family === (selectedFamilySummary?.product_family ?? selectedValidationFamily) &&
-      record.product_variant === (selectedVariantSummary?.product_variant ?? selectedValidationVariant),
+      (!selectedValidationFamily || record.product_family === selectedValidationFamily) &&
+      (!selectedValidationVariant || record.product_variant === selectedValidationVariant),
   );
   const sampleValidationRecords = selectedVariantRecords.slice(0, 8);
   const selectedValidationRecord =
@@ -1596,18 +1615,50 @@ export function App() {
     sampleValidationRecords[0] ??
     selectedVariantRecords[0] ??
     null;
-  const activeCompleteness = selectedValidationRecord?.completeness ?? null;
+  const selectedValidationScopeRows =
+    selectedVariantSummary?.total_records ??
+    selectedFamilySummary?.total_records ??
+    canonicalValidation?.validation_subset_records ??
+    0;
+  const selectedValidationReadyRows =
+    selectedVariantSummary?.ready_records ??
+    selectedFamilySummary?.ready_records ??
+    canonicalValidation?.ready_records ??
+    0;
+  const selectedValidationBlockedRows =
+    selectedVariantSummary?.blocked_records ??
+    selectedFamilySummary?.blocked_records ??
+    canonicalValidation?.blocked_records ??
+    0;
+  const selectedValidationXmlReadyRows =
+    selectedVariantSummary?.xml_ready_records ??
+    selectedFamilySummary?.xml_ready_records ??
+    canonicalValidation?.xml_ready_records ??
+    0;
+  const selectedValidationStatus =
+    selectedValidationScopeRows === 0
+      ? { label: "Stop", className: "danger" }
+      : selectedValidationBlockedRows > 0
+        ? { label: "Warning", className: "warn" }
+        : { label: "Ready", className: "ok" };
   const blockerSummaries = canonicalValidation?.blocker_summaries ?? [];
   const topBlockerHighlights = [...blockerSummaries]
     .filter((summary) => summary.missing_count > 0)
     .sort((left, right) => right.missing_count - left.missing_count)
     .slice(0, 6);
-  const visibleValidationFields = selectedValidationRecord?.fields ?? [];
   const selectedStorageExample = selectedValidationRecord?.storage_condition_items[0] ?? null;
   const selectedWarningExample = selectedValidationRecord?.critical_warning_items[0] ?? null;
   const selectedMarketAvailabilityExample = selectedValidationRecord?.market_availability_items[0] ?? null;
   const selectedOpenBlockerPreview = selectedValidationRecord?.blockers.slice(0, 3) ?? [];
   const selectedXmlBlockerPreview = selectedValidationRecord?.xml_blockers.slice(0, 3) ?? [];
+  const selectedValidationFieldLookup = new Map(
+    (selectedValidationRecord?.fields ?? []).map((field) => [field.canonical_path, field]),
+  );
+  const canonicalMappingRowLookup = new Map(canonicalMappingRows.map((row) => [row.canonicalPath, row]));
+  const selectedValidationMappingRows = (selectedValidationRecord?.fields ?? []).map((field) => ({
+    field,
+    review: canonicalMappingRowLookup.get(field.canonical_path) ?? null,
+  }));
   const trackedValidationFieldCount =
     canonicalValidationRecords[0]?.fields.length ?? canonicalValidation?.sample_records[0]?.fields.length ?? 0;
   const optionalValidationFieldCount = Math.max(
@@ -1673,16 +1724,25 @@ export function App() {
         summary.product_family === selectedDeviceSubjectFamily &&
         summary.product_variant === selectedDeviceSubjectVariant,
     ) ?? null;
+  const fallbackDeviceSubjectFamilyCount = new Set(
+    deviceSubjects
+      .map((subject) => subject.product_family)
+      .filter((family): family is string => Boolean(family)),
+  ).size;
+  const fallbackDeviceSubjectVariantCount = new Set(
+    deviceSubjects
+      .filter((subject) => !selectedDeviceSubjectFamily || subject.product_family === selectedDeviceSubjectFamily)
+      .map((subject) => subject.product_variant)
+      .filter((variant): variant is string => Boolean(variant)),
+  ).size;
   const selectedDeviceSubjectScopeRows =
     selectedDeviceSubjectVariantSummary?.total_records ??
     selectedDeviceSubjectFamilySummary?.total_records ??
-    canonicalValidation?.total_source_records ??
-    0;
+    (canonicalValidation ? canonicalValidation.validation_subset_records : filteredDeviceSubjects.length);
   const selectedDeviceSubjectXmlReadyRows =
     selectedDeviceSubjectVariantSummary?.xml_ready_records ??
     selectedDeviceSubjectFamilySummary?.xml_ready_records ??
-    canonicalValidation?.xml_ready_records ??
-    0;
+    (canonicalValidation ? canonicalValidation.xml_ready_records : filteredDeviceSubjects.length);
   const selectedDeviceSubjectBlockedRows =
     selectedDeviceSubjectVariantSummary?.blocked_records ??
     selectedDeviceSubjectFamilySummary?.blocked_records ??
@@ -2654,6 +2714,18 @@ export function App() {
     const order = { matched: 0, unmatched: 1, excluded: 2 };
     return order[left.match_status] - order[right.match_status];
   });
+  const selectedValidationVariantMappings = orderedVariantMappings.filter((mapping) => {
+    if (selectedVariantSummary) {
+      return (
+        mapping.workbook === selectedVariantSummary.source_workbook &&
+        mapping.sheet === selectedVariantSummary.source_sheet
+      );
+    }
+    if (selectedFamilySummary) {
+      return workbookFamilyLabel(mapping.workbook) === selectedFamilySummary.product_family;
+    }
+    return true;
+  });
   const familyWorkbookSummaries = visibleWorkbooks.map((workbook) => {
     const family = workbookFamilyLabel(workbook.workbook);
     const variantSummariesForWorkbook = validationVariantSummaries.filter(
@@ -3122,13 +3194,6 @@ export function App() {
             Submission Data
           </button>
           <button
-            className={activeTab === "canonical" ? "nav-link active" : "nav-link"}
-            type="button"
-            onClick={() => setActiveTab("canonical")}
-          >
-            Canonical
-          </button>
-          <button
             className={activeTab === "canonicalValidation" ? "nav-link active" : "nav-link"}
             type="button"
             onClick={() => setActiveTab("canonicalValidation")}
@@ -3167,16 +3232,6 @@ export function App() {
               <h1>EUDAMED Data Details</h1>
               <p className="hero-copy">
                 Imported rows, stable subjects, POST/PATCH split, duplicates, and table footprint.
-              </p>
-            </>
-          ) : null}
-          {activeTab === "canonical" ? (
-            <>
-              <p className="eyebrow">Canonical Preparation</p>
-              <h1>Review Canonical Model Contract</h1>
-              <p className="hero-copy">
-                An intermediary layer that preserves stable regulatory meaning before workbook values are
-                projected into schema-specific XML.
               </p>
             </>
           ) : null}
@@ -3254,16 +3309,6 @@ export function App() {
                 {isRunningWorkbookImport ? "Importing Workbooks..." : "Import Workbooks"}
               </button>
               {workbookImportActionMessage ? <p className="status-detail status-detail-tight">{workbookImportActionMessage}</p> : null}
-            </>
-          ) : null}
-          {activeTab === "canonical" ? (
-            <>
-              <span className="status-label">Current phase</span>
-              <span className="status-pill ok">MDR UDI-DI first load</span>
-              <p className="status-detail">
-                <span className="inline-stat-pill">{uniqueCanonicalFieldCount} unique canonical fields</span>
-                are currently represented by {canonicalFieldCount} mapping review rows.
-              </p>
             </>
           ) : null}
           {activeTab === "canonicalValidation" ? (
@@ -3427,7 +3472,9 @@ export function App() {
                       ? `${selectedDeviceSubjectVariantSummary.total_records} workbook rows mapped to this variant, ${selectedDeviceSubjectVariantSummary.xml_ready_records} XML-ready.`
                       : selectedDeviceSubjectFamilySummary
                         ? `${selectedDeviceSubjectFamilySummary.variant_count} variants in scope, ${selectedDeviceSubjectFamilySummary.total_records} workbook rows, ${selectedDeviceSubjectFamilySummary.xml_ready_records} XML-ready.`
-                      : `${validationFamilySummaries.length} in-scope families and ${validationVariantSummaries.length} XML-ready variants are currently represented.`}
+                      : canonicalValidation
+                        ? `${validationFamilySummaries.length} in-scope families and ${validationVariantSummaries.length} XML-ready variants are currently represented.`
+                        : `${fallbackDeviceSubjectFamilyCount} families and ${fallbackDeviceSubjectVariantCount} variants are currently represented in SQLite device subjects.`}
                   </p>
                 </div>
                 <span className="status-pill ok compact">
@@ -3639,211 +3686,6 @@ export function App() {
         </>
       ) : null}
 
-      {activeTab === "canonical" ? (
-        isLoadingCanonicalReview ? (
-          renderLoadingPanel(
-            "Loading canonical review",
-            "Preparing the current mapping review bundle and reference-aligned entity summary.",
-          )
-        ) : (
-        <section className="tab-stack">
-          <section className="summary-grid">
-            <div className="summary-card">
-              <span className="summary-label">Matched variants</span>
-              <strong>{matchedVariantCount}</strong>
-              <p>Workbook sheets with exact `Device Model` matches in the authoritative Basic UDI workbook.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">Excluded variants</span>
-              <strong>{excludedVariantCount}</strong>
-              <p>Workbook sheets intentionally deferred from active variant-level canonical linkage.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">Unmatched variants</span>
-              <strong>{unmatchedVariantCount}</strong>
-              <p>Sheets currently lacking an exact Basic UDI `Device Model` match.</p>
-            </div>
-            <div className="summary-card">
-              <span className="summary-label">Authoritative source</span>
-              <strong>{authoritativeReferenceWorkbook?.workbook ?? "Missing"}</strong>
-              <p>Variant-level Basic UDI context is now resolved from the active reference workbook.</p>
-            </div>
-          </section>
-
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <span className="section-kicker">Business Layer</span>
-                <h2>Canonical Intermediary Model</h2>
-              </div>
-            </div>
-            <p className="panel-copy">
-              The canonical model sits between the source workbook and the target schema. It captures
-              business and regulatory meaning in stable business terms so the application can retain the
-              same semantics even when source headers vary, normalization is needed, or the final schema
-              structure looks different from the source template.
-            </p>
-            <div className="canonical-summary-block">
-              <div className="canonical-summary-item">
-                <span className="summary-label">Scope in review</span>
-                <p className="canonical-summary-inline">
-                  {uniqueCanonicalFieldCount} unique canonical fields are currently defined for review across {canonicalEntityCount} canonical entity groups and {logicalSchemaTypeCount} logical schema types referenced, represented by {canonicalFieldCount} mapping rows.
-                  {canonicalEntityNames.length ? (
-                    <span className="canonical-entity-pill-row" aria-label="Canonical entity groups">
-                      {" "}
-                      {canonicalEntityNames.map((entityName) => (
-                        <span className="canonical-entity-pill" key={entityName}>
-                          {entityName}
-                        </span>
-                      ))}
-                    </span>
-                  ) : null}
-                </p>
-              </div>
-              <div className="canonical-summary-item">
-                <span className="summary-label">Direct Fields</span>
-                <p>
-                  {directCount} fields map directly from workbook meaning into the canonical layer without
-                  extra transformation logic.
-                </p>
-              </div>
-              <div className="canonical-summary-item">
-                <span className="summary-label">Derived And Normalized Fields</span>
-                <p className="canonical-summary-inline">
-                  {contextHeavyCount} fields need normalization or derivation so business meaning stays
-                  stable before schema-specific codes or combined values are applied.
-                  <span className="canonical-inline-pill-row">
-                    <span className="canonical-entity-pill">{derivedRows.length} derived</span>
-                    <span className="canonical-entity-pill">{normalizedRows.length} normalized</span>
-                  </span>
-                </p>
-              </div>
-              <div className="canonical-summary-item">
-                <span className="summary-label">Repeated Structures And Known Gaps</span>
-                <p className="canonical-summary-inline">
-                  {repeatedCount + gapCount} fields are represented as repeated business structures or visible review gaps.
-                  <span className="canonical-inline-pill-row">
-                    <span className="canonical-entity-pill">{repeatedCount} repeated</span>
-                    <span className="canonical-entity-pill">{gapCount} gaps</span>
-                    <span className="canonical-entity-pill">Market Availability</span>
-                    <span className="canonical-entity-pill">Storage Conditions</span>
-                    <span className="canonical-entity-pill">Critical Warnings</span>
-                  </span>
-                </p>
-              </div>
-            </div>
-          </section>
-          <section className="panel">
-            <details className="group-accordion">
-              <summary>
-                <span>Source Sheet To Basic UDI Variant</span>
-                <span className="status-pill ok compact">{matchedVariantCount} matched</span>
-              </summary>
-              <div className="accordion-body">
-                <table className="mapping-contract-table">
-                  <thead>
-                    <tr>
-                      <th>Workbook</th>
-                      <th>Source sheet</th>
-                      <th>Basic UDI variant</th>
-                      <th>Basic UDI-DI</th>
-                      <th>Registration mode</th>
-                      <th>Review status</th>
-                      <th>Review notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orderedVariantMappings.map((mapping) => (
-                      <tr key={`${mapping.workbook}-${mapping.sheet}`}>
-                        <td>{mapping.workbook}</td>
-                        <td>{mapping.sheet}</td>
-                        <td>{mapping.device_model ?? "Pending"}</td>
-                        <td>{mapping.basic_udi_di ?? "N/A"}</td>
-                        <td>{mapping.submission_operation ?? "N/A"}</td>
-                        <td>
-                          <span
-                            className={
-                              mapping.match_status === "matched"
-                                ? "status-pill ok compact"
-                                : mapping.match_status === "excluded"
-                                  ? "status-pill danger compact"
-                                  : "status-pill warn compact"
-                            }
-                          >
-                            {titleCaseToken(mapping.match_status)}
-                          </span>
-                        </td>
-                        <td>{mapping.notes.join(" ")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          </section>
-          <section className="panel">
-            <details className="group-accordion">
-              <summary>
-                <span>Canonical Mapping</span>
-                <span className="status-pill ok compact">{uniqueCanonicalFieldCount} unique fields</span>
-              </summary>
-              <div className="accordion-body">
-                <p className="panel-copy canonical-schema-pill-copy">
-                  <span className="canonical-schema-label">EUDAMED Schema Use:</span>
-                  <br />
-                  {schemaScopeGroups.flatMap(([family, schemaNames]) =>
-                    Array.from(schemaNames).map((schemaName) => (
-                      <span className="inline-stat-pill canonical-schema-pill" key={`mapping-${family}-${schemaName}`}>
-                        {schemaName}
-                      </span>
-                    )),
-                  )}
-                </p>
-                <table className="mapping-contract-table">
-                  <colgroup>
-                    <col className="mapping-col-excel" />
-                    <col className="mapping-col-canonical" />
-                    <col className="mapping-col-schema" />
-                    <col className="mapping-col-schema" />
-                    <col className="mapping-col-type" />
-                    <col className="mapping-col-schema" />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>Source workbook field</th>
-                      <th>Canonical meaning</th>
-                      <th>EUDAMED target</th>
-                      <th>Schema file</th>
-                      <th>Mapping method</th>
-                      <th>Review notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {canonicalMappingRows.map((row) => (
-                      <tr key={row.canonicalPath}>
-                        <td>{row.excelField}</td>
-                        <td>
-                          <strong>{row.businessLabel}</strong>
-                          <br />
-                          <code>{row.canonicalPath}</code>
-                        </td>
-                        <td>{row.schemaTarget}</td>
-                        <td>{row.schemaFile}</td>
-                        <td>
-                          <span className="status-pill ok compact">{titleCaseToken(row.classification)}</span>
-                        </td>
-                        <td>{row.reviewNotes}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          </section>
-        </section>
-        )
-      ) : null}
-
       {activeTab === "canonicalValidation" ? (
         isLoadingCanonicalValidation ? (
           renderLoadingPanel(
@@ -3852,310 +3694,268 @@ export function App() {
           )
         ) : (
         <section className="tab-stack">
-          <section className="summary-grid">
-            <div className="summary-card">
+          <section className="summary-grid canonical-kpi-grid">
+            <div className="summary-card summary-card-kpi summary-card-kpi-primary">
               <span className="summary-label">Total source rows</span>
               <strong>{canonicalValidation?.total_source_records ?? 0}</strong>
               <p>Rows parsed across the current in-scope and deferred workbook sheets.</p>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-kpi summary-card-kpi-primary">
               <span className="summary-label">Rows in validation scope</span>
               <strong>{canonicalValidation?.validation_subset_records ?? 0}</strong>
               <p>Rows currently covered by active variant-level canonical validation.</p>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-kpi summary-card-kpi-secondary">
               <span className="summary-label">Canonical-ready rows</span>
               <strong>{canonicalValidation?.ready_records ?? 0}</strong>
               <p>Rows complete against the current canonical-required field set.</p>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-kpi summary-card-kpi-post">
               <span className="summary-label">XML-ready rows</span>
               <strong>{canonicalValidation?.xml_ready_records ?? 0}</strong>
               <p>Rows currently complete enough for downstream XML projection.</p>
             </div>
-          </section>
-
-          <section className="panel scope-banner-panel">
-            <div className="section-heading">
-              <div>
-                <span className="section-kicker">Validation Scope</span>
-                <h2>Multi-Family Variant Validation</h2>
-              </div>
-            </div>
-            <p className="panel-copy">
-              {canonicalValidation?.scope_note ??
-                "Variant-level canonical validation is loading from the active workbook and Basic UDI sources."}
-            </p>
-            <p className="panel-copy scope-note-secondary">
-              {canonicalValidation?.validation_note ??
-                "Validation semantics are loading from the current canonical bundle."}
-            </p>
-            <div className="queue-summary">
-              <div className="queue-chip">
-                <strong>{validationFamilySummaries.length}</strong>
-                <span>families in scope</span>
-              </div>
-              <div className="queue-chip">
-                <strong>{validationVariantSummaries.length}</strong>
-                <span>variants in scope</span>
-              </div>
-              <div className="queue-chip">
-                <strong>{trackedValidationFieldCount}</strong>
-                <span>unique canonical fields</span>
-              </div>
-              <div className="queue-chip">
-                <strong>{canonicalValidation?.tracked_required_fields ?? 0}</strong>
-                <span>required for completeness</span>
-              </div>
-              <div className="queue-chip">
-                <strong>{canonicalValidation?.tracked_xml_required_fields ?? 0}</strong>
-                <span>required for XML</span>
-              </div>
-              <div className="queue-chip">
-                <strong>{canonicalValidation?.deferred_scope_summaries.length ?? 0}</strong>
-                <span>deferred sheets</span>
-              </div>
+            <div className="summary-card summary-card-kpi summary-card-kpi-primary">
+              <span className="summary-label">Distinct Subjects</span>
+              <strong>{latestImportBatch?.device_subject_count ?? 0}</strong>
+              <p>Unique medical devices resolved from the current in-scope workbook rows.</p>
             </div>
           </section>
 
-          <section className="content-grid validation-layout validation-step-grid">
-            <details
-              className="panel group-accordion validation-equal-panel validation-summary-panel"
-              open={validationStepsOpen}
-              onToggle={(event) => setValidationStepsOpen(event.currentTarget.open)}
-            >
-              <summary>
-                <span>Step 1: Select Product Family</span>
-              </summary>
-              <div className="accordion-body">
-                <p className="panel-copy">
-                  Start by selecting a product family to surface its variants and related validation statistics.
-                </p>
-                <div className="draft-list">
-                  {validationFamilySummaries.map((summary) => {
-                    const isSelected = summary.product_family === selectedFamilySummary?.product_family;
-                    return (
-                      <button
-                        key={summary.product_family}
-                        className={isSelected ? "sheet-card active validation-sample-card" : "sheet-card validation-sample-card"}
-                        type="button"
-                        onClick={() => setSelectedValidationFamily(summary.product_family)}
-                      >
-                        <span className="sheet-title">{summary.product_family}</span>
-                        <small>
-                          {summary.variant_count} variants · {summary.total_records} rows
-                        </small>
-                        <small>
-                          {summary.ready_records} ready · {summary.blocked_records} blocked
-                        </small>
-                        <small>
-                          XML {summary.xml_ready_records} ready · {summary.xml_blocked_records} blocked
-                        </small>
-                        <small>
-                          POST {summary.post_records} · PATCH {summary.patch_records}
-                        </small>
-                      </button>
-                    );
-                  })}
+          <section className="panel device-subject-summary-panel validation-selection-panel">
+            <div className="device-subject-filter-column">
+              <span className="section-kicker">Canonical Model</span>
+              <label className="read-model-filter-control">
+                <span>Family</span>
+                <select
+                  value={selectedValidationFamily}
+                  onChange={(event) => setSelectedValidationFamily(event.target.value)}
+                >
+                  <option value="">All families</option>
+                  {validationFamilySummaries.map((summary) => (
+                    <option key={summary.product_family} value={summary.product_family}>
+                      {summary.product_family}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="read-model-filter-control">
+                <span>Variant</span>
+                <select
+                  value={selectedValidationVariant}
+                  onChange={(event) => setSelectedValidationVariant(event.target.value)}
+                  disabled={!selectedFamilyVariantSummaries.length}
+                >
+                  <option value="">All variants</option>
+                  {selectedFamilyVariantSummaries.map((summary) => (
+                    <option key={summary.product_variant} value={summary.product_variant}>
+                      {summary.product_variant}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="device-subject-detail-column">
+              <div className="device-subject-summary-head">
+                <div>
+                  <strong>
+                    {selectedValidationRecord
+                      ? `${selectedValidationRecord.product_family} / ${selectedValidationRecord.product_variant}`
+                      : selectedVariantSummary
+                        ? `${selectedVariantSummary.product_family} / ${selectedVariantSummary.product_variant}`
+                        : selectedFamilySummary?.product_family ?? "Canonical Validation Scope"}
+                  </strong>
+                  <p className="panel-copy">
+                    {selectedValidationRecord
+                      ? `${selectedValidationRecord.catalogue_number ?? "No catalogue"} · ${selectedValidationRecord.trade_name ?? "No trade name"}`
+                      : selectedVariantSummary
+                        ? `${selectedVariantSummary.submission_operation ?? "N/A"} scope with ${selectedVariantSummary.total_records} rows, ${selectedVariantSummary.xml_ready_records} XML-ready, and ${selectedVariantSummary.xml_blocked_records} XML-blocked.`
+                        : selectedFamilySummary
+                          ? `${selectedFamilySummary.variant_count} variants in scope, ${selectedFamilySummary.total_records} rows, ${selectedFamilySummary.xml_ready_records} XML-ready.`
+                          : `${validationFamilySummaries.length} in-scope families and ${validationVariantSummaries.length} variants are currently represented.`}
+                  </p>
                 </div>
-              </div>
-            </details>
-
-            <details
-              className="panel group-accordion validation-equal-panel validation-blockers-panel"
-              open={validationStepsOpen}
-              onToggle={(event) => setValidationStepsOpen(event.currentTarget.open)}
-            >
-              <summary>
-                <span>Step 2: Select Product Variant</span>
-              </summary>
-              <div className="accordion-body">
-                <p className="panel-copy">
-                  Review readiness and blocker statistics for variants inside the selected family.
-                </p>
-                <div className="draft-list">
-                  {selectedFamilyVariantSummaries.map((summary) => {
-                    const isSelected = summary.product_variant === selectedVariantSummary?.product_variant;
-                    return (
-                      <button
-                        key={summary.product_variant}
-                        className={isSelected ? "sheet-card active validation-sample-card" : "sheet-card validation-sample-card"}
-                        type="button"
-                        onClick={() => setSelectedValidationVariant(summary.product_variant)}
-                      >
-                        <span className="sheet-title">{summary.product_variant}</span>
-                        <small>
-                          {summary.submission_operation ?? "N/A"} · {summary.total_records} rows
-                        </small>
-                        <small>
-                          {summary.ready_records} ready · {summary.blocked_records} blocked
-                        </small>
-                        <small>
-                          XML {summary.xml_ready_records} ready · {summary.xml_blocked_records} blocked
-                        </small>
-                        <small>
-                          {summary.missing_required_field_total} missing required fields
-                        </small>
-                        <small>
-                          {summary.missing_xml_required_field_total} missing XML-required fields
-                        </small>
-                        {summary.common_blockers.length ? (
-                          <small>{summary.common_blockers.join(" | ")}</small>
-                        ) : null}
-                        {summary.common_xml_blockers.length ? (
-                          <small>XML: {summary.common_xml_blockers.join(" | ")}</small>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </details>
-
-            <details
-              className="panel group-accordion validation-equal-panel validation-samples-panel"
-              open={validationStepsOpen}
-              onToggle={(event) => setValidationStepsOpen(event.currentTarget.open)}
-            >
-              <summary>
-                <span>Step 3: Review Sample Data</span>
-              </summary>
-              <div className="accordion-body">
-                <p className="panel-copy">
-                  Review representative sample rows for the selected variant before drilling into field-level canonical evidence.
-                </p>
-                <div className="draft-list">
-                  {sampleValidationRecords.map((record) => {
-                    const isSelected = selectedValidationRecord?.catalogue_number === record.catalogue_number;
-                    return (
-                      <button
-                        key={`${record.source_sheet}-${record.catalogue_number}`}
-                        className={isSelected ? "sheet-card active validation-sample-card" : "sheet-card validation-sample-card"}
-                        type="button"
-                        onClick={() => setSelectedValidationRecordKey(record.catalogue_number)}
-                      >
-                        <span className="sheet-title">{record.product_variant}</span>
-                        <small>{record.catalogue_number}</small>
-                        <small>{record.trade_name ?? "No trade name"}</small>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </details>
-          </section>
-
-          <section className="content-grid validation-layout single-panel-grid">
-            <details className="panel group-accordion validation-selected-panel" open={false}>
-              <summary>
-                <span>
-                  {selectedValidationRecord
-                    ? `Canonical Model for ${selectedValidationRecord.product_family} / ${selectedValidationRecord.product_variant} / ${selectedValidationRecord.catalogue_number ?? "No sample"}`
-                    : "Canonical Model"}
+                <span className={`status-pill ${selectedValidationStatus.className} compact`}>
+                  {selectedValidationStatus.label}
                 </span>
-                {selectedValidationRecord ? (
-                  <span className="status-pill ok compact">{selectedValidationRecord.submission_operation ?? "No operation"}</span>
-                ) : null}
-              </summary>
-              <div className="accordion-body">
-                {selectedValidationRecord ? (
-                  <>
-                  <div className="queue-summary">
-                    <div className="queue-chip">
-                      <strong>
-                        {selectedValidationRecord.source_sheet} · row {selectedValidationRecord.source_row_index}
-                      </strong>
-                      <span>source position</span>
-                    </div>
-                    <div className="queue-chip">
-                      <strong>{selectedValidationRecord.product_family}</strong>
-                      <span>product family</span>
-                    </div>
-                    <div className="queue-chip">
-                      <strong>{selectedValidationRecord.product_variant}</strong>
-                      <span>product variant</span>
-                    </div>
-                    <div className="queue-chip">
-                      <strong>{basicUdiMatchLabel(selectedValidationRecord.reference_match_status)}</strong>
-                      <span>basic UDI match</span>
-                    </div>
+              </div>
+              <div className="device-subject-metric-grid">
+                <div className="queue-chip">
+                  <strong>{selectedValidationScopeRows}</strong>
+                  <span>rows in scope</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{selectedValidationReadyRows}</strong>
+                  <span>canonical-ready</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{selectedValidationXmlReadyRows}</strong>
+                  <span>XML-ready</span>
+                </div>
+                <div className="queue-chip">
+                  <strong>{selectedValidationBlockedRows}</strong>
+                  <span>blocked rows</span>
+                </div>
+                <div className="device-subject-status-card">
+                  <span className={`status-pill ${selectedValidationStatus.className}`}>
+                    {selectedValidationRecord?.submission_operation ?? selectedVariantSummary?.submission_operation ?? "Scope"}
+                  </span>
+                </div>
+              </div>
+            </div>
+            {selectedValidationRecord ? (
+              <div className="validation-full-width-stack">
+                <section className="validation-record-section">
+                  <div className="validation-record-section-head">
+                    <span className="section-kicker">Sample Device</span>
                   </div>
-                  <div className="workflow-note validation-record-note">
-                    <strong>{selectedValidationRecord.trade_name}</strong>
-                    <span>UDI-DI {selectedValidationRecord.primary_udi_di} · Issuing entity {selectedValidationRecord.issuing_entity ?? "Unknown"}</span>
-                  </div>
-                  <section className="summary-grid validation-record-grid">
-                    <div className="summary-card">
-                      <span className="summary-label">Canonical mapped fields</span>
-                      <strong>{selectedValidationRecord.completeness.mapped_required_fields}</strong>
-                      <p>{selectedValidationRecord.completeness.total_required_fields} required fields tracked.</p>
+                  <div className="summary-grid validation-record-grid">
+                    <div className="summary-card summary-card-kpi summary-card-kpi-primary">
+                      <span className="summary-label">Catalogue</span>
+                      <strong>{selectedValidationRecord.catalogue_number ?? "N/A"}</strong>
+                      <p>Workbook catalogue/reference number.</p>
                     </div>
-                    <div className="summary-card">
-                      <span className="summary-label">Canonical missing fields</span>
+                    <div className="summary-card summary-card-kpi summary-card-kpi-primary">
+                      <span className="summary-label">UDI-DI</span>
+                      <strong>{selectedValidationRecord.primary_udi_di ?? "Missing"}</strong>
+                      <p>Issuing entity {selectedValidationRecord.issuing_entity ?? "Unknown"}.</p>
+                    </div>
+                    <div className="summary-card summary-card-kpi summary-card-kpi-secondary">
+                      <span className="summary-label">Required Missing</span>
                       <strong>{selectedValidationRecord.completeness.missing_required_fields}</strong>
-                      <p>Remaining blockers for this sample row.</p>
+                      <p>{selectedValidationRecord.completeness.total_required_fields} completeness fields tracked.</p>
                     </div>
-                    <div className="summary-card">
-                      <span className="summary-label">XML mapped fields</span>
-                      <strong>{selectedValidationRecord.xml_readiness.mapped_required_fields}</strong>
+                    <div className="summary-card summary-card-kpi summary-card-kpi-post">
+                      <span className="summary-label">XML Missing</span>
+                      <strong>{selectedValidationRecord.xml_readiness.missing_required_fields}</strong>
                       <p>{selectedValidationRecord.xml_readiness.total_required_fields} XML-required fields tracked.</p>
                     </div>
-                    <div className="summary-card">
-                      <span className="summary-label">XML missing fields</span>
-                      <strong>{selectedValidationRecord.xml_readiness.missing_required_fields}</strong>
-                      <p>Remaining XML blockers for this sample row.</p>
+                  </div>
+                </section>
+                <div className="draft-card validation-mapping-panel">
+                    <div className="draft-card-head">
+                      <strong>{selectedValidationReviewTab === "canonicalMapping" ? "Canonical Mapping" : "Source Sheet to Basic UDI"}</strong>
+                      <span className="status-pill ok compact">
+                        {selectedValidationReviewTab === "canonicalMapping"
+                          ? selectedValidationMappingRows.length
+                          : selectedValidationVariantMappings.length}
+                      </span>
                     </div>
-                  </section>
-                  <div className="draft-list">
-                    <div className="draft-card">
-                      <div className="draft-card-head">
-                        <strong>Repeated Structure Preview</strong>
-                        <span className="status-pill ok compact">
-                          {selectedValidationRecord.market_availability_items.length +
-                            selectedValidationRecord.storage_condition_items.length +
-                            selectedValidationRecord.critical_warning_items.length}
-                        </span>
-                      </div>
-                      <div className="queue-summary validation-pill-row">
-                        <div className="queue-chip">
-                          <strong>{selectedValidationRecord.market_availability_items.length}</strong>
-                          <span>market availability items</span>
-                        </div>
-                        <div className="queue-chip">
-                          <strong>{selectedValidationRecord.storage_condition_items.length}</strong>
-                          <span>storage condition items</span>
-                        </div>
-                        <div className="queue-chip">
-                          <strong>{selectedValidationRecord.critical_warning_items.length}</strong>
-                          <span>critical warning items</span>
-                        </div>
-                        {selectedMarketAvailabilityExample ? (
-                          <div className="queue-chip">
-                            <strong>Market Availability</strong>
-                            <span>
-                              {selectedMarketAvailabilityExample.country}
-                              {selectedMarketAvailabilityExample.original_placed_on_market ? " · first EU market" : ""}
-                            </span>
-                          </div>
-                        ) : null}
-                        {selectedStorageExample ? (
-                          <div className="queue-chip">
-                            <strong>Storage Condition</strong>
-                            <span>
-                              {selectedStorageExample.item_type ?? "Unspecified"} {"->"} {selectedStorageExample.normalized_code ?? "No code"}
-                            </span>
-                          </div>
-                        ) : null}
-                        {selectedWarningExample ? (
-                          <div className="queue-chip">
-                            <strong>Critical Warning</strong>
-                            <span>
-                              {selectedWarningExample.item_type ?? "Unspecified"} {"->"} {selectedWarningExample.normalized_code ?? "No code"}
-                            </span>
-                          </div>
-                        ) : null}
-                      </div>
+                    <div className="xml-mode-toggle xml-top-tabs validation-review-tabs">
+                      <button
+                        className={
+                          selectedValidationReviewTab === "sourceSheetBasicUdi"
+                            ? "action-button xml-mode-button active"
+                            : "ghost-button xml-mode-button"
+                        }
+                        type="button"
+                        onClick={() => setSelectedValidationReviewTab("sourceSheetBasicUdi")}
+                      >
+                        Source Sheet to Basic UDI
+                      </button>
+                      <button
+                        className={
+                          selectedValidationReviewTab === "canonicalMapping"
+                            ? "action-button xml-mode-button active"
+                            : "ghost-button xml-mode-button"
+                        }
+                        type="button"
+                        onClick={() => setSelectedValidationReviewTab("canonicalMapping")}
+                      >
+                        Canonical Mapping
+                      </button>
                     </div>
+                    <div className="validation-mapping-scroll">
+                      {selectedValidationReviewTab === "canonicalMapping" ? (
+                        <table className="mapping-contract-table validation-mapping-contract-table">
+                          <colgroup>
+                            <col className="mapping-col-excel" />
+                            <col className="mapping-col-canonical" />
+                            <col className="mapping-col-schema" />
+                            <col className="mapping-col-schema" />
+                            <col className="mapping-col-type" />
+                            <col className="mapping-col-schema" />
+                          </colgroup>
+                          <thead>
+                            <tr>
+                              <th>Source workbook field</th>
+                              <th>Canonical meaning</th>
+                              <th>EUDAMED target</th>
+                              <th>Schema file</th>
+                              <th>Mapping method</th>
+                              <th>Review notes</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedValidationMappingRows.map(({ field, review }) => (
+                              <tr key={field.canonical_path}>
+                                <td>{review?.excelField ?? field.source_detail ?? "Context / external reference"}</td>
+                                <td>
+                                  <strong>{review?.businessLabel ?? field.business_label}</strong>
+                                  <br />
+                                  <code>{field.canonical_path}</code>
+                                  <div className="field-source-note">
+                                    Current value: {field.value !== null && field.value !== undefined ? String(field.value) : "Missing"}
+                                  </div>
+                                </td>
+                                <td>{review?.schemaTarget ?? "Not yet aligned"}</td>
+                                <td>{review?.schemaFile ?? "Schema file under review"}</td>
+                                <td>
+                                  <span className="status-pill ok compact">
+                                    {titleCaseToken(review?.classification ?? field.source ?? "derived")}
+                                  </span>
+                                </td>
+                                <td>
+                                  {review?.reviewNotes ??
+                                    `${titleCaseToken(field.source)}${field.source_detail ? ` · ${field.source_detail}` : ""}`}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <table className="mapping-contract-table validation-mapping-contract-table">
+                          <thead>
+                            <tr>
+                              <th>Workbook</th>
+                              <th>Source sheet</th>
+                              <th>Basic UDI variant</th>
+                              <th>Basic UDI-DI</th>
+                              <th>Registration mode</th>
+                              <th>Review status</th>
+                              <th>Review notes</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedValidationVariantMappings.map((mapping) => (
+                              <tr key={`${mapping.workbook}-${mapping.sheet}`}>
+                                <td>{mapping.workbook}</td>
+                                <td>{mapping.sheet}</td>
+                                <td>{mapping.device_model ?? "Pending"}</td>
+                                <td>{mapping.basic_udi_di ?? "N/A"}</td>
+                                <td>{mapping.submission_operation ?? "N/A"}</td>
+                                <td>
+                                  <span
+                                    className={
+                                      mapping.match_status === "matched"
+                                        ? "status-pill ok compact"
+                                        : mapping.match_status === "excluded"
+                                          ? "status-pill danger compact"
+                                          : "status-pill warn compact"
+                                    }
+                                  >
+                                    {titleCaseToken(mapping.match_status)}
+                                  </span>
+                                </td>
+                                <td>{mapping.notes.join(" ")}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                <div className="draft-list validation-secondary-card-grid">
                     <div className="draft-card">
                       <div className="draft-card-head">
                         <strong>Canonical Blockers</strong>
@@ -4190,48 +3990,60 @@ export function App() {
                         <p className="panel-copy">No XML blocker fields remain missing for this sample row.</p>
                       )}
                     </div>
-                  </div>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Canonical field</th>
-                        <th>Current value</th>
-                        <th>Source</th>
-                        <th>Review note</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleValidationFields.map((field) => (
-                        <tr key={field.canonical_path}>
-                          <td>
-                            <strong>{field.business_label}</strong>
-                            <br />
-                            <code>{field.canonical_path}</code>
-                          </td>
-                          <td>{field.value ?? "Missing"}</td>
-                          <td>
-                            <span
-                              className={
-                                field.source === "missing"
-                                  ? "status-pill warn compact"
-                                  : "status-pill ok compact"
-                              }
-                            >
-                              {titleCaseToken(field.source)}
+                    <div className="draft-card">
+                      <div className="draft-card-head">
+                        <strong>Structured Content</strong>
+                        <span className="status-pill ok compact">
+                          {selectedValidationRecord.market_availability_items.length +
+                            selectedValidationRecord.storage_condition_items.length +
+                            selectedValidationRecord.critical_warning_items.length}
+                        </span>
+                      </div>
+                      <div className="queue-summary validation-pill-row">
+                        <div className="queue-chip">
+                          <strong>{selectedValidationRecord.market_availability_items.length}</strong>
+                          <span>market availability</span>
+                        </div>
+                        <div className="queue-chip">
+                          <strong>{selectedValidationRecord.storage_condition_items.length}</strong>
+                          <span>storage conditions</span>
+                        </div>
+                        <div className="queue-chip">
+                          <strong>{selectedValidationRecord.critical_warning_items.length}</strong>
+                          <span>critical warnings</span>
+                        </div>
+                        {selectedMarketAvailabilityExample ? (
+                          <div className="queue-chip">
+                            <strong>Market</strong>
+                            <span>
+                              {selectedMarketAvailabilityExample.country}
+                              {selectedMarketAvailabilityExample.original_placed_on_market ? " · first EU market" : ""}
                             </span>
-                            <div className="field-source-note">{field.source_detail}</div>
-                          </td>
-                          <td>{field.review_note ?? "No additional review note recorded."}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </>
-                ) : (
-                  <p className="panel-copy">No rows are currently available for the selected family and variant.</p>
-                )}
+                          </div>
+                        ) : null}
+                        {selectedStorageExample ? (
+                          <div className="queue-chip">
+                            <strong>Storage</strong>
+                            <span>
+                              {selectedStorageExample.item_type ?? "Unspecified"} {"->"} {selectedStorageExample.normalized_code ?? "No code"}
+                            </span>
+                          </div>
+                        ) : null}
+                        {selectedWarningExample ? (
+                          <div className="queue-chip">
+                            <strong>Warning</strong>
+                            <span>
+                              {selectedWarningExample.item_type ?? "Unspecified"} {"->"} {selectedWarningExample.normalized_code ?? "No code"}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                </div>
               </div>
-            </details>
+            ) : (
+              <p className="panel-copy">No rows are currently available for the selected family and variant.</p>
+            )}
           </section>
 
         </section>

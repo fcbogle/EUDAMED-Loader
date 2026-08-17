@@ -259,6 +259,10 @@ select {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
+.canonical-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .summary-card {
   padding: 18px 20px;
   border-radius: 18px;
@@ -1943,6 +1947,119 @@ a.ghost-button:visited {
   line-height: 1.35;
 }
 
+.validation-mapping-contract-table {
+  margin-top: 10px;
+}
+
+.validation-mapping-panel {
+  margin-top: 16px;
+}
+
+.validation-mapping-scroll {
+  max-height: 560px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+}
+
+.validation-review-tabs {
+  margin-top: 12px;
+  margin-bottom: 10px;
+}
+
+.validation-full-width-stack {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 16px;
+}
+
+.validation-record-section {
+  padding: 16px 18px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 68, 90, 0.14);
+  background: rgba(0, 68, 90, 0.04);
+}
+
+.validation-record-section-head {
+  margin-bottom: 12px;
+}
+
+.validation-record-section .section-kicker {
+  margin-bottom: 0;
+}
+
+.validation-record-grid {
+  margin-bottom: 0;
+}
+
+.validation-record-grid .summary-card strong {
+  font-size: 1.28rem;
+}
+
+.validation-identity-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(0, 68, 90, 0.05);
+  border: 1px solid rgba(0, 68, 90, 0.1);
+}
+
+.validation-identity-primary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.validation-identity-primary strong {
+  display: block;
+  margin: 0;
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: 1.2rem;
+  color: #002a3a;
+}
+
+.validation-identity-primary span {
+  color: #4c6f7a;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
+.validation-identity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+  align-items: center;
+}
+
+.validation-identity-note {
+  color: #4c6f7a;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.validation-secondary-card-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.validation-mapping-contract-table td strong {
+  font-size: 0.78rem;
+}
+
+.validation-mapping-contract-table code {
+  font-size: 0.7rem;
+}
+
+.validation-mapping-contract-table td,
+.validation-mapping-contract-table th {
+  font-size: 0.78rem;
+}
+
 .validation-sample-card {
   width: 100%;
 }
@@ -2468,6 +2585,10 @@ a.ghost-button:visited {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .canonical-kpi-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
   .content-grid {
     grid-template-columns: 1fr;
   }
@@ -2487,6 +2608,19 @@ a.ghost-button:visited {
 
   .monitoring-chip-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .validation-secondary-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .validation-identity-band {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .validation-identity-meta {
+    justify-content: flex-start;
   }
 
   .monitoring-detail-grid {
@@ -2521,6 +2655,10 @@ a.ghost-button:visited {
   }
 
   .workbook-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .canonical-kpi-grid {
     grid-template-columns: 1fr;
   }
 
