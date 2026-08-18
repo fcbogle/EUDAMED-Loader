@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.services.canonical_projection import CanonicalProjectionService
 from app.services.canonical_validation import CanonicalValidationService
 from app.validation_models import CanonicalValidationRecord
 
@@ -7,6 +8,7 @@ from app.validation_models import CanonicalValidationRecord
 class ValidationRecordSelector:
     def __init__(self, validation_service: CanonicalValidationService) -> None:
         self.validation_service = validation_service
+        self.projection_service = CanonicalProjectionService(validation_service=validation_service)
 
     def find_xml_ready_record(
         self,
@@ -15,7 +17,7 @@ class ValidationRecordSelector:
         product_variant: str,
         catalogue_number: str,
     ) -> CanonicalValidationRecord:
-        bundle = self.validation_service.build_validation_bundle()
+        bundle = self.projection_service.latest_bundle()
         for record in bundle.records:
             if (
                 record.product_family == product_family
@@ -36,7 +38,7 @@ class ValidationRecordSelector:
         product_variant: str,
         catalogue_number: str,
     ) -> CanonicalValidationRecord:
-        bundle = self.validation_service.build_validation_bundle()
+        bundle = self.projection_service.latest_bundle()
         for record in bundle.records:
             if (
                 record.product_family == product_family

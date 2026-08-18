@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -171,14 +171,22 @@ class WorkbookImportDuplicateGroup(BaseModel):
     row_indexes: list[int] = Field(default_factory=list)
 
 
+WorkbookImportProjectionStatus = Literal["ready", "stale", "missing"]
+
+
 class WorkbookImportSnapshotSummary(BaseModel):
     import_batch: WorkbookImportBatchSummary
     imported_workbooks: list[ImportedWorkbookSummary] = Field(default_factory=list)
     table_counts: list[WorkbookImportTableCount] = Field(default_factory=list)
     operation_counts: list[WorkbookImportOperationCount] = Field(default_factory=list)
-    duplicate_source_row_delta: int
-    duplicate_subject_count: int
-    workbook_duplicate_row_count: int
+    canonical_projection_status: WorkbookImportProjectionStatus = "missing"
+    canonical_projection_import_batch_id: int | None = None
+    duplicate_source_row_delta: int = 0
+    merged_source_row_count: int = 0
+    duplicate_subject_count: int = 0
+    workbook_duplicate_row_count: int = 0
+    workbook_duplicate_group_count: int = 0
+    unresolved_identity_row_count: int = 0
     top_duplicate_groups: list[WorkbookImportDuplicateGroup] = Field(default_factory=list)
 
 

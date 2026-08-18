@@ -608,6 +608,54 @@ class WorkbookImportService:
                     (latest_batch.import_batch_id,),
                 ).fetchone()[0]
             )
+            workbook_duplicate_group_count = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM (
+                        SELECT 1
+                        FROM source_row sr
+                        JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+                        WHERE sw.import_batch_id = ?
+                          AND COALESCE(TRIM(sr.product_family), '') <> ''
+                          AND COALESCE(TRIM(sr.product_variant), '') <> ''
+                          AND COALESCE(TRIM(sr.catalogue_number), '') <> ''
+                        GROUP BY
+                            COALESCE(TRIM(sr.product_family), ''),
+                            COALESCE(TRIM(sr.product_variant), ''),
+                            COALESCE(TRIM(sr.catalogue_number), '')
+                        HAVING COUNT(*) > 1
+                    ) duplicate_group
+                    """,
+                    (latest_batch.import_batch_id,),
+                ).fetchone()[0]
+            )
+            merged_source_row_count = max(
+                latest_batch.source_row_count - latest_batch.device_subject_count - latest_batch_identity_issue_count,
+                0,
+            )
+            snapshot_row = (
+                connection.execute(
+                    """
+                    SELECT source_import_batch_id, total_source_records
+                    FROM canonical_projection_snapshot
+                    WHERE source_import_batch_id = ?
+                    LIMIT 1
+                    """,
+                    (latest_batch.import_batch_id,),
+                ).fetchone()
+                if "canonical_projection_snapshot" in available_tables
+                else None
+            )
+            canonical_projection_import_batch_id = (
+                int(snapshot_row["source_import_batch_id"]) if snapshot_row is not None else None
+            )
+            if snapshot_row is None:
+                canonical_projection_status = "missing"
+            elif int(snapshot_row["total_source_records"]) == latest_batch.source_row_count:
+                canonical_projection_status = "ready"
+            else:
+                canonical_projection_status = "stale"
 
         operation_counts = [
             WorkbookImportOperationCount(
@@ -635,18 +683,21 @@ class WorkbookImportService:
         )
 
         return WorkbookImportSnapshotSummary(
-            import_batch=latest_batch,
-            imported_workbooks=imported_workbooks,
-            table_counts=table_counts,
-            operation_counts=operation_counts,
-            duplicate_source_row_delta=max(
-                latest_batch.source_row_count - latest_batch.device_subject_count - unresolved_identity_row_count,
-                0,
-            ),
-            duplicate_subject_count=duplicate_subject_count,
-            workbook_duplicate_row_count=workbook_duplicate_row_count,
-            top_duplicate_groups=duplicate_groups,
+                import_batch=latest_batch,
+                imported_workbooks=imported_workbooks,
+                table_counts=table_counts,
+                operation_counts=operation_counts,
+                canonical_projection_status=canonical_projection_status,
+                canonical_projection_import_batch_id=canonical_projection_import_batch_id,
+                duplicate_source_row_delta=merged_source_row_count,
+                merged_source_row_count=merged_source_row_count,
+                duplicate_subject_count=duplicate_subject_count,
+                workbook_duplicate_row_count=workbook_duplicate_row_count,
+                workbook_duplicate_group_count=workbook_duplicate_group_count,
+                unresolved_identity_row_count=unresolved_identity_row_count,
+                top_duplicate_groups=duplicate_groups,
         )
+        
 
     def schema_summary(self) -> DatabaseSchemaSummary:
         with self._connect() as connection:

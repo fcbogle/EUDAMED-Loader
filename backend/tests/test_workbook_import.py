@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 
 from app.config import get_settings
 from app.models import WorkbookImportRunRequest
@@ -25,7 +26,10 @@ from app.routers.profiling import (
     workbook_import_schema_summary,
 )
 from app.services.testing_state_store import TestingStateStore as PlaygroundStateStore
+from app.services.canonical_validation import CanonicalValidationService
 from app.services.workbook_import import ImportedSourceRow, WorkbookImportService
+from app.services.xml_generation import XmlGenerationService
+from app.services.xml_selection import ValidationRecordSelector
 from app.validation_models import CanonicalValidationBundle, CanonicalValidationFieldValue, CanonicalValidationRecord, CompletenessSnapshot
 
 
@@ -497,6 +501,90 @@ def test_sqlite_canonical_validation_bundle_matches_persisted_projection(
     assert sqlite_bundle.family_summaries[0].product_family == "Family A"
     assert len(sqlite_route_bundle["records"]) == 1
     assert sqlite_route_bundle["records"][0]["catalogue_number"] == "CAT-001"
+    assert sqlite_route_bundle["persistence_source"] == "sqlite_projection"
+    assert sqlite_route_bundle["projection_status"] == "ready"
+    assert sqlite_route_bundle["source_import_batch_id"] == 1
+
+
+def test_validation_record_selector_uses_sqlite_projection_when_import_exists(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
+    service = WorkbookImportService()
+    service.run_import(imported_by="pytest", label="Import One")
+
+    class FailingValidationService:
+        def build_validation_bundle(self) -> CanonicalValidationBundle:
+            raise AssertionError("Selector should not fall back to workbook-derived validation when SQLite projection exists.")
+
+    selector = ValidationRecordSelector(FailingValidationService())  # type: ignore[arg-type]
+
+    selected = selector.find_post_record(
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-001",
+    )
+
+    assert selected.catalogue_number == "CAT-001"
+    assert selected.primary_udi_di == "111111"
+
+
+def test_xml_generation_scope_uses_sqlite_projection_when_import_exists(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
+    service = WorkbookImportService()
+    service.run_import(imported_by="pytest", label="Import One")
+
+    generation_service = XmlGenerationService()
+    monkeypatch.setattr(
+        generation_service.validation_service,
+        "build_validation_bundle",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("Generation scope should not fall back to workbook-derived validation when SQLite projection exists.")
+        ),
+    )
+
+    scope = generation_service.generation_scope()
+
+    assert scope.family_scope == "Synthetic scope"
+    assert scope.total_xml_ready_records == 1
+    assert len(scope.families) == 1
+    assert scope.families[0].product_family == "Family A"
+
+
+def test_xml_generation_variant_post_candidates_use_sqlite_projection_when_import_exists(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
+    service = WorkbookImportService()
+    service.run_import(imported_by="pytest", label="Import One")
+
+    generation_service = XmlGenerationService()
+    monkeypatch.setattr(
+        generation_service.validation_service,
+        "build_validation_bundle",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("Variant POST candidate selection should not fall back to workbook-derived validation when SQLite projection exists.")
+        ),
+    )
+
+    records, excluded, eligible_count = generation_service._variant_post_records_with_exclusions(
+        product_family="Family A",
+        product_variant="Variant A",
+        record_count=None,
+    )
+
+    assert len(records) == 1
+    assert not excluded
+    assert eligible_count == 1
+    assert records[0].catalogue_number == "CAT-001"
 
 
 def test_sqlite_canonical_validation_route_rebuilds_stale_snapshot(
@@ -530,6 +618,44 @@ def test_sqlite_canonical_validation_route_rebuilds_stale_snapshot(
     assert sqlite_route_bundle["validation_subset_records"] == 1
     assert sqlite_route_bundle["excluded_records"] == 0
     assert len(sqlite_route_bundle["records"]) == 1
+    assert sqlite_route_bundle["projection_status"] == "rebuilt"
+
+
+def test_sqlite_canonical_validation_route_raises_when_projection_cannot_be_rebuilt(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
+    service = WorkbookImportService()
+    import_result = service.run_import(imported_by="pytest", label="Import One")
+
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute(
+            "DELETE FROM canonical_projection_snapshot WHERE source_import_batch_id = ?",
+            (import_result.import_batch_id,),
+        )
+        connection.execute(
+            "DELETE FROM canonical_device_record WHERE source_import_batch_id = ?",
+            (import_result.import_batch_id,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    monkeypatch.setattr(WorkbookImportService, "rebuild_canonical_projection", lambda self, import_batch_id=None: 0)
+    monkeypatch.setattr(
+        CanonicalValidationService,
+        "build_validation_bundle",
+        lambda self: (_ for _ in ()).throw(AssertionError("Workbook fallback should not run")),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        canonical_validation_sqlite()
+
+    assert exc_info.value.status_code == 503
+    assert "missing in SQLite" in str(exc_info.value.detail)
 
 
 def test_workbook_import_matches_existing_subject_by_primary_and_records_drift(
@@ -761,7 +887,88 @@ def test_workbook_import_summary_counts_only_clean_duplicate_rows_as_overlap(
     assert summary is not None
     assert summary.import_batch.source_row_count == 2
     assert summary.import_batch.device_subject_count == 1
+    assert summary.canonical_projection_status == "ready"
+    assert summary.canonical_projection_import_batch_id == summary.import_batch.import_batch_id
     assert summary.duplicate_source_row_delta == 0
+    assert summary.merged_source_row_count == 0
+    assert summary.unresolved_identity_row_count == 1
+
+
+def test_workbook_import_summary_exposes_explicit_duplicate_metrics(
+    isolated_workbook_import_env: tuple[Path, Path],
+) -> None:
+    _, _excel_dir = isolated_workbook_import_env
+    service = WorkbookImportService()
+    rows = [
+        ImportedSourceRow(sheet_name="Variant A", row_index=2, values={"dummy": "first"}),
+        ImportedSourceRow(sheet_name="Variant A", row_index=3, values={"dummy": "second"}),
+    ]
+    service._load_source_rows = lambda workbook_path: rows  # type: ignore[method-assign]
+    promotions = {
+        ("synthetic.xlsx", "Variant A", 2): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+            "primary_udi_di": "111111",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        },
+        ("synthetic.xlsx", "Variant A", 3): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+            "primary_udi_di": "111111",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        },
+    }
+    service._promotion_lookup = lambda: promotions  # type: ignore[method-assign]
+    service._validation_bundle = lambda: _synthetic_validation_bundle_from_promotions(promotions, row_count=2)  # type: ignore[method-assign]
+
+    service.run_import(imported_by="pytest", label="Import One")
+    summary = service.latest_import_snapshot_summary()
+
+    assert summary is not None
+    assert summary.import_batch.source_row_count == 2
+    assert summary.import_batch.device_subject_count == 1
+    assert summary.canonical_projection_status == "ready"
+    assert summary.merged_source_row_count == 1
+    assert summary.duplicate_source_row_delta == 1
+    assert summary.workbook_duplicate_group_count == 1
+    assert summary.workbook_duplicate_row_count == 2
+    assert summary.unresolved_identity_row_count == 0
+
+
+def test_workbook_import_summary_marks_stale_canonical_projection(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
+    service = WorkbookImportService()
+    import_result = service.run_import(imported_by="pytest", label="Import One")
+
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute(
+            """
+            UPDATE canonical_projection_snapshot
+            SET total_source_records = 999
+            WHERE source_import_batch_id = ?
+            """,
+            (import_result.import_batch_id,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    summary = service.latest_import_snapshot_summary()
+
+    assert summary is not None
+    assert summary.canonical_projection_status == "stale"
+    assert summary.canonical_projection_import_batch_id == import_result.import_batch_id
 
 
 def test_workbook_import_read_model_endpoints_return_subject_rows_and_identity_issues(

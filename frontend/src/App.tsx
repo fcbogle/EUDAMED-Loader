@@ -1101,8 +1101,8 @@ export function App() {
     }
   }
 
-  async function loadCanonicalValidationBundle(): Promise<void> {
-    if (canonicalValidation || isLoadingCanonicalValidation) {
+  async function loadCanonicalValidationBundle(forceRefresh = false): Promise<void> {
+    if ((!forceRefresh && canonicalValidation) || isLoadingCanonicalValidation) {
       return;
     }
     setIsLoadingCanonicalValidation(true);
@@ -1110,7 +1110,11 @@ export function App() {
       const canonicalValidationData = await api.canonicalValidation();
       initializeCanonicalValidationState(canonicalValidationData);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Failed to load canonical validation.");
+      if (requestError instanceof ApiError && requestError.status === 404) {
+        setCanonicalValidation(null);
+      } else {
+        setError(requestError instanceof Error ? requestError.message : "Failed to load canonical validation.");
+      }
     } finally {
       setIsLoadingCanonicalValidation(false);
     }
@@ -1218,6 +1222,7 @@ export function App() {
         label: `UI import ${new Date().toISOString()}`,
       });
       await loadWorkbookImportMonitoring();
+      await loadCanonicalValidationBundle(true);
       setWorkbookImportActionMessage(
         `Workbook import completed. Batch #${result.import_batch_id} captured ${pluralize(result.source_row_count, "row")} across ${pluralize(result.workbook_count, "workbook")}.`,
       );
@@ -1279,6 +1284,20 @@ export function App() {
       void loadCanonicalValidationBundle();
     }
   }, [activeTab, canonicalValidation]);
+
+  useEffect(() => {
+    const latestImportBatchId = latestWorkbookImportSummary?.import_batch.import_batch_id;
+    if (
+      (activeTab === "canonicalValidation" ||
+        activeTab === "xml" ||
+        activeTab === "generation") &&
+      latestImportBatchId !== undefined &&
+      canonicalValidation &&
+      canonicalValidation.source_import_batch_id !== latestImportBatchId
+    ) {
+      void loadCanonicalValidationBundle(true);
+    }
+  }, [activeTab, latestWorkbookImportSummary, canonicalValidation]);
 
   useEffect(() => {
     if (activeTab === "workbooks" && !schemas) {
@@ -1683,10 +1702,13 @@ export function App() {
   const importedWorkbooks = latestWorkbookImportSummary?.imported_workbooks ?? [];
   const importTableCounts = latestWorkbookImportSummary?.table_counts ?? [];
   const importOperationCounts = latestWorkbookImportSummary?.operation_counts ?? [];
-  const duplicateSourceRowDelta = latestWorkbookImportSummary?.duplicate_source_row_delta ?? 0;
+  const canonicalProjectionStatus = latestWorkbookImportSummary?.canonical_projection_status ?? "missing";
+  const mergedSourceRowCount = latestWorkbookImportSummary?.merged_source_row_count ?? 0;
   const distinctSubjectCount = latestImportBatch?.device_subject_count ?? 0;
   const workbookDuplicateRowCount = latestWorkbookImportSummary?.workbook_duplicate_row_count ?? 0;
+  const workbookDuplicateGroupCount = latestWorkbookImportSummary?.workbook_duplicate_group_count ?? 0;
   const topDuplicateGroups = latestWorkbookImportSummary?.top_duplicate_groups ?? [];
+  const unresolvedIdentityRowCount = latestWorkbookImportSummary?.unresolved_identity_row_count ?? 0;
   const sourceRowTableCount = latestImportBatch?.source_row_count ?? 0;
   const deviceSubjectTableCount = latestImportBatch?.device_subject_count ?? 0;
   const filteredDeviceSubjects = deviceSubjects.filter(
@@ -1716,6 +1738,70 @@ export function App() {
   const testingStateTables = importTableCounts.filter((entry) =>
     ["testing_subjects", "testing_events", "reviewed_post_baselines"].includes(entry.table_name),
   );
+  const submissionSnapshotStatus = latestImportBatch
+    ? canonicalProjectionStatus === "ready"
+      ? {
+          label: "Projected",
+          className: "ok",
+          detail: `Workbook to SQLite and canonical projection are current for batch #${latestImportBatch.import_batch_id}.`,
+        }
+      : canonicalProjectionStatus === "stale"
+        ? {
+            label: "Projection stale",
+            className: "warn",
+            detail: `Workbook import exists for batch #${latestImportBatch.import_batch_id}, but the canonical projection no longer matches that batch.`,
+          }
+        : {
+            label: "Projection missing",
+            className: "danger",
+            detail: `Workbook import exists for batch #${latestImportBatch.import_batch_id}, but the canonical projection is not currently available in SQLite.`,
+          }
+    : {
+        label: hasWorkbookImportSnapshot
+          ? "Snapshot pending"
+          : workbookImportSummaryError
+            ? "Snapshot unavailable"
+            : "Import required",
+        className: latestImportBatch ? "ok" : "warn",
+        detail:
+          !hasWorkbookImportSnapshot && !workbookImportSummaryError
+            ? "No workbook import snapshot exists yet. Run the initial import to populate the SQLite-backed submission view."
+            : workbookImportSummaryError
+              ? workbookImportSummaryError
+              : "Submission Data requires a workbook import before SQLite-backed monitoring and read-model panels can load.",
+      };
+  const canonicalProjectionUiStatus =
+    canonicalValidation?.projection_status === "rebuilt"
+      ? {
+          label: "Projection rebuilt",
+          className: "warn",
+          detail:
+            canonicalValidation.source_import_batch_id !== null
+              ? `SQLite canonical projection was rebuilt for import batch #${canonicalValidation.source_import_batch_id} during this request.`
+              : "SQLite canonical projection was rebuilt during this request.",
+        }
+      : canonicalValidation?.projection_status === "ready"
+        ? {
+            label: "SQLite ready",
+            className: "ok",
+            detail:
+              canonicalValidation.source_import_batch_id !== null
+                ? `Canonical validation is reading the current SQLite projection for import batch #${canonicalValidation.source_import_batch_id}.`
+                : "Canonical validation is reading the current SQLite projection.",
+          }
+        : !latestImportBatch
+          ? {
+              label: "Import required",
+              className: "warn",
+              detail: "Canonical Validation now depends on the imported SQLite projection. Run Import Workbooks first.",
+            }
+          : {
+              label: "Loading scope",
+              className: "warn",
+              detail: trackedValidationFieldCount
+                ? `${trackedValidationFieldCount} unique canonical fields are currently carried into validation.`
+                : "Loading validation subset...",
+            };
   const selectedDeviceSubjectFamilySummary =
     validationFamilySummaries.find((summary) => summary.product_family === selectedDeviceSubjectFamily) ?? null;
   const selectedDeviceSubjectVariantSummary =
@@ -3229,19 +3315,20 @@ export function App() {
           {activeTab === "workbooks" ? (
             <>
               <p className="eyebrow">Workbook Analysis</p>
-              <h1>EUDAMED Data Details</h1>
-              <p className="hero-copy">
-                Imported rows, stable subjects, POST/PATCH split, duplicates, and table footprint.
+              <h1>Submission Data</h1>
+              <p className="hero-copy hero-copy-compact">
+                Review imported workbook coverage, device counts, XML readiness, duplicates, and
+                current SQLite status.
               </p>
             </>
           ) : null}
           {activeTab === "canonicalValidation" ? (
             <>
               <p className="eyebrow">Canonical Validation</p>
-              <h1>Validate Multi-Family Canonical Readiness</h1>
+              <h1>Canonical Validation</h1>
               <p className="hero-copy">
-                Review readiness across in-scope product families, drill down into product variants,
-                and inspect row-level canonical evidence before XML generation.
+                Check which families and variants are ready for canonical use, then inspect the
+                supporting source-to-canonical mapping before XML generation.
               </p>
             </>
           ) : null}
@@ -3279,46 +3366,37 @@ export function App() {
           {activeTab === "workbooks" ? (
             <>
               <span className="status-label">Current snapshot</span>
-              <span className={latestImportBatch ? "status-pill ok" : "status-pill warn"}>
-                {latestImportBatch
-                  ? "Imported"
-                  : hasWorkbookImportSnapshot
-                    ? "Snapshot pending"
-                    : workbookImportSummaryError
-                    ? "Snapshot unavailable"
-                    : "Import required"}
-              </span>
-              <p className="status-detail">
-                {latestImportBatch
-                  ? `Workbook to database`
-                  : !hasWorkbookImportSnapshot && !workbookImportSummaryError
-                    ? "No workbook import snapshot exists yet. Run the initial import to populate the database-backed submission view."
-                  : workbookImportSummaryError
-                    ? workbookImportSummaryError
-                    : `${sheets.length} sheets available for source review and ${schemas?.total_files ?? 0} schema files inventoried.`}
-              </p>
+              <div className="status-card-toolbar">
+                <button
+                  className="action-button import-workbooks-button"
+                  type="button"
+                  onClick={() => void runWorkbookImportFromUi()}
+                  disabled={isRunningWorkbookImport}
+                >
+                  {isRunningWorkbookImport ? "Importing Workbooks..." : "Import Workbooks"}
+                </button>
+                <span className={`status-pill ${submissionSnapshotStatus.className}`}>
+                  {submissionSnapshotStatus.label}
+                </span>
+              </div>
               {latestImportBatch ? (
-                <p className="status-detail status-detail-tight">{formatIsoDateTime(latestImportBatch.imported_at)}</p>
-              ) : null}
-              <button
-                className="action-button import-workbooks-button"
-                type="button"
-                onClick={() => void runWorkbookImportFromUi()}
-                disabled={isRunningWorkbookImport}
-              >
-                {isRunningWorkbookImport ? "Importing Workbooks..." : "Import Workbooks"}
-              </button>
+                <p className="status-detail status-detail-tight">
+                  {`${submissionSnapshotStatus.detail} · Last import: ${formatIsoDateTime(latestImportBatch.imported_at)}`}
+                </p>
+              ) : (
+                <p className="status-detail status-detail-tight">{submissionSnapshotStatus.detail}</p>
+              )}
               {workbookImportActionMessage ? <p className="status-detail status-detail-tight">{workbookImportActionMessage}</p> : null}
             </>
           ) : null}
           {activeTab === "canonicalValidation" ? (
             <>
               <span className="status-label">Validation scope</span>
-              <span className="status-pill ok">{canonicalValidation?.family_scope ?? "Loading scope"}</span>
+              <span className={`status-pill ${canonicalProjectionUiStatus.className}`}>{canonicalProjectionUiStatus.label}</span>
               <p className="status-detail">
-                {trackedValidationFieldCount
-                  ? `${trackedValidationFieldCount} unique canonical fields are currently carried into validation.`
-                  : "Loading validation subset..."}
+                {canonicalValidation?.family_scope
+                  ? `${canonicalValidation.family_scope} · ${canonicalProjectionUiStatus.detail}`
+                  : canonicalProjectionUiStatus.detail}
               </p>
             </>
           ) : null}
@@ -3368,8 +3446,8 @@ export function App() {
                 </div>
               </div>
               <p className="panel-copy">
-                No workbook import snapshot exists yet. The live workbook files are visible below, but the database-backed
-                submission view and monitoring panels will populate only after the first import batch is created.
+                No workbook import snapshot exists yet. Submission Data now depends on the imported SQLite snapshot, so the
+                database-backed submission view and monitoring panels will populate only after the first import batch is created.
               </p>
               <div className="action-summary">
                 <button
@@ -3386,8 +3464,8 @@ export function App() {
           ) : null}
           {workbookImportSummaryError ? (
             <div className="panel error-banner">
-              Workbook import monitoring is partially unavailable: {workbookImportSummaryError}. The UI is showing the live
-              workbook files below, and any available database-backed snapshot data will continue to render.
+              Workbook import monitoring is partially unavailable: {workbookImportSummaryError}. Any available SQLite-backed
+              snapshot data will continue to render.
             </div>
           ) : null}
           <section className="summary-grid workbook-kpi-grid">
@@ -3410,9 +3488,9 @@ export function App() {
               <p>Current device identities</p>
             </div>
             <div className="summary-card summary-card-kpi summary-card-kpi-warn">
-              <span className="summary-label">Overlap</span>
-              <strong>{latestImportBatch ? duplicateSourceRowDelta : "N/A"}</strong>
-              <p>Rows merged into existing subjects</p>
+              <span className="summary-label">Merged Rows</span>
+              <strong>{latestImportBatch ? mergedSourceRowCount : "N/A"}</strong>
+              <p>Workbook rows merged into an existing device subject</p>
             </div>
             <div className="summary-card summary-card-kpi summary-card-kpi-post">
               <span className="summary-label">POST</span>
@@ -3652,12 +3730,16 @@ export function App() {
                   <span>workbook duplicates</span>
                 </div>
                 <div className="queue-chip">
+                  <strong>{latestImportBatch ? workbookDuplicateGroupCount : "N/A"}</strong>
+                  <span>duplicate groups</span>
+                </div>
+                <div className="queue-chip">
                   <strong>{latestImportBatch ? identityIssueTableCount : "N/A"}</strong>
                   <span>identity issues</span>
                 </div>
                 <div className="queue-chip">
-                  <strong>{latestImportBatch ? unclassifiedDeviceSubjectCount : "N/A"}</strong>
-                  <span>unclassified subjects</span>
+                  <strong>{latestImportBatch ? unresolvedIdentityRowCount : "N/A"}</strong>
+                  <span>unresolved rows</span>
                 </div>
               </div>
               <div className="monitoring-detail-grid">
@@ -3690,8 +3772,23 @@ export function App() {
         isLoadingCanonicalValidation ? (
           renderLoadingPanel(
             "Loading canonical validation",
-            "Reading in-scope workbook rows and assembling completeness and XML-readiness results.",
+            "Reading the current SQLite canonical projection and assembling completeness and XML-readiness results.",
           )
+        ) : !latestImportBatch ? (
+          <section className="tab-stack">
+            <section className="panel">
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">SQLite Projection</span>
+                  <h2>Import Required</h2>
+                </div>
+              </div>
+              <p className="panel-copy">
+                Canonical Validation now depends on the imported SQLite projection. Run `Import Workbooks` in `Submission Data`
+                before loading canonical validation.
+              </p>
+            </section>
+          </section>
         ) : (
         <section className="tab-stack">
           <section className="summary-grid canonical-kpi-grid">

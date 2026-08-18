@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from typing import get_args, get_origin
 
+import pytest
+from fastapi import HTTPException
 from pydantic import BaseModel
 
 from app.canonical_models import BasicDevice, DeviceRecord, Manufacturer, MarketAvailability
 from app.routers.canonical import canonical_validation
+from app.services.canonical_projection import CanonicalProjectionNoImportError
 from app.services.canonical_review import CanonicalReviewService
 from app.services.canonical_validation import CanonicalValidationService
 
@@ -139,14 +142,31 @@ def test_canonical_validation_emits_unique_canonical_paths_per_record() -> None:
     assert len(emitted_paths) == len(set(emitted_paths))
 
 
-def test_canonical_validation_api_returns_multi_family_payload() -> None:
-    payload = canonical_validation()
+def test_canonical_validation_service_payload_returns_multi_family_payload() -> None:
+    payload = CanonicalValidationService().build_validation_bundle().model_dump(mode="json")
 
     assert payload["family_scope"] == "In-scope non-accessories families"
     assert len(payload["family_summaries"]) == 5
     assert len(payload["variant_summaries"]) == 14
     assert payload["xml_blocked_records"] >= payload["blocked_records"]
     assert payload["records"][0]["product_variant"]
+
+
+def test_canonical_validation_route_requires_import(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "app.routers.canonical.CanonicalProjectionService.latest_bundle",
+        lambda self, require_import=False: (_ for _ in ()).throw(
+            CanonicalProjectionNoImportError(
+                "No workbook import snapshot exists yet. Import workbooks before loading canonical validation."
+            )
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        canonical_validation()
+
+    assert exc_info.value.status_code == 404
+    assert "Import workbooks before loading canonical validation" in str(exc_info.value.detail)
 
 
 def test_canonical_validation_recognizes_alternate_udi_di_header_variants() -> None:

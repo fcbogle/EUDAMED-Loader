@@ -151,9 +151,14 @@ export type WorkbookImportSnapshotSummary = {
   imported_workbooks: ImportedWorkbookSummary[];
   table_counts: WorkbookImportTableCount[];
   operation_counts: WorkbookImportOperationCount[];
+  canonical_projection_status: "ready" | "stale" | "missing";
+  canonical_projection_import_batch_id: number | null;
   duplicate_source_row_delta: number;
+  merged_source_row_count: number;
   duplicate_subject_count: number;
   workbook_duplicate_row_count: number;
+  workbook_duplicate_group_count: number;
+  unresolved_identity_row_count: number;
   top_duplicate_groups: WorkbookImportDuplicateGroup[];
 };
 
@@ -500,6 +505,9 @@ export type CanonicalValidationBundle = {
   sample_records: CanonicalValidationRecord[];
   deferred_scope_summaries: DeferredValidationScopeSummary[];
   records: CanonicalValidationRecord[];
+  persistence_source: "sqlite_projection" | "workbook_fallback";
+  projection_status: "ready" | "rebuilt" | "missing" | "no_import";
+  source_import_batch_id: number | null;
 };
 
 export type XmlValidationIssue = {

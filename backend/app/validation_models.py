@@ -20,6 +20,8 @@ SourceFieldCoverageStatus = Literal[
     "not_yet_represented",
     "deferred_by_design",
 ]
+CanonicalPersistenceSource = Literal["sqlite_projection", "workbook_fallback"]
+CanonicalProjectionStatus = Literal["ready", "rebuilt", "missing", "no_import"]
 
 
 class CompletenessSnapshot(BaseModel):
@@ -156,3 +158,6 @@ class CanonicalValidationBundle(BaseModel):
     sample_records: list[CanonicalValidationRecord] = Field(default_factory=list)
     deferred_scope_summaries: list[DeferredValidationScopeSummary] = Field(default_factory=list)
     records: list[CanonicalValidationRecord] = Field(default_factory=list)
+    persistence_source: CanonicalPersistenceSource = "workbook_fallback"
+    projection_status: CanonicalProjectionStatus = "missing"
+    source_import_batch_id: int | None = None

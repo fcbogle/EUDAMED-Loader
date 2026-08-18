@@ -129,17 +129,33 @@ with the current implementation focus now being:
 
 - The `Submission Data` workspace now mixes:
   - live workbook inventory from direct Excel inspection
-  - SQLite-backed import snapshot and monitoring panels
+  - SQLite-backed import snapshot, read-model, and monitoring panels
 - The current SQLite import layer persists:
   - `import_batch`
   - `source_workbook`
   - `source_row`
   - `device_subject`
+  - `device_identity_issue`
+  - `canonical_device_record`
+  - `canonical_field_value`
+  - `canonical_projection_snapshot`
+- The active SQLite file is currently:
+  - `data/testing/testing-state.sqlite3`
+- The current workbook-import and projection flow is:
+  - workbook rows are imported into SQLite as `source_row`
+  - matching rows are resolved into stable `device_subject` identities
+  - unresolved or conflicting identity cases are captured in `device_identity_issue`
+  - the current canonical validation subset is persisted into `canonical_device_record` and `canonical_field_value`
+  - a batch-level canonical projection snapshot is persisted in `canonical_projection_snapshot`
 - The UI now surfaces database-backed panels for:
   - `Database Tables`
   - `Workbook Snapshot`
   - `Database Monitoring`
   - `Latest Drift`
+- The UI now also uses SQLite-backed read-model endpoints for:
+  - `device_subject` summaries
+  - `source_row` summaries and detail views
+  - `device_identity_issue` summaries and detail views
 - The UI now treats missing workbook-import data as an empty state rather than a hard error:
   - if no import batch exists yet, the page shows `Import Workbooks`
   - the same control remains available in the status card for reruns
@@ -148,11 +164,40 @@ with the current implementation focus now being:
   - `/api/workbook-imports/schema-summary`
   - `/api/workbook-imports/health`
   - `/api/workbook-imports/latest/diff`
+- The current SQLite-backed read-model endpoints are:
+  - `/api/workbook-imports/device-subjects`
+  - `/api/workbook-imports/source-rows`
+  - `/api/workbook-imports/identity-issues`
 - `latest/summary` and `latest/diff` may legitimately return `404` when no import batch exists yet
   - the frontend now treats that as first-run state, not as a fatal failure
 - Current design boundary:
-  - monitoring and import controls are in place
-  - the SQLite layer is not yet the main read model for `device_subject` and `source_row` workflows
+  - SQLite is now the active operational store for workbook import state, monitoring, identity issue tracking, and canonical projection snapshots
+  - the `Submission Data` workspace is no longer summary-only database chrome; it already depends on SQLite-backed read paths
+  - the broader relational cleanup still remains ahead:
+    - more consistent `device_subject_id` lineage joins across all persistence
+    - expansion of accepted-state and submission-history persistence beyond the current testing-state slices
+
+### Canonical Validation
+
+- The canonical validation UI now prefers a SQLite-backed projection rather than rebuilding only from direct workbook inspection.
+- The active SQLite-backed canonical validation route is:
+  - `/api/canonical-validation/sqlite`
+- Current route behavior:
+  - if no workbook import exists yet, the route falls back to workbook-derived canonical validation and reports `projection_status = no_import`
+  - if a workbook import exists and the SQLite projection is current, the route reports `persistence_source = sqlite_projection` and `projection_status = ready`
+  - if a workbook import exists but the stored projection is stale, the route rebuilds the SQLite projection for the latest batch and reports `projection_status = rebuilt`
+  - if a workbook import exists but the SQLite projection is missing and cannot be rebuilt, the route now fails with `503` rather than silently hiding the persistence problem
+- The `Submission Data` workspace now surfaces projection state separately from generic import state:
+  - `ready`
+  - `stale`
+  - `missing`
+- The `Canonical Validation` workspace now surfaces SQLite projection status separately from validation scope:
+  - `SQLite ready`
+  - `Projection rebuilt`
+  - `No import`
+- Current practical meaning:
+  - workbook import is now the entry point for refreshing the SQLite-backed canonical view
+  - canonical validation is no longer just a transient workbook read; it is part of the persisted SQLite workflow
 
 ### EUDAMED Testing
 
@@ -177,6 +222,49 @@ General XML tools:
 - `Bulk Basic UDI POST`
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
+
+### Planned EUDAMED Testing Logging
+
+- Target this work after the current SQLite persistence increments and Canonical Validation / testing UI tidy-up are complete.
+- The goal is targeted auditability for EUDAMED testing decisions and writes, not broad debug logging across the whole app.
+- Preferred implementation shape:
+  - structured application logs via `structlog`
+  - optional SQLAlchemy query tracing behind a disabled-by-default flag
+  - durable SQLite audit tables for the business events that matter during Playground testing
+- Logging should be narrowly scoped to:
+  - `has_successful_basic_udi_post`
+  - `has_successful_primary_udi_post`
+  - `posted_entries`
+  - `posted_parent_groups`
+  - writes to `testing_subjects`
+  - writes to `testing_events`
+  - writes to `reviewed_post_baselines`
+  - generation of `POST`, `PATCH`, and bulk preview/download artifacts
+  - recorded outcomes such as success, failure, accepted, and rejected
+- Logging should not default to capturing:
+  - every generic `SELECT`
+  - workbook-import internals
+  - full XML payload bodies
+  - full Playground response bodies
+  - routine Canonical / Canonical Validation read traffic
+- Proposed feature flags:
+  - `EUDAMED_TESTING_AUDIT=true`
+  - `EUDAMED_TESTING_DEBUG_LOGS=false`
+  - `EUDAMED_TESTING_SQL_TRACE=false`
+- Proposed SQLite audit tables:
+  - `testing_query_audit`
+  - `testing_xml_run`
+  - `testing_xml_result`
+  - `testing_state_transition`
+- Best first safe increment when this work starts:
+  - log the Basic UDI and Primary UDI existence checks
+  - log writes to `testing_events`
+  - log creation of `POST` / `PATCH` preview and download artifacts
+  - log recorded Playground outcomes and resulting state transitions
+- Likely implementation touchpoints:
+  - `backend/app/services/testing_state_store.py`
+  - `backend/app/services/xml_generation.py`
+  - any SQLite persistence layer that replaces remaining in-memory testing-state behavior
 
 ### POST
 

@@ -148,6 +148,11 @@ select {
   font-size: 1.02rem;
 }
 
+.hero-copy-compact {
+  max-width: 68ch;
+  font-size: 0.96rem;
+}
+
 .status-card,
 .panel,
 .summary-card {
@@ -927,6 +932,14 @@ th {
   margin: 18px 0 14px;
 }
 
+.status-card-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 10px 0 0;
+}
+
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -1177,9 +1190,10 @@ a.ghost-button:visited {
 
 .monitoring-chip-grid {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(9, minmax(140px, 1fr));
   gap: 12px;
   margin-top: 16px;
+  overflow-x: auto;
 }
 
 .monitoring-chip-grid .queue-chip {

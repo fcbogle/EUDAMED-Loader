@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from app.config import get_settings
+from app.services.canonical_projection import CanonicalProjectionService
 from app.services.canonical_validation import CanonicalValidationService
 from app.services.xml_packaging import XmlPackageBuilder
 from app.services.xml_projection import DeviceXmlProjectionBuilder
@@ -36,6 +37,9 @@ class XmlGenerationService:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.validation_service = CanonicalValidationService()
+        self.canonical_projection_service = CanonicalProjectionService(
+            validation_service=self.validation_service,
+        )
         self.xml_validation_service = XmlValidationService()
         self.selector = ValidationRecordSelector(self.validation_service)
         self.projection_builder = DeviceXmlProjectionBuilder()
@@ -47,8 +51,11 @@ class XmlGenerationService:
     def project_root(self):
         return self.settings.schema_dir.parents[1]
 
+    def _validation_bundle(self):
+        return self.canonical_projection_service.latest_bundle()
+
     def generation_scope(self) -> XmlGenerationScopeBundle:
-        bundle = self.validation_service.build_validation_bundle()
+        bundle = self._validation_bundle()
         families = [
             XmlGenerationSelectionSummary(
                 product_family=summary.product_family,
@@ -86,7 +93,7 @@ class XmlGenerationService:
         product_variant: str,
         record_count: int | None,
     ) -> tuple[list[CanonicalValidationRecord], list[BulkXmlExcludedRecord], int]:
-        bundle = self.validation_service.build_validation_bundle()
+        bundle = self._validation_bundle()
         variant_records = [
             record
             for record in bundle.records
@@ -159,7 +166,7 @@ class XmlGenerationService:
         product_family: str,
         product_variant: str,
     ) -> list[CanonicalValidationRecord]:
-        bundle = self.validation_service.build_validation_bundle()
+        bundle = self._validation_bundle()
         return [
             record
             for record in bundle.records
@@ -1833,7 +1840,7 @@ class XmlGenerationService:
         product_variant: str,
         chunk_sequence: int = 1,
     ) -> BatchXmlPreview:
-        bundle = self.validation_service.build_validation_bundle()
+        bundle = self._validation_bundle()
         records = self.selector.xml_ready_variant_records(
             bundle.records,
             product_family=product_family,
@@ -1911,7 +1918,7 @@ class XmlGenerationService:
         product_family: str,
         product_variant: str,
     ) -> tuple[str, bytes]:
-        bundle = self.validation_service.build_validation_bundle()
+        bundle = self._validation_bundle()
         records = self.selector.xml_ready_variant_records(
             bundle.records,
             product_family=product_family,
