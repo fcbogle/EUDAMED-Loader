@@ -181,9 +181,9 @@ with the current implementation focus now being:
 
 - The canonical validation UI now prefers a SQLite-backed projection rather than rebuilding only from direct workbook inspection.
 - The active SQLite-backed canonical validation route is:
-  - `/api/canonical-validation/sqlite`
+  - `/api/canonical-validation`
 - Current route behavior:
-  - if no workbook import exists yet, the route falls back to workbook-derived canonical validation and reports `projection_status = no_import`
+  - if no workbook import exists yet, the route now returns `404` and the UI treats that as an import-required state
   - if a workbook import exists and the SQLite projection is current, the route reports `persistence_source = sqlite_projection` and `projection_status = ready`
   - if a workbook import exists but the stored projection is stale, the route rebuilds the SQLite projection for the latest batch and reports `projection_status = rebuilt`
   - if a workbook import exists but the SQLite projection is missing and cannot be rebuilt, the route now fails with `503` rather than silently hiding the persistence problem
@@ -194,7 +194,7 @@ with the current implementation focus now being:
 - The `Canonical Validation` workspace now surfaces SQLite projection status separately from validation scope:
   - `SQLite ready`
   - `Projection rebuilt`
-  - `No import`
+  - `Import required`
 - Current practical meaning:
   - workbook import is now the entry point for refreshing the SQLite-backed canonical view
   - canonical validation is no longer just a transient workbook read; it is part of the persisted SQLite workflow

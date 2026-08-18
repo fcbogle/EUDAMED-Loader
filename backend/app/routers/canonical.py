@@ -26,12 +26,3 @@ def canonical_validation() -> dict:
     except CanonicalProjectionUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-
-@router.get("/canonical-validation/sqlite")
-def canonical_validation_sqlite() -> dict:
-    try:
-        return CanonicalProjectionService().latest_bundle(require_import=True).model_dump(mode="json")
-    except CanonicalProjectionNoImportError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except CanonicalProjectionUnavailableError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc

@@ -205,7 +205,7 @@ export const api = {
       rules,
     }),
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
-  canonicalValidation: () => getJson<CanonicalValidationBundle>("/canonical-validation/sqlite"),
+  canonicalValidation: () => getJson<CanonicalValidationBundle>("/canonical-validation"),
   xmlGenerationScope: () => getJson<XmlGenerationScopeBundle>("/xml/scope"),
   previewXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendJson<SingleRecordXmlPreview>("/xml/preview-record", "POST", {

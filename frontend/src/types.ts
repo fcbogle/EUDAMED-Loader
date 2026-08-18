@@ -505,8 +505,8 @@ export type CanonicalValidationBundle = {
   sample_records: CanonicalValidationRecord[];
   deferred_scope_summaries: DeferredValidationScopeSummary[];
   records: CanonicalValidationRecord[];
-  persistence_source: "sqlite_projection" | "workbook_fallback";
-  projection_status: "ready" | "rebuilt" | "missing" | "no_import";
+  persistence_source: "sqlite_projection";
+  projection_status: "ready" | "rebuilt";
   source_import_batch_id: number | null;
 };
 

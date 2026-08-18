@@ -9,7 +9,7 @@ from fastapi import HTTPException
 
 from app.config import get_settings
 from app.models import WorkbookImportRunRequest
-from app.routers.canonical import canonical_validation_sqlite
+from app.routers.canonical import canonical_validation
 from app.routers.profiling import (
     get_device_identity_issue,
     get_device_subject,
@@ -486,7 +486,7 @@ def test_sqlite_canonical_validation_bundle_matches_persisted_projection(
     service.run_import(imported_by="pytest", label="Import One")
 
     sqlite_bundle = service.canonical_validation_bundle_from_sqlite()
-    sqlite_route_bundle = canonical_validation_sqlite()
+    sqlite_route_bundle = canonical_validation()
 
     assert sqlite_bundle is not None
     assert sqlite_bundle.total_source_records == 1
@@ -612,7 +612,7 @@ def test_sqlite_canonical_validation_route_rebuilds_stale_snapshot(
     finally:
         connection.close()
 
-    sqlite_route_bundle = canonical_validation_sqlite()
+    sqlite_route_bundle = canonical_validation()
 
     assert sqlite_route_bundle["total_source_records"] == 1
     assert sqlite_route_bundle["validation_subset_records"] == 1
@@ -652,7 +652,7 @@ def test_sqlite_canonical_validation_route_raises_when_projection_cannot_be_rebu
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        canonical_validation_sqlite()
+        canonical_validation()
 
     assert exc_info.value.status_code == 503
     assert "missing in SQLite" in str(exc_info.value.detail)
