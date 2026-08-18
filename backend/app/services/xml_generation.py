@@ -4,7 +4,11 @@ import json
 from typing import Any
 
 from app.config import get_settings
-from app.services.canonical_projection import CanonicalProjectionService
+from app.services.canonical_projection import (
+    CanonicalProjectionNoImportError,
+    CanonicalProjectionService,
+    CanonicalProjectionUnavailableError,
+)
 from app.services.canonical_validation import CanonicalValidationService
 from app.services.xml_packaging import XmlPackageBuilder
 from app.services.xml_projection import DeviceXmlProjectionBuilder
@@ -28,20 +32,22 @@ from app.xml_models import (
     PostRegistrationPreview,
     RegisteredDeviceAnchor,
     SingleRecordXmlPreview,
+    XmlValidationResult,
     XmlGenerationScopeBundle,
     XmlGenerationSelectionSummary,
 )
 
 
 class XmlGenerationService:
-    def __init__(self) -> None:
+    def __init__(self, *, require_import: bool = False) -> None:
         self.settings = get_settings()
+        self.require_import = require_import
         self.validation_service = CanonicalValidationService()
         self.canonical_projection_service = CanonicalProjectionService(
             validation_service=self.validation_service,
         )
         self.xml_validation_service = XmlValidationService()
-        self.selector = ValidationRecordSelector(self.validation_service)
+        self.selector = ValidationRecordSelector(self.validation_service, require_import=require_import)
         self.projection_builder = DeviceXmlProjectionBuilder()
         self.renderer = EudamedMessageRenderer(self.settings)
         self.package_builder = XmlPackageBuilder()
@@ -52,7 +58,10 @@ class XmlGenerationService:
         return self.settings.schema_dir.parents[1]
 
     def _validation_bundle(self):
-        return self.canonical_projection_service.latest_bundle()
+        try:
+            return self.canonical_projection_service.latest_bundle(require_import=self.require_import)
+        except (CanonicalProjectionNoImportError, CanonicalProjectionUnavailableError) as exc:
+            raise ValueError(str(exc)) from exc
 
     def generation_scope(self) -> XmlGenerationScopeBundle:
         bundle = self._validation_bundle()
@@ -307,6 +316,16 @@ class XmlGenerationService:
                 continue
 
             for record in group:
+                if not record.primary_udi_di:
+                    excluded_records.append(
+                        BulkXmlExcludedRecord(
+                            catalogue_number=record.catalogue_number,
+                            primary_udi_di=record.primary_udi_di,
+                            reason_code="missing_primary_udi_di",
+                            reason_message="Record does not currently resolve to a Primary UDI-DI, so it cannot be used for Bulk UDI-DI POST.",
+                        )
+                    )
+                    continue
                 if self.testing_state_store.has_successful_primary_udi_post(
                     product_family=product_family,
                     product_variant=product_variant,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -25,8 +26,15 @@ from app.routers.profiling import (
     workbook_import_health_summary,
     workbook_import_schema_summary,
 )
+from app.routers.xml_generation import (
+    testing_subject_history,
+    testing_subject_summaries,
+    testing_workspace_summary,
+    xml_generation_scope,
+)
 from app.services.testing_state_store import TestingStateStore as PlaygroundStateStore
 from app.services.canonical_validation import CanonicalValidationService
+from app.services.testing_read_model import TestingReadModelService
 from app.services.workbook_import import ImportedSourceRow, WorkbookImportService
 from app.services.xml_generation import XmlGenerationService
 from app.services.xml_selection import ValidationRecordSelector
@@ -386,6 +394,9 @@ def test_workbook_import_creates_canonical_tables_and_backfills_device_subject_l
 
     connection = sqlite3.connect(db_path)
     try:
+        connection.execute("DELETE FROM testing_events")
+        connection.execute("DELETE FROM testing_subjects")
+        connection.execute("DELETE FROM reviewed_post_baselines")
         subject_id = int(
             connection.execute(
                 """
@@ -585,6 +596,316 @@ def test_xml_generation_variant_post_candidates_use_sqlite_projection_when_impor
     assert not excluded
     assert eligible_count == 1
     assert records[0].catalogue_number == "CAT-001"
+
+
+def test_xml_generation_scope_requires_sqlite_import_for_testing_paths(
+    isolated_workbook_import_env: tuple[Path, Path],
+) -> None:
+    _db_path, _excel_dir = isolated_workbook_import_env
+
+    with pytest.raises(HTTPException) as exc_info:
+        xml_generation_scope()
+
+    assert exc_info.value.status_code == 400 or exc_info.value.status_code == 404
+    assert "Import workbooks before loading canonical validation" in str(exc_info.value.detail)
+
+
+def test_testing_read_model_service_returns_workspace_summary_and_subject_history(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
+    import_service = WorkbookImportService()
+    import_service.run_import(imported_by="pytest", label="Import One")
+
+    connection = sqlite3.connect(db_path)
+    try:
+        subject_id = int(
+            connection.execute(
+                """
+                INSERT INTO testing_subjects (
+                    subject_key,
+                    device_subject_id,
+                    normalized_product_family,
+                    normalized_product_variant,
+                    normalized_catalogue_number,
+                    normalized_primary_udi_di,
+                    normalized_basic_udi_di,
+                    product_family,
+                    product_variant,
+                    catalogue_number,
+                    primary_udi_di,
+                    basic_udi_di,
+                    post_success,
+                    baseline_patch_success,
+                    latest_successful_version,
+                    latest_successful_state_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "family-a|variant-a|cat-001",
+                    1,
+                    "familya",
+                    "varianta",
+                    "cat-001",
+                    "111111",
+                    "basic-1",
+                    "Family A",
+                    "Variant A",
+                    "CAT-001",
+                    "111111",
+                    "BASIC-1",
+                    1,
+                    1,
+                    "2",
+                    json.dumps({"version": "2", "trade_name": "Synthetic Trade Name"}),
+                ),
+            ).lastrowid
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_events (
+                subject_id,
+                event_index,
+                message_type,
+                status,
+                version,
+                scenario_id,
+                scenario_label,
+                tested_at,
+                transaction_id,
+                submission_id,
+                correlation_id,
+                message_id,
+                changed_fields_json,
+                retained_fields_json,
+                unchanged_fields_json,
+                raw_event_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                subject_id,
+                0,
+                "DEVICE.POST",
+                "SUCCESS",
+                "1",
+                None,
+                "Baseline POST",
+                "2026-08-14T09:00:00Z",
+                "txn-1",
+                "sub-1",
+                "corr-1",
+                "msg-1",
+                json.dumps([]),
+                json.dumps([]),
+                json.dumps([]),
+                json.dumps({"message_type": "DEVICE.POST", "status": "SUCCESS"}),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_events (
+                subject_id,
+                event_index,
+                message_type,
+                status,
+                version,
+                scenario_id,
+                scenario_label,
+                tested_at,
+                transaction_id,
+                submission_id,
+                correlation_id,
+                message_id,
+                changed_fields_json,
+                retained_fields_json,
+                unchanged_fields_json,
+                raw_event_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                subject_id,
+                1,
+                "UDI_DI.PATCH",
+                "SUCCESS",
+                "2",
+                "equivalent_first_patch",
+                "Equivalent First Patch",
+                "2026-08-15T09:00:00Z",
+                "txn-2",
+                "sub-2",
+                "corr-2",
+                "msg-2",
+                json.dumps(["trade_name"]),
+                json.dumps(["manufacturer"]),
+                json.dumps(["catalogue_number"]),
+                json.dumps({"message_type": "UDI_DI.PATCH", "status": "SUCCESS"}),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO reviewed_post_baselines (
+                device_subject_id,
+                normalized_product_family,
+                normalized_product_variant,
+                normalized_catalogue_number,
+                product_family,
+                product_variant,
+                catalogue_number,
+                reviewed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (1, "familya", "varianta", "cat-001", "Family A", "Variant A", "CAT-001", "2026-08-14T08:00:00Z"),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    read_model_service = TestingReadModelService()
+    workspace_summary = read_model_service.workspace_summary(
+        product_family="Family A",
+        product_variant="Variant A",
+    )
+    subject_summaries = read_model_service.list_subject_summaries(
+        product_family="Family A",
+        product_variant="Variant A",
+    )
+    subject_history = read_model_service.subject_history(subject_id)
+
+    assert workspace_summary.subject_count == 1
+    assert workspace_summary.linked_device_subject_count == 1
+    assert workspace_summary.reviewed_post_count == 1
+    assert workspace_summary.successful_device_post_count == 1
+    assert workspace_summary.successful_patch_count == 1
+    assert workspace_summary.posted_parent_group_count == 1
+    assert workspace_summary.latest_tested_at == "2026-08-15T09:00:00Z"
+
+    assert len(subject_summaries) == 1
+    assert subject_summaries[0].catalogue_number == "CAT-001"
+    assert subject_summaries[0].reviewed_post_at == "2026-08-14T08:00:00Z"
+    assert subject_summaries[0].event_count == 2
+
+    assert subject_history is not None
+    assert subject_history.subject.catalogue_number == "CAT-001"
+    assert [event.message_type for event in subject_history.events] == ["DEVICE.POST", "UDI_DI.PATCH"]
+    assert subject_history.events[1].changed_fields == ["trade_name"]
+
+
+def test_testing_read_model_routes_return_summary_subjects_and_history(
+    isolated_workbook_import_env: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path, _excel_dir = isolated_workbook_import_env
+    _apply_synthetic_import_stubs(monkeypatch)
+    import_service = WorkbookImportService()
+    import_service.run_import(imported_by="pytest", label="Import One")
+
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute("DELETE FROM testing_events")
+        connection.execute("DELETE FROM testing_subjects")
+        connection.execute("DELETE FROM reviewed_post_baselines")
+        subject_id = int(
+            connection.execute(
+                """
+                INSERT INTO testing_subjects (
+                    subject_key,
+                    device_subject_id,
+                    normalized_product_family,
+                    normalized_product_variant,
+                    normalized_catalogue_number,
+                    normalized_primary_udi_di,
+                    normalized_basic_udi_di,
+                    product_family,
+                    product_variant,
+                    catalogue_number,
+                    primary_udi_di,
+                    basic_udi_di,
+                    post_success,
+                    baseline_patch_success,
+                    latest_successful_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "family-a|variant-a|cat-001",
+                    1,
+                    "familya",
+                    "varianta",
+                    "cat-001",
+                    "111111",
+                    "basic-1",
+                    "Family A",
+                    "Variant A",
+                    "CAT-001",
+                    "111111",
+                    "BASIC-1",
+                    1,
+                    1,
+                    "2",
+                ),
+            ).lastrowid
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_events (
+                subject_id,
+                event_index,
+                message_type,
+                status,
+                version,
+                scenario_id,
+                scenario_label,
+                tested_at,
+                raw_event_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                subject_id,
+                0,
+                "DEVICE.POST",
+                "SUCCESS",
+                "1",
+                None,
+                "Baseline POST",
+                "2026-08-14T09:00:00Z",
+                json.dumps({"message_type": "DEVICE.POST", "status": "SUCCESS"}),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO reviewed_post_baselines (
+                device_subject_id,
+                normalized_product_family,
+                normalized_product_variant,
+                normalized_catalogue_number,
+                product_family,
+                product_variant,
+                catalogue_number,
+                reviewed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (1, "familya", "varianta", "cat-001", "Family A", "Variant A", "CAT-001", "2026-08-14T08:00:00Z"),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    summary_payload = testing_workspace_summary(
+        {"product_family": "Family A", "product_variant": "Variant A"},
+    )
+    subjects_payload = testing_subject_summaries(
+        {"product_family": "Family A", "product_variant": "Variant A", "limit": 50},
+    )
+    history_payload = testing_subject_history(subject_id)
+
+    assert summary_payload["subject_count"] == 1
+    assert summary_payload["reviewed_post_count"] == 1
+    assert summary_payload["successful_device_post_count"] == 1
+    assert len(subjects_payload) == 1
+    assert subjects_payload[0]["catalogue_number"] == "CAT-001"
+    assert history_payload["subject"]["catalogue_number"] == "CAT-001"
+    assert history_payload["events"][0]["message_type"] == "DEVICE.POST"
 
 
 def test_sqlite_canonical_validation_route_rebuilds_stale_snapshot(

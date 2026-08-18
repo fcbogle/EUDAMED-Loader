@@ -784,3 +784,35 @@ export type BulkPatchPostedParentsResponse = {
   product_variant: string;
   parents: BulkPatchPostedParentGroup[];
 };
+
+export type TestingWorkspaceSummary = {
+  product_family: string | null;
+  product_variant: string | null;
+  subject_count: number;
+  linked_device_subject_count: number;
+  reviewed_post_count: number;
+  successful_device_post_count: number;
+  successful_child_post_count: number;
+  successful_patch_count: number;
+  baseline_patch_success_count: number;
+  posted_parent_group_count: number;
+  latest_tested_at: string | null;
+};
+
+export type TestingSubjectReadModelSummary = {
+  id: number;
+  device_subject_id: number | null;
+  product_family: string | null;
+  product_variant: string | null;
+  catalogue_number: string | null;
+  primary_udi_di: string | null;
+  basic_udi_di: string | null;
+  post_success: boolean;
+  baseline_patch_success: boolean;
+  has_successful_device_post: boolean;
+  has_successful_child_post_or_patch: boolean;
+  latest_successful_version: string | null;
+  latest_tested_at: string | null;
+  reviewed_post_at: string | null;
+  event_count: number;
+};

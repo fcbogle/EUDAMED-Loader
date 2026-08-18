@@ -28,6 +28,8 @@ import type {
   SingleRecordXmlPreview,
   SourceRowDetail,
   SourceRowSummary,
+  TestingSubjectReadModelSummary,
+  TestingWorkspaceSummary,
   WorkbookImportDiffSummary,
   WorkbookImportRunResponse,
   WorkbookImportSnapshotSummary,
@@ -296,6 +298,21 @@ export const api = {
     sendJson<BulkPatchPostedParentsResponse>("/xml/bulk-patch-posted-parents", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
+    }),
+  testingWorkspaceSummary: (params?: { product_family?: string; product_variant?: string }) =>
+    sendJson<TestingWorkspaceSummary>("/xml/testing-workspace-summary", "POST", {
+      product_family: params?.product_family,
+      product_variant: params?.product_variant,
+    }),
+  testingSubjectSummaries: (params?: {
+    product_family?: string;
+    product_variant?: string;
+    limit?: number;
+  }) =>
+    sendJson<TestingSubjectReadModelSummary[]>("/xml/testing-subject-summaries", "POST", {
+      product_family: params?.product_family,
+      product_variant: params?.product_variant,
+      limit: params?.limit ?? 200,
     }),
   downloadXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-record", "POST", {

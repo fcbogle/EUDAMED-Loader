@@ -37,6 +37,7 @@ import type {
   SheetProfile,
   SheetSummary,
   SingleRecordXmlPreview,
+  TestingSubjectReadModelSummary,
   WorkbookImportDuplicateGroup,
   WorkbookImportSnapshotSummary,
   WorkbookSummary,
@@ -402,6 +403,57 @@ function summarizeBulkExcludedRecords(
     title: pluralize(count, "record"),
     detail: `${pluralize(count, "record")} in ${familyVariantLabel} ${count === 1 ? "was" : "were"} excluded from Bulk PATCH: ${reasonMessage}`,
   }));
+}
+
+function buildBulkPatchPostedParentGroups(
+  subjectSummaries: TestingSubjectReadModelSummary[],
+): BulkPatchPostedParentGroup[] {
+  const grouped = new Map<string, BulkPatchPostedParentGroup>();
+  for (const summary of subjectSummaries) {
+    if (!summary.post_success || !summary.has_successful_child_post_or_patch || !summary.basic_udi_di) {
+      continue;
+    }
+    const existing = grouped.get(summary.basic_udi_di) ?? {
+      basic_udi_di: summary.basic_udi_di,
+      posted_child_count: 0,
+      sample_catalogue_numbers: [],
+    };
+    existing.posted_child_count += 1;
+    if (
+      summary.catalogue_number &&
+      existing.sample_catalogue_numbers.length < 10 &&
+      !existing.sample_catalogue_numbers.includes(summary.catalogue_number)
+    ) {
+      existing.sample_catalogue_numbers.push(summary.catalogue_number);
+    }
+    grouped.set(summary.basic_udi_di, existing);
+  }
+  return Array.from(grouped.values()).sort((left, right) => left.basic_udi_di.localeCompare(right.basic_udi_di));
+}
+
+function buildBulkPatchPostedEntries(
+  subjectSummaries: TestingSubjectReadModelSummary[],
+  basicUdiDi: string | null,
+): BulkPatchPostedEntry[] {
+  if (!basicUdiDi) {
+    return [];
+  }
+  const normalizedBasicUdiDi = basicUdiDi.trim().toLowerCase();
+  return subjectSummaries
+    .filter(
+      (summary) =>
+        summary.post_success &&
+        summary.has_successful_child_post_or_patch &&
+        (summary.basic_udi_di ?? "").trim().toLowerCase() === normalizedBasicUdiDi,
+    )
+    .map((summary) => ({
+      catalogue_number: summary.catalogue_number,
+      primary_udi_di: summary.primary_udi_di,
+      basic_udi_di: summary.basic_udi_di,
+      latest_version: summary.latest_successful_version,
+      baseline_patch_success: summary.baseline_patch_success,
+    }))
+    .sort((left, right) => (left.catalogue_number ?? "").localeCompare(right.catalogue_number ?? ""));
 }
 
 type DraftAction = {
@@ -929,8 +981,7 @@ export function App() {
   const [selectedBulkPatchCatalogueNumbers, setSelectedBulkPatchCatalogueNumbers] = useState<string[]>([]);
   const [bulkPatchCatalogueFilter, setBulkPatchCatalogueFilter] = useState<string>("");
   const [bulkPatchImportText, setBulkPatchImportText] = useState<string>("");
-  const [bulkPatchPostedEntries, setBulkPatchPostedEntries] = useState<BulkPatchPostedEntry[]>([]);
-  const [bulkPatchPostedParents, setBulkPatchPostedParents] = useState<BulkPatchPostedParentGroup[]>([]);
+  const [testingSubjectSummaries, setTestingSubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
   const [patchScenarioStatuses, setPatchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
     equivalent_first_patch: "EUDAMED Candidate",
     trade_name_edit: "EUDAMED Candidate",
@@ -1893,6 +1944,11 @@ export function App() {
       .filter((value): value is string => Boolean(value)),
   );
   const selectedBulkEligibleBasicUdiCount = selectedBulkEligibleBasicUdiSet.size;
+  const bulkPatchPostedParents = buildBulkPatchPostedParentGroups(testingSubjectSummaries);
+  const bulkPatchPostedEntries = buildBulkPatchPostedEntries(
+    testingSubjectSummaries,
+    selectedBulkPatchBasicUdiDi || null,
+  );
   const postedBulkParentBasicUdiSet = new Set(
     bulkPatchPostedParents
       .map((group) => group.basic_udi_di)
@@ -2108,23 +2164,24 @@ export function App() {
   }, [displayedBulkPatchParentOptions, selectedBulkPatchBasicUdiDi]);
   useEffect(() => {
     if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) {
-      setBulkPatchPostedParents([]);
+      setTestingSubjectSummaries([]);
       return;
     }
     let cancelled = false;
     void api
-      .bulkPatchPostedParents(
-        selectedXmlFamilySummary.product_family,
-        selectedXmlVariantSummary.product_variant,
-      )
+      .testingSubjectSummaries({
+        product_family: selectedXmlFamilySummary.product_family,
+        product_variant: selectedXmlVariantSummary.product_variant,
+        limit: 10000,
+      })
       .then((response) => {
         if (!cancelled) {
-          setBulkPatchPostedParents(response.parents);
+          setTestingSubjectSummaries(response);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setBulkPatchPostedParents([]);
+          setTestingSubjectSummaries([]);
         }
       });
     return () => {
@@ -2134,42 +2191,11 @@ export function App() {
   useEffect(() => {
     if (!selectedBulkPatchParentGroup) {
       setSelectedBulkPatchCatalogueNumbers([]);
-      setBulkPatchPostedEntries([]);
       return;
     }
     setBulkPatchCatalogueFilter("");
     setBulkPatchImportText("");
   }, [selectedBulkPatchParentGroup?.basic_udi_di]);
-  useEffect(() => {
-    if (!selectedXmlFamilySummary || !selectedXmlVariantSummary || !selectedBulkPatchParentGroup) {
-      setBulkPatchPostedEntries([]);
-      return;
-    }
-    let cancelled = false;
-    void api
-      .bulkPatchPostedEntries(
-        selectedXmlFamilySummary.product_family,
-        selectedXmlVariantSummary.product_variant,
-        selectedBulkPatchParentGroup.basic_udi_di,
-      )
-      .then((response) => {
-        if (!cancelled) {
-          setBulkPatchPostedEntries(response.entries);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setBulkPatchPostedEntries([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    selectedXmlFamilySummary?.product_family,
-    selectedXmlVariantSummary?.product_variant,
-    selectedBulkPatchParentGroup?.basic_udi_di,
-  ]);
   useEffect(() => {
     const filtered = selectedBulkPatchCatalogueNumbers.filter((catalogueNumber) => bulkPatchPostedCatalogueSet.has(catalogueNumber));
     if (filtered.length === selectedBulkPatchCatalogueNumbers.length) {
@@ -2990,7 +3016,7 @@ export function App() {
   }
 
   async function resolveBulkPatchCatalogueNumbers(): Promise<string[]> {
-    if (!selectedXmlFamilySummary || !selectedXmlVariantSummary || !selectedBulkPatchParentGroup) {
+    if (!selectedBulkPatchParentGroup) {
       return [];
     }
     if (bulkPatchScopeMode === "all_posted") {
@@ -3002,18 +3028,6 @@ export function App() {
         selectedBulkPatchFallbackCatalogueNumbers.length === selectedBulkPatchParentGroup.posted_child_count
       ) {
         return selectedBulkPatchFallbackCatalogueNumbers;
-      }
-      const response = await api.bulkPatchPostedEntries(
-        selectedXmlFamilySummary.product_family,
-        selectedXmlVariantSummary.product_variant,
-        selectedBulkPatchParentGroup.basic_udi_di,
-      );
-      setBulkPatchPostedEntries(response.entries);
-      const resolvedCatalogueNumbers = response.entries
-        .map((entry) => entry.catalogue_number)
-        .filter((catalogueNumber): catalogueNumber is string => Boolean(catalogueNumber));
-      if (resolvedCatalogueNumbers.length > 0) {
-        return resolvedCatalogueNumbers;
       }
       return selectedBulkPatchFallbackCatalogueNumbers;
     }

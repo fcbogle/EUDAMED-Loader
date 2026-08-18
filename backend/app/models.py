@@ -325,3 +325,58 @@ class DeviceIdentityIssueDetail(DeviceIdentityIssueSummary):
     details_json: dict[str, Any] = Field(default_factory=dict)
     resolved_at: str | None = None
     resolution_note: str | None = None
+
+
+class TestingWorkspaceSummary(BaseModel):
+    product_family: str | None = None
+    product_variant: str | None = None
+    subject_count: int
+    linked_device_subject_count: int
+    reviewed_post_count: int
+    successful_device_post_count: int
+    successful_child_post_count: int
+    successful_patch_count: int
+    baseline_patch_success_count: int
+    posted_parent_group_count: int
+    latest_tested_at: str | None = None
+
+
+class TestingSubjectReadModelSummary(BaseModel):
+    id: int
+    device_subject_id: int | None = None
+    product_family: str | None = None
+    product_variant: str | None = None
+    catalogue_number: str | None = None
+    primary_udi_di: str | None = None
+    basic_udi_di: str | None = None
+    post_success: bool = False
+    baseline_patch_success: bool = False
+    has_successful_device_post: bool = False
+    has_successful_child_post_or_patch: bool = False
+    latest_successful_version: str | None = None
+    latest_tested_at: str | None = None
+    reviewed_post_at: str | None = None
+    event_count: int = 0
+
+
+class TestingEventSummary(BaseModel):
+    id: int
+    event_index: int
+    message_type: str | None = None
+    status: str | None = None
+    version: str | None = None
+    scenario_id: str | None = None
+    scenario_label: str | None = None
+    tested_at: str | None = None
+    transaction_id: str | None = None
+    submission_id: str | None = None
+    correlation_id: str | None = None
+    message_id: str | None = None
+    changed_fields: list[Any] = Field(default_factory=list)
+    retained_fields: list[Any] = Field(default_factory=list)
+    unchanged_fields: list[Any] = Field(default_factory=list)
+
+
+class TestingSubjectHistory(BaseModel):
+    subject: TestingSubjectReadModelSummary
+    events: list[TestingEventSummary] = Field(default_factory=list)

@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from app.services.canonical_projection import CanonicalProjectionService
+from app.services.canonical_projection import (
+    CanonicalProjectionNoImportError,
+    CanonicalProjectionService,
+    CanonicalProjectionUnavailableError,
+)
 from app.services.canonical_validation import CanonicalValidationService
 from app.validation_models import CanonicalValidationRecord
 
 
 class ValidationRecordSelector:
-    def __init__(self, validation_service: CanonicalValidationService) -> None:
+    def __init__(self, validation_service: CanonicalValidationService, *, require_import: bool = False) -> None:
         self.validation_service = validation_service
+        self.require_import = require_import
         self.projection_service = CanonicalProjectionService(validation_service=validation_service)
 
     def find_xml_ready_record(
@@ -17,7 +22,7 @@ class ValidationRecordSelector:
         product_variant: str,
         catalogue_number: str,
     ) -> CanonicalValidationRecord:
-        bundle = self.projection_service.latest_bundle()
+        bundle = self._bundle()
         for record in bundle.records:
             if (
                 record.product_family == product_family
@@ -38,7 +43,7 @@ class ValidationRecordSelector:
         product_variant: str,
         catalogue_number: str,
     ) -> CanonicalValidationRecord:
-        bundle = self.projection_service.latest_bundle()
+        bundle = self._bundle()
         for record in bundle.records:
             if (
                 record.product_family == product_family
@@ -77,3 +82,9 @@ class ValidationRecordSelector:
             records[index : index + max_records_per_file]
             for index in range(0, len(records), max_records_per_file)
         ]
+
+    def _bundle(self):
+        try:
+            return self.projection_service.latest_bundle(require_import=self.require_import)
+        except (CanonicalProjectionNoImportError, CanonicalProjectionUnavailableError) as exc:
+            raise ValueError(str(exc)) from exc

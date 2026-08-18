@@ -3,10 +3,69 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
+from app.services.testing_read_model import TestingReadModelService
 from app.services.xml_generation import XmlGenerationService
-from app.services.testing_state_store import TestingStateStore
 
 router = APIRouter(tags=["xml-generation"])
+
+
+def _xml_service() -> XmlGenerationService:
+    return XmlGenerationService(require_import=True)
+
+
+def _testing_read_model() -> TestingReadModelService:
+    return TestingReadModelService()
+
+
+def _bulk_patch_posted_entries_from_summaries(
+    summaries: list[dict] | list[object],
+    *,
+    basic_udi_di: str,
+) -> list[dict[str, object]]:
+    normalized_basic_udi_di = "".join(basic_udi_di.casefold().split())
+    entries: list[dict[str, object]] = []
+    for summary in summaries:
+        entry = summary if isinstance(summary, dict) else summary.model_dump(mode="python")
+        if not entry.get("post_success") or not entry.get("has_successful_child_post_or_patch"):
+            continue
+        entry_basic_udi_di = str(entry.get("basic_udi_di") or "").strip()
+        if not entry_basic_udi_di or "".join(entry_basic_udi_di.casefold().split()) != normalized_basic_udi_di:
+            continue
+        entries.append(
+            {
+                "catalogue_number": entry.get("catalogue_number"),
+                "primary_udi_di": entry.get("primary_udi_di"),
+                "basic_udi_di": entry.get("basic_udi_di"),
+                "latest_version": entry.get("latest_successful_version"),
+                "baseline_patch_success": bool(entry.get("baseline_patch_success")),
+            }
+        )
+    entries.sort(key=lambda item: str(item.get("catalogue_number") or ""))
+    return entries
+
+
+def _bulk_patch_posted_parent_groups_from_summaries(summaries: list[dict] | list[object]) -> list[dict[str, object]]:
+    grouped: dict[str, dict[str, object]] = {}
+    for summary in summaries:
+        entry = summary if isinstance(summary, dict) else summary.model_dump(mode="python")
+        if not entry.get("post_success") or not entry.get("has_successful_child_post_or_patch"):
+            continue
+        basic_udi_di = str(entry.get("basic_udi_di") or "").strip()
+        catalogue_number = str(entry.get("catalogue_number") or "").strip()
+        if not basic_udi_di:
+            continue
+        group = grouped.setdefault(
+            basic_udi_di,
+            {
+                "basic_udi_di": basic_udi_di,
+                "posted_child_count": 0,
+                "sample_catalogue_numbers": [],
+            },
+        )
+        group["posted_child_count"] = int(group["posted_child_count"]) + 1
+        if catalogue_number and len(group["sample_catalogue_numbers"]) < 10 and catalogue_number not in group["sample_catalogue_numbers"]:
+            group["sample_catalogue_numbers"].append(catalogue_number)
+    return [grouped[key] for key in sorted(grouped)]
 
 
 def _parse_generated_patch_payload(payload: dict) -> tuple[str, str, str, str, str, dict]:
@@ -33,7 +92,10 @@ def _parse_generated_patch_payload(payload: dict) -> tuple[str, str, str, str, s
 
 @router.get("/xml/scope")
 def xml_generation_scope() -> dict:
-    scope = XmlGenerationService().generation_scope()
+    try:
+        scope = _xml_service().generation_scope()
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return scope.model_dump(mode="json")
 
 
@@ -48,7 +110,7 @@ def preview_xml_record(payload: dict[str, str]) -> dict:
             detail="product_family, product_variant, and catalogue_number are required.",
         )
     try:
-        preview = XmlGenerationService().preview_single_record(
+        preview = _xml_service().preview_single_record(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
@@ -69,7 +131,7 @@ def download_xml_record(payload: dict[str, str]) -> Response:
             detail="product_family, product_variant, and catalogue_number are required.",
         )
     try:
-        file_name, xml_bytes = XmlGenerationService().download_single_record(
+        file_name, xml_bytes = _xml_service().download_single_record(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
@@ -91,7 +153,7 @@ def preview_xml_post_registration(payload: dict[str, str]) -> dict:
             detail="product_family, product_variant, and catalogue_number are required.",
         )
     try:
-        preview = XmlGenerationService().preview_post_registration(
+        preview = _xml_service().preview_post_registration(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
@@ -111,7 +173,7 @@ def preview_xml_next_post_registration(payload: dict[str, str]) -> dict:
             detail="product_family and product_variant are required.",
         )
     try:
-        preview = XmlGenerationService().preview_next_post_registration(
+        preview = _xml_service().preview_next_post_registration(
             product_family=product_family,
             product_variant=product_variant,
         )
@@ -131,7 +193,7 @@ def download_xml_post_package(payload: dict[str, str]) -> Response:
             detail="product_family, product_variant, and catalogue_number are required.",
         )
     try:
-        file_name, zip_bytes = XmlGenerationService().download_post_package(
+        file_name, zip_bytes = _xml_service().download_post_package(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
@@ -153,7 +215,7 @@ def preview_xml_market_info_put(payload: dict[str, str]) -> dict:
             detail="product_family, product_variant, and catalogue_number are required.",
         )
     try:
-        preview = XmlGenerationService().preview_market_info_put(
+        preview = _xml_service().preview_market_info_put(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
@@ -174,7 +236,7 @@ def download_xml_market_info_put(payload: dict[str, str]) -> Response:
             detail="product_family, product_variant, and catalogue_number are required.",
         )
     try:
-        file_name, xml_bytes = XmlGenerationService().download_market_info_put(
+        file_name, xml_bytes = _xml_service().download_market_info_put(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
@@ -191,7 +253,7 @@ def preview_generated_patch_scenario(payload: dict) -> dict:
         _parse_generated_patch_payload(payload)
     )
     try:
-        preview = XmlGenerationService().preview_generated_patch_scenario(
+        preview = _xml_service().preview_generated_patch_scenario(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
@@ -210,7 +272,7 @@ def download_generated_patch_scenario(payload: dict) -> Response:
         _parse_generated_patch_payload(payload)
     )
     try:
-        file_name, package_bytes = XmlGenerationService().download_generated_patch_scenario(
+        file_name, package_bytes = _xml_service().download_generated_patch_scenario(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
@@ -234,7 +296,7 @@ def preview_xml_bulk_post(payload: dict[str, str | int] | None = None) -> dict:
     if not product_family or not product_variant:
         raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
-        preview = XmlGenerationService().preview_bulk_post(
+        preview = _xml_service().preview_bulk_post(
             product_family=str(product_family),
             product_variant=str(product_variant),
             record_count=record_count,
@@ -254,7 +316,7 @@ def download_xml_bulk_post(payload: dict[str, str | int] | None = None) -> Respo
     if not product_family or not product_variant:
         raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
-        file_name, zip_bytes = XmlGenerationService().download_bulk_post(
+        file_name, zip_bytes = _xml_service().download_bulk_post(
             product_family=product_family,
             product_variant=product_variant,
             record_count=record_count,
@@ -275,7 +337,7 @@ def preview_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) -> 
     if not product_family or not product_variant:
         raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
-        preview = XmlGenerationService().preview_bulk_udidi_post(
+        preview = _xml_service().preview_bulk_udidi_post(
             product_family=str(product_family),
             product_variant=str(product_variant),
             record_count=record_count,
@@ -295,7 +357,7 @@ def download_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) ->
     if not product_family or not product_variant:
         raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
-        file_name, zip_bytes = XmlGenerationService().download_bulk_udidi_post(
+        file_name, zip_bytes = _xml_service().download_bulk_udidi_post(
             product_family=str(product_family),
             product_variant=str(product_variant),
             record_count=record_count,
@@ -323,7 +385,7 @@ def preview_xml_bulk_patch(payload: dict | None = None) -> dict:
             detail="product_family, product_variant, basic_udi_di, and scenario_id are required.",
         )
     try:
-        preview = XmlGenerationService().preview_bulk_patch(
+        preview = _xml_service().preview_bulk_patch(
             product_family=str(product_family),
             product_variant=str(product_variant),
             basic_udi_di=str(basic_udi_di),
@@ -356,7 +418,7 @@ def download_xml_bulk_patch(payload: dict | None = None) -> Response:
             detail="product_family, product_variant, basic_udi_di, and scenario_id are required.",
         )
     try:
-        file_name, zip_bytes = XmlGenerationService().download_bulk_patch(
+        file_name, zip_bytes = _xml_service().download_bulk_patch(
             product_family=str(product_family),
             product_variant=str(product_variant),
             basic_udi_di=str(basic_udi_di),
@@ -384,9 +446,13 @@ def bulk_patch_posted_entries(payload: dict | None = None) -> dict:
             status_code=400,
             detail="product_family, product_variant, and basic_udi_di are required.",
         )
-    entries = TestingStateStore().posted_entries(
+    summaries = _testing_read_model().list_subject_summaries(
         product_family=str(product_family),
         product_variant=str(product_variant),
+        limit=10000,
+    )
+    entries = _bulk_patch_posted_entries_from_summaries(
+        summaries,
         basic_udi_di=str(basic_udi_di),
     )
     return {
@@ -407,15 +473,49 @@ def bulk_patch_posted_parents(payload: dict | None = None) -> dict:
             status_code=400,
             detail="product_family and product_variant are required.",
         )
-    groups = TestingStateStore().posted_parent_groups(
+    summaries = _testing_read_model().list_subject_summaries(
         product_family=str(product_family),
         product_variant=str(product_variant),
+        limit=10000,
     )
+    groups = _bulk_patch_posted_parent_groups_from_summaries(summaries)
     return {
         "product_family": str(product_family),
         "product_variant": str(product_variant),
         "parents": groups,
     }
+
+
+@router.post("/xml/testing-workspace-summary")
+def testing_workspace_summary(payload: dict | None = None) -> dict:
+    data = payload or {}
+    summary = _testing_read_model().workspace_summary(
+        product_family=str(data["product_family"]) if data.get("product_family") else None,
+        product_variant=str(data["product_variant"]) if data.get("product_variant") else None,
+    )
+    return summary.model_dump(mode="json")
+
+
+@router.post("/xml/testing-subject-summaries")
+def testing_subject_summaries(payload: dict | None = None) -> list[dict]:
+    data = payload or {}
+    limit = int(data.get("limit", 200))
+    if limit < 1 or limit > 10000:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 10000.")
+    summaries = _testing_read_model().list_subject_summaries(
+        product_family=str(data["product_family"]) if data.get("product_family") else None,
+        product_variant=str(data["product_variant"]) if data.get("product_variant") else None,
+        limit=limit,
+    )
+    return [summary.model_dump(mode="json") for summary in summaries]
+
+
+@router.get("/xml/testing-subjects/{subject_id}/history")
+def testing_subject_history(subject_id: int) -> dict:
+    history = _testing_read_model().subject_history(subject_id)
+    if history is None:
+        raise HTTPException(status_code=404, detail="Testing subject not found.")
+    return history.model_dump(mode="json")
 
 
 def preview_xml_batch(payload: dict[str, str | int] | None = None) -> dict:
@@ -426,7 +526,7 @@ def preview_xml_batch(payload: dict[str, str | int] | None = None) -> dict:
     if not product_family or not product_variant:
         raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
-        preview = XmlGenerationService().preview_batch(
+        preview = _xml_service().preview_batch(
             product_family=str(product_family),
             product_variant=str(product_variant),
             chunk_sequence=chunk_sequence,
@@ -443,7 +543,7 @@ def download_xml_batch(payload: dict[str, str | int] | None = None) -> Response:
     if not product_family or not product_variant:
         raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
-        file_name, zip_bytes = XmlGenerationService().download_batch(
+        file_name, zip_bytes = _xml_service().download_batch(
             product_family=str(product_family),
             product_variant=str(product_variant),
         )
