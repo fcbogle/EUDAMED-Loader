@@ -111,7 +111,7 @@ with the current implementation focus now being:
   - historical verification snapshot on Friday, August 14, 2026 and Saturday, August 15, 2026:
     - backend `pytest`: `58 passed`
     - frontend production build: `npm run build` passed
-  - successful Playground test results are persisted in `data/testing/testing-state.sqlite3`, with legacy YAML bootstrap data in `data/testing/playground-tested-subjects.yaml`, and are documented in `docs/eudamed-playground-test-report.md`
+  - successful Playground test results are persisted in `data/testing/testing-state.sqlite3`, with historical seed data now extracted into `data/testing/testing-state-seed.sql`, and are documented in `docs/eudamed-playground-test-report.md`
     - successful single `DEVICE.POST` for `Epirus / Esprit / ESP22L1S` on Thursday, August 14, 2026
     - successful single `UDI_DI.PATCH` version `2` trade-name update for `Epirus / Esprit / ESP22L1S` on Thursday, August 14, 2026
     - successful second `Elite / Elite VT` bulk child `UDI_DI.POST` wave of five new child devices on Thursday, August 14, 2026
@@ -133,6 +133,11 @@ with the current implementation focus now being:
     - if a parent `Basic UDI-DI` is already registered, parent `POST` should stop and direct the user toward child `POST`
     - if no successful tracked registration exists for the targeted device lineage, `PATCH` should stop and explain that accepted / tracked state is required first
     - for bulk operations, the system should resolve the eligible cohort and present counts and groupings before generation
+  - refined `POST` direction confirmed on Wednesday, August 19, 2026:
+    - the `POST` workspace should present the next single available child `Primary UDI-DI` record for the selected family and variant
+    - if the parent `Basic UDI-DI` is already registered, the UI should explain that available child `Primary UDI-DI` records can be posted under that registered parent
+    - the UI should not anchor `POST` to an arbitrary selected or first XML-ready `POST` row if that exact child device is already registered
+    - if no further child `Primary UDI-DI` records are available for `POST`, the UI should say so explicitly
   - this should be implemented as explicit operation-specific readiness assessment rather than one generic workflow engine
   - no data-model change has yet been agreed for linking testing history beyond the current `device_subject`-anchored direction; discuss that separately before implementation
 
@@ -261,6 +266,104 @@ Current directional design intent:
   - recommended next action
 - Keep the operation-specific rule sets explicit; do not collapse this into one opaque generic workflow engine.
 
+Proposed first implementation contract for operation assessment:
+
+- one backend endpoint per active operation type is acceptable, but the payload shape should stay consistent across them
+- the initial active operation types should be:
+  - `single_post`
+  - `single_patch`
+  - `bulk_post`
+  - `bulk_patch`
+- defer:
+  - `single_market_info`
+  - `bulk_market_info`
+
+Recommended shared assessment payload:
+
+- `operation_type`
+  - one of the active operation identifiers above
+- `product_family`
+- `product_variant`
+- `status`
+  - `available`
+  - `blocked`
+  - `attention`
+- `summary_message`
+  - short user-facing sentence in plain English
+- `blocking_reasons`
+  - flat list of simple user-facing reasons
+- `recommended_next_action`
+  - short action label such as:
+    - `Generate POST`
+    - `Use Bulk UDI-DI POST`
+    - `Review accepted PATCH lineage`
+    - `Select a posted parent group`
+- `eligible_record_count`
+  - integer count for the operation as currently selected
+- `identity_scope`
+  - operation-specific identity context such as:
+    - `catalogue_number`
+    - `primary_udi_di`
+    - `basic_udi_di`
+    - selected parent group
+- `evidence`
+  - structured supporting facts used by the UI, not raw SQL state
+
+Recommended operation-specific evidence payloads:
+
+- `single_post`
+  - `candidate_catalogue_number`
+  - `candidate_primary_udi_di`
+  - `candidate_basic_udi_di`
+  - `parent_registration_known`
+  - `child_registration_known`
+  - `xml_ready`
+- `single_patch`
+  - `catalogue_number`
+  - `primary_udi_di`
+  - `basic_udi_di`
+  - `tracked_registration_known`
+  - `latest_accepted_version`
+  - `latest_successful_scenario_id`
+  - `reviewed_post_baseline_present`
+- `bulk_post`
+  - `eligible_parent_group_count`
+  - `eligible_child_record_count`
+  - `posted_parent_group_count`
+  - `unposted_parent_group_count`
+  - `available_basic_udi_di_groups`
+- `bulk_patch`
+  - `eligible_parent_group_count`
+  - `selected_basic_udi_di`
+  - `eligible_child_record_count`
+  - `latest_version_summary`
+  - `available_parent_groups`
+
+Recommended plain-language blocking messages:
+
+- `single_post`
+  - `This parent Basic UDI-DI is already registered. Use child POST instead.`
+  - `This child UDI-DI is already registered, so a new POST is not available.`
+- `single_patch`
+  - `This device does not yet have a tracked successful registration, so PATCH is not available.`
+  - `No accepted version state is available for this device lineage.`
+- `bulk_post`
+  - `All parent Basic UDI-DI groups are already registered.`
+  - `No new child UDI-DI records remain for this variant.`
+- `bulk_patch`
+  - `No posted child devices are currently available under the selected parent.`
+  - `Select a posted parent group before generating Bulk PATCH.`
+
+Recommended implementation rule:
+
+- the existing UI can be retained and reused
+- after the user selects:
+  - `Device Family`
+  - `Variant`
+  - `Operation`
+- the backend assessment should be loaded first
+- preview, generate, and download controls should then be enabled only when the assessment says the operation is currently possible
+
 ### Planned EUDAMED Testing Logging
 
 - Target this work after the current SQLite persistence increments and Canonical Validation / testing UI tidy-up are complete.
@@ -308,9 +411,14 @@ Current directional design intent:
 
 - Single `POST` no longer relies on a shared anchor panel.
 - It generates one registration `POST` for the next valid candidate in the selected family and variant.
+- The current intended `POST` UX is:
+  - resolve the next available child `Primary UDI-DI` candidate for the selected family and variant
+  - if the parent `Basic UDI-DI` is already registered, present that child candidate as a child registration under the existing parent
+  - do not present an arbitrary selected `POST` row if that exact child `Primary UDI-DI` is already registered
+  - if no further child `Primary UDI-DI` candidates remain, present an explicit no-candidate message rather than implying the wrong record can be posted
 - Current single `POST` selection rules are:
   - if both parent `Basic UDI-DI` and child `UDI-DI` are already known, the record is skipped
-  - if the parent is known but the child is not, single `POST` stops and directs the user to `Bulk UDI-DI POST`
+  - if the parent is known but the child is not, single `POST` should present that child as the next available `POST` candidate under the registered parent
   - if neither parent nor child is known, that record may be offered as a genuine new registration candidate
 - Validates locally against the schema set.
 - Supports `POST` ZIP download.
@@ -335,7 +443,7 @@ It now:
   - later version `3+` PATCH generation from latest accepted tracked state
 - current implementation derives scenario drafts from the latest successful device state resolved through the testing-state store, currently backed by `data/testing/testing-state.sqlite3`
   - runtime app behavior should now treat SQLite as the active source of truth rather than auto-reading YAML when the store is empty
-  - current tests may still seed temporary SQLite state from the historical YAML fixture
+  - current tests now seed temporary SQLite state from `data/testing/testing-state-seed.sql`
   - scenario derivation falls back to the baseline first child `PATCH` only when no later accepted state has been recorded for that device
 - current scenario status:
   - implemented and Playground-successful: `equivalent_first_patch`, `trade_name_edit`, `warning_add`, `storage_condition_edit`, `base_quantity_edit`
@@ -639,7 +747,7 @@ Implemented or partially implemented scenarios with caveats:
 - Removed stale fixture-anchor fields from `RegisteredDeviceAnchor`.
 - Removed the unused combined baseline-pair download route and frontend client method:
   - `/api/xml/download-post-patch-pair`
-- Active tests now rely on the current generated, SQLite-backed testing-state workflow, with legacy YAML used only for initial store seeding.
+- Active tests now rely on the current generated, SQLite-backed testing-state workflow, with historical test data seeded from `data/testing/testing-state-seed.sql`.
 
 ## Verification Notes
 
@@ -794,9 +902,9 @@ Implemented or partially implemented scenarios with caveats:
 1. Keep workbook parsing as-is.
 2. Import parsed workbook rows into `source_row`.
 3. Build `device_subject` from the current row-level device identity.
-4. Move YAML `latest_successful_state` into `device_current_state`.
-5. Move YAML `test_events` into `submission` and `submission_change`.
-6. Switch the application to read current accepted state from the database rather than from YAML.
+4. Move historical accepted-state snapshots into `device_current_state`.
+5. Move historical testing events into `submission` and `submission_change`.
+6. Switch the application to read current accepted state from the database rather than from any legacy file-based testing artifact.
 
 ### Current Agreed Identity Direction
 

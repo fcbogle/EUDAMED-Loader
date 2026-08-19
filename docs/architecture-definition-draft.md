@@ -338,7 +338,7 @@ Current design rules are:
 - version `3+` `PATCH` should derive from the latest accepted tracked `PATCH` state for that same lineage
 - all non-target fields should remain aligned with the chosen base state
 - only the scenario-approved target field or fields should change
-- the current YAML testing state store is the temporary persistence mechanism for accepted device state and `PATCH` lineage until the database-backed model is introduced
+- the active testing-state model now persists accepted device state and `PATCH` lineage in SQLite
 
 ### Single And Bulk Testing Flow Rules
 
@@ -413,7 +413,7 @@ Current documented risks and issues include:
 - incomplete scenario coverage
 - no manual upload state tracking yet
 - no database-backed history or audit model yet
-- accepted device state still lives in YAML rather than a database-backed submission state model
+- accepted device state should be treated as SQLite-backed in the current application model, with retained legacy YAML artifacts kept only as historical reference and not as operational state
 
 ## Transition Architecture And Roadmap
 

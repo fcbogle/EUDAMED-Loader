@@ -484,16 +484,12 @@ class XmlGenerationService:
                 continue
             if parent_known and not child_known:
                 parent_known_child_unknown += 1
-                continue
+                return record
             if child_known and not parent_known:
                 child_known_parent_unknown += 1
                 continue
             return record
 
-        if parent_known_child_unknown:
-            raise ValueError(
-                f"Parent Basic UDI-DI already exists for {product_family} / {product_variant}. Use Bulk UDI-DI POST to add child devices."
-            )
         if child_known_parent_unknown:
             raise ValueError(
                 f"Tracked state is inconsistent for {product_family} / {product_variant}: one or more child UDI-DIs appear registered while the parent Basic UDI-DI is not recorded as posted."

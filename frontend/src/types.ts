@@ -643,6 +643,27 @@ export type XmlGenerationScopeBundle = {
   families: XmlGenerationSelectionSummary[];
 };
 
+export type OperationAssessmentType = "single_post" | "single_patch" | "bulk_post" | "bulk_patch";
+export type OperationAssessmentStatus = "available" | "blocked" | "attention";
+
+export type OperationAssessmentIdentityScope = {
+  product_family: string;
+  product_variant: string;
+  catalogue_number: string | null;
+  basic_udi_di: string | null;
+};
+
+export type OperationAssessment = {
+  operation_type: OperationAssessmentType;
+  status: OperationAssessmentStatus;
+  summary_message: string;
+  blocking_reasons: string[];
+  recommended_next_action: string | null;
+  eligible_record_count: number;
+  identity_scope: OperationAssessmentIdentityScope;
+  evidence: Record<string, unknown>;
+};
+
 export type BatchXmlChunkSummary = {
   sequence: number;
   file_name: string;

@@ -27,6 +27,10 @@ from app.routers.profiling import (
     workbook_import_schema_summary,
 )
 from app.routers.xml_generation import (
+    assess_bulk_patch,
+    assess_bulk_post,
+    assess_single_patch,
+    assess_single_post,
     testing_subject_history,
     testing_subject_summaries,
     testing_workspace_summary,
@@ -234,6 +238,143 @@ def _synthetic_validation_bundle_from_promotions(
         sample_records=[record],
         records=[record],
     )
+
+
+def _insert_testing_subject(
+    db_path: Path,
+    *,
+    product_family: str,
+    product_variant: str,
+    catalogue_number: str,
+    primary_udi_di: str,
+    basic_udi_di: str,
+    post_success: int = 0,
+    baseline_patch_success: int = 0,
+    latest_successful_version: str | None = None,
+    latest_successful_state_json: str | None = None,
+) -> int:
+    normalized_product_family = "".join(product_family.casefold().split())
+    normalized_product_variant = "".join(product_variant.casefold().split())
+    normalized_catalogue_number = "".join(catalogue_number.casefold().split())
+    normalized_primary_udi_di = "".join(primary_udi_di.casefold().split())
+    normalized_basic_udi_di = "".join(basic_udi_di.casefold().split())
+    connection = sqlite3.connect(db_path)
+    try:
+        cursor = connection.execute(
+            """
+            INSERT INTO testing_subjects (
+                subject_key,
+                normalized_product_family,
+                normalized_product_variant,
+                normalized_catalogue_number,
+                normalized_primary_udi_di,
+                normalized_basic_udi_di,
+                product_family,
+                product_variant,
+                catalogue_number,
+                primary_udi_di,
+                basic_udi_di,
+                post_success,
+                baseline_patch_success,
+                latest_successful_version,
+                latest_successful_state_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"{normalized_product_family}|{normalized_product_variant}|{normalized_catalogue_number}",
+                normalized_product_family,
+                normalized_product_variant,
+                normalized_catalogue_number,
+                normalized_primary_udi_di,
+                normalized_basic_udi_di,
+                product_family,
+                product_variant,
+                catalogue_number,
+                primary_udi_di,
+                basic_udi_di,
+                post_success,
+                baseline_patch_success,
+                latest_successful_version,
+                latest_successful_state_json,
+            ),
+        )
+        connection.commit()
+        return int(cursor.lastrowid)
+    finally:
+        connection.close()
+
+
+def _insert_testing_event(
+    db_path: Path,
+    *,
+    subject_id: int,
+    event_index: int,
+    message_type: str,
+    status: str,
+    version: str,
+    scenario_id: str | None = None,
+) -> None:
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute(
+            """
+            INSERT INTO testing_events (
+                subject_id,
+                event_index,
+                message_type,
+                status,
+                version,
+                scenario_id,
+                raw_event_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                subject_id,
+                event_index,
+                message_type,
+                status,
+                version,
+                scenario_id,
+                json.dumps({"message_type": message_type, "status": status, "version": version}),
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _insert_reviewed_post_baseline(
+    db_path: Path,
+    *,
+    product_family: str,
+    product_variant: str,
+    catalogue_number: str,
+) -> None:
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute(
+            """
+            INSERT INTO reviewed_post_baselines (
+                normalized_product_family,
+                normalized_product_variant,
+                normalized_catalogue_number,
+                product_family,
+                product_variant,
+                catalogue_number
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "".join(product_family.casefold().split()),
+                "".join(product_variant.casefold().split()),
+                "".join(catalogue_number.casefold().split()),
+                product_family,
+                product_variant,
+                catalogue_number,
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def test_workbook_import_service_persists_import_batch_and_subjects(
@@ -906,6 +1047,190 @@ def test_testing_read_model_routes_return_summary_subjects_and_history(
     assert subjects_payload[0]["catalogue_number"] == "CAT-001"
     assert history_payload["subject"]["catalogue_number"] == "CAT-001"
     assert history_payload["events"][0]["message_type"] == "DEVICE.POST"
+
+
+def test_operation_assessment_routes_report_single_post_and_bulk_post_availability(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    promotions = {
+        ("synthetic.xlsx", "Variant A", 2): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+            "primary_udi_di": "111111",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        },
+        ("synthetic.xlsx", "Variant A", 3): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-002",
+            "primary_udi_di": "222222",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        },
+    }
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_validation_bundle",
+        lambda self: _synthetic_validation_bundle_from_promotions(promotions, row_count=2),
+    )
+
+    single_payload = assess_single_post({"product_family": "Family A", "product_variant": "Variant A"})
+    bulk_payload = assess_bulk_post({"product_family": "Family A", "product_variant": "Variant A"})
+
+    assert single_payload["operation_type"] == "single_post"
+    assert single_payload["status"] == "available"
+    assert single_payload["evidence"]["candidate_basic_udi_di"] == "BASIC-1"
+    assert single_payload["evidence"]["parent_registration_known"] is False
+    assert bulk_payload["operation_type"] == "bulk_post"
+    assert bulk_payload["status"] == "available"
+    assert bulk_payload["evidence"]["eligible_parent_group_count"] == 1
+    assert bulk_payload["evidence"]["eligible_child_record_count"] == 0
+
+
+def test_operation_assessment_routes_report_single_patch_availability_from_sqlite_state(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    promotions = {
+        ("synthetic.xlsx", "Variant A", 2): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+            "primary_udi_di": "111111",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        }
+    }
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_validation_bundle",
+        lambda self: _synthetic_validation_bundle_from_promotions(promotions),
+    )
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-001",
+        primary_udi_di="111111",
+        basic_udi_di="BASIC-1",
+        post_success=1,
+        latest_successful_version="1",
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=subject_id,
+        event_index=1,
+        message_type="UDI_DI.POST",
+        status="SUCCESS",
+        version="1",
+    )
+    _insert_reviewed_post_baseline(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-001",
+    )
+
+    payload = assess_single_patch(
+        {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+        }
+    )
+
+    assert payload["operation_type"] == "single_patch"
+    assert payload["status"] == "available"
+    assert payload["eligible_record_count"] == 1
+    assert payload["evidence"]["reviewed_post_baseline_present"] is True
+    assert payload["evidence"]["tracked_registration_known"] is True
+    assert payload["evidence"]["latest_accepted_version"] == "1"
+
+
+def test_operation_assessment_routes_report_bulk_patch_parent_selection_and_availability(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    promotions = {
+        ("synthetic.xlsx", "Variant A", 2): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+            "primary_udi_di": "111111",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        }
+    }
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_validation_bundle",
+        lambda self: _synthetic_validation_bundle_from_promotions(promotions),
+    )
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-001",
+        primary_udi_di="111111",
+        basic_udi_di="BASIC-1",
+        post_success=1,
+        baseline_patch_success=1,
+        latest_successful_version="2",
+        latest_successful_state_json=json.dumps({"version": "2", "trade_name": "Synthetic Trade Name"}),
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=subject_id,
+        event_index=1,
+        message_type="DEVICE.POST",
+        status="SUCCESS",
+        version="1",
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=subject_id,
+        event_index=2,
+        message_type="UDI_DI.POST",
+        status="SUCCESS",
+        version="1",
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=subject_id,
+        event_index=3,
+        message_type="UDI_DI.PATCH",
+        status="SUCCESS",
+        version="2",
+        scenario_id="equivalent_first_patch",
+    )
+
+    parent_selection_payload = assess_bulk_patch({"product_family": "Family A", "product_variant": "Variant A"})
+    selected_payload = assess_bulk_patch(
+        {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "basic_udi_di": "BASIC-1",
+        }
+    )
+
+    assert parent_selection_payload["operation_type"] == "bulk_patch"
+    assert parent_selection_payload["status"] == "attention"
+    assert parent_selection_payload["evidence"]["eligible_parent_group_count"] == 1
+    assert selected_payload["operation_type"] == "bulk_patch"
+    assert selected_payload["status"] == "available"
+    assert selected_payload["eligible_record_count"] == 1
+    assert selected_payload["evidence"]["selected_basic_udi_di"] == "BASIC-1"
+    assert selected_payload["evidence"]["latest_version_summary"] == ["2"]
 
 
 def test_sqlite_canonical_validation_route_rebuilds_stale_snapshot(

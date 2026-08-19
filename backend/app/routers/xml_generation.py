@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
+from app.services.operation_assessment import OperationAssessmentService
 from app.services.testing_read_model import TestingReadModelService
 from app.services.xml_generation import XmlGenerationService
 
@@ -15,6 +16,10 @@ def _xml_service() -> XmlGenerationService:
 
 def _testing_read_model() -> TestingReadModelService:
     return TestingReadModelService()
+
+
+def _operation_assessment() -> OperationAssessmentService:
+    return OperationAssessmentService()
 
 
 def _bulk_patch_posted_entries_from_summaries(
@@ -494,6 +499,65 @@ def testing_workspace_summary(payload: dict | None = None) -> dict:
         product_variant=str(data["product_variant"]) if data.get("product_variant") else None,
     )
     return summary.model_dump(mode="json")
+
+
+@router.post("/xml/assess-single-post")
+def assess_single_post(payload: dict | None = None) -> dict:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    if not product_family or not product_variant:
+        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    assessment = _operation_assessment().assess_single_post(
+        product_family=str(product_family),
+        product_variant=str(product_variant),
+        catalogue_number=str(data["catalogue_number"]) if data.get("catalogue_number") else None,
+    )
+    return assessment.model_dump(mode="json")
+
+
+@router.post("/xml/assess-single-patch")
+def assess_single_patch(payload: dict | None = None) -> dict:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    if not product_family or not product_variant:
+        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    assessment = _operation_assessment().assess_single_patch(
+        product_family=str(product_family),
+        product_variant=str(product_variant),
+        catalogue_number=str(data["catalogue_number"]) if data.get("catalogue_number") else None,
+    )
+    return assessment.model_dump(mode="json")
+
+
+@router.post("/xml/assess-bulk-post")
+def assess_bulk_post(payload: dict | None = None) -> dict:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    if not product_family or not product_variant:
+        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    assessment = _operation_assessment().assess_bulk_post(
+        product_family=str(product_family),
+        product_variant=str(product_variant),
+    )
+    return assessment.model_dump(mode="json")
+
+
+@router.post("/xml/assess-bulk-patch")
+def assess_bulk_patch(payload: dict | None = None) -> dict:
+    data = payload or {}
+    product_family = data.get("product_family")
+    product_variant = data.get("product_variant")
+    if not product_family or not product_variant:
+        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    assessment = _operation_assessment().assess_bulk_patch(
+        product_family=str(product_family),
+        product_variant=str(product_variant),
+        basic_udi_di=str(data["basic_udi_di"]) if data.get("basic_udi_di") else None,
+    )
+    return assessment.model_dump(mode="json")
 
 
 @router.post("/xml/testing-subject-summaries")

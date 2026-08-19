@@ -380,3 +380,46 @@ class TestingEventSummary(BaseModel):
 class TestingSubjectHistory(BaseModel):
     subject: TestingSubjectReadModelSummary
     events: list[TestingEventSummary] = Field(default_factory=list)
+
+
+OperationAssessmentType = Literal["single_post", "single_patch", "bulk_post", "bulk_patch"]
+OperationAssessmentStatus = Literal["available", "blocked", "attention"]
+
+
+class OperationAssessmentRequest(BaseModel):
+    product_family: str
+    product_variant: str
+
+
+class SinglePostAssessmentRequest(OperationAssessmentRequest):
+    catalogue_number: str | None = None
+
+
+class SinglePatchAssessmentRequest(OperationAssessmentRequest):
+    catalogue_number: str | None = None
+
+
+class BulkPostAssessmentRequest(OperationAssessmentRequest):
+    pass
+
+
+class BulkPatchAssessmentRequest(OperationAssessmentRequest):
+    basic_udi_di: str | None = None
+
+
+class OperationAssessmentIdentityScope(BaseModel):
+    product_family: str
+    product_variant: str
+    catalogue_number: str | None = None
+    basic_udi_di: str | None = None
+
+
+class OperationAssessment(BaseModel):
+    operation_type: OperationAssessmentType
+    status: OperationAssessmentStatus
+    summary_message: str
+    blocking_reasons: list[str] = Field(default_factory=list)
+    recommended_next_action: str | None = None
+    eligible_record_count: int = 0
+    identity_scope: OperationAssessmentIdentityScope
+    evidence: dict[str, Any] = Field(default_factory=dict)

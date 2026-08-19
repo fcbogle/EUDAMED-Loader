@@ -19,6 +19,7 @@ import type {
   GeneratedPatchScenarioPreview,
   MarketInfoPutPreview,
   NormalizationRuleFile,
+  OperationAssessment,
   PostRegistrationPreview,
   RegisteredDeviceAnchor,
   ReferenceWorkbookSummary,
@@ -313,6 +314,29 @@ export const api = {
       product_family: params?.product_family,
       product_variant: params?.product_variant,
       limit: params?.limit ?? 200,
+    }),
+  assessSinglePost: (productFamily: string, productVariant: string, catalogueNumber?: string | null) =>
+    sendJson<OperationAssessment>("/xml/assess-single-post", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber ?? undefined,
+    }),
+  assessSinglePatch: (productFamily: string, productVariant: string, catalogueNumber?: string | null) =>
+    sendJson<OperationAssessment>("/xml/assess-single-patch", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber ?? undefined,
+    }),
+  assessBulkPost: (productFamily: string, productVariant: string) =>
+    sendJson<OperationAssessment>("/xml/assess-bulk-post", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+    }),
+  assessBulkPatch: (productFamily: string, productVariant: string, basicUdiDi?: string | null) =>
+    sendJson<OperationAssessment>("/xml/assess-bulk-patch", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      basic_udi_di: basicUdiDi ?? undefined,
     }),
   downloadXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-record", "POST", {

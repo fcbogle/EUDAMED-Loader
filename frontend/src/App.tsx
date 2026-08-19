@@ -30,6 +30,7 @@ import type {
   ImportedWorkbookSummary,
   MarketInfoPutPreview,
   NormalizationRuleFile,
+  OperationAssessment,
   PostRegistrationPreview,
   RegisteredDeviceAnchor,
   ReferenceWorkbookSummary,
@@ -940,6 +941,46 @@ function matchesReadModelFilter(values: Array<string | number | null | undefined
   return values.some((value) => String(value ?? "").toLowerCase().includes(normalizedFilter));
 }
 
+function operationAssessmentStatusClass(status: OperationAssessment["status"]): string {
+  return status === "available" ? "ok" : status === "attention" ? "warn" : "danger";
+}
+
+function operationAssessmentStatusLabel(status: OperationAssessment["status"]): string {
+  return status === "available" ? "Available" : status === "attention" ? "Attention" : "Blocked";
+}
+
+function assessmentEvidenceNumber(assessment: OperationAssessment | null, key: string): number | null {
+  if (!assessment) {
+    return null;
+  }
+  const value = assessment.evidence[key];
+  return typeof value === "number" ? value : null;
+}
+
+function assessmentEvidenceString(assessment: OperationAssessment | null, key: string): string | null {
+  if (!assessment) {
+    return null;
+  }
+  const value = assessment.evidence[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function assessmentEvidenceBoolean(assessment: OperationAssessment | null, key: string): boolean | null {
+  if (!assessment) {
+    return null;
+  }
+  const value = assessment.evidence[key];
+  return typeof value === "boolean" ? value : null;
+}
+
+function assessmentEvidenceStringArray(assessment: OperationAssessment | null, key: string): string[] {
+  if (!assessment) {
+    return [];
+  }
+  const value = assessment.evidence[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
 export function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("workbooks");
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
@@ -982,6 +1023,9 @@ export function App() {
   const [bulkPatchCatalogueFilter, setBulkPatchCatalogueFilter] = useState<string>("");
   const [bulkPatchImportText, setBulkPatchImportText] = useState<string>("");
   const [testingSubjectSummaries, setTestingSubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
+  const [xmlOperationAssessment, setXmlOperationAssessment] = useState<OperationAssessment | null>(null);
+  const [xmlOperationAssessmentError, setXmlOperationAssessmentError] = useState<string | null>(null);
+  const [isLoadingXmlOperationAssessment, setIsLoadingXmlOperationAssessment] = useState<boolean>(false);
   const [patchScenarioStatuses, setPatchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
     equivalent_first_patch: "EUDAMED Candidate",
     trade_name_edit: "EUDAMED Candidate",
@@ -2089,6 +2133,19 @@ export function App() {
           ? `Preview ready. ${xmlBulkPatchPreview.included_record_count} devices will be generated and ${xmlBulkPatchPreview.excluded_record_count} will be excluded.`
           : `Preview ready. ${xmlBulkPatchPreview.included_record_count} devices will be generated.`
         : `Ready to generate bulk PATCH for ${selectedBulkPatchSelectedCount} device${selectedBulkPatchSelectedCount === 1 ? "" : "s"}.`;
+  const assessedBulkParentGroupCount = assessmentEvidenceNumber(xmlOperationAssessment, "eligible_parent_group_count");
+  const assessedBulkChildRecordCount = assessmentEvidenceNumber(xmlOperationAssessment, "eligible_child_record_count");
+  const assessedUnpostedParentGroupCount = assessmentEvidenceNumber(xmlOperationAssessment, "unposted_parent_group_count");
+  const assessedSelectedBasicUdiDi = assessmentEvidenceString(xmlOperationAssessment, "selected_basic_udi_di");
+  const assessedLatestVersionSummary = assessmentEvidenceStringArray(xmlOperationAssessment, "latest_version_summary");
+  const assessedPatchLatestAcceptedVersion = assessmentEvidenceString(xmlOperationAssessment, "latest_accepted_version");
+  const assessedPatchReviewedBaseline = assessmentEvidenceBoolean(xmlOperationAssessment, "reviewed_post_baseline_present");
+  const assessedPatchTrackedRegistration = assessmentEvidenceBoolean(xmlOperationAssessment, "tracked_registration_known");
+  const assessedPostCandidateCatalogueNumber = assessmentEvidenceString(xmlOperationAssessment, "candidate_catalogue_number");
+  const selectedPostCandidateRecord =
+    (assessedPostCandidateCatalogueNumber
+      ? selectedXmlVariantRecords.find((record) => record.catalogue_number === assessedPostCandidateCatalogueNumber)
+      : null) ?? null;
   const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
   const selectedPairRequestArgs =
     selectedXmlPairRecord?.catalogue_number
@@ -2121,9 +2178,9 @@ export function App() {
     : 1;
   const selectedBulkCapacity =
     xmlMode === "bulkPost"
-      ? selectedBulkUnpostedBasicUdiCount
+      ? assessedUnpostedParentGroupCount ?? selectedBulkUnpostedBasicUdiCount
       : xmlMode === "bulkUdidiPost"
-        ? selectedBulkEligibleUdidiPostCount
+        ? assessedBulkChildRecordCount ?? selectedBulkEligibleUdidiPostCount
         : selectedBulkPatchEligibleCount;
   const normalizedBulkRecordCount = Math.min(Math.max(selectedBulkRecordCount, 1), Math.max(selectedBulkCapacity, 1));
   const selectedBulkChunkCount =
@@ -2149,8 +2206,8 @@ export function App() {
       )
     : [];
   const bulkPostReadinessMessage =
-    selectedBulkUnpostedBasicUdiCount > 0
-      ? `Ready to generate ${selectedBulkUnpostedBasicUdiCount} unposted Basic UDI-DI parent${selectedBulkUnpostedBasicUdiCount === 1 ? "" : "s"}.`
+    (assessedUnpostedParentGroupCount ?? selectedBulkUnpostedBasicUdiCount) > 0
+      ? `Ready to generate ${assessedUnpostedParentGroupCount ?? selectedBulkUnpostedBasicUdiCount} unposted Basic UDI-DI parent${(assessedUnpostedParentGroupCount ?? selectedBulkUnpostedBasicUdiCount) === 1 ? "" : "s"}.`
       : "All Basic UDI-DI parents for this variant already have successful parent DEVICE.POST entries. Use Bulk UDI-DI POST for additional child devices.";
   useEffect(() => {
     const parentOption = displayedBulkPatchParentOptions[0]?.basic_udi_di ?? "";
@@ -2188,6 +2245,79 @@ export function App() {
       cancelled = true;
     };
   }, [selectedXmlFamilySummary?.product_family, selectedXmlVariantSummary?.product_variant]);
+  useEffect(() => {
+    if (activeTab !== "xml") {
+      return;
+    }
+    if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) {
+      setXmlOperationAssessment(null);
+      setXmlOperationAssessmentError(null);
+      setIsLoadingXmlOperationAssessment(false);
+      return;
+    }
+    if (xmlMode === "single" || xmlMode === "marketInfo") {
+      setXmlOperationAssessment(null);
+      setXmlOperationAssessmentError(null);
+      setIsLoadingXmlOperationAssessment(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingXmlOperationAssessment(true);
+    setXmlOperationAssessmentError(null);
+
+    void (async () => {
+      try {
+        const assessment =
+          xmlMode === "post"
+            ? await api.assessSinglePost(
+                selectedXmlFamilySummary.product_family,
+                selectedXmlVariantSummary.product_variant,
+              )
+            : xmlMode === "patch"
+              ? await api.assessSinglePatch(
+                  selectedXmlFamilySummary.product_family,
+                  selectedXmlVariantSummary.product_variant,
+                  selectedPairRequestArgs?.catalogue_number ?? undefined,
+                )
+              : xmlMode === "bulkPatch"
+                ? await api.assessBulkPatch(
+                    selectedXmlFamilySummary.product_family,
+                    selectedXmlVariantSummary.product_variant,
+                    selectedBulkPatchBasicUdiDi || undefined,
+                  )
+                : await api.assessBulkPost(
+                    selectedXmlFamilySummary.product_family,
+                    selectedXmlVariantSummary.product_variant,
+                  );
+        if (!cancelled) {
+          setXmlOperationAssessment(assessment);
+        }
+      } catch (requestError) {
+        if (!cancelled) {
+          setXmlOperationAssessment(null);
+          setXmlOperationAssessmentError(
+            requestError instanceof Error ? requestError.message : "Operation assessment is unavailable.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingXmlOperationAssessment(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeTab,
+    xmlMode,
+    selectedXmlFamilySummary,
+    selectedXmlVariantSummary,
+    selectedPairRequestArgs?.catalogue_number,
+    selectedBulkPatchBasicUdiDi,
+  ]);
   useEffect(() => {
     if (!selectedBulkPatchParentGroup) {
       setSelectedBulkPatchCatalogueNumbers([]);
@@ -2617,8 +2747,39 @@ export function App() {
     xmlMode === "marketInfo"
         ? selectedMarketInfoAnchor
         : xmlPatchPreview?.registered_device_anchor ?? selectedPairAnchor;
+  const selectedPostPreviewRecord =
+    xmlPairPreview && selectedPostCandidateRecord
+      ? {
+          catalogue_number: xmlPairPreview.catalogue_number,
+          product_family: xmlPairPreview.product_family ?? selectedPostCandidateRecord.product_family,
+          product_variant: xmlPairPreview.product_variant ?? selectedPostCandidateRecord.product_variant,
+          trade_name: selectedPostCandidateRecord.trade_name,
+          primary_udi_di: xmlPairPreview.primary_udi_di,
+          issuing_entity: selectedPostCandidateRecord.issuing_entity,
+        }
+      : null;
+  const selectedPostWorkspaceRecord = selectedPostPreviewRecord ?? selectedPostCandidateRecord;
+  const isOperationAssessmentMode =
+    xmlMode === "post" ||
+    xmlMode === "patch" ||
+    xmlMode === "bulkPost" ||
+    xmlMode === "bulkUdidiPost" ||
+    xmlMode === "bulkPatch";
   const isPostWorkspaceReady = Boolean(selectedXmlFamilySummary && selectedXmlVariantSummary);
   const isPairWorkspaceReady = Boolean(selectedPairRequestArgs);
+  const canRunPostFromAssessment =
+    isPostWorkspaceReady && xmlOperationAssessment?.status === "available";
+  const canRunPatchFromAssessment =
+    isPatchScenarioReady && xmlOperationAssessment?.status === "available";
+  const canRunBulkPostFromAssessment =
+    Boolean(selectedXmlVariantSummary) && (assessedBulkParentGroupCount ?? 0) > 0;
+  const canRunBulkUdidiPostFromAssessment =
+    Boolean(selectedXmlVariantSummary) && (assessedBulkChildRecordCount ?? 0) > 0;
+  const canRunBulkPatchFromAssessment =
+    Boolean(selectedBulkPatchParentGroup) &&
+    (xmlOperationAssessment?.status === "available" || xmlOperationAssessment?.status === "attention") &&
+    (xmlOperationAssessment?.eligible_record_count ?? 0) > 0 &&
+    canRunBulkPatch;
   const acceptedXmlModes = [
     {
       id: "post",
@@ -2631,13 +2792,13 @@ export function App() {
     xmlMode === "post"
       ? xmlPairPreview
         ? xmlPairPreview.post_xml
-        : selectedXmlPairRecord
+        : selectedPostWorkspaceRecord
           ? [
-              "<!-- Generate POST XML to load the accepted registration preview -->",
-              `<catalogue-number>${selectedXmlPairRecord.catalogue_number}</catalogue-number>`,
-              `<udi-di>${selectedXmlPairRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
+              "<!-- Generate POST XML to load the next available POST candidate preview -->",
+              `<catalogue-number>${selectedPostWorkspaceRecord.catalogue_number}</catalogue-number>`,
+              `<udi-di>${selectedPostWorkspaceRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
             ].join("\n")
-          : "<!-- No POST-classified XML-ready record is currently available for POST generation -->"
+          : "<!-- No available Primary UDI-DI POST candidate is currently available for the selected family and variant -->"
       : xmlMode === "single"
       ? selectedXmlRecord
         ? xmlPreview?.xml ??
@@ -2761,8 +2922,114 @@ export function App() {
             : xmlMode === "bulkPost"
               ? "Bulk Basic UDI POST Workspace"
               : xmlMode === "bulkUdidiPost"
-                ? "Bulk UDI-DI POST Workspace"
+              ? "Bulk UDI-DI POST Workspace"
               : "Bulk PATCH Workspace";
+  const xmlAssessmentTitle =
+    xmlMode === "post"
+      ? "POST assessment"
+      : xmlMode === "patch"
+        ? "PATCH assessment"
+        : xmlMode === "bulkPost"
+          ? "Bulk Basic UDI POST assessment"
+          : xmlMode === "bulkUdidiPost"
+            ? "Bulk UDI-DI POST assessment"
+            : "Bulk PATCH assessment";
+  const xmlAssessmentSummaryRows =
+    xmlMode === "post"
+      ? [
+          {
+            label: "Candidate catalogue",
+            value: assessmentEvidenceString(xmlOperationAssessment, "candidate_catalogue_number") ?? "Not resolved",
+          },
+          {
+            label: "Basic UDI-DI",
+            value: assessmentEvidenceString(xmlOperationAssessment, "candidate_basic_udi_di") ?? "Not resolved",
+          },
+          {
+            label: "Parent registration",
+            value:
+              assessmentEvidenceBoolean(xmlOperationAssessment, "parent_registration_known") === null
+                ? "Unknown"
+                : assessmentEvidenceBoolean(xmlOperationAssessment, "parent_registration_known")
+                  ? "Already registered"
+                  : "Not yet registered",
+          },
+          {
+            label: "Child registration",
+            value:
+              assessmentEvidenceBoolean(xmlOperationAssessment, "child_registration_known") === null
+                ? "Unknown"
+                : assessmentEvidenceBoolean(xmlOperationAssessment, "child_registration_known")
+                  ? "Already registered"
+                  : "Not yet registered",
+          },
+        ]
+      : xmlMode === "patch"
+        ? [
+            {
+              label: "Catalogue number",
+              value: assessmentEvidenceString(xmlOperationAssessment, "catalogue_number") ?? "Not resolved",
+            },
+            {
+              label: "Latest accepted version",
+              value: assessedPatchLatestAcceptedVersion ?? "Not tracked",
+            },
+            {
+              label: "Reviewed baseline POST",
+              value:
+                assessedPatchReviewedBaseline === null
+                  ? "Unknown"
+                  : assessedPatchReviewedBaseline
+                    ? "Present"
+                    : "Missing",
+            },
+            {
+              label: "Tracked registration",
+              value:
+                assessedPatchTrackedRegistration === null
+                  ? "Unknown"
+                  : assessedPatchTrackedRegistration
+                    ? "Present"
+                    : "Missing",
+            },
+          ]
+        : xmlMode === "bulkPatch"
+          ? [
+              {
+                label: "Available parent groups",
+                value: String(assessmentEvidenceNumber(xmlOperationAssessment, "eligible_parent_group_count") ?? 0),
+              },
+              {
+                label: "Selected Basic UDI-DI",
+                value: assessedSelectedBasicUdiDi ?? "Select a parent",
+              },
+              {
+                label: "Eligible child devices",
+                value: String(assessmentEvidenceNumber(xmlOperationAssessment, "eligible_child_record_count") ?? 0),
+              },
+              {
+                label: "Tracked versions",
+                value: assessedLatestVersionSummary.length > 0 ? assessedLatestVersionSummary.join(", ") : "Not tracked",
+              },
+            ]
+          : [
+              {
+                label: "Eligible parent groups",
+                value: String(assessedBulkParentGroupCount ?? 0),
+              },
+              {
+                label: "Eligible child records",
+                value: String(assessedBulkChildRecordCount ?? 0),
+              },
+              {
+                label: "Posted parent groups",
+                value: String(assessmentEvidenceNumber(xmlOperationAssessment, "posted_parent_group_count") ?? 0),
+              },
+              {
+                label: "Unposted parent groups",
+                value: String(assessedUnpostedParentGroupCount ?? 0),
+              },
+            ];
   const activePreviewLabel =
     xmlMode === "post"
       ? "Post"
@@ -2791,6 +3058,34 @@ export function App() {
               : xmlMode === "bulkUdidiPost"
                 ? xmlBulkUdidiPostPreview?.selected_chunk_file_name ?? null
               : xmlBulkPatchPreview?.selected_chunk_file_name ?? null;
+  const canGenerateCurrentXml =
+    xmlMode === "post"
+      ? canRunPostFromAssessment
+      : xmlMode === "single"
+        ? Boolean(selectedXmlRecord)
+        : xmlMode === "marketInfo"
+          ? Boolean(selectedTestingAnchor)
+          : xmlMode === "patch"
+            ? canRunPatchFromAssessment
+            : xmlMode === "bulkPost"
+              ? canRunBulkPostFromAssessment
+              : xmlMode === "bulkUdidiPost"
+                ? canRunBulkUdidiPostFromAssessment
+                : canRunBulkPatchFromAssessment;
+  const canDownloadCurrentXml =
+    xmlMode === "post"
+      ? Boolean(xmlPairPreview)
+      : xmlMode === "single"
+        ? Boolean(selectedXmlRecord)
+        : xmlMode === "marketInfo"
+          ? Boolean(selectedTestingAnchor)
+          : xmlMode === "patch"
+            ? Boolean(hasReviewedPatchBaselinePost && hasReviewedGeneratedPatchPreview)
+            : xmlMode === "bulkPost"
+              ? canRunBulkPostFromAssessment
+              : xmlMode === "bulkUdidiPost"
+                ? canRunBulkUdidiPostFromAssessment
+                : canRunBulkPatchFromAssessment;
   const profileColumns = sheetProfile?.columns ?? [];
   const highNullColumns = profileColumns.filter((column) => {
     if (!sheetProfile?.data_rows) {
@@ -4517,6 +4812,66 @@ export function App() {
               </div>
               )
             ) : null}
+            {isOperationAssessmentMode ? (
+              <div className="draft-card bulk-patch-summary-bar">
+                <div className="draft-card-head">
+                  <strong>{xmlAssessmentTitle}</strong>
+                  <span
+                    className={
+                      isLoadingXmlOperationAssessment
+                        ? "status-pill warn compact"
+                        : xmlOperationAssessment
+                          ? `status-pill ${operationAssessmentStatusClass(xmlOperationAssessment.status)} compact`
+                          : "status-pill warn compact"
+                    }
+                  >
+                    {isLoadingXmlOperationAssessment
+                      ? "Assessing"
+                      : xmlOperationAssessment
+                        ? operationAssessmentStatusLabel(xmlOperationAssessment.status)
+                        : "Unavailable"}
+                  </span>
+                </div>
+                <div className="bulk-patch-summary-row">
+                  <div className="bulk-patch-summary-metrics">
+                    {xmlAssessmentSummaryRows.map((row) => (
+                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile" key={row.label}>
+                        <strong>{row.label}</strong>
+                        <span>{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <p className="panel-copy bulk-patch-summary-status">
+                  {isLoadingXmlOperationAssessment
+                    ? "Checking the selected operation against current canonical validation and tracked SQLite testing state."
+                    : xmlOperationAssessment?.summary_message ??
+                      xmlOperationAssessmentError ??
+                      "Operation assessment is not available for this selection."}
+                </p>
+                {xmlOperationAssessment?.blocking_reasons.length ? (
+                  <div className="roadmap-list">
+                    {xmlOperationAssessment.blocking_reasons.map((reason, index) => (
+                      <div className="roadmap-item" key={`${reason}-${index}`}>
+                        <strong>{xmlOperationAssessment.status === "blocked" ? "Why blocked" : "Needs attention"}</strong>
+                        <p>{reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {xmlOperationAssessment?.recommended_next_action ? (
+                  <div className="workflow-note">
+                    <strong>Recommended next action</strong>
+                    <span>{xmlOperationAssessment.recommended_next_action}</span>
+                  </div>
+                ) : null}
+              </div>
+            ) : xmlMode === "marketInfo" ? (
+              <div className="workflow-note">
+                <strong>Assessment status</strong>
+                <span>Market Info operational assessment is deferred and is not yet driven by the new backend contract.</span>
+              </div>
+            ) : null}
             <div className={xmlMode === "bulkPatch" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" ? "xml-focus-layout bulk-patch-focus-layout" : "xml-focus-layout"}>
               <div className="xml-preview-surface">
                 <div className="section-heading xml-preview-heading">
@@ -4586,7 +4941,9 @@ export function App() {
                     {xmlMode === "post"
                       ? xmlPairPreview
                         ? `POST preview generated for ${xmlPairPreview.product_family} / ${xmlPairPreview.product_variant} / ${xmlPairPreview.catalogue_number}.`
-                        : "No POST preview generated yet for the registered testing anchor."
+                        : selectedPostWorkspaceRecord
+                          ? `No POST preview generated yet for the next available Primary UDI-DI candidate ${selectedPostWorkspaceRecord.catalogue_number}.`
+                          : "No available Primary UDI-DI POST candidate is currently available for the selected family and variant."
                       : xmlMode === "single"
                         ? xmlPreview
                           ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
@@ -4625,13 +4982,8 @@ export function App() {
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      (xmlMode === "post" && !isPostWorkspaceReady) ||
-                      (xmlMode === "single" && !selectedXmlRecord) ||
-                      (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
-                      (xmlMode === "patch" && !isPatchScenarioReady) ||
-                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost") && !selectedBulkCapacity) ||
-                      (xmlMode === "bulkPatch" && !canRunBulkPatch) ||
                       ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
+                      !canGenerateCurrentXml ||
                       isGeneratingXml
                     }
                   >
@@ -4656,13 +5008,8 @@ export function App() {
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      (xmlMode === "post" && !isPostWorkspaceReady) ||
-                      (xmlMode === "single" && !selectedXmlRecord) ||
-                      (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
-                      (xmlMode === "patch" && !isPatchScenarioReady) ||
-                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost") && !selectedBulkCapacity) ||
-                      (xmlMode === "bulkPatch" && !canRunBulkPatch) ||
                       ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
+                      !canGenerateCurrentXml ||
                       isGeneratingXml
                     }
                   >
@@ -4673,13 +5020,8 @@ export function App() {
                     type="button"
                     onClick={() => void downloadXmlRecord()}
                     disabled={
-                      (xmlMode === "post" && !xmlPairPreview) ||
-                      (xmlMode === "single" && !selectedXmlRecord) ||
-                      (xmlMode === "marketInfo" && !selectedTestingAnchor) ||
-                      (xmlMode === "patch" && (!hasReviewedPatchBaselinePost || !hasReviewedGeneratedPatchPreview)) ||
-                      ((xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost") && !selectedBulkCapacity) ||
-                      (xmlMode === "bulkPatch" && !canRunBulkPatch) ||
                       ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
+                      !canDownloadCurrentXml ||
                       isGeneratingXml
                     }
                   >
@@ -4700,20 +5042,31 @@ export function App() {
                   {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
                 </div>
                 {xmlMode === "post" ? (
-                  selectedTestingAnchor ? (
+                  selectedPostWorkspaceRecord ? (
                     <div className="draft-list xml-record-stack">
                       <div className="draft-card xml-record-card">
                         <div className="draft-card-head">
-                          <strong>{selectedTestingAnchor.catalogue_number}</strong>
-                          <span className="status-pill ok compact">Registered device</span>
+                          <strong>{selectedPostWorkspaceRecord.catalogue_number}</strong>
+                          <span className="status-pill ok compact">Next POST candidate</span>
                         </div>
                         <p className="draft-meta">
-                          {selectedTestingAnchor.product_family} / {selectedTestingAnchor.product_variant}
+                          {selectedPostWorkspaceRecord.product_family} / {selectedPostWorkspaceRecord.product_variant}
+                        </p>
+                        {selectedPostWorkspaceRecord.trade_name ? (
+                          <p className="panel-copy">{selectedPostWorkspaceRecord.trade_name}</p>
+                        ) : null}
+                        <p className="panel-copy">
+                          UDI-DI {selectedPostWorkspaceRecord.primary_udi_di ?? "Unknown"} ·
+                          {xmlOperationAssessment?.status === "available"
+                            ? " available to register under the tracked Basic UDI-DI parent."
+                            : " not currently available for POST."}
                         </p>
                         <p className="panel-copy">
-                          UDI-DI {selectedTestingAnchor.primary_udi_di} · Accepted registration {selectedTestingAnchor.post_file_name}
+                          {xmlOperationAssessment?.status === "available"
+                            ? "Review the next available child Primary UDI-DI POST candidate for this family and variant."
+                            : xmlOperationAssessment?.summary_message ??
+                              "No available child Primary UDI-DI POST candidate is currently available for this family and variant."}
                         </p>
-                        <p className="panel-copy">Review the accepted registration POST for the device that will anchor later PATCH and MARKET_INFO testing.</p>
                         <div className="family-scope-pill-row xml-status-row">
                           <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
                             Post {pairPostValidation ? (pairPostValidation.valid ? "valid" : "invalid") : "awaiting preview"}
@@ -4722,7 +5075,10 @@ export function App() {
                       </div>
                     </div>
                   ) : (
-                    <p className="panel-copy">No registered testing anchor is currently available for POST generation.</p>
+                    <p className="panel-copy">
+                      {xmlOperationAssessment?.summary_message ??
+                        "No available child Primary UDI-DI POST candidate is currently available for the selected family and variant."}
+                    </p>
                   )
                 ) : xmlMode === "single" ? (
                   selectedXmlRecord ? (

@@ -206,12 +206,9 @@ def test_next_valid_post_record_blocks_when_parent_exists(monkeypatch) -> None:
         lambda **kwargs: False,
     )
 
-    try:
-        service._next_valid_post_record(product_family="Elite", product_variant="Elite2")
-    except ValueError as exc:
-        assert str(exc) == "Parent Basic UDI-DI already exists for Elite / Elite2. Use Bulk UDI-DI POST to add child devices."
-    else:
-        raise AssertionError("Expected parent-exists POST selection block.")
+    selected_record = service._next_valid_post_record(product_family="Elite", product_variant="Elite2")
+
+    assert selected_record.catalogue_number == "ELT22"
 
 
 def basicUdiDiForRecordForTest(record: CanonicalValidationRecord) -> str | None:
