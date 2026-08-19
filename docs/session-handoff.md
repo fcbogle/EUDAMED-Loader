@@ -84,7 +84,6 @@ with the current implementation focus now being:
   - `Bulk Basic UDI POST` is now treated as a parent-only flow
   - `Bulk UDI-DI POST` is now treated as a child-only flow
   - parent existence is now resolved from the testing-state store, currently backed by `data/testing/testing-state.sqlite3`
-  - legacy `data/testing/playground-tested-subjects.yaml` remains a bootstrap import source when the SQLite store is empty
   - if a parent `Basic UDI-DI` already has a successful `DEVICE.POST`, `Bulk Basic UDI POST` should not generate a new parent seed
   - in that case the clean backend message is now:
     - `Parent Basic UDI-DI already exists for {family} / {variant}. Use Bulk UDI-DI POST to add child devices.`
@@ -120,6 +119,22 @@ with the current implementation focus now being:
   - latest traced single-`POST` eligibility findings on Saturday, August 15, 2026:
     - `Echelon VAC` is blocked because the parent `Basic UDI-DI` is already known in tracked state, so additional registrations should use `Bulk UDI-DI POST`
     - `Echelon VT` is blocked because every validated row in that variant is currently classified as `PATCH`, not `POST`
+- Latest agreed design direction on Wednesday, August 19, 2026:
+  - `EUDAMED Testing` should move toward a process-type-driven workflow rather than exposing raw XML actions first
+  - the user should first choose the intended operation type, then choose `Product Family` and `Variant`
+  - SQLite-backed backend assessment should then determine and present the current operational situation for that selection
+  - the UI should guide the user by explaining:
+    - what is possible
+    - what is blocked
+    - why it is blocked
+    - how many records are eligible
+    - what the next valid action is
+  - example intended outcomes:
+    - if a parent `Basic UDI-DI` is already registered, parent `POST` should stop and direct the user toward child `POST`
+    - if no successful tracked registration exists for the targeted device lineage, `PATCH` should stop and explain that accepted / tracked state is required first
+    - for bulk operations, the system should resolve the eligible cohort and present counts and groupings before generation
+  - this should be implemented as explicit operation-specific readiness assessment rather than one generic workflow engine
+  - no data-model change has yet been agreed for linking testing history beyond the current `device_subject`-anchored direction; discuss that separately before implementation
 
 ## Current Repo State
 
@@ -223,6 +238,29 @@ General XML tools:
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
 
+Current directional design intent:
+
+- `EUDAMED Testing` should evolve from a mode selector into a process-aware operations workspace.
+- The primary user flow should become:
+  - choose operation type
+  - choose `Product Family`
+  - choose `Variant`
+  - let the backend assess the current SQLite-backed situation
+  - present the valid next action with supporting counts and reasons
+- The system should define the situation for the user rather than expecting the user to infer it from low-level XML tooling.
+- The backend should eventually expose explicit operation-readiness assessments for at least:
+  - parent `POST`
+  - child `POST`
+  - single-device `PATCH`
+  - `Bulk PATCH`
+  - `Market Info`
+- Those assessments should be SQLite-backed and should describe:
+  - eligible record counts
+  - required identity scope such as `Basic UDI-DI` or child `UDI-DI`
+  - blocking reasons
+  - recommended next action
+- Keep the operation-specific rule sets explicit; do not collapse this into one opaque generic workflow engine.
+
 ### Planned EUDAMED Testing Logging
 
 - Target this work after the current SQLite persistence increments and Canonical Validation / testing UI tidy-up are complete.
@@ -296,8 +334,9 @@ It now:
   - real first-update version `2` PATCH generation from accepted `POST`
   - later version `3+` PATCH generation from latest accepted tracked state
 - current implementation derives scenario drafts from the latest successful device state resolved through the testing-state store, currently backed by `data/testing/testing-state.sqlite3`
-  - the SQLite store is initially seeded from `data/testing/playground-tested-subjects.yaml` when empty
-  - and falls back to the baseline first child `PATCH` only when no later accepted state has been recorded for that device
+  - runtime app behavior should now treat SQLite as the active source of truth rather than auto-reading YAML when the store is empty
+  - current tests may still seed temporary SQLite state from the historical YAML fixture
+  - scenario derivation falls back to the baseline first child `PATCH` only when no later accepted state has been recorded for that device
 - current scenario status:
   - implemented and Playground-successful: `equivalent_first_patch`, `trade_name_edit`, `warning_add`, `storage_condition_edit`, `base_quantity_edit`
   - implemented but not Playground-accepted: `status_code_edit`
@@ -467,13 +506,13 @@ Important limitation:
 
 - restart the backend after the latest router and message changes
 - verify the UI now shows the cleaner parent-exists stop instead of a confusing failed action
+- start shaping `EUDAMED Testing` toward operation-type readiness assessment driven by SQLite state rather than direct action-first mode switching
 - continue Playground testing for:
   - `Bulk UDI-DI POST`
   - `Bulk PATCH`
   - `Market Info`
 - keep all new successful or rejected Playground results reflected in:
   - `data/testing/testing-state.sqlite3`
-  - `data/testing/playground-tested-subjects.yaml` only when bootstrap source data is intentionally refreshed
   - `docs/eudamed-playground-test-report.md`
 
 ## Current Scenario Scope

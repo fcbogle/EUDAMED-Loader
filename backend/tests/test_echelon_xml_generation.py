@@ -364,7 +364,7 @@ def test_generated_trade_name_patch_scenario_reuses_latest_successful_patch_stat
     assert preview.context.base_message_type == "PATCH"
     assert preview.context.base_version == "4"
     assert preview.context.proposed_patch_version == "5"
-    assert preview.context.base_state_source == "yaml_latest_successful_patch"
+    assert preview.context.base_state_source == "sqlite_latest_successful_patch"
     assert preview.context.base_state_label == "Latest successful PATCH version 4"
     assert preview.registered_device_anchor.catalogue_number == preview.catalogue_number
     assert preview.base_validation.valid is True
@@ -446,7 +446,7 @@ def test_generated_trade_name_patch_scenario_preserves_latest_successful_trade_n
     )
 
     assert preview.context.base_version == "4"
-    assert preview.context.base_state_source == "yaml_latest_successful_patch"
+    assert preview.context.base_state_source == "sqlite_latest_successful_patch"
     assert "<e:version>4</e:version>" in preview.base_xml
     assert "ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED" in preview.base_xml
     assert "ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED" in preview.derived_patch_xml

@@ -5,8 +5,6 @@ import json
 import sqlite3
 from typing import Any, cast
 
-import yaml
-
 from app.config import get_settings
 from app.xml_models import CriticalWarningXmlItem, PatchStateSnapshot, StorageConditionXmlItem
 
@@ -22,10 +20,6 @@ class TestingStateStore:
     def __init__(self) -> None:
         self.settings = get_settings()
         self._ensure_database()
-
-    @property
-    def yaml_path(self):
-        return self.settings.schema_dir.parents[1] / "data" / "testing" / "playground-tested-subjects.yaml"
 
     @property
     def db_path(self):
@@ -56,7 +50,7 @@ class TestingStateStore:
         if not version:
             return None
         return PatchStateResolution(
-            source="yaml_latest_successful_patch",
+            source="sqlite_latest_successful_patch",
             state=PatchStateSnapshot(
                 version=version,
                 trade_name=self._optional_string(latest_state.get("trade_name")),
@@ -421,140 +415,7 @@ class TestingStateStore:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS ix_reviewed_post_baselines_device_subject_id ON reviewed_post_baselines(device_subject_id)"
             )
-            subject_count = int(connection.execute("SELECT COUNT(*) FROM testing_subjects").fetchone()[0])
-            if not subject_count:
-                self._import_yaml_into_database(connection)
             self._backfill_device_subject_links(connection)
-
-    def _import_yaml_into_database(self, connection: sqlite3.Connection) -> None:
-        if not self.yaml_path.exists():
-            return
-        data = yaml.safe_load(self.yaml_path.read_text()) or {}
-        subjects = data.get("tested_subjects") or []
-        for subject in subjects:
-            if not isinstance(subject, dict):
-                continue
-            source_reference = cast(dict[str, Any] | None, subject.get("source_reference"))
-            playground_status = cast(dict[str, Any] | None, subject.get("playground_status"))
-            latest_state = cast(dict[str, Any] | None, subject.get("latest_successful_state"))
-            subject_cursor: sqlite3.Cursor = connection.execute(
-                """
-                INSERT INTO testing_subjects (
-                    subject_key,
-                    device_subject_id,
-                    normalized_product_family,
-                    normalized_product_variant,
-                    normalized_catalogue_number,
-                    normalized_primary_udi_di,
-                    normalized_basic_udi_di,
-                    product_family,
-                    product_variant,
-                    catalogue_number,
-                    primary_udi_di,
-                    basic_udi_di,
-                    source_workbook,
-                    source_sheet,
-                    source_row_index,
-                    post_success,
-                    baseline_patch_success,
-                    exclude_from_post_wave,
-                    exclude_from_baseline_patch_wave,
-                    latest_successful_version,
-                    latest_successful_state_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    self._optional_string(subject.get("subject_id"))
-                    or "|".join(
-                        filter(
-                            None,
-                            [
-                                self._normalize_identity(subject.get("product_family")),
-                                self._normalize_identity(subject.get("product_variant")),
-                                self._normalize_identity(subject.get("catalogue_number")),
-                            ],
-                        )
-                    ),
-                    self._resolve_device_subject_id(
-                        connection,
-                        product_family=self._optional_string(subject.get("product_family")),
-                        product_variant=self._optional_string(subject.get("product_variant")),
-                        catalogue_number=self._optional_string(subject.get("catalogue_number")),
-                        primary_udi_di=self._optional_string(subject.get("primary_udi_di")),
-                    ),
-                    self._normalize_identity(subject.get("product_family")),
-                    self._normalize_identity(subject.get("product_variant")),
-                    self._normalize_identity(subject.get("catalogue_number")),
-                    self._normalize_identity(subject.get("primary_udi_di")) or None,
-                    self._normalize_identity(subject.get("basic_udi_di")) or None,
-                    self._optional_string(subject.get("product_family")),
-                    self._optional_string(subject.get("product_variant")),
-                    self._optional_string(subject.get("catalogue_number")),
-                    self._optional_string(subject.get("primary_udi_di")),
-                    self._optional_string(subject.get("basic_udi_di")),
-                    self._optional_string(source_reference.get("workbook")) if source_reference else None,
-                    self._optional_string(source_reference.get("sheet")) if source_reference else None,
-                    self._optional_int(cast(object, source_reference.get("row_index"))) if source_reference else None,
-                    int(bool(playground_status.get("post_success"))) if playground_status else 0,
-                    int(bool(playground_status.get("baseline_patch_success"))) if playground_status else 0,
-                    int(bool(playground_status.get("exclude_from_post_wave"))) if playground_status else 0,
-                    int(bool(playground_status.get("exclude_from_baseline_patch_wave"))) if playground_status else 0,
-                    self._optional_string(latest_state.get("version")) if latest_state else None,
-                    json.dumps(latest_state) if latest_state else None,
-                ),
-            )
-            subject_row_id = subject_cursor.lastrowid
-            if subject_row_id is None:
-                raise RuntimeError("Failed to persist imported testing subject row.")
-            subject_id = int(subject_row_id)
-            test_events = subject.get("test_events")
-            if not isinstance(test_events, list):
-                continue
-            for event_index, event in enumerate(test_events):
-                if not isinstance(event, dict):
-                    continue
-                connection.execute(
-                    """
-                    INSERT INTO testing_events (
-                        subject_id,
-                        event_index,
-                        message_type,
-                        status,
-                        version,
-                        scenario_id,
-                        scenario_label,
-                        tested_at,
-                        transaction_id,
-                        submission_id,
-                        payload_created_at,
-                        correlation_id,
-                        message_id,
-                        changed_fields_json,
-                        retained_fields_json,
-                        unchanged_fields_json,
-                        raw_event_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        subject_id,
-                        event_index,
-                        self._optional_string(event.get("message_type")),
-                        self._optional_string(event.get("status")),
-                        self._optional_string(event.get("version")),
-                        self._optional_string(event.get("scenario_id")),
-                        self._optional_string(event.get("scenario_label")),
-                        self._optional_string(event.get("tested_at")),
-                        self._optional_string(event.get("transaction_id")),
-                        self._optional_string(event.get("submission_id")),
-                        self._optional_string(event.get("payload_created_at")),
-                        self._optional_string(event.get("correlation_id")),
-                        self._optional_string(event.get("message_id")),
-                        json.dumps(event.get("changed_fields")) if isinstance(event.get("changed_fields"), list) else None,
-                        json.dumps(event.get("retained_fields")) if isinstance(event.get("retained_fields"), list) else None,
-                        json.dumps(event.get("unchanged_fields")) if isinstance(event.get("unchanged_fields"), list) else None,
-                        json.dumps(event),
-                    ),
-                )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
