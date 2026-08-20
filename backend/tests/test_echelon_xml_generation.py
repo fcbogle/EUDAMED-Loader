@@ -122,6 +122,27 @@ def test_single_record_preview_can_override_manufacturer_srn_for_playground(monk
     assert "<s:nodeActorCode>UK-MF-000033261</s:nodeActorCode>" in preview.post_xml
 
 
+def test_single_post_preview_switches_to_child_udidi_post_when_parent_is_already_registered(monkeypatch) -> None:
+    service = XmlGenerationService()
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_basic_udi_post",
+        lambda **kwargs: True,
+    )
+
+    preview = service.preview_post_registration(
+        product_family="Elan",
+        product_variant="Elan IC",
+        catalogue_number="ELANIC22L1S",
+    )
+
+    assert preview.message_type == "UDI_DI.POST"
+    assert preview.post_file_name.endswith("udidi-post-ELANIC22L1S.xml")
+    assert "<s:serviceID>UDI_DI</s:serviceID>" in preview.post_xml
+    assert "<device:MDRBasicUDI>" not in preview.post_xml
+    assert "<device:UDIDIData" in preview.post_xml
+
+
 def test_next_valid_post_record_skips_known_posted_parent_and_child(monkeypatch) -> None:
     service = XmlGenerationService()
     first_known = cast(

@@ -133,11 +133,20 @@ with the current implementation focus now being:
     - if a parent `Basic UDI-DI` is already registered, parent `POST` should stop and direct the user toward child `POST`
     - if no successful tracked registration exists for the targeted device lineage, `PATCH` should stop and explain that accepted / tracked state is required first
     - for bulk operations, the system should resolve the eligible cohort and present counts and groupings before generation
-  - refined `POST` direction confirmed on Wednesday, August 19, 2026:
-    - the `POST` workspace should present the next single available child `Primary UDI-DI` record for the selected family and variant
-    - if the parent `Basic UDI-DI` is already registered, the UI should explain that available child `Primary UDI-DI` records can be posted under that registered parent
-    - the UI should not anchor `POST` to an arbitrary selected or first XML-ready `POST` row if that exact child device is already registered
-    - if no further child `Primary UDI-DI` records are available for `POST`, the UI should say so explicitly
+- refined `POST` direction confirmed on Wednesday, August 19, 2026:
+  - the `POST` workspace should present the next single available child `Primary UDI-DI` record for the selected family and variant
+  - if the parent `Basic UDI-DI` is already registered, the UI should explain that available child `Primary UDI-DI` records can be posted under that registered parent
+  - the UI should not anchor `POST` to an arbitrary selected or first XML-ready `POST` row if that exact child device is already registered
+  - if no further child `Primary UDI-DI` records are available for `POST`, the UI should say so explicitly
+  - refined `PATCH` direction confirmed on Wednesday, August 19, 2026:
+    - `Patch XML` should stay record-based rather than family-based
+    - one PATCH flow should always target one exact child device lineage
+    - the system should not infer a PATCH target from family and variant alone when multiple sibling child devices exist
+    - the resolved PATCH target should remain stable across assessment, preview, download, and later response handling
+  - implemented `POST` shape refinement confirmed on Thursday, August 20, 2026:
+    - single `POST` now emits `DEVICE.POST` when the parent `Basic UDI-DI` is not yet registered
+    - single `POST` now emits child-only `UDI_DI.POST` when the parent `Basic UDI-DI` is already registered and the child `Primary UDI-DI` is still available
+    - the child-only payload still references the registered parent through `basicUDIIdentifier`
   - this should be implemented as explicit operation-specific readiness assessment rather than one generic workflow engine
   - no data-model change has yet been agreed for linking testing history beyond the current `device_subject`-anchored direction; discuss that separately before implementation
 
@@ -411,6 +420,11 @@ Recommended implementation rule:
 
 - Single `POST` no longer relies on a shared anchor panel.
 - It generates one registration `POST` for the next valid candidate in the selected family and variant.
+- Current implemented `POST` message-shape behavior is:
+  - if the parent `Basic UDI-DI` is not yet registered, emit parent-style `DEVICE.POST`
+  - that `DEVICE.POST` contains one `MDRBasicUDI` parent registration and one `MDRUDIDIData` child registration for the chosen candidate
+  - if the parent `Basic UDI-DI` is already registered, emit child-only `UDI_DI.POST`
+  - that `UDI_DI.POST` contains only the child `UDIDIData` payload and references the existing parent through `basicUDIIdentifier`
 - The current intended `POST` UX is:
   - resolve the next available child `Primary UDI-DI` candidate for the selected family and variant
   - if the parent `Basic UDI-DI` is already registered, present that child candidate as a child registration under the existing parent
@@ -426,15 +440,21 @@ Recommended implementation rule:
 
 ### Patch XML
 
-Current implementation is generated and record-driven.
+Current implementation generates PATCH XML from one exact device record lineage.
 
 It now:
 
-- uses the current parent `POST` selection identified by:
+- uses the current selected record identified by:
   - `product_family`
   - `product_variant`
   - `catalogue_number`
-- requires the user to generate and review the baseline `POST` first for that parent record
+- treats that selected record as one exact child-device lineage, not as a general family-level PATCH request
+- anchors PATCH generation to one exact identity set:
+  - `catalogue_number`
+  - child `Primary UDI-DI`
+  - parent `Basic UDI-DI`
+  - latest accepted tracked state for that same device
+- requires the user to generate and review the baseline `POST` first for that same selected device record
 - also requires tracked successful Playground registration for that same device before a version `2` `PATCH` can be drafted
 - keeps the `Patch XML` workspace visible, but should block generation and download until that reviewed baseline `POST` exists in the current session
 - should support:
@@ -458,12 +478,21 @@ It now:
   - generated XML change summary after preview
 - validates generated XML locally and supports download
 
+Record-based meaning:
+
+- `Patch XML` should not silently switch between sibling devices within the same family and variant.
+- The chosen PATCH target should remain the same record from assessment through XML generation.
+- The UI may use family and variant to narrow the available records, but the actual PATCH lineage must resolve to one exact child device record before generation.
+- Version `2` PATCH should derive from the accepted baseline `POST` for that exact record.
+- Version `3+` PATCH should derive from the latest accepted tracked `PATCH` for that exact record.
+- Response handling should later update tracked state against that same exact record lineage.
+
 Important limitation:
 
 - reviewed baseline `POST` state is persisted in the testing-state SQLite store, not only in-memory
 - PATCH scenario promotion state such as `EUDAMED Candidate` versus `EUDAMED Accepted` still remains UI/application state rather than a broader workflow model
 - the testing-state store is SQLite-backed today and is expected to evolve within SQLite rather than be replaced by a different database platform
-- the current implementation still assumes the reviewed equivalent first-child `PATCH` as the starting point before later scenario drafting
+- later scenario drafting still assumes an equivalent-first accepted `PATCH` baseline when no later accepted `PATCH` state has been recorded for that exact record
 - this is now an acknowledged design constraint to replace
 
 ### Market Info

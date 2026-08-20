@@ -1326,16 +1326,27 @@ class XmlGenerationService:
             )
 
         post_record = self.projection_builder.build_device_record(record)
+        parent_registered = self.testing_state_store.has_successful_basic_udi_post(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            basic_udi_di=post_record.basic_identifier_code,
+        )
+        xml_record = (
+            self.projection_builder.build_udidi_post_record(post_record)
+            if parent_registered
+            else post_record
+        )
+        message_type = "UDI_DI.POST" if parent_registered else "DEVICE.POST"
         patch_state_resolution = self.testing_state_store.latest_successful_patch_state(
             product_family=record.product_family,
             product_variant=record.product_variant,
             catalogue_number=post_record.catalogue_number,
         )
-        post_xml_bytes = self.renderer.render_message(post_record)
+        post_xml_bytes = self.renderer.render_message(xml_record)
         post_file_name = self.package_builder.operation_file_name(
             product_family=record.product_family,
             product_variant=record.product_variant,
-            operation="POST",
+            operation="UDIDI-POST" if parent_registered else "POST",
             catalogue_number=post_record.catalogue_number,
         )
         self.testing_state_store.mark_reviewed_post(
@@ -1349,6 +1360,7 @@ class XmlGenerationService:
             product_variant=record.product_variant,
             catalogue_number=post_record.catalogue_number,
             primary_udi_di=post_record.primary_udi_di,
+            message_type=message_type,
             registered_device_anchor=registered_device_anchor,
             latest_successful_patch_state=patch_state_resolution.state if patch_state_resolution else None,
             latest_successful_patch_scenario_id=patch_state_resolution.scenario_id if patch_state_resolution else None,
@@ -1834,7 +1846,7 @@ class XmlGenerationService:
         )
         manifest = {
             "mode": preview.mode,
-            "message_type": "DEVICE.POST",
+            "message_type": preview.message_type,
             "product_family": preview.product_family,
             "product_variant": preview.product_variant,
             "catalogue_number": preview.catalogue_number,

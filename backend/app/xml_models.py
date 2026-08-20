@@ -59,6 +59,7 @@ class PostRegistrationPreview(BaseModel):
     product_variant: str | None = None
     catalogue_number: str
     primary_udi_di: str
+    message_type: str = "DEVICE.POST"
     registered_device_anchor: RegisteredDeviceAnchor
     latest_successful_patch_state: PatchStateSnapshot | None = None
     latest_successful_patch_scenario_id: str | None = None
