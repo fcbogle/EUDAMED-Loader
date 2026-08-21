@@ -2265,6 +2265,7 @@ export function App() {
 
     let cancelled = false;
     setIsLoadingXmlOperationAssessment(true);
+    setXmlOperationAssessment(null);
     setXmlOperationAssessmentError(null);
 
     void (async () => {

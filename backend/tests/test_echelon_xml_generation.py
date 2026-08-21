@@ -266,6 +266,20 @@ def test_next_valid_post_record_blocks_when_parent_exists(monkeypatch) -> None:
     assert selected_record.catalogue_number == "EL22-24-1KIT-S"
 
 
+def test_preview_next_post_registration_honours_grouped_family_label_for_registered_state() -> None:
+    service = XmlGenerationService()
+
+    preview = service.preview_next_post_registration(
+        product_family="Epirus / Esprit",
+        product_variant="Esprit",
+    )
+
+    assert preview.message_type == "UDI_DI.POST"
+    assert preview.catalogue_number == "ESP22L1SD"
+    assert preview.product_family == "Epirus / Esprit"
+    assert preview.product_variant == "Esprit"
+
+
 def basicUdiDiForRecordForTest(record: CanonicalValidationRecord) -> str | None:
     for field in record.fields:
         if field.canonical_path in {"basic_device.basic_udi_di", "device_record.basic_udi_identifier"} and field.value:

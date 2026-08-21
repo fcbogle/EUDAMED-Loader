@@ -71,12 +71,13 @@ class TestingStateStore:
         product_variant: str,
         basic_udi_di: str,
     ) -> list[dict[str, object]]:
+        family_clause, family_params = self._family_match_clause(product_family, table_name="testing_subjects")
         with self._connect() as connection:
             rows = connection.execute(
-                """
+                f"""
                 SELECT catalogue_number, primary_udi_di, basic_udi_di, latest_successful_version, baseline_patch_success
                 FROM testing_subjects
-                WHERE normalized_product_family = ?
+                WHERE {family_clause}
                   AND normalized_product_variant = ?
                   AND normalized_basic_udi_di = ?
                   AND post_success = 1
@@ -90,7 +91,7 @@ class TestingStateStore:
                 ORDER BY id
                 """,
                 (
-                    self._normalize_identity(product_family),
+                    *family_params,
                     self._normalize_identity(product_variant),
                     self._normalize_identity(basic_udi_di),
                 ),
@@ -112,12 +113,13 @@ class TestingStateStore:
         product_family: str,
         product_variant: str,
     ) -> list[dict[str, object]]:
+        family_clause, family_params = self._family_match_clause(product_family, table_name="testing_subjects")
         with self._connect() as connection:
             rows = connection.execute(
-                """
+                f"""
                 SELECT basic_udi_di, COUNT(*) AS posted_child_count
                 FROM testing_subjects
-                WHERE normalized_product_family = ?
+                WHERE {family_clause}
                   AND normalized_product_variant = ?
                   AND post_success = 1
                   AND basic_udi_di IS NOT NULL
@@ -132,7 +134,7 @@ class TestingStateStore:
                 ORDER BY MIN(id)
                 """,
                 (
-                    self._normalize_identity(product_family),
+                    *family_params,
                     self._normalize_identity(product_variant),
                 ),
             ).fetchall()
@@ -142,10 +144,10 @@ class TestingStateStore:
                 if not basic_udi_di:
                     continue
                 sample_rows = connection.execute(
-                    """
+                    f"""
                     SELECT catalogue_number
                     FROM testing_subjects
-                    WHERE normalized_product_family = ?
+                    WHERE {family_clause}
                       AND normalized_product_variant = ?
                       AND normalized_basic_udi_di = ?
                       AND post_success = 1
@@ -160,7 +162,7 @@ class TestingStateStore:
                     LIMIT 10
                     """,
                     (
-                        self._normalize_identity(product_family),
+                        *family_params,
                         self._normalize_identity(product_variant),
                         self._normalize_identity(basic_udi_di),
                     ),
@@ -185,12 +187,13 @@ class TestingStateStore:
         product_variant: str,
         basic_udi_di: str,
     ) -> bool:
+        family_clause, family_params = self._family_match_clause(product_family, table_name="testing_subjects")
         with self._connect() as connection:
             row = connection.execute(
-                """
+                f"""
                 SELECT 1
                 FROM testing_subjects
-                WHERE normalized_product_family = ?
+                WHERE {family_clause}
                   AND normalized_product_variant = ?
                   AND normalized_basic_udi_di = ?
                   AND EXISTS (
@@ -203,7 +206,7 @@ class TestingStateStore:
                 LIMIT 1
                 """,
                 (
-                    self._normalize_identity(product_family),
+                    *family_params,
                     self._normalize_identity(product_variant),
                     self._normalize_identity(basic_udi_di),
                 ),
@@ -217,12 +220,13 @@ class TestingStateStore:
         product_variant: str,
         primary_udi_di: str,
     ) -> bool:
+        family_clause, family_params = self._family_match_clause(product_family, table_name="testing_subjects")
         with self._connect() as connection:
             row = connection.execute(
-                """
+                f"""
                 SELECT 1
                 FROM testing_subjects
-                WHERE normalized_product_family = ?
+                WHERE {family_clause}
                   AND normalized_product_variant = ?
                   AND normalized_primary_udi_di = ?
                   AND EXISTS (
@@ -235,7 +239,7 @@ class TestingStateStore:
                 LIMIT 1
                 """,
                 (
-                    self._normalize_identity(product_family),
+                    *family_params,
                     self._normalize_identity(product_variant),
                     self._normalize_identity(primary_udi_di),
                 ),
@@ -291,18 +295,19 @@ class TestingStateStore:
         product_variant: str,
         catalogue_number: str,
     ) -> bool:
+        family_clause, family_params = self._family_match_clause(product_family, table_name="reviewed_post_baselines")
         with self._connect() as connection:
             row = connection.execute(
-                """
+                f"""
                 SELECT 1
                 FROM reviewed_post_baselines
-                WHERE normalized_product_family = ?
+                WHERE {family_clause}
                   AND normalized_product_variant = ?
                   AND normalized_catalogue_number = ?
                 LIMIT 1
                 """,
                 (
-                    self._normalize_identity(product_family),
+                    *family_params,
                     self._normalize_identity(product_variant),
                     self._normalize_identity(catalogue_number),
                 ),
@@ -452,18 +457,19 @@ class TestingStateStore:
         product_variant: str,
         catalogue_number: str,
     ) -> sqlite3.Row | None:
+        family_clause, family_params = self._family_match_clause(product_family, table_name="testing_subjects")
         with self._connect() as connection:
             return connection.execute(
-                """
+                f"""
                 SELECT *
                 FROM testing_subjects
-                WHERE normalized_product_family = ?
+                WHERE {family_clause}
                   AND normalized_product_variant = ?
                   AND normalized_catalogue_number = ?
                 LIMIT 1
                 """,
                 (
-                    self._normalize_identity(product_family),
+                    *family_params,
                     self._normalize_identity(product_variant),
                     self._normalize_identity(catalogue_number),
                 ),
@@ -557,11 +563,11 @@ class TestingStateStore:
         catalogue_number: str | None,
         primary_udi_di: str | None,
     ) -> int | None:
-        normalized_family = self._normalize_identity(product_family)
+        normalized_family_candidates = self._normalized_family_candidates(product_family)
         normalized_variant = self._normalize_identity(product_variant)
         normalized_catalogue = self._normalize_identity(catalogue_number)
         normalized_primary = self._normalize_identity(primary_udi_di)
-        if not (normalized_family and normalized_variant and normalized_catalogue):
+        if not (normalized_family_candidates and normalized_variant and normalized_catalogue):
             return None
         if not self._table_exists(connection, "device_subject"):
             return None
@@ -576,7 +582,7 @@ class TestingStateStore:
         exact_primary_matches: list[int] = []
         fallback_matches: list[int] = []
         for row in rows:
-            if self._normalize_identity(row["product_family"]) != normalized_family:
+            if self._normalize_identity(row["product_family"]) not in normalized_family_candidates:
                 continue
             if self._normalize_identity(row["product_variant"]) != normalized_variant:
                 continue
@@ -608,6 +614,31 @@ class TestingStateStore:
         left_normalized = cls._normalize_identity(left)
         right_normalized = cls._normalize_identity(right)
         return bool(left_normalized and right_normalized and left_normalized == right_normalized)
+
+    @classmethod
+    def _normalized_family_candidates(cls, product_family: object) -> tuple[str, ...]:
+        normalized_full = cls._normalize_identity(product_family)
+        if not normalized_full:
+            return ()
+        candidates = {normalized_full}
+        family_text = cls._optional_string(product_family)
+        if family_text and "/" in family_text:
+            candidates.update(
+                cls._normalize_identity(part)
+                for part in family_text.split("/")
+                if cls._normalize_identity(part)
+            )
+        return tuple(sorted(candidates))
+
+    @classmethod
+    def _family_match_clause(cls, product_family: object, *, table_name: str) -> tuple[str, tuple[str, ...]]:
+        family_candidates = cls._normalized_family_candidates(product_family)
+        if not family_candidates:
+            return f"{table_name}.normalized_product_family = ''", ()
+        if len(family_candidates) == 1:
+            return f"{table_name}.normalized_product_family = ?", family_candidates
+        placeholders = ", ".join("?" for _ in family_candidates)
+        return f"{table_name}.normalized_product_family IN ({placeholders})", family_candidates
 
     @classmethod
     def _normalize_identity(cls, value: object) -> str:

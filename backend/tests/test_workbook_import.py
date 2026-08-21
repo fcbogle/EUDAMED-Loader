@@ -1093,6 +1093,66 @@ def test_operation_assessment_routes_report_single_post_and_bulk_post_availabili
     assert bulk_payload["evidence"]["eligible_child_record_count"] == 0
 
 
+def test_operation_assessment_accepts_grouped_family_labels_for_registered_post_state(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    promotions = {
+        ("synthetic.xlsx", "Esprit", 2): {
+            "product_family": "Epirus / Esprit",
+            "product_variant": "Esprit",
+            "catalogue_number": "ESP22L1S",
+            "primary_udi_di": "05050649058189",
+            "submission_operation": "POST",
+            "basic_udi_di": "5050649ESPRITVZ",
+            "canonical_status": "xml_ready",
+        }
+    }
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_validation_bundle",
+        lambda self: _synthetic_validation_bundle_from_promotions(promotions),
+    )
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L1S",
+        primary_udi_di="05050649058189",
+        basic_udi_di="5050649ESPRITVZ",
+        post_success=1,
+        latest_successful_version="2",
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=subject_id,
+        event_index=0,
+        message_type="DEVICE.POST",
+        status="SUCCESS",
+        version="1",
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=subject_id,
+        event_index=1,
+        message_type="UDI_DI.PATCH",
+        status="SUCCESS",
+        version="2",
+    )
+
+    payload = assess_single_post({"product_family": "Epirus / Esprit", "product_variant": "Esprit"})
+
+    assert payload["operation_type"] == "single_post"
+    assert payload["status"] == "blocked"
+    assert payload["summary_message"] == (
+        "The Basic UDI-DI is already registered and no further Device UDI-DI POST candidates are currently "
+        "available for this family and variant."
+    )
+    assert payload["evidence"]["parent_registration_known"] is True
+    assert payload["evidence"]["child_registration_known"] is True
+
+
 def test_operation_assessment_routes_report_single_patch_availability_from_sqlite_state(
     isolated_workbook_import_db: Path,
     monkeypatch: pytest.MonkeyPatch,
