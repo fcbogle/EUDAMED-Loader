@@ -100,6 +100,14 @@ type BulkExclusionSummary = {
   detail: string;
 };
 
+type XmlStructureSection = {
+  id: string;
+  label: string;
+  detail: string;
+  lineStart: number;
+  lineEnd: number;
+};
+
 const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
   {
     id: "equivalent_first_patch",
@@ -981,6 +989,104 @@ function assessmentEvidenceStringArray(assessment: OperationAssessment | null, k
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
+function extractXmlStructureSections(xml: string): XmlStructureSection[] {
+  const lines = xml.split("\n");
+  const markers: Array<{ match: (line: string) => boolean; label: string; detail: string }> = [
+    {
+      match: (line) => line.includes("<m:Push"),
+      label: "Message envelope",
+      detail: "Push wrapper, correlation, message, and service metadata.",
+    },
+    {
+      match: (line) => line.includes("<m:recipient>"),
+      label: "Recipient and service",
+      detail: "EUDAMED node routing and service operation details.",
+    },
+    {
+      match: (line) => line.includes("<m:payload>"),
+      label: "Payload root",
+      detail: "Start of the DEVICE.POST payload.",
+    },
+    {
+      match: (line) => line.includes("<device:UDIDIData"),
+      label: "Device registration",
+      detail: "Top-level UDI-DI registration object.",
+    },
+    {
+      match: (line) => line.includes("<udidi:identifier>"),
+      label: "Device UDI-DI",
+      detail: "Primary device identifier and issuing entity.",
+    },
+    {
+      match: (line) => line.includes("<udidi:basicUDIIdentifier>"),
+      label: "Basic UDI-DI parent",
+      detail: "Parent family or variant registration identity.",
+    },
+    {
+      match: (line) => line.includes("<udidi:status>") || line.includes("<e:state>"),
+      label: "Registration and market state",
+      detail: "Registration status and on-market state values.",
+    },
+    {
+      match: (line) => line.includes("<udidi:MDNCodes>") || line.includes("<udidi:deviceClassification>"),
+      label: "Classification",
+      detail: "Classification fields such as MDN and related metadata.",
+    },
+    {
+      match: (line) => line.includes("<udidi:tradeName>") || line.includes("<udidi:tradeNames>") || line.includes("<udidi:deviceName>"),
+      label: "Commercial presentation",
+      detail: "Trade names and user-facing device naming.",
+    },
+    {
+      match: (line) => line.includes("<udidi:referenceNumber>") || line.includes("<udidi:productionIdentifier>"),
+      label: "Reference and production identifiers",
+      detail: "Catalogue, reference, and production identifier content.",
+    },
+    {
+      match: (line) => line.includes("<udidi:description>") || line.includes("<udidi:intendedPurpose>") || line.includes("<udidi:additionalDescription>"),
+      label: "Description and intended use",
+      detail: "Narrative description and intended-purpose text.",
+    },
+    {
+      match: (line) => line.includes("<udidi:criticalWarnings>") || line.includes("<udidi:storageHandlingConditions>") || line.includes("<udidi:singleUse>"),
+      label: "Warnings and handling",
+      detail: "Warnings, storage handling, and use-condition fields.",
+    },
+  ];
+
+  const starts = markers
+    .map((marker, index) => {
+      const lineStart = lines.findIndex((line) => marker.match(line));
+      return lineStart < 0
+        ? null
+        : {
+            id: `xml-structure-${index}`,
+            label: marker.label,
+            detail: marker.detail,
+            lineStart,
+          };
+    })
+    .filter((marker): marker is { id: string; label: string; detail: string; lineStart: number } => marker !== null)
+    .sort((left, right) => left.lineStart - right.lineStart);
+
+  if (starts.length < 1) {
+    return [
+      {
+        id: "xml-structure-empty",
+        label: "Preview pending",
+        detail: "Generate a POST preview to inspect the XML structure.",
+        lineStart: 0,
+        lineEnd: Math.max(lines.length - 1, 0),
+      },
+    ];
+  }
+
+  return starts.map((section, index) => ({
+    ...section,
+    lineEnd: (starts[index + 1]?.lineStart ?? lines.length) - 1,
+  }));
+}
+
 export function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("workbooks");
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
@@ -1059,6 +1165,7 @@ export function App() {
   const [xmlMarketInfoPreview, setXmlMarketInfoPreview] = useState<MarketInfoPutPreview | null>(null);
   const [xmlPatchPreview, setXmlPatchPreview] = useState<GeneratedPatchScenarioPreview | null>(null);
   const [xmlBulkPatchPreview, setXmlBulkPatchPreview] = useState<BulkPatchPreview | null>(null);
+  const [selectedPostXmlSectionId, setSelectedPostXmlSectionId] = useState<string | null>(null);
   const [patchPreviewView, setPatchPreviewView] = useState<"base" | "derived">("derived");
   const [patchVersionInput, setPatchVersionInput] = useState<string>("3");
   const [patchTradeNameInput, setPatchTradeNameInput] = useState<string>("");
@@ -2143,6 +2250,8 @@ export function App() {
   const assessedPatchTrackedRegistration = assessmentEvidenceBoolean(xmlOperationAssessment, "tracked_registration_known");
   const assessedPostParentRegistrationKnown = assessmentEvidenceBoolean(xmlOperationAssessment, "parent_registration_known");
   const assessedPostCandidateCatalogueNumber = assessmentEvidenceString(xmlOperationAssessment, "candidate_catalogue_number");
+  const assessedPostCandidatePrimaryUdiDi = assessmentEvidenceString(xmlOperationAssessment, "candidate_primary_udi_di");
+  const hasResolvedPostAssessmentCandidate = Boolean(assessedPostCandidateCatalogueNumber || assessedPostCandidatePrimaryUdiDi);
   const selectedPostCandidateRecord =
     (assessedPostCandidateCatalogueNumber
       ? selectedXmlVariantRecords.find((record) => record.catalogue_number === assessedPostCandidateCatalogueNumber)
@@ -2860,6 +2969,12 @@ export function App() {
           `<record-count>${normalizedBulkRecordCount}</record-count>`,
           `<chunk-sequence>${selectedXmlChunkSequence}</chunk-sequence>`,
         ].join("\n");
+  const postXmlStructureSections = xmlMode === "post" ? extractXmlStructureSections(xmlPreviewLines) : [];
+  const selectedPostXmlSection =
+    xmlMode === "post"
+      ? postXmlStructureSections.find((section) => section.id === selectedPostXmlSectionId) ?? postXmlStructureSections[0] ?? null
+      : null;
+  const postXmlPreviewLineRefs = useRef<Record<number, HTMLSpanElement | null>>({});
   const selectedBatchValidation =
     xmlMode === "post"
       ? xmlPairPreview?.post_validation ?? null
@@ -2929,7 +3044,7 @@ export function App() {
               : "Bulk PATCH Workspace";
   const xmlAssessmentTitle =
     xmlMode === "post"
-      ? "POST assessment"
+      ? "POST Assessment"
       : xmlMode === "patch"
         ? "PATCH assessment"
         : xmlMode === "bulkPost"
@@ -3086,9 +3201,29 @@ export function App() {
             ? Boolean(hasReviewedPatchBaselinePost && hasReviewedGeneratedPatchPreview)
             : xmlMode === "bulkPost"
               ? canRunBulkPostFromAssessment
-              : xmlMode === "bulkUdidiPost"
-                ? canRunBulkUdidiPostFromAssessment
-                : canRunBulkPatchFromAssessment;
+            : xmlMode === "bulkUdidiPost"
+              ? canRunBulkUdidiPostFromAssessment
+              : canRunBulkPatchFromAssessment;
+  useEffect(() => {
+    if (xmlMode !== "post") {
+      return;
+    }
+    if (postXmlStructureSections.length < 1) {
+      setSelectedPostXmlSectionId(null);
+      return;
+    }
+    if (!selectedPostXmlSectionId || !postXmlStructureSections.some((section) => section.id === selectedPostXmlSectionId)) {
+      setSelectedPostXmlSectionId(postXmlStructureSections[0].id);
+    }
+  }, [xmlMode, postXmlStructureSections, selectedPostXmlSectionId]);
+
+  useEffect(() => {
+    if (xmlMode !== "post" || !selectedPostXmlSection) {
+      return;
+    }
+    const targetLine = postXmlPreviewLineRefs.current[selectedPostXmlSection.lineStart];
+    targetLine?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [xmlMode, selectedPostXmlSection]);
   const profileColumns = sheetProfile?.columns ?? [];
   const highNullColumns = profileColumns.filter((column) => {
     if (!sheetProfile?.data_rows) {
@@ -4468,50 +4603,164 @@ export function App() {
         ) : (
         <section className="tab-stack">
           <section className="summary-grid">
-            <div className="summary-card">
+            <div className="summary-card summary-card-kpi summary-card-kpi-primary">
               <span className="summary-label">Validated rows</span>
               <strong>{xmlValidationRecords.length}</strong>
               <p>Rows available from the current Canonical Validation workspace.</p>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-kpi summary-card-kpi-post">
               <span className="summary-label">XML-ready rows</span>
               <strong>{xmlReadyRecords.length}</strong>
               <p>Rows currently eligible for EUDAMED XML generation workflows.</p>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-kpi summary-card-kpi-warn">
               <span className="summary-label">Blocked rows</span>
               <strong>{xmlBlockedRecords.length}</strong>
               <p>Rows that would need canonical validation fixes before XML generation should include them.</p>
             </div>
-            <div className="summary-card">
+            <div
+              className={`summary-card summary-card-kpi ${
+                xmlMode === "patch" || xmlMode === "bulkPatch"
+                  ? "summary-card-kpi-patch"
+                  : xmlMode === "post" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost"
+                    ? "summary-card-kpi-post"
+                    : "summary-card-kpi-secondary"
+              }`}
+            >
               <span className="summary-label">Current mode</span>
               <strong>{xmlModeLabel}</strong>
               <p>{xmlModeDescription}</p>
             </div>
           </section>
 
+          {(() => {
+            const xmlOperationSummary = (() => {
+              if (xmlMode === "post") {
+                return {
+                  count: xmlOperationAssessment?.eligible_record_count ?? (selectedPostWorkspaceRecord ? 1 : 0),
+                  noun: "POST candidate",
+                };
+              }
+              if (xmlMode === "patch") {
+                return {
+                  count: xmlOperationAssessment?.eligible_record_count ?? (selectedXmlRecord ? 1 : 0),
+                  noun: "PATCH candidate",
+                };
+              }
+              if (xmlMode === "bulkPost") {
+                return {
+                  count: assessedUnpostedParentGroupCount ?? selectedBulkUnpostedBasicUdiCount,
+                  noun: "parent POST group",
+                };
+              }
+              if (xmlMode === "bulkUdidiPost") {
+                return {
+                  count: assessedBulkChildRecordCount ?? selectedBulkEligibleUdidiPostCount,
+                  noun: "child POST record",
+                };
+              }
+              if (xmlMode === "bulkPatch") {
+                return {
+                  count: xmlOperationAssessment?.eligible_record_count ?? selectedBulkPatchSelectedCount,
+                  noun: "PATCH record",
+                };
+              }
+              return {
+                count: xmlReadyRecords.length,
+                noun: "XML-ready row",
+              };
+            })();
+            const xmlScopeSummary = (() => {
+              if (xmlMode === "post") {
+                return {
+                  count: selectedBulkEligiblePostCount,
+                  noun: "POST row in variant",
+                };
+              }
+              if (xmlMode === "patch") {
+                return {
+                  count: selectedXmlVariantSummary?.xml_ready_records ?? 0,
+                  noun: "XML-ready row in variant",
+                };
+              }
+              if (xmlMode === "bulkPost") {
+                return {
+                  count: selectedBulkEligiblePostCount,
+                  noun: "POST row in variant",
+                };
+              }
+              if (xmlMode === "bulkUdidiPost") {
+                return {
+                  count: selectedBulkEligibleUdidiPostCount,
+                  noun: "eligible child row in variant",
+                };
+              }
+              if (xmlMode === "bulkPatch") {
+                return {
+                  count: selectedBulkPatchEligibleCount,
+                  noun: "posted row in scope",
+                };
+              }
+              return {
+                count: xmlReadyRecords.length,
+                noun: "XML-ready row",
+              };
+            })();
+
+            const xmlWorkspaceStatus =
+              isOperationAssessmentMode && xmlOperationAssessment
+                ? {
+                    label:
+                      xmlOperationAssessment.status === "available"
+                        ? "Ready"
+                        : xmlOperationAssessment.status === "attention"
+                          ? "Warning"
+                          : "Blocked",
+                    className:
+                      xmlOperationAssessment.status === "available"
+                        ? "ok"
+                        : xmlOperationAssessment.status === "attention"
+                          ? "warn"
+                          : "danger",
+                    detail: `${xmlOperationSummary.count} ${xmlOperationSummary.count === 1 ? "next" : ""} ${xmlOperationSummary.noun}${xmlOperationSummary.count === 1 ? "" : "s"}`.replace("  ", " "),
+                  }
+                : xmlReadyRecords.length === 0
+                  ? { label: "Blocked", className: "danger", detail: "No XML-ready rows" }
+                  : xmlBlockedRecords.length > 0
+                    ? { label: "Warning", className: "warn", detail: `${xmlBlockedRecords.length} excluded row${xmlBlockedRecords.length === 1 ? "" : "s"}` }
+                    : { label: "Ready", className: "ok", detail: `${xmlReadyRecords.length} XML-ready row${xmlReadyRecords.length === 1 ? "" : "s"}` };
+
+            return (
           <section className="panel scope-banner-panel">
-            <div className="section-heading">
+            <div className="device-subject-summary-head">
               <div>
-                <span className="section-kicker">Dependency Gate</span>
-                <h2>EUDAMED Testing Depends On Canonical Validation</h2>
+                <span className="section-kicker">Validation Status</span>
+                <strong>
+                  {selectedXmlVariantSummary
+                    ? `${selectedXmlFamilySummary?.product_family ?? "No family selected"} / ${selectedXmlVariantSummary.product_variant}`
+                    : selectedXmlFamilySummary?.product_family ?? "XML workspace"}
+                </strong>
+                <p className="panel-copy">
+                  The selected {xmlModeLabel} operation is summarised below with the next recommended action and the current family/variant scope.
+                </p>
               </div>
-              <span className={xmlReadyRecords.length ? "status-pill ok compact" : "status-pill warn compact"}>
-                {xmlReadyRecords.length ? "Validation-ready records available" : "Validation gate not yet met"}
-              </span>
+              <div className="operation-summary-pill-row">
+                <span className={`status-pill ${xmlWorkspaceStatus.className} compact`}>
+                  {xmlWorkspaceStatus.label} · {xmlWorkspaceStatus.detail}
+                </span>
+                <span className="status-pill ok compact">
+                  In scope · {xmlScopeSummary.count} {xmlScopeSummary.noun}{xmlScopeSummary.count === 1 ? "" : "s"}
+                </span>
+              </div>
             </div>
-            <p className="panel-copy">
-              This workspace now consumes the aligned Canonical Validation output. Select a product family,
-              product variant, and then generate either a registered-device message or a variant-scoped batch package.
-            </p>
-            <div className="queue-summary">
+            <div className="device-subject-metric-grid">
               <div className="queue-chip">
-                <strong>{canonicalValidation?.family_scope ?? "Loading scope"}</strong>
-                <span>generation scope</span>
+                <strong>{xmlOperationSummary.count}</strong>
+                <span>next-action count</span>
               </div>
               <div className="queue-chip">
-                <strong>{xmlFamilySummaries.length}</strong>
-                <span>families in scope</span>
+                <strong>{xmlScopeSummary.count}</strong>
+                <span>rows in scope</span>
               </div>
               <div className="queue-chip">
                 <strong>{selectedXmlVariantSummaries.length}</strong>
@@ -4519,10 +4768,12 @@ export function App() {
               </div>
               <div className="queue-chip">
                 <strong>{xmlBlockedRecords.length}</strong>
-                <span>rows excluded until resolved</span>
+                <span>{xmlBlockedRecords.length ? "excluded rows" : "rows excluded"}</span>
               </div>
             </div>
           </section>
+            );
+          })()}
 
           <section className="content-grid validation-layout xml-selection-grid">
             <div className="panel validation-equal-panel validation-summary-panel">
@@ -4595,50 +4846,63 @@ export function App() {
               </div>
             </div>
             <div className="xml-header-band">
-              <div className="xml-mode-toggle xml-top-tabs">
-                <button
-                  className={xmlMode === "post" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                  type="button"
-                  onClick={() => setXmlMode("post")}
-                >
-                  POST
-                </button>
-                <button
-                  className={xmlMode === "patch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                  type="button"
-                  onClick={() => setXmlMode("patch")}
-                >
-                  Patch XML
-                </button>
-                <button
-                  className={xmlMode === "marketInfo" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                  type="button"
-                  onClick={() => setXmlMode("marketInfo")}
-                >
-                  Market Info
-                </button>
-                <span className="xml-mode-divider" aria-hidden="true" />
-                <button
-                  className={xmlMode === "bulkPost" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                  type="button"
-                  onClick={() => setXmlMode("bulkPost")}
-                >
-                  Bulk Basic UDI POST
-                </button>
-                <button
-                  className={xmlMode === "bulkUdidiPost" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                  type="button"
-                  onClick={() => setXmlMode("bulkUdidiPost")}
-                >
-                  Bulk UDI-DI POST
-                </button>
-                <button
-                  className={xmlMode === "bulkPatch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                  type="button"
-                  onClick={() => setXmlMode("bulkPatch")}
-                >
-                  Bulk PATCH
-                </button>
+              <div className="xml-mode-groups">
+                <div className="xml-mode-group">
+                  <div className="xml-mode-group-head">
+                    <span className="section-kicker">Single device</span>
+                  </div>
+                  <div className="xml-mode-toggle xml-top-tabs">
+                    <button
+                      className={xmlMode === "post" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                      type="button"
+                      onClick={() => setXmlMode("post")}
+                    >
+                      Single POST
+                    </button>
+                    <button
+                      className={xmlMode === "patch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                      type="button"
+                      onClick={() => setXmlMode("patch")}
+                    >
+                      Single PATCH
+                    </button>
+                    <button
+                      className={xmlMode === "marketInfo" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                      type="button"
+                      onClick={() => setXmlMode("marketInfo")}
+                    >
+                      Market Info
+                    </button>
+                  </div>
+                </div>
+                <div className="xml-mode-group">
+                  <div className="xml-mode-group-head">
+                    <span className="section-kicker">Multiple devices</span>
+                  </div>
+                  <div className="xml-mode-toggle xml-top-tabs">
+                    <button
+                      className={xmlMode === "bulkUdidiPost" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                      type="button"
+                      onClick={() => setXmlMode("bulkUdidiPost")}
+                    >
+                      Bulk POST
+                    </button>
+                    <button
+                      className={xmlMode === "bulkPatch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                      type="button"
+                      onClick={() => setXmlMode("bulkPatch")}
+                    >
+                      Bulk PATCH
+                    </button>
+                    <button
+                      className={xmlMode === "marketInfo" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+                      type="button"
+                      onClick={() => setXmlMode("marketInfo")}
+                    >
+                      Market Info
+                    </button>
+                  </div>
+                </div>
               </div>
               <div className="xml-header-context">
                 <div className="xml-header-context-block">
@@ -4836,22 +5100,96 @@ export function App() {
                   </span>
                 </div>
                 <div className="bulk-patch-summary-row">
-                  <div className="bulk-patch-summary-metrics">
-                    {xmlAssessmentSummaryRows.map((row) => (
-                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile" key={row.label}>
-                        <strong>{row.label}</strong>
-                        <span>{row.value}</span>
+                  {xmlMode === "post" && xmlOperationAssessment ? (
+                    <div className="post-assessment-layout">
+                      <div className="post-assessment-hero">
+                        {hasResolvedPostAssessmentCandidate ? (
+                          <div className="post-assessment-hero-row">
+                            <div className="post-assessment-hero-item">
+                              <span className="summary-label">Candidate</span>
+                              <strong>{assessedPostCandidateCatalogueNumber ?? "Not resolved"}</strong>
+                            </div>
+                            <div className="post-assessment-hero-item post-assessment-hero-item-secondary">
+                              <span className="summary-label">Device UDI-DI</span>
+                              <strong>{assessedPostCandidatePrimaryUdiDi ?? "Not resolved"}</strong>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="post-assessment-empty-state">
+                            <span className="summary-label">Selected scope</span>
+                            <strong>
+                              {selectedXmlFamilySummary?.product_family ?? "No family selected"} / {selectedXmlVariantSummary?.product_variant ?? "No variant selected"}
+                            </strong>
+                            <p className="panel-copy">
+                              No POST candidate could be resolved from the current canonical validation and tracked SQLite testing state.
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
+                      {hasResolvedPostAssessmentCandidate ? (
+                        <div className="post-assessment-chip-row">
+                          {xmlAssessmentSummaryRows.map((row) => (
+                            <div
+                              className={
+                                row.value === "Not yet registered"
+                                  ? "queue-chip post-assessment-chip post-assessment-chip-highlight"
+                                  : "queue-chip post-assessment-chip"
+                              }
+                              key={row.label}
+                            >
+                              <strong>{row.value}</strong>
+                              <span>{row.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="post-assessment-chip-row">
+                          <div className="queue-chip post-assessment-chip">
+                            <strong>{selectedBulkEligiblePostCount}</strong>
+                            <span>POST rows in variant</span>
+                          </div>
+                          <div className="queue-chip post-assessment-chip">
+                            <strong>{selectedXmlVariantSummary?.xml_ready_records ?? 0}</strong>
+                            <span>XML-ready rows in variant</span>
+                          </div>
+                          <div className="queue-chip post-assessment-chip">
+                            <strong>{selectedXmlVariantSummary?.xml_blocked_records ?? 0}</strong>
+                            <span>blocked rows in variant</span>
+                          </div>
+                          <div className="queue-chip post-assessment-chip">
+                            <strong>{selectedXmlVariantSummary?.total_records ?? 0}</strong>
+                            <span>total rows in variant</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bulk-patch-summary-metrics">
+                      {xmlAssessmentSummaryRows.map((row) => (
+                        <div className="workflow-note patch-readiness-note bulk-patch-summary-tile" key={row.label}>
+                          <strong>{row.label}</strong>
+                          <span>{row.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <p className="panel-copy bulk-patch-summary-status">
-                  {isLoadingXmlOperationAssessment
-                    ? "Checking the selected operation against current canonical validation and tracked SQLite testing state."
-                    : xmlOperationAssessment?.summary_message ??
-                      xmlOperationAssessmentError ??
-                      "Operation assessment is not available for this selection."}
-                </p>
+                {xmlMode === "post" && xmlOperationAssessment ? (
+                  <div className="post-assessment-interpretation">
+                    <strong>Interpretation</strong>
+                    <p>
+                      {xmlOperationAssessment.summary_message}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="panel-copy bulk-patch-summary-status">
+                    {isLoadingXmlOperationAssessment
+                      ? "Checking the selected operation against current canonical validation and tracked SQLite testing state."
+                      : xmlOperationAssessment?.summary_message ??
+                        xmlOperationAssessmentError ??
+                        "Operation assessment is not available for this selection."}
+                  </p>
+                )}
                 {xmlOperationAssessment?.blocking_reasons.length ? (
                   <div className="roadmap-list">
                     {xmlOperationAssessment.blocking_reasons.map((reason, index) => (
@@ -4863,7 +5201,7 @@ export function App() {
                   </div>
                 ) : null}
                 {xmlOperationAssessment?.recommended_next_action ? (
-                  <div className="workflow-note">
+                  <div className={xmlMode === "post" ? "workflow-note post-assessment-action" : "workflow-note"}>
                     <strong>Recommended next action</strong>
                     <span>{xmlOperationAssessment.recommended_next_action}</span>
                   </div>
@@ -4875,15 +5213,140 @@ export function App() {
                 <span>Market Info operational assessment is deferred and is not yet driven by the new backend contract.</span>
               </div>
             ) : null}
+            {xmlMode === "post" ? (
+              <div className="post-preview-card">
+                <div className="post-preview-layout">
+                  <div className="post-preview-topbar">
+                    <div className="post-preview-title-block">
+                      <h2>POST Preview</h2>
+                    </div>
+                    <div className="draft-actions-bar xml-actions-bar post-actions-bar">
+                      <button
+                        className="action-button"
+                        type="button"
+                        onClick={() => void generateXmlPreview()}
+                        disabled={!canGenerateCurrentXml || isGeneratingXml}
+                      >
+                        {isGeneratingXml ? "Generating..." : "Generate POST"}
+                      </button>
+                      <button
+                        className="ghost-button post-secondary-action"
+                        type="button"
+                        onClick={() => void generateXmlPreview()}
+                        disabled={!canGenerateCurrentXml || isGeneratingXml}
+                      >
+                        Validate Against XSD
+                      </button>
+                      <button
+                        className="ghost-button post-tertiary-action"
+                        type="button"
+                        onClick={() => void downloadXmlRecord()}
+                        disabled={!canDownloadCurrentXml || isGeneratingXml}
+                      >
+                        Download POST ZIP
+                      </button>
+                      {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
+                    </div>
+                  </div>
+                  <div className="post-preview-summary-row">
+                    <div className="workflow-note post-preview-status">
+                      <strong>Preview status</strong>
+                      <span>
+                        {xmlPairPreview
+                          ? `Generated for ${xmlPairPreview.catalogue_number} · ${activePreviewLabel}`
+                          : selectedPostWorkspaceRecord
+                            ? `Awaiting preview for ${selectedPostWorkspaceRecord.catalogue_number}.`
+                            : "No available Device UDI-DI POST candidate is currently available for the selected family and variant."}
+                      </span>
+                    </div>
+                    <div className="xml-preview-meta post-preview-meta">
+                      <div className="xml-preview-meta-block">
+                        <span className="summary-label">Active view</span>
+                        <strong>{activePreviewLabel}</strong>
+                      </div>
+                      <div className="xml-preview-meta-block">
+                        <span className="summary-label">Validation</span>
+                        <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                          {validationStatusLabel}
+                        </span>
+                      </div>
+                      <div className="xml-preview-meta-block">
+                        <span className="summary-label">Schema</span>
+                        <strong>{selectedSchemaLabel ?? "Message.xsd pending"}</strong>
+                      </div>
+                      <div className="xml-preview-meta-block">
+                        <span className="summary-label">File</span>
+                        <strong>{activePreviewFileName ?? "Not generated yet"}</strong>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="post-preview-content-grid">
+                    <div className="post-preview-structure-panel">
+                      <div className="post-preview-subhead">
+                        <strong>XML structure</strong>
+                        <span>Navigate the main POST message sections.</span>
+                      </div>
+                      <div className="post-preview-structure-list">
+                        {postXmlStructureSections.map((section) => (
+                          <button
+                            key={section.id}
+                            className={selectedPostXmlSection?.id === section.id ? "post-structure-item active" : "post-structure-item"}
+                            type="button"
+                            onClick={() => setSelectedPostXmlSectionId(section.id)}
+                          >
+                            <span className="post-structure-line-range">
+                              Lines {section.lineStart + 1}-{section.lineEnd + 1}
+                            </span>
+                            <strong>{section.label}</strong>
+                            <span>{section.detail}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="post-preview-xml-panel">
+                      <div className="post-preview-subhead">
+                        <strong>Raw XML preview</strong>
+                        <span>
+                          {selectedPostXmlSection
+                            ? `Focused on ${selectedPostXmlSection.label.toLowerCase()}.`
+                            : "Inspect the generated XML payload."}
+                        </span>
+                      </div>
+                      <pre className="xml-preview-block post-preview-block">
+                        <code>
+                          {xmlPreviewLines.split("\n").map((line, index) => {
+                            const isInSelectedSection =
+                              selectedPostXmlSection !== null &&
+                              index >= selectedPostXmlSection.lineStart &&
+                              index <= selectedPostXmlSection.lineEnd;
+                            return (
+                              <span
+                                key={`post-xml-line-${index}`}
+                                ref={(element) => {
+                                  postXmlPreviewLineRefs.current[index] = element;
+                                }}
+                                className={isInSelectedSection ? "xml-preview-line xml-preview-line-highlight" : "xml-preview-line"}
+                              >
+                                <span className="xml-preview-line-number">{index + 1}</span>
+                                <span className="xml-preview-line-text">{line}</span>
+                              </span>
+                            );
+                          })}
+                        </code>
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div className={xmlMode === "bulkPatch" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" ? "xml-focus-layout bulk-patch-focus-layout" : "xml-focus-layout"}>
               <div className="xml-preview-surface">
-                <div className="section-heading xml-preview-heading">
-                  <div>
-                    <span className="section-kicker">Preview</span>
-                    <h2>
-                      {xmlMode === "post"
-                        ? "POST Preview"
-                        : xmlMode === "single"
+                <div>
+                  <div className="section-heading xml-preview-heading">
+                    <div>
+                      <span className="section-kicker">Preview</span>
+                      <h2>
+                        {xmlMode === "single"
                           ? "Single Record XML Preview"
                           : xmlMode === "marketInfo"
                             ? "Market Info Preview"
@@ -4893,61 +5356,58 @@ export function App() {
                                 ? "Bulk Basic UDI POST Preview"
                                 : xmlMode === "bulkUdidiPost"
                                   ? "Bulk UDI-DI POST Preview"
-                                : "Bulk PATCH Preview"}
-                    </h2>
-                  </div>
-                  {xmlMode === "patch" ? (
-                    <div className="xml-mode-toggle xml-sub-tabs xml-compare-toggle">
-                      <button
-                        className={patchPreviewView === "base" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
-                        type="button"
-                        onClick={() => setPatchPreviewView("base")}
-                      >
-                        Base Message
-                      </button>
-                      <button
-                        className={patchPreviewView === "derived" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
-                        type="button"
-                        onClick={() => setPatchPreviewView("derived")}
-                      >
-                        Derived Patch
-                      </button>
+                                  : "Bulk PATCH Preview"}
+                      </h2>
                     </div>
-                  ) : null}
-                </div>
-                <div className={xmlMode === "bulkPatch" || xmlMode === "bulkPost" ? "xml-preview-meta bulk-patch-preview-meta" : "xml-preview-meta"}>
-                  <div className="xml-preview-meta-block">
-                    <span className="summary-label">Active view</span>
-                    <strong>{activePreviewLabel}</strong>
+                    {xmlMode === "patch" ? (
+                      <div className="xml-mode-toggle xml-sub-tabs xml-compare-toggle">
+                        <button
+                          className={patchPreviewView === "base" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
+                          type="button"
+                          onClick={() => setPatchPreviewView("base")}
+                        >
+                          Base Message
+                        </button>
+                        <button
+                          className={patchPreviewView === "derived" ? "action-button xml-mode-button xml-compare-button active" : "ghost-button xml-mode-button xml-compare-button"}
+                          type="button"
+                          onClick={() => setPatchPreviewView("derived")}
+                        >
+                          Derived Patch
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="xml-preview-meta-block">
-                    <span className="summary-label">Validation</span>
-                    <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                      {validationStatusLabel}
-                    </span>
+                  <div
+                    className={
+                      xmlMode === "bulkPatch" || xmlMode === "bulkPost"
+                        ? "xml-preview-meta bulk-patch-preview-meta"
+                        : "xml-preview-meta"
+                    }
+                  >
+                    <div className="xml-preview-meta-block">
+                      <span className="summary-label">Active view</span>
+                      <strong>{activePreviewLabel}</strong>
+                    </div>
+                    <div className="xml-preview-meta-block">
+                      <span className="summary-label">Validation</span>
+                      <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
+                        {validationStatusLabel}
+                      </span>
+                    </div>
+                    <div className="xml-preview-meta-block">
+                      <span className="summary-label">Schema</span>
+                      <strong>{selectedSchemaLabel ?? "Message.xsd pending"}</strong>
+                    </div>
+                    <div className="xml-preview-meta-block">
+                      <span className="summary-label">File</span>
+                      <strong>{activePreviewFileName ?? "Not generated yet"}</strong>
+                    </div>
                   </div>
-                  <div className="xml-preview-meta-block">
-                    <span className="summary-label">Schema</span>
-                    <strong>{selectedSchemaLabel ?? "Message.xsd pending"}</strong>
-                  </div>
-                  <div className="xml-preview-meta-block">
-                    <span className="summary-label">File</span>
-                    <strong>{activePreviewFileName ?? "Not generated yet"}</strong>
-                  </div>
-                </div>
-                <pre className="xml-preview-block">
-                  <code>{xmlPreviewLines}</code>
-                </pre>
-                <div className="workflow-note">
-                  <strong>Preview status</strong>
-                  <span>
-                    {xmlMode === "post"
-                      ? xmlPairPreview
-                        ? `POST preview generated for ${xmlPairPreview.product_family} / ${xmlPairPreview.product_variant} / ${xmlPairPreview.catalogue_number}.`
-                        : selectedPostWorkspaceRecord
-                          ? `No POST preview generated yet for the next available Device UDI-DI candidate ${selectedPostWorkspaceRecord.catalogue_number}.`
-                          : "No available Device UDI-DI POST candidate is currently available for the selected family and variant."
-                      : xmlMode === "single"
+                  <div className="workflow-note">
+                    <strong>Preview status</strong>
+                    <span>
+                      {xmlMode === "single"
                         ? xmlPreview
                           ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
                           : "No XML preview generated yet for the selected row."
@@ -4971,11 +5431,15 @@ export function App() {
                               ? xmlBulkUdidiPostPreview
                                 ? `Bulk UDI-DI POST preview generated for ${xmlBulkUdidiPostPreview.product_family} / ${xmlBulkUdidiPostPreview.product_variant}, chunk ${xmlBulkUdidiPostPreview.selected_chunk_sequence}.`
                                 : "No bulk UDI-DI POST preview generated yet for the selected variant."
-                            : xmlBulkPatchPreview
-                              ? `Bulk PATCH preview generated for ${xmlBulkPatchPreview.product_family} / ${xmlBulkPatchPreview.product_variant} / ${xmlBulkPatchPreview.selected_basic_udi_di}, chunk ${xmlBulkPatchPreview.selected_chunk_sequence}.`
-                              : "No bulk PATCH preview generated yet for the selected parent scope."}
-                  </span>
+                              : xmlBulkPatchPreview
+                                ? `Bulk PATCH preview generated for ${xmlBulkPatchPreview.product_family} / ${xmlBulkPatchPreview.product_variant} / ${xmlBulkPatchPreview.selected_basic_udi_di}, chunk ${xmlBulkPatchPreview.selected_chunk_sequence}.`
+                                : "No bulk PATCH preview generated yet for the selected parent scope."}
+                    </span>
+                  </div>
                 </div>
+                <pre className="xml-preview-block">
+                  <code>{xmlPreviewLines}</code>
+                </pre>
               </div>
 
               <div className="xml-sidebar-surface">
@@ -4990,11 +5454,9 @@ export function App() {
                       isGeneratingXml
                     }
                   >
-                    {isGeneratingXml
+                      {isGeneratingXml
                       ? "Generating..."
-                      : xmlMode === "post"
-                        ? "Generate POST"
-                        : xmlMode === "single"
+                      : xmlMode === "single"
                         ? "Generate XML"
                         : xmlMode === "marketInfo"
                           ? "Generate Market Info"
@@ -5028,9 +5490,7 @@ export function App() {
                       isGeneratingXml
                     }
                   >
-                    {xmlMode === "post"
-                      ? "Download POST ZIP"
-                      : xmlMode === "single"
+                    {xmlMode === "single"
                         ? "Download XML"
                       : xmlMode === "marketInfo"
                           ? "Download Market Info"
@@ -5044,50 +5504,7 @@ export function App() {
                   </button>
                   {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
                 </div>
-                {xmlMode === "post" ? (
-                  selectedPostWorkspaceRecord ? (
-                    <div className="draft-list xml-record-stack">
-                      <div className="draft-card xml-record-card">
-                        <div className="draft-card-head">
-                          <strong>{selectedPostWorkspaceRecord.catalogue_number}</strong>
-                          <span className="status-pill ok compact">Next POST candidate</span>
-                        </div>
-                        <p className="draft-meta">
-                          {selectedPostWorkspaceRecord.product_family} / {selectedPostWorkspaceRecord.product_variant}
-                        </p>
-                        {selectedPostWorkspaceRecord.trade_name ? (
-                          <p className="panel-copy">{selectedPostWorkspaceRecord.trade_name}</p>
-                        ) : null}
-                        <p className="panel-copy">
-                          Device UDI-DI {selectedPostWorkspaceRecord.primary_udi_di ?? "Unknown"} ·
-                          {xmlOperationAssessment?.status === "available"
-                            ? assessedPostParentRegistrationKnown
-                              ? " available to register under the tracked Basic UDI-DI parent."
-                              : " can seed a new Basic UDI-DI parent registration."
-                            : " not currently available for POST."}
-                        </p>
-                        <p className="panel-copy">
-                          {xmlOperationAssessment?.status === "available"
-                            ? assessedPostParentRegistrationKnown
-                              ? "The Basic UDI-DI is already registered. Review the next available Device UDI-DI POST candidate for this family and variant."
-                              : "Review the next available POST candidate for this family and variant. This record will seed a new Basic UDI-DI parent registration."
-                            : xmlOperationAssessment?.summary_message ??
-                              "No available Device UDI-DI POST candidate is currently available for this family and variant."}
-                        </p>
-                        <div className="family-scope-pill-row xml-status-row">
-                          <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                            Post {pairPostValidation ? (pairPostValidation.valid ? "valid" : "invalid") : "awaiting preview"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="panel-copy">
-                      {xmlOperationAssessment?.summary_message ??
-                        "No available Device UDI-DI POST candidate is currently available for the selected family and variant."}
-                    </p>
-                  )
-                ) : xmlMode === "single" ? (
+                {xmlMode === "single" ? (
                   selectedXmlRecord ? (
                     <div className="draft-list xml-record-stack">
                       <div className="draft-card xml-record-card">
@@ -6201,9 +6618,7 @@ export function App() {
                 {xmlMode !== "bulkPatch" && xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" ? (
                   <div className="workflow-note">
                       <strong>
-                        {xmlMode === "post"
-                          ? "POST review"
-                          : xmlMode === "single"
+                        {xmlMode === "single"
                             ? "Single-record review"
                             : xmlMode === "marketInfo"
                               ? "Standalone market-info review"
@@ -6212,9 +6627,7 @@ export function App() {
                                 : "Bulk UDI-DI POST scope"}
                     </strong>
                     <span>
-                      {xmlMode === "post"
-                        ? "Use one current POST-classified device to confirm the accepted registration payload before generating PATCH scenarios."
-                        : xmlMode === "single"
+                      {xmlMode === "single"
                           ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
                           : xmlMode === "marketInfo"
                             ? "Use one XML-ready record to inspect the standalone MARKET_INFO.PUT wrapper and its current marketInfos collection."
@@ -6238,7 +6651,7 @@ export function App() {
                       </div>
                       <div className="draft-card">
                         <div className="draft-card-head">
-                          <strong>{xmlMode === "post" ? "Active preview validation" : "Validation output"}</strong>
+                          <strong>Validation output</strong>
                           <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
                             {selectedBatchValidation
                               ? selectedBatchValidation.valid
@@ -6263,9 +6676,7 @@ export function App() {
                               </div>
                             ) : (
                               <p className="panel-copy">
-                                {xmlMode === "post"
-                                  ? "The generated POST preview validates cleanly."
-                                  : xmlMode === "single"
+                                {xmlMode === "single"
                                     ? "The generated single-record Push message validates cleanly."
                                     : xmlMode === "marketInfo"
                                     ? "The generated MARKET_INFO.PUT Push message validates cleanly."
@@ -6279,9 +6690,7 @@ export function App() {
                           </>
                         ) : (
                           <p className="panel-copy">
-                            {xmlMode === "post"
-                              ? "Generate a POST preview to inspect the schema validation outcome."
-                              : xmlMode === "single"
+                            {xmlMode === "single"
                                 ? "Generate a single-record preview to inspect the schema validation outcome."
                                 : xmlMode === "marketInfo"
                                   ? "Generate a MARKET_INFO.PUT preview to inspect the schema validation outcome."
@@ -6316,17 +6725,6 @@ export function App() {
                         <p className="panel-copy">{xmlPatchPreview.derived_patch_validation.schema_path}</p>
                       </div>
                     </>
-                  ) : null}
-                  {xmlMode === "post" ? (
-                    <div className="draft-card">
-                      <div className="draft-card-head">
-                        <strong>POST validation</strong>
-                        <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                          {pairPostValidation ? (pairPostValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
-                        </span>
-                      </div>
-                      <p className="panel-copy">{pairPostValidation?.schema_path ?? "Generate a POST preview to validate the XML."}</p>
-                    </div>
                   ) : null}
                   {(xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && selectedBulkPreview ? (
                     <div className="draft-card">
@@ -6367,6 +6765,7 @@ export function App() {
                 </div>
               </div>
             </div>
+            )}
           </section>
         </section>
         )
