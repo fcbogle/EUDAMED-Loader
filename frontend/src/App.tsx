@@ -367,8 +367,8 @@ function summarizeBulkExcludedRecords(
     if (childAlreadyRegistered > 0) {
       summaries.push({
         key: "child-already-registered",
-        title: "Already registered child UDI-DI",
-        detail: `${pluralize(childAlreadyRegistered, "record")} in ${familyVariantLabel} ${childAlreadyRegistered === 1 ? "already has" : "already have"} a tracked successful child registration and ${childAlreadyRegistered === 1 ? "was" : "were"} excluded from Bulk UDI-DI POST generation.`,
+        title: "Already registered Device UDI-DI",
+        detail: `${pluralize(childAlreadyRegistered, "record")} in ${familyVariantLabel} ${childAlreadyRegistered === 1 ? "already has" : "already have"} a tracked successful Device UDI-DI registration and ${childAlreadyRegistered === 1 ? "was" : "were"} excluded from Bulk UDI-DI POST generation.`,
       });
     }
     if (missingBasicUdi > 0) {
@@ -2798,7 +2798,7 @@ export function App() {
               `<catalogue-number>${selectedPostWorkspaceRecord.catalogue_number}</catalogue-number>`,
               `<udi-di>${selectedPostWorkspaceRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
             ].join("\n")
-          : "<!-- No available Primary UDI-DI POST candidate is currently available for the selected family and variant -->"
+          : "<!-- No available Device UDI-DI POST candidate is currently available for the selected family and variant -->"
       : xmlMode === "single"
       ? selectedXmlRecord
         ? xmlPreview?.xml ??
@@ -2908,7 +2908,7 @@ export function App() {
             : xmlMode === "bulkPost"
               ? "Generate one parent DEVICE.POST per Basic UDI-DI that is not already registered."
               : xmlMode === "bulkUdidiPost"
-                ? "Generate child UDI-DI POST messages only for devices under an already accepted Basic UDI-DI parent."
+                ? "Generate Device UDI-DI POST messages only for devices under an already accepted Basic UDI-DI."
               : "Generate a chunked bulk PATCH package that applies one PATCH scenario across the selected bulk POST cohort.";
   const xmlWorkspaceTitle =
     xmlMode === "post"
@@ -4698,7 +4698,7 @@ export function App() {
                     </div>
                     <div className="queue-chip">
                       <strong>{selectedTestingAnchor.primary_udi_di}</strong>
-                      <span>primary UDI-DI</span>
+                      <span>Device UDI-DI</span>
                     </div>
                   </div>
                 ) : (
@@ -4942,8 +4942,8 @@ export function App() {
                       ? xmlPairPreview
                         ? `POST preview generated for ${xmlPairPreview.product_family} / ${xmlPairPreview.product_variant} / ${xmlPairPreview.catalogue_number}.`
                         : selectedPostWorkspaceRecord
-                          ? `No POST preview generated yet for the next available Primary UDI-DI candidate ${selectedPostWorkspaceRecord.catalogue_number}.`
-                          : "No available Primary UDI-DI POST candidate is currently available for the selected family and variant."
+                          ? `No POST preview generated yet for the next available Device UDI-DI candidate ${selectedPostWorkspaceRecord.catalogue_number}.`
+                          : "No available Device UDI-DI POST candidate is currently available for the selected family and variant."
                       : xmlMode === "single"
                         ? xmlPreview
                           ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
@@ -5056,16 +5056,16 @@ export function App() {
                           <p className="panel-copy">{selectedPostWorkspaceRecord.trade_name}</p>
                         ) : null}
                         <p className="panel-copy">
-                          UDI-DI {selectedPostWorkspaceRecord.primary_udi_di ?? "Unknown"} ·
+                          Device UDI-DI {selectedPostWorkspaceRecord.primary_udi_di ?? "Unknown"} ·
                           {xmlOperationAssessment?.status === "available"
                             ? " available to register under the tracked Basic UDI-DI parent."
                             : " not currently available for POST."}
                         </p>
                         <p className="panel-copy">
                           {xmlOperationAssessment?.status === "available"
-                            ? "Review the next available child Primary UDI-DI POST candidate for this family and variant."
+                            ? "Review the next available Device UDI-DI POST candidate for this family and variant."
                             : xmlOperationAssessment?.summary_message ??
-                              "No available child Primary UDI-DI POST candidate is currently available for this family and variant."}
+                              "No available Device UDI-DI POST candidate is currently available for this family and variant."}
                         </p>
                         <div className="family-scope-pill-row xml-status-row">
                           <span className={pairPostValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
@@ -5077,7 +5077,7 @@ export function App() {
                   ) : (
                     <p className="panel-copy">
                       {xmlOperationAssessment?.summary_message ??
-                        "No available child Primary UDI-DI POST candidate is currently available for the selected family and variant."}
+                        "No available Device UDI-DI POST candidate is currently available for the selected family and variant."}
                     </p>
                   )
                 ) : xmlMode === "single" ? (
@@ -5527,10 +5527,10 @@ export function App() {
                             {selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}
                           </p>
                           <p className="panel-copy">
-                            Select how many sibling child UDI-DI registrations to include under the already accepted Basic UDI-DI parent.
+                            Select how many sibling Device UDI-DI registrations to include under the already accepted Basic UDI-DI parent.
                           </p>
                           <p className="panel-copy">
-                            {selectedBulkEligibleUdidiPostCount} eligible child UDI-DI registration{selectedBulkEligibleUdidiPostCount === 1 ? "" : "s"} in this variant can be used for Bulk UDI-DI POST.
+                            {selectedBulkEligibleUdidiPostCount} eligible Device UDI-DI registration{selectedBulkEligibleUdidiPostCount === 1 ? "" : "s"} in this variant can be used for Bulk UDI-DI POST.
                           </p>
                           <p className="panel-copy">
                             {selectedXmlVariantSummary.xml_blocked_records} row{selectedXmlVariantSummary.xml_blocked_records === 1 ? "" : "s"} remain excluded until resolved.
@@ -5620,7 +5620,7 @@ export function App() {
                               </select>
                               {bulkPatchScopeMode === "all_posted" ? (
                                 <p className="panel-copy">
-                                  Apply this PATCH to every posted child device under the selected parent.
+                                  Apply this PATCH to every posted Device UDI-DI record under the selected Basic UDI-DI.
                                 </p>
                               ) : null}
                               {bulkPatchScopeMode === "selected_catalogue_numbers" ? (
@@ -5662,7 +5662,7 @@ export function App() {
                                             />
                                             <span>
                                               <strong>{catalogueNumber || entry.primary_udi_di || "Unknown device"}</strong>
-                                              <p>{entry.primary_udi_di ?? "Primary UDI-DI pending"}</p>
+                                              <p>{entry.primary_udi_di ?? "Device UDI-DI pending"}</p>
                                               <p>Current version {entry.latest_version ?? "1"}</p>
                                             </span>
                                           </label>
@@ -6032,7 +6032,7 @@ export function App() {
                                   Confirm child scope under an existing Basic UDI-DI parent.
                                 </p>
                                 <label className="field-label" htmlFor="xml-bulk-udidi-post-count">
-                                  Eligible child UDI-DIs
+                                  Eligible Device UDI-DIs
                                 </label>
                                 <div className="bulk-parent-chip-row">
                                   <span className="bulk-parent-chip active">
@@ -6181,7 +6181,7 @@ export function App() {
                             </>
                           ) : !selectedBulkCapacity ? (
                             <p className="panel-copy">
-                              No eligible child UDI-DI registrations are available for this variant, so Bulk UDI-DI POST cannot be generated here.
+                              No eligible Device UDI-DI registrations are available for this variant, so Bulk UDI-DI POST cannot be generated here.
                             </p>
                           ) : null}
                         </>
@@ -6213,7 +6213,7 @@ export function App() {
                             ? "Use one XML-ready record to inspect the standalone MARKET_INFO.PUT wrapper and its current marketInfos collection."
                             : xmlMode === "patch"
                               ? "Use one selected POST parent, then compare the derived scenario PATCH against the accepted POST or latest accepted PATCH before external EUDAMED testing."
-                                : "Bulk UDI-DI POST emits standalone child UDI-DI registrations and assumes the referenced Basic UDI-DI parent has already been accepted."}
+                                : "Bulk UDI-DI POST emits standalone Device UDI-DI registrations and assumes the referenced Basic UDI-DI has already been accepted."}
                     </span>
                   </div>
                 ) : null}

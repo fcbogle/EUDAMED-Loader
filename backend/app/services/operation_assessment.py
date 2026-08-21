@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Sequence
 
-from app.models import OperationAssessment, OperationAssessmentIdentityScope
+from app.models import OperationAssessment, OperationAssessmentIdentityScope, OperationAssessmentType
 from app.services.testing_read_model import TestingReadModelService
 from app.services.xml_generation import XmlGenerationService
 from app.validation_models import CanonicalValidationRecord
+from app.xml_models import BulkXmlExcludedRecord
 
 
 class OperationAssessmentService:
@@ -137,7 +139,7 @@ class OperationAssessmentService:
         product_family: str,
         product_variant: str,
     ) -> OperationAssessment:
-        candidate_records, excluded_records, _ = self.xml_service._variant_post_records_with_exclusions(
+        candidate_records, variant_excluded_records, _ = self.xml_service._variant_post_records_with_exclusions(
             product_family=product_family,
             product_variant=product_variant,
             record_count=None,
@@ -175,18 +177,18 @@ class OperationAssessmentService:
             if not candidate_records:
                 blocking_reasons.append("No XML-ready POST rows are currently available for this family and variant.")
             if posted_parent_groups:
-                blocking_reasons.append("Tracked parent registrations exist, but no child UDI-DI POST rows are currently eligible.")
+                blocking_reasons.append("Tracked Basic UDI-DI registrations exist, but no Device UDI-DI POST rows are currently eligible.")
             if not posted_parent_groups and not candidate_records:
                 blocking_reasons.append("No parent Basic UDI-DI seed rows are currently eligible for bulk POST.")
-            if excluded_records:
-                blocking_reasons.extend(self._summarize_excluded_reasons(excluded_records))
+            if variant_excluded_records:
+                blocking_reasons.extend(self._summarize_excluded_reasons(variant_excluded_records))
             blocking_reasons = self._deduplicated_reasons(blocking_reasons)
 
         if status == "available":
             if eligible_parent_group_count > 0 and eligible_child_record_count > 0:
                 summary_message = (
                     f"Bulk POST is available. {eligible_parent_group_count} parent Basic UDI-DI groups and "
-                    f"{eligible_child_record_count} child UDI-DI records are currently eligible."
+                    f"{eligible_child_record_count} Device UDI-DI records are currently eligible."
                 )
                 recommended_next_action = "Choose whether to generate parent POSTs first or child POSTs under already registered parents."
             elif eligible_parent_group_count > 0:
@@ -196,7 +198,7 @@ class OperationAssessmentService:
                 recommended_next_action = "Generate the parent Bulk POST package for the eligible Basic UDI-DI groups."
             else:
                 summary_message = (
-                    f"Bulk POST is available. {eligible_child_record_count} child UDI-DI records can be posted under already registered parents."
+                    f"Bulk POST is available. {eligible_child_record_count} Device UDI-DI records can be posted under already registered parents."
                 )
                 recommended_next_action = "Generate the child Bulk POST package for the eligible UDI-DI records."
         else:
@@ -387,13 +389,13 @@ class OperationAssessmentService:
                 catalogue_number=record.catalogue_number,
                 summary_message="POST is not currently available for the selected device.",
                 blocking_reasons=[
-                    "This Primary UDI-DI already has a tracked successful registration, so a new POST should not be generated."
+                    "This Device UDI-DI already has a tracked successful registration, so a new POST should not be generated."
                 ],
                 evidence=evidence,
             )
         if parent_registration_known:
             summary_message = (
-                f"POST is available for {record.catalogue_number}. The Basic UDI-DI is already registered, so this can proceed as a child UDI-DI POST."
+                f"POST is available for {record.catalogue_number}. The Basic UDI-DI is already registered, so this can proceed as a Device UDI-DI POST."
             )
             recommended_next_action = "Generate the single-device child POST XML for this catalogue number."
         else:
@@ -507,12 +509,12 @@ class OperationAssessmentService:
         return deduplicated
 
     @staticmethod
-    def _summarize_excluded_reasons(excluded_records: list[object]) -> list[str]:
+    def _summarize_excluded_reasons(excluded_records: Sequence[BulkXmlExcludedRecord]) -> list[str]:
         counter = Counter()
         for record in excluded_records:
-            reason_message = getattr(record, "reason_message", None)
+            reason_message = record.reason_message
             if reason_message:
-                counter[str(reason_message)] += 1
+                counter[reason_message] += 1
         return [message for message, _count in counter.most_common(3)]
 
     @staticmethod
@@ -527,7 +529,7 @@ class OperationAssessmentService:
     @staticmethod
     def _blocked_assessment(
         *,
-        operation_type: str,
+        operation_type: OperationAssessmentType,
         product_family: str,
         product_variant: str,
         summary_message: str,

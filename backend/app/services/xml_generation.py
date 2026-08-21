@@ -322,7 +322,7 @@ class XmlGenerationService:
                             catalogue_number=record.catalogue_number,
                             primary_udi_di=record.primary_udi_di,
                             reason_code="missing_primary_udi_di",
-                            reason_message="Record does not currently resolve to a Primary UDI-DI, so it cannot be used for Bulk UDI-DI POST.",
+                            reason_message="Record does not currently resolve to a Device UDI-DI, so it cannot be used for Bulk UDI-DI POST.",
                         )
                     )
                     continue
@@ -337,7 +337,7 @@ class XmlGenerationService:
                             primary_udi_di=record.primary_udi_di,
                             reason_code="child_already_registered",
                             reason_message=(
-                                f"Primary UDI-DI {record.primary_udi_di} already has a successful child registration in tracked state."
+                                f"Device UDI-DI {record.primary_udi_di} already has a successful registration in tracked state."
                             ),
                         )
                     )
@@ -371,7 +371,7 @@ class XmlGenerationService:
         child_records = parent_group[1:]
         eligible_child_records = len(child_records)
         if not child_records:
-            raise ValueError(f"Basic UDI-DI {basic_udi_di} does not currently have any eligible child UDI-DI POST rows.")
+            raise ValueError(f"Basic UDI-DI {basic_udi_di} does not currently have any eligible Device UDI-DI POST rows.")
 
         selected_catalogue_set = {
             catalogue_number.strip()
@@ -492,7 +492,7 @@ class XmlGenerationService:
 
         if child_known_parent_unknown:
             raise ValueError(
-                f"Tracked state is inconsistent for {product_family} / {product_variant}: one or more child UDI-DIs appear registered while the parent Basic UDI-DI is not recorded as posted."
+                f"Tracked state is inconsistent for {product_family} / {product_variant}: one or more Device UDI-DI records appear registered while the Basic UDI-DI is not recorded as posted."
             )
         if parent_and_child_known:
             raise ValueError(
@@ -682,7 +682,7 @@ class XmlGenerationService:
         included_records_raw = included_candidates[:normalized_count]
         if not included_records_raw:
             raise ValueError(
-                f"No eligible child UDI-DI POST records are currently available for {product_family} / {product_variant}."
+                f"No eligible Device UDI-DI POST records are currently available for {product_family} / {product_variant}."
             )
 
         record_chunks = self.selector.chunk_records(included_records_raw, self.settings.eudamed_max_batch_records)
