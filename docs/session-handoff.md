@@ -278,6 +278,7 @@ Current directional design intent:
   - `single_patch`
   - `bulk_post`
   - `bulk_patch`
+- `Market Info` remains present as an XML workspace, but its operational assessment is still deferred and is not yet driven by the newer backend assessment contract.
 - `Market Info` assessment remains deferred.
 - Those assessments are SQLite-backed and should describe:
   - eligible record counts
@@ -800,9 +801,8 @@ Implemented or partially implemented scenarios with caveats:
 
 - Historical verification snapshots recorded above should be treated as dated evidence only.
 - Re-run current verification from the present worktree before relying on pass counts.
-- Latest current verification on Saturday, August 15, 2026:
-  - focused workbook-import tests: `3 passed`
-  - full backend suite: `61 passed`
+- Latest current verification on Friday, August 21, 2026:
+  - full backend suite: `85 passed`
   - frontend production build: `npm run build` passed
 - Recommended backend command from the current repo layout:
   - `cd backend`

@@ -48,12 +48,16 @@ class OperationAssessmentService:
             return self._assess_single_post_record(target_record)
 
         available_record = None
+        available_assessment: OperationAssessment | None = None
         blocked_reasons: list[str] = []
+        blocked_assessments: list[OperationAssessment] = []
         for record in candidate_records:
             assessment = self._assess_single_post_record(record)
             if assessment.status == "available":
+                available_assessment = assessment
                 return assessment
             blocked_reasons.extend(assessment.blocking_reasons)
+            blocked_assessments.append(assessment)
             if available_record is None:
                 available_record = record
 
@@ -61,15 +65,36 @@ class OperationAssessmentService:
         if not candidate_records:
             blocking_reasons = ["No XML-ready POST rows are currently available for this family and variant."]
         first_catalogue_number = available_record.catalogue_number if available_record is not None else None
+        first_blocked_assessment = blocked_assessments[0] if blocked_assessments else None
+        parent_registered_without_next_child = bool(
+            blocked_assessments
+            and all(bool(assessment.evidence.get("parent_registration_known")) for assessment in blocked_assessments)
+            and all(bool(assessment.evidence.get("child_registration_known")) for assessment in blocked_assessments)
+        )
+        summary_message = "POST is not currently available for the selected family and variant."
+        if parent_registered_without_next_child:
+            summary_message = (
+                "The Basic UDI-DI is already registered and no further Device UDI-DI POST candidates are currently "
+                "available for this family and variant."
+            )
         return self._blocked_assessment(
             operation_type="single_post",
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=first_catalogue_number,
-            summary_message="POST is not currently available for the selected family and variant.",
+            summary_message=summary_message,
             blocking_reasons=blocking_reasons,
             evidence={
                 "candidate_catalogue_number": first_catalogue_number,
+                "candidate_basic_udi_di": (
+                    first_blocked_assessment.evidence.get("candidate_basic_udi_di") if first_blocked_assessment else None
+                ),
+                "parent_registration_known": (
+                    first_blocked_assessment.evidence.get("parent_registration_known") if first_blocked_assessment else None
+                ),
+                "child_registration_known": (
+                    first_blocked_assessment.evidence.get("child_registration_known") if first_blocked_assessment else None
+                ),
                 "xml_ready": bool(candidate_records),
             },
         )

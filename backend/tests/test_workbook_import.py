@@ -31,9 +31,9 @@ from app.routers.xml_generation import (
     assess_bulk_post,
     assess_single_patch,
     assess_single_post,
-    testing_subject_history,
-    testing_subject_summaries,
-    testing_workspace_summary,
+    testing_subject_history as xml_testing_subject_history,
+    testing_subject_summaries as xml_testing_subject_summaries,
+    testing_workspace_summary as xml_testing_workspace_summary,
     xml_generation_scope,
 )
 from app.services.testing_state_store import TestingStateStore as PlaygroundStateStore
@@ -1032,13 +1032,13 @@ def test_testing_read_model_routes_return_summary_subjects_and_history(
     finally:
         connection.close()
 
-    summary_payload = testing_workspace_summary(
+    summary_payload = xml_testing_workspace_summary(
         {"product_family": "Family A", "product_variant": "Variant A"},
     )
-    subjects_payload = testing_subject_summaries(
+    subjects_payload = xml_testing_subject_summaries(
         {"product_family": "Family A", "product_variant": "Variant A", "limit": 50},
     )
-    history_payload = testing_subject_history(subject_id)
+    history_payload = xml_testing_subject_history(subject_id)
 
     assert summary_payload["subject_count"] == 1
     assert summary_payload["reviewed_post_count"] == 1
@@ -1153,6 +1153,58 @@ def test_operation_assessment_routes_report_single_patch_availability_from_sqlit
     assert payload["evidence"]["reviewed_post_baseline_present"] is True
     assert payload["evidence"]["tracked_registration_known"] is True
     assert payload["evidence"]["latest_accepted_version"] == "1"
+
+
+def test_operation_assessment_reports_registered_parent_without_further_child_post_candidates(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    promotions = {
+        ("synthetic.xlsx", "Variant A", 2): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+            "primary_udi_di": "111111",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        }
+    }
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_validation_bundle",
+        lambda self: _synthetic_validation_bundle_from_promotions(promotions),
+    )
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-001",
+        primary_udi_di="111111",
+        basic_udi_di="BASIC-1",
+        post_success=1,
+        latest_successful_version="1",
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=subject_id,
+        event_index=0,
+        message_type="DEVICE.POST",
+        status="SUCCESS",
+        version="1",
+    )
+
+    payload = assess_single_post({"product_family": "Family A", "product_variant": "Variant A"})
+
+    assert payload["operation_type"] == "single_post"
+    assert payload["status"] == "blocked"
+    assert payload["summary_message"] == (
+        "The Basic UDI-DI is already registered and no further Device UDI-DI POST candidates are currently "
+        "available for this family and variant."
+    )
+    assert payload["evidence"]["parent_registration_known"] is True
+    assert payload["evidence"]["child_registration_known"] is True
 
 
 def test_operation_assessment_routes_report_bulk_patch_parent_selection_and_availability(

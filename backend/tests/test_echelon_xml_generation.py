@@ -5,9 +5,11 @@ from types import SimpleNamespace
 from typing import cast
 from zipfile import ZipFile
 
+import pytest
 from fastapi import HTTPException
 
 from app.config import get_settings
+from app.routers import xml_generation as xml_generation_router
 from app.services.canonical_validation import CanonicalValidationService
 from app.routers.xml_generation import (
     download_generated_patch_scenario,
@@ -25,6 +27,11 @@ from app.routers.xml_generation import (
 from app.services.xml_generation import XmlGenerationService
 from app.services.xml_selection import ValidationRecordSelector
 from app.validation_models import CanonicalValidationBundle, CanonicalValidationRecord
+
+
+@pytest.fixture
+def route_xml_service_without_import(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(xml_generation_router, "_xml_service", lambda: XmlGenerationService(require_import=False))
 
 
 def test_required_positive_int_input_rejects_bool_values() -> None:
@@ -66,7 +73,7 @@ def test_generic_single_record_preview_normalizes_udi_pi_variants_for_elan_ic() 
     assert "<udidi:productionIdentifier>SERIALISATION_NUMBER</udidi:productionIdentifier>" in preview.xml
 
 
-def test_generic_preview_route_returns_single_record_payload() -> None:
+def test_generic_preview_route_returns_single_record_payload(route_xml_service_without_import: None) -> None:
     payload = preview_xml_record(
         {
             "product_family": "Echelon",
@@ -106,10 +113,16 @@ def test_next_post_preview_route_returns_payload() -> None:
 
 
 def test_single_record_preview_can_override_manufacturer_srn_for_playground(monkeypatch) -> None:
+    service = XmlGenerationService()
     monkeypatch.setenv("EUDAMED_MANUFACTURER_SRN_OVERRIDE", "UK-MF-000033261")
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_basic_udi_post",
+        lambda **_: False,
+    )
     get_settings.cache_clear()
     try:
-        preview = XmlGenerationService().preview_post_registration(
+        preview = service.preview_post_registration(
             product_family="Elan",
             product_variant="Elan IC",
             catalogue_number="ELANIC22L1S",
@@ -120,6 +133,27 @@ def test_single_record_preview_can_override_manufacturer_srn_for_playground(monk
 
     assert "<basicudi:MFActorCode>UK-MF-000033261</basicudi:MFActorCode>" in preview.post_xml
     assert "<s:nodeActorCode>UK-MF-000033261</s:nodeActorCode>" in preview.post_xml
+
+
+def test_single_post_preview_uses_device_post_when_parent_is_not_registered(monkeypatch) -> None:
+    service = XmlGenerationService()
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_basic_udi_post",
+        lambda **kwargs: False,
+    )
+
+    preview = service.preview_post_registration(
+        product_family="Elan",
+        product_variant="Elan IC",
+        catalogue_number="ELANIC22L1S",
+    )
+
+    assert preview.message_type == "DEVICE.POST"
+    assert preview.post_file_name.endswith("post-ELANIC22L1S.xml")
+    assert "<s:serviceID>DEVICE</s:serviceID>" in preview.post_xml
+    assert "<device:MDRBasicUDI>" in preview.post_xml
+    assert "<device:UDIDIData" not in preview.post_xml
 
 
 def test_single_post_preview_switches_to_child_udidi_post_when_parent_is_already_registered(monkeypatch) -> None:
@@ -229,7 +263,7 @@ def test_next_valid_post_record_blocks_when_parent_exists(monkeypatch) -> None:
 
     selected_record = service._next_valid_post_record(product_family="Elite", product_variant="Elite2")
 
-    assert selected_record.catalogue_number == "ELT22"
+    assert selected_record.catalogue_number == "EL22-24-1KIT-S"
 
 
 def basicUdiDiForRecordForTest(record: CanonicalValidationRecord) -> str | None:
@@ -260,7 +294,7 @@ def test_market_info_put_preview_generates_schema_valid_xml() -> None:
     assert "<marketinfo:uDIDIIdentifier>" in preview.xml
 
 
-def test_market_info_put_routes_return_payloads() -> None:
+def test_market_info_put_routes_return_payloads(route_xml_service_without_import: None) -> None:
     payload = preview_xml_market_info_put(
         {
             "product_family": "Echelon",
@@ -286,7 +320,7 @@ def test_market_info_put_routes_return_payloads() -> None:
     assert b"<mktinfo:DTXMarketInfo>" in response.body
 
 
-def test_generic_download_route_returns_xml_file() -> None:
+def test_generic_download_route_returns_xml_file(route_xml_service_without_import: None) -> None:
     response = download_xml_record(
         {
             "product_family": "Echelon",
@@ -325,7 +359,7 @@ def test_generic_batch_preview_generates_variant_scoped_schema_valid_xml() -> No
     assert "<s:serviceOperation>PATCH</s:serviceOperation>" in preview.selected_chunk_xml
 
 
-def test_generic_batch_preview_route_returns_variant_batch_payload() -> None:
+def test_generic_batch_preview_route_returns_variant_batch_payload(route_xml_service_without_import: None) -> None:
     payload = preview_xml_batch(
         {
             "product_family": "Echelon",
@@ -343,7 +377,7 @@ def test_generic_batch_preview_route_returns_variant_batch_payload() -> None:
     assert payload["selected_chunk_validation"]["valid"] is True
 
 
-def test_generic_batch_download_route_returns_zip_package() -> None:
+def test_generic_batch_download_route_returns_zip_package(route_xml_service_without_import: None) -> None:
     response = download_xml_batch(
         {
             "product_family": "Echelon",
@@ -615,7 +649,7 @@ def test_generated_status_code_patch_scenario_updates_enum() -> None:
     assert preview.derived_patch_validation.valid is True
 
 
-def test_generated_patch_scenario_route_returns_comparison_payload() -> None:
+def test_generated_patch_scenario_route_returns_comparison_payload(route_xml_service_without_import: None) -> None:
     XmlGenerationService().preview_post_registration(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -640,7 +674,7 @@ def test_generated_patch_scenario_route_returns_comparison_payload() -> None:
     assert payload["derived_patch_validation"]["valid"] is True
 
 
-def test_generated_patch_scenario_download_route_returns_zip_package() -> None:
+def test_generated_patch_scenario_download_route_returns_zip_package(route_xml_service_without_import: None) -> None:
     XmlGenerationService().preview_post_registration(
         product_family="Echelon",
         product_variant="Echelon VAC",
@@ -1081,7 +1115,7 @@ def test_bulk_udidi_post_blocks_when_parent_device_post_has_not_been_recorded(mo
             record_count=5,
         )
     except ValueError as exc:
-        assert str(exc) == "No eligible child UDI-DI POST records are currently available for Elite / EliteVT."
+        assert str(exc) == "No eligible Device UDI-DI POST records are currently available for Elite / EliteVT."
     else:
         raise AssertionError("Expected Bulk UDI-DI POST preview to stop when the parent DEVICE.POST has not been recorded.")
 
@@ -1123,7 +1157,7 @@ def test_bulk_udidi_post_excludes_children_already_registered_in_tracked_state(m
             record_count=5,
         )
     except ValueError as exc:
-        assert str(exc) == "No eligible child UDI-DI POST records are currently available for Elite / EliteVT."
+        assert str(exc) == "No eligible Device UDI-DI POST records are currently available for Elite / EliteVT."
     else:
         raise AssertionError("Expected Bulk UDI-DI POST preview to stop when every child UDI-DI is already registered.")
 

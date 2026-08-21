@@ -2141,6 +2141,7 @@ export function App() {
   const assessedPatchLatestAcceptedVersion = assessmentEvidenceString(xmlOperationAssessment, "latest_accepted_version");
   const assessedPatchReviewedBaseline = assessmentEvidenceBoolean(xmlOperationAssessment, "reviewed_post_baseline_present");
   const assessedPatchTrackedRegistration = assessmentEvidenceBoolean(xmlOperationAssessment, "tracked_registration_known");
+  const assessedPostParentRegistrationKnown = assessmentEvidenceBoolean(xmlOperationAssessment, "parent_registration_known");
   const assessedPostCandidateCatalogueNumber = assessmentEvidenceString(xmlOperationAssessment, "candidate_catalogue_number");
   const selectedPostCandidateRecord =
     (assessedPostCandidateCatalogueNumber
@@ -2758,7 +2759,8 @@ export function App() {
           issuing_entity: selectedPostCandidateRecord.issuing_entity,
         }
       : null;
-  const selectedPostWorkspaceRecord = selectedPostPreviewRecord ?? selectedPostCandidateRecord;
+  const selectedPostWorkspaceRecord =
+    selectedPostPreviewRecord ?? (xmlOperationAssessment?.status === "available" ? selectedPostCandidateRecord : null);
   const isOperationAssessmentMode =
     xmlMode === "post" ||
     xmlMode === "patch" ||
@@ -5058,12 +5060,16 @@ export function App() {
                         <p className="panel-copy">
                           Device UDI-DI {selectedPostWorkspaceRecord.primary_udi_di ?? "Unknown"} ·
                           {xmlOperationAssessment?.status === "available"
-                            ? " available to register under the tracked Basic UDI-DI parent."
+                            ? assessedPostParentRegistrationKnown
+                              ? " available to register under the tracked Basic UDI-DI parent."
+                              : " can seed a new Basic UDI-DI parent registration."
                             : " not currently available for POST."}
                         </p>
                         <p className="panel-copy">
                           {xmlOperationAssessment?.status === "available"
-                            ? "Review the next available Device UDI-DI POST candidate for this family and variant."
+                            ? assessedPostParentRegistrationKnown
+                              ? "The Basic UDI-DI is already registered. Review the next available Device UDI-DI POST candidate for this family and variant."
+                              : "Review the next available POST candidate for this family and variant. This record will seed a new Basic UDI-DI parent registration."
                             : xmlOperationAssessment?.summary_message ??
                               "No available Device UDI-DI POST candidate is currently available for this family and variant."}
                         </p>
