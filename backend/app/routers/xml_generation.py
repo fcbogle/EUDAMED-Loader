@@ -3,8 +3,10 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
+from app.models import SuccessXmlUploadRequest, SuccessXmlUploadResult
 from app.services.operation_assessment import OperationAssessmentService
 from app.services.testing_read_model import TestingReadModelService
+from app.services.testing_success_xml import TestingSuccessXmlService
 from app.services.xml_generation import XmlGenerationService
 
 router = APIRouter(tags=["xml-generation"])
@@ -20,6 +22,10 @@ def _testing_read_model() -> TestingReadModelService:
 
 def _operation_assessment() -> OperationAssessmentService:
     return OperationAssessmentService()
+
+
+def _testing_success_xml() -> TestingSuccessXmlService:
+    return TestingSuccessXmlService()
 
 
 def _bulk_patch_posted_entries_from_summaries(
@@ -207,6 +213,19 @@ def download_xml_post_package(payload: dict[str, str]) -> Response:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
     return Response(content=zip_bytes, media_type="application/zip", headers=headers)
+
+
+@router.post("/xml/upload-success-xml")
+def upload_success_xml(payload: SuccessXmlUploadRequest) -> SuccessXmlUploadResult:
+    if not payload.xml_content.strip():
+        raise HTTPException(status_code=400, detail="Upload a non-empty EUDAMED success XML file.")
+    try:
+        return _testing_success_xml().record_success_xml(
+            xml_bytes=payload.xml_content.encode("utf-8"),
+            source_file_name=payload.file_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/xml/preview-market-info-put")

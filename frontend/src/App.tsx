@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import { ApiError, api } from "./api";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
@@ -1180,10 +1180,12 @@ export function App() {
     SHC007: "",
   });
   const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
+  const [isDownloadingXml, setIsDownloadingXml] = useState<boolean>(false);
   const [isLoadingStartup, setIsLoadingStartup] = useState<boolean>(true);
   const [isLoadingCanonicalReview, setIsLoadingCanonicalReview] = useState<boolean>(false);
   const [isLoadingCanonicalValidation, setIsLoadingCanonicalValidation] = useState<boolean>(false);
   const [isLoadingSchemas, setIsLoadingSchemas] = useState<boolean>(false);
+  const postSuccessXmlInputRef = useRef<HTMLInputElement | null>(null);
   const documentationSections: DocumentationSection[] = [
     {
       id: "projectStructure",
@@ -2089,6 +2091,16 @@ export function App() {
     (record) => (record.submission_operation ?? "").toUpperCase() === "POST",
   );
   const selectedBulkEligiblePostCount = selectedBulkEligiblePostRecords.length;
+  const selectedSuccessfulPrimaryUdiDiSet = new Set(
+    testingSubjectSummaries
+      .filter((summary) => summary.has_successful_device_post || summary.has_successful_child_post_or_patch)
+      .map((summary) => (summary.primary_udi_di ?? "").trim().toLowerCase())
+      .filter((value): value is string => Boolean(value)),
+  );
+  const selectedExactAvailablePostCount = selectedBulkEligiblePostRecords.filter((record) => {
+    const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
+    return primaryUdiDi ? !selectedSuccessfulPrimaryUdiDiSet.has(primaryUdiDi) : true;
+  }).length;
   const selectedBulkEligibleBasicUdiSet = new Set(
     selectedBulkEligiblePostRecords
       .map((record) => basicUdiDiForRecord(record))
@@ -3592,7 +3604,7 @@ export function App() {
     ) {
       return;
     }
-    setIsGeneratingXml(true);
+    setIsDownloadingXml(true);
     setError(null);
     setXmlActionMessage("Preparing download...");
     try {
@@ -3702,8 +3714,63 @@ export function App() {
       setXmlActionMessage(null);
       setError(requestError instanceof Error ? requestError.message : "Failed to download XML.");
     } finally {
-      setIsGeneratingXml(false);
+      setIsDownloadingXml(false);
     }
+  }
+
+  async function uploadSuccessXml(file: File): Promise<void> {
+    if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) {
+      return;
+    }
+    setIsGeneratingXml(true);
+    setError(null);
+    setXmlActionMessage(`Uploading success XML for ${file.name}...`);
+    try {
+      const xmlContent = await file.text();
+      const result = await api.uploadSuccessXml(file.name, xmlContent);
+      const [updatedSummaries, updatedAssessment] = await Promise.all([
+        api.testingSubjectSummaries({
+          product_family: selectedXmlFamilySummary.product_family,
+          product_variant: selectedXmlVariantSummary.product_variant,
+          limit: 10000,
+        }),
+        api.assessSinglePost(
+          selectedXmlFamilySummary.product_family,
+          selectedXmlVariantSummary.product_variant,
+        ),
+      ]);
+      setTestingSubjectSummaries(updatedSummaries);
+      setXmlOperationAssessment(updatedAssessment);
+      setXmlOperationAssessmentError(null);
+      setXmlPairPreview(null);
+      setSelectedPostXmlSectionId(null);
+      setXmlActionMessage(
+        result.duplicate_event
+          ? `${result.summary_message} This success XML was already recorded.`
+          : result.summary_message,
+      );
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "Failed to upload success XML.";
+      setError(message);
+      setXmlActionMessage(message);
+    } finally {
+      setIsGeneratingXml(false);
+      if (postSuccessXmlInputRef.current) {
+        postSuccessXmlInputRef.current.value = "";
+      }
+    }
+  }
+
+  function handleUploadSuccessXmlClick(): void {
+    postSuccessXmlInputRef.current?.click();
+  }
+
+  function handlePostSuccessXmlSelected(event: ChangeEvent<HTMLInputElement>): void {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    void uploadSuccessXml(file);
   }
 
   return (
@@ -4673,8 +4740,8 @@ export function App() {
             const xmlScopeSummary = (() => {
               if (xmlMode === "post") {
                 return {
-                  count: selectedBulkEligiblePostCount,
-                  noun: "POST row in variant",
+                  count: selectedExactAvailablePostCount,
+                  noun: "available POST in variant",
                 };
               }
               if (xmlMode === "patch") {
@@ -5221,11 +5288,18 @@ export function App() {
                       <h2>POST Preview</h2>
                     </div>
                     <div className="draft-actions-bar xml-actions-bar post-actions-bar">
+                      <input
+                        ref={postSuccessXmlInputRef}
+                        type="file"
+                        accept=".xml,text/xml,application/xml"
+                        className="visually-hidden"
+                        onChange={handlePostSuccessXmlSelected}
+                      />
                       <button
                         className="action-button"
                         type="button"
                         onClick={() => void generateXmlPreview()}
-                        disabled={!canGenerateCurrentXml || isGeneratingXml}
+                        disabled={!canGenerateCurrentXml || isGeneratingXml || isDownloadingXml}
                       >
                         {isGeneratingXml ? "Generating..." : "Generate POST"}
                       </button>
@@ -5233,7 +5307,7 @@ export function App() {
                         className="ghost-button post-secondary-action"
                         type="button"
                         onClick={() => void generateXmlPreview()}
-                        disabled={!canGenerateCurrentXml || isGeneratingXml}
+                        disabled={!canGenerateCurrentXml || isGeneratingXml || isDownloadingXml}
                       >
                         Validate Against XSD
                       </button>
@@ -5241,13 +5315,21 @@ export function App() {
                         className="ghost-button post-tertiary-action"
                         type="button"
                         onClick={() => void downloadXmlRecord()}
-                        disabled={!canDownloadCurrentXml || isGeneratingXml}
+                        disabled={!canDownloadCurrentXml || isGeneratingXml || isDownloadingXml}
                       >
-                        Download POST ZIP
+                        {isDownloadingXml ? "Preparing ZIP..." : "Download POST ZIP"}
                       </button>
-                      {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
+                      <button
+                        className="ghost-button post-tertiary-action"
+                        type="button"
+                        onClick={handleUploadSuccessXmlClick}
+                        disabled={isGeneratingXml || isDownloadingXml}
+                      >
+                        Upload Success XML
+                      </button>
                     </div>
                   </div>
+                  {xmlActionMessage ? <div className="save-message post-preview-action-message">{xmlActionMessage}</div> : null}
                   <div className="post-preview-summary-row">
                     <div className="workflow-note post-preview-status">
                       <strong>Preview status</strong>
@@ -5451,7 +5533,8 @@ export function App() {
                     disabled={
                       ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
                       !canGenerateCurrentXml ||
-                      isGeneratingXml
+                      isGeneratingXml ||
+                      isDownloadingXml
                     }
                   >
                       {isGeneratingXml
@@ -5475,7 +5558,8 @@ export function App() {
                     disabled={
                       ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
                       !canGenerateCurrentXml ||
-                      isGeneratingXml
+                      isGeneratingXml ||
+                      isDownloadingXml
                     }
                   >
                     Validate Against XSD
@@ -5487,10 +5571,13 @@ export function App() {
                     disabled={
                       ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
                       !canDownloadCurrentXml ||
-                      isGeneratingXml
+                      isGeneratingXml ||
+                      isDownloadingXml
                     }
                   >
-                    {xmlMode === "single"
+                    {isDownloadingXml
+                      ? "Preparing ZIP..."
+                      : xmlMode === "single"
                         ? "Download XML"
                       : xmlMode === "marketInfo"
                           ? "Download Market Info"
@@ -6845,14 +6932,14 @@ export function App() {
                   </div>
                   <div className="xml-sidebar-surface">
                     <div className="draft-actions-bar xml-actions-bar">
-                      <button className="action-button" type="button" onClick={() => void generateXmlPreview()} disabled={!selectedXmlPairRecord || isGeneratingXml}>
+                      <button className="action-button" type="button" onClick={() => void generateXmlPreview()} disabled={!selectedXmlPairRecord || isGeneratingXml || isDownloadingXml}>
                         {isGeneratingXml ? "Generating..." : "Generate Accepted POST"}
                       </button>
-                      <button className="ghost-button" type="button" onClick={() => void generateXmlPreview()} disabled={!selectedXmlPairRecord || isGeneratingXml}>
+                      <button className="ghost-button" type="button" onClick={() => void generateXmlPreview()} disabled={!selectedXmlPairRecord || isGeneratingXml || isDownloadingXml}>
                         Validate Against XSD
                       </button>
-                      <button className="ghost-button" type="button" onClick={() => void downloadXmlRecord()} disabled={!selectedXmlPairRecord || isGeneratingXml}>
-                        Download POST Package
+                      <button className="ghost-button" type="button" onClick={() => void downloadXmlRecord()} disabled={!selectedXmlPairRecord || isGeneratingXml || isDownloadingXml}>
+                        {isDownloadingXml ? "Preparing ZIP..." : "Download POST Package"}
                       </button>
                       {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
                     </div>

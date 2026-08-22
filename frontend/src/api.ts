@@ -36,6 +36,7 @@ import type {
   WorkbookImportSnapshotSummary,
   WorkbookSummary,
   XmlGenerationScopeBundle,
+  SuccessXmlUploadResult,
 } from "./types";
 
 const API_ROOT = "http://localhost:8000/api";
@@ -337,6 +338,11 @@ export const api = {
       product_family: productFamily,
       product_variant: productVariant,
       basic_udi_di: basicUdiDi ?? undefined,
+    }),
+  uploadSuccessXml: (fileName: string, xmlContent: string) =>
+    sendJson<SuccessXmlUploadResult>("/xml/upload-success-xml", "POST", {
+      file_name: fileName,
+      xml_content: xmlContent,
     }),
   downloadXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-record", "POST", {

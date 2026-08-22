@@ -1,0 +1,371 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from dataclasses import dataclass
+from typing import Any, Literal, cast
+
+import lxml.etree as ET
+
+from app.models import SuccessXmlUploadResult
+from app.services.testing_state_store import TestingStateStore
+
+MESSAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1"
+SERVICE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1"
+NAMESPACES: dict[str, str] = {
+    "message": MESSAGE_NS,
+    "service": SERVICE_NS,
+}
+
+
+SuccessMessageType = Literal["DEVICE.POST", "UDI_DI.POST"]
+SuccessOperationLabel = Literal["Basic UDI-DI POST", "Device UDI-DI POST"]
+
+
+@dataclass(frozen=True)
+class AcknowledgementPayload:
+    message_type: SuccessMessageType
+    operation_label: SuccessOperationLabel
+    entity_code: str
+    tested_at: str | None
+    correlation_id: str | None
+    message_id: str | None
+    response_code: str
+    source_file_name: str | None
+    raw_xml: str
+
+
+@dataclass(frozen=True)
+class SubjectResolution:
+    subject_id: int
+    created_subject: bool
+    product_family: str | None
+    product_variant: str | None
+    catalogue_number: str | None
+    primary_udi_di: str | None
+    basic_udi_di: str | None
+
+
+class TestingSuccessXmlService:
+    def __init__(self) -> None:
+        self.store = TestingStateStore()
+
+    def record_success_xml(self, *, xml_bytes: bytes, source_file_name: str | None = None) -> SuccessXmlUploadResult:
+        acknowledgement = self._parse_acknowledgement(xml_bytes=xml_bytes, source_file_name=source_file_name)
+        with self.store._connect() as connection:
+            resolution = self._resolve_subject(connection, acknowledgement)
+            recorded_event, duplicate_event = self._record_event(connection, resolution.subject_id, acknowledgement)
+            connection.execute("UPDATE testing_subjects SET post_success = 1 WHERE id = ?", (resolution.subject_id,))
+        return SuccessXmlUploadResult(
+            summary_message=(
+                f"Tracked successful {acknowledgement.operation_label} for "
+                f"{resolution.catalogue_number or acknowledgement.entity_code}."
+            ),
+            message_type=acknowledgement.message_type,
+            operation_label=acknowledgement.operation_label,
+            entity_code=acknowledgement.entity_code,
+            product_family=resolution.product_family,
+            product_variant=resolution.product_variant,
+            catalogue_number=resolution.catalogue_number,
+            primary_udi_di=resolution.primary_udi_di,
+            basic_udi_di=resolution.basic_udi_di,
+            tested_at=acknowledgement.tested_at,
+            correlation_id=acknowledgement.correlation_id,
+            message_id=acknowledgement.message_id,
+            source_file_name=acknowledgement.source_file_name,
+            subject_id=resolution.subject_id,
+            created_subject=resolution.created_subject,
+            recorded_event=recorded_event,
+            duplicate_event=duplicate_event,
+        )
+
+    def _parse_acknowledgement(self, *, xml_bytes: bytes, source_file_name: str | None) -> AcknowledgementPayload:
+        try:
+            root = cast(Any, ET.fromstring(xml_bytes))
+        except ET.XMLSyntaxError as exc:
+            raise ValueError(f"Success XML could not be parsed: {exc}") from exc
+
+        response_entities = root.findall(".//message:responseEntity", NAMESPACES)
+        if len(response_entities) != 1:
+            raise ValueError("Success XML must contain exactly one response entity.")
+
+        response_entity = response_entities[0]
+        response_code = self._node_text(response_entity.find("message:responseCode", NAMESPACES))
+        if response_code != "SUCCESS":
+            raise ValueError(f"Only SUCCESS acknowledgements can be recorded. Received {response_code or 'UNKNOWN'}.")
+
+        entity_code = self._node_text(response_entity.find("message:entityCode", NAMESPACES))
+        if not entity_code:
+            raise ValueError("Success XML is missing responseEntity.entityCode.")
+
+        service_id, service_operation = self._resolve_service_identity(root)
+        if service_operation != "POST":
+            raise ValueError(
+                f"Only POST acknowledgements are supported. Received {service_id or 'UNKNOWN'}.{service_operation or 'UNKNOWN'}."
+            )
+        if service_id not in {"DEVICE", "UDI_DI"}:
+            raise ValueError(
+                f"Only DEVICE.POST and UDI_DI.POST acknowledgements are supported. Received {service_id or 'UNKNOWN'}."
+            )
+
+        if service_id == "DEVICE":
+            message_type: SuccessMessageType = "DEVICE.POST"
+            operation_label: SuccessOperationLabel = "Basic UDI-DI POST"
+        else:
+            message_type = "UDI_DI.POST"
+            operation_label = "Device UDI-DI POST"
+        return AcknowledgementPayload(
+            message_type=message_type,
+            operation_label=operation_label,
+            entity_code=entity_code,
+            tested_at=self._node_text(root.find("message:creationDateTime", NAMESPACES)),
+            correlation_id=self._node_text(root.find("message:correlationID", NAMESPACES)),
+            message_id=self._node_text(root.find("message:messageID", NAMESPACES)),
+            response_code=response_code,
+            source_file_name=source_file_name,
+            raw_xml=xml_bytes.decode("utf-8", errors="replace"),
+        )
+
+    def _resolve_service_identity(self, root: Any) -> tuple[str | None, str | None]:
+        for path in ("message:sender/message:service", "message:recipient/message:service"):
+            service_node = root.find(path, NAMESPACES)
+            if service_node is None:
+                continue
+            service_id = self._node_text(service_node.find("service:serviceID", NAMESPACES))
+            service_operation = self._node_text(service_node.find("service:serviceOperation", NAMESPACES))
+            if service_id and service_operation:
+                return service_id, service_operation
+        return None, None
+
+    def _resolve_subject(self, connection: sqlite3.Connection, acknowledgement: AcknowledgementPayload) -> SubjectResolution:
+        existing_subject = self._find_existing_testing_subject(connection, acknowledgement)
+        if existing_subject is not None:
+            return SubjectResolution(
+                subject_id=int(existing_subject["id"]),
+                created_subject=False,
+                product_family=self.store._optional_string(existing_subject["product_family"]),
+                product_variant=self.store._optional_string(existing_subject["product_variant"]),
+                catalogue_number=self.store._optional_string(existing_subject["catalogue_number"]),
+                primary_udi_di=self.store._optional_string(existing_subject["primary_udi_di"]),
+                basic_udi_di=self.store._optional_string(existing_subject["basic_udi_di"]),
+            )
+
+        device_row = self._find_device_subject_row(connection, acknowledgement)
+        if device_row is None:
+            raise ValueError(
+                f"No device subject could be resolved for {acknowledgement.operation_label} entity {acknowledgement.entity_code}."
+            )
+
+        subject_id = self._insert_testing_subject(connection, device_row)
+        return SubjectResolution(
+            subject_id=subject_id,
+            created_subject=True,
+            product_family=self.store._optional_string(device_row["product_family"]),
+            product_variant=self.store._optional_string(device_row["product_variant"]),
+            catalogue_number=self.store._optional_string(device_row["catalogue_number"]),
+            primary_udi_di=self.store._optional_string(device_row["primary_udi_di"]),
+            basic_udi_di=self.store._optional_string(device_row["basic_udi_di"]),
+        )
+
+    def _find_existing_testing_subject(
+        self,
+        connection: sqlite3.Connection,
+        acknowledgement: AcknowledgementPayload,
+    ) -> sqlite3.Row | None:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM testing_subjects
+            WHERE normalized_primary_udi_di = ?
+               OR normalized_basic_udi_di = ?
+            ORDER BY id
+            """,
+            (
+                self.store._normalize_identity(acknowledgement.entity_code),
+                self.store._normalize_identity(acknowledgement.entity_code),
+            ),
+        ).fetchall()
+        if acknowledgement.message_type == "UDI_DI.POST":
+            for row in rows:
+                if self.store._matches_identity(row["primary_udi_di"], acknowledgement.entity_code):
+                    return row
+            return None
+        for row in rows:
+            if self.store._matches_identity(row["basic_udi_di"], acknowledgement.entity_code):
+                return row
+        return None
+
+    def _find_device_subject_row(
+        self,
+        connection: sqlite3.Connection,
+        acknowledgement: AcknowledgementPayload,
+    ) -> sqlite3.Row | None:
+        rows = connection.execute(
+            """
+            SELECT
+                ds.id,
+                ds.subject_key,
+                ds.product_family,
+                ds.product_variant,
+                ds.catalogue_number,
+                ds.primary_udi_di,
+                ds.basic_udi_di,
+                ds.current_source_row_id,
+                sr.sheet_name,
+                sr.row_index,
+                sw.workbook_name
+            FROM device_subject ds
+            LEFT JOIN source_row sr ON sr.id = ds.current_source_row_id
+            LEFT JOIN source_workbook sw ON sw.id = sr.source_workbook_id
+            ORDER BY ds.id
+            """
+        ).fetchall()
+        if acknowledgement.message_type == "UDI_DI.POST":
+            for row in rows:
+                if self.store._matches_identity(row["primary_udi_di"], acknowledgement.entity_code):
+                    return row
+            return None
+        for row in rows:
+            if self.store._matches_identity(row["basic_udi_di"], acknowledgement.entity_code):
+                return row
+        return None
+
+    def _insert_testing_subject(self, connection: sqlite3.Connection, device_row: sqlite3.Row) -> int:
+        connection.execute(
+            """
+            INSERT INTO testing_subjects (
+                subject_key,
+                device_subject_id,
+                normalized_product_family,
+                normalized_product_variant,
+                normalized_catalogue_number,
+                normalized_primary_udi_di,
+                normalized_basic_udi_di,
+                product_family,
+                product_variant,
+                catalogue_number,
+                primary_udi_di,
+                basic_udi_di,
+                source_workbook,
+                source_sheet,
+                source_row_index,
+                post_success,
+                baseline_patch_success,
+                exclude_from_post_wave,
+                exclude_from_baseline_patch_wave,
+                latest_successful_version,
+                latest_successful_state_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, 0, NULL, NULL)
+            """,
+            (
+                self.store._optional_string(device_row["subject_key"]),
+                int(device_row["id"]),
+                self.store._normalize_identity(device_row["product_family"]),
+                self.store._normalize_identity(device_row["product_variant"]),
+                self.store._normalize_identity(device_row["catalogue_number"]),
+                self.store._normalize_identity(device_row["primary_udi_di"]),
+                self.store._normalize_identity(device_row["basic_udi_di"]),
+                self.store._optional_string(device_row["product_family"]),
+                self.store._optional_string(device_row["product_variant"]),
+                self.store._optional_string(device_row["catalogue_number"]),
+                self.store._optional_string(device_row["primary_udi_di"]),
+                self.store._optional_string(device_row["basic_udi_di"]),
+                self.store._optional_string(device_row["workbook_name"]),
+                self.store._optional_string(device_row["sheet_name"]),
+                self.store._optional_int(device_row["row_index"]),
+            ),
+        )
+        inserted_row = connection.execute("SELECT last_insert_rowid()").fetchone()
+        if inserted_row is None:
+            raise ValueError("Testing subject insert succeeded but no row id was returned.")
+        return int(inserted_row[0])
+
+    def _record_event(
+        self,
+        connection: sqlite3.Connection,
+        subject_id: int,
+        acknowledgement: AcknowledgementPayload,
+    ) -> tuple[bool, bool]:
+        duplicate_row = connection.execute(
+            """
+            SELECT id
+            FROM testing_events
+            WHERE subject_id = ?
+              AND COALESCE(correlation_id, '') = COALESCE(?, '')
+              AND COALESCE(message_id, '') = COALESCE(?, '')
+              AND message_type = ?
+              AND status = 'SUCCESS'
+            LIMIT 1
+            """,
+            (
+                subject_id,
+                acknowledgement.correlation_id,
+                acknowledgement.message_id,
+                acknowledgement.message_type,
+            ),
+        ).fetchone()
+        if duplicate_row is not None:
+            return False, True
+
+        next_index_row = connection.execute(
+            "SELECT COALESCE(MAX(event_index), -1) + 1 FROM testing_events WHERE subject_id = ?",
+            (subject_id,),
+        ).fetchone()
+        next_index = int(next_index_row[0]) if next_index_row is not None else 0
+        raw_event_json = json.dumps(
+            {
+                "source_file_name": acknowledgement.source_file_name,
+                "message_type": acknowledgement.message_type,
+                "operation_label": acknowledgement.operation_label,
+                "entity_code": acknowledgement.entity_code,
+                "response_code": acknowledgement.response_code,
+                "correlation_id": acknowledgement.correlation_id,
+                "message_id": acknowledgement.message_id,
+                "tested_at": acknowledgement.tested_at,
+                "xml": acknowledgement.raw_xml,
+            }
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_events (
+                subject_id,
+                event_index,
+                message_type,
+                status,
+                version,
+                scenario_id,
+                scenario_label,
+                tested_at,
+                transaction_id,
+                submission_id,
+                payload_created_at,
+                correlation_id,
+                message_id,
+                changed_fields_json,
+                retained_fields_json,
+                unchanged_fields_json,
+                raw_event_json
+            ) VALUES (?, ?, ?, 'SUCCESS', NULL, NULL, NULL, ?, NULL, NULL, ?, ?, ?, NULL, NULL, NULL, ?)
+            """,
+            (
+                subject_id,
+                next_index,
+                acknowledgement.message_type,
+                acknowledgement.tested_at,
+                acknowledgement.tested_at,
+                acknowledgement.correlation_id,
+                acknowledgement.message_id,
+                raw_event_json,
+            ),
+        )
+        return True, False
+
+    @staticmethod
+    def _node_text(node: Any) -> str | None:
+        if node is None:
+            return None
+        text = node.text
+        if not isinstance(text, str):
+            return None
+        value = text.strip()
+        return value or None

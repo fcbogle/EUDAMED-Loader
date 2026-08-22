@@ -30,9 +30,10 @@ class TestingReadModelService:
     ) -> TestingWorkspaceSummary:
         clauses: list[str] = []
         params: list[object] = []
-        if product_family:
-            clauses.append("ts.normalized_product_family = ?")
-            params.append(self._normalize_identity(product_family))
+        family_clause, family_params = self._family_filter_clause("ts.normalized_product_family", product_family)
+        if family_clause:
+            clauses.append(family_clause)
+            params.extend(family_params)
         if product_variant:
             clauses.append("ts.normalized_product_variant = ?")
             params.append(self._normalize_identity(product_variant))
@@ -57,7 +58,7 @@ class TestingReadModelService:
                     f"""
                     SELECT COUNT(*)
                     FROM reviewed_post_baselines rb
-                    {"WHERE rb.normalized_product_family = ?" + (" AND rb.normalized_product_variant = ?" if product_variant else "") if product_family else ("WHERE rb.normalized_product_variant = ?" if product_variant else "")}
+                    {self._baseline_where_clause(product_family=product_family, product_variant=product_variant)}
                     """,
                     self._baseline_filter_params(product_family=product_family, product_variant=product_variant),
                 ).fetchone()[0]
@@ -88,7 +89,7 @@ class TestingReadModelService:
                     FROM testing_subjects ts
                     WHERE ts.post_success = 1
                       AND COALESCE(ts.normalized_basic_udi_di, '') <> ''
-                      {"AND ts.normalized_product_family = ?" if product_family else ""}
+                      {f"AND {family_clause}" if family_clause else ""}
                       {"AND ts.normalized_product_variant = ?" if product_variant else ""}
                     GROUP BY ts.normalized_basic_udi_di
                 )
@@ -228,7 +229,7 @@ class TestingReadModelService:
             JOIN testing_subjects ts ON ts.id = event.subject_id
             WHERE event.status = 'SUCCESS'
               AND event.message_type = ?
-              {"AND ts.normalized_product_family = ?" if product_family else ""}
+              {f"AND {self._family_filter_clause('ts.normalized_product_family', product_family)[0]}" if product_family else ""}
               {"AND ts.normalized_product_variant = ?" if product_variant else ""}
             """,
             (
@@ -267,8 +268,9 @@ class TestingReadModelService:
         product_variant: str | None,
     ) -> str:
         clauses: list[str] = []
-        if product_family:
-            clauses.append("ts.normalized_product_family = ?")
+        family_clause, _ = cls._family_filter_clause("ts.normalized_product_family", product_family)
+        if family_clause:
+            clauses.append(family_clause)
         if product_variant:
             clauses.append("ts.normalized_product_variant = ?")
         return f"WHERE {' AND '.join(clauses)}" if clauses else ""
@@ -281,8 +283,7 @@ class TestingReadModelService:
         product_variant: str | None,
     ) -> tuple[str, ...]:
         params: list[str] = []
-        if product_family:
-            params.append(cls._normalize_identity(product_family))
+        params.extend(cls._family_filter_params(product_family))
         if product_variant:
             params.append(cls._normalize_identity(product_variant))
         return tuple(params)
@@ -295,6 +296,50 @@ class TestingReadModelService:
         product_variant: str | None,
     ) -> tuple[str, ...]:
         return cls._subject_filter_params(product_family=product_family, product_variant=product_variant)
+
+    @classmethod
+    def _baseline_where_clause(
+        cls,
+        *,
+        product_family: str | None,
+        product_variant: str | None,
+    ) -> str:
+        clauses: list[str] = []
+        family_clause, _ = cls._family_filter_clause("rb.normalized_product_family", product_family)
+        if family_clause:
+            clauses.append(family_clause)
+        if product_variant:
+            clauses.append("rb.normalized_product_variant = ?")
+        return f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+    @classmethod
+    def _family_filter_clause(cls, column_name: str, product_family: str | None) -> tuple[str, tuple[str, ...]]:
+        family_candidates = cls._normalized_family_candidates(product_family)
+        if not family_candidates:
+            return "", ()
+        if len(family_candidates) == 1:
+            return f"{column_name} = ?", family_candidates
+        placeholders = ", ".join("?" for _ in family_candidates)
+        return f"{column_name} IN ({placeholders})", family_candidates
+
+    @classmethod
+    def _family_filter_params(cls, product_family: str | None) -> tuple[str, ...]:
+        return cls._normalized_family_candidates(product_family)
+
+    @classmethod
+    def _normalized_family_candidates(cls, product_family: object) -> tuple[str, ...]:
+        normalized_full = cls._normalize_identity(product_family)
+        if not normalized_full:
+            return ()
+        candidates = {normalized_full}
+        family_text = cls._optional_string(product_family)
+        if family_text and "/" in family_text:
+            candidates.update(
+                cls._normalize_identity(part)
+                for part in family_text.split("/")
+                if cls._normalize_identity(part)
+            )
+        return tuple(sorted(candidates))
 
     @classmethod
     def _subject_summary_from_row(cls, row: sqlite3.Row) -> TestingSubjectReadModelSummary:

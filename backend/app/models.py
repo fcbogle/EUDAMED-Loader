@@ -382,6 +382,31 @@ class TestingSubjectHistory(BaseModel):
     events: list[TestingEventSummary] = Field(default_factory=list)
 
 
+class SuccessXmlUploadResult(BaseModel):
+    summary_message: str
+    message_type: Literal["DEVICE.POST", "UDI_DI.POST"]
+    operation_label: Literal["Basic UDI-DI POST", "Device UDI-DI POST"]
+    entity_code: str
+    product_family: str | None = None
+    product_variant: str | None = None
+    catalogue_number: str | None = None
+    primary_udi_di: str | None = None
+    basic_udi_di: str | None = None
+    tested_at: str | None = None
+    correlation_id: str | None = None
+    message_id: str | None = None
+    source_file_name: str | None = None
+    subject_id: int
+    created_subject: bool = False
+    recorded_event: bool = False
+    duplicate_event: bool = False
+
+
+class SuccessXmlUploadRequest(BaseModel):
+    file_name: str | None = None
+    xml_content: str
+
+
 OperationAssessmentType = Literal["single_post", "single_patch", "bulk_post", "bulk_patch"]
 OperationAssessmentStatus = Literal["available", "blocked", "attention"]
 

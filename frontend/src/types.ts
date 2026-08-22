@@ -837,3 +837,23 @@ export type TestingSubjectReadModelSummary = {
   reviewed_post_at: string | null;
   event_count: number;
 };
+
+export type SuccessXmlUploadResult = {
+  summary_message: string;
+  message_type: "DEVICE.POST" | "UDI_DI.POST";
+  operation_label: "Basic UDI-DI POST" | "Device UDI-DI POST";
+  entity_code: string;
+  product_family: string | null;
+  product_variant: string | null;
+  catalogue_number: string | null;
+  primary_udi_di: string | null;
+  basic_udi_di: string | null;
+  tested_at: string | null;
+  correlation_id: string | null;
+  message_id: string | null;
+  source_file_name: string | null;
+  subject_id: number;
+  created_subject: boolean;
+  recorded_event: boolean;
+  duplicate_event: boolean;
+};

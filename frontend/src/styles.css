@@ -467,9 +467,10 @@ select {
 
 .operation-summary-pill-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 10px;
+  align-items: center;
 }
 
 .device-subject-metric-grid {
@@ -1277,6 +1278,12 @@ a.ghost-button:visited {
 .save-message {
   color: #007a12;
   font-size: 0.88rem;
+}
+
+.post-preview-action-message {
+  margin-top: -2px;
+  max-width: min(980px, 100%);
+  line-height: 1.35;
 }
 
 .queue-summary {
@@ -2271,6 +2278,18 @@ a.ghost-button:visited {
   box-shadow: 0 12px 30px rgba(0, 42, 58, 0.06);
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .post-preview-layout {
   display: grid;
   gap: 14px;
@@ -2866,7 +2885,7 @@ a.ghost-button:visited {
 
 .post-actions-bar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
   gap: 10px;
   margin: 8px 0 0;
   flex: 0 0 auto;
