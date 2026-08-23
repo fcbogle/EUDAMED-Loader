@@ -4,6 +4,7 @@ import { ApiError, api } from "./api";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
 import { BulkPatchWorkspace } from "./components/BulkPatchWorkspace";
 import { BulkPostWorkspace } from "./components/BulkPostWorkspace";
+import { BulkXmlPreviewPanel } from "./components/BulkXmlPreviewPanel";
 import { GenericXmlPreviewPanel } from "./components/GenericXmlPreviewPanel";
 import canonicalValidationDocumentation from "./content/docs/canonical-validation.md?raw";
 import { PatchPreviewPanel } from "./components/PatchPreviewPanel";
@@ -2600,11 +2601,18 @@ export function App() {
     xmlOperationAssessment?.status === "available",
   );
   const successXmlUploadScope =
-    selectedXmlFamilySummary && selectedXmlVariantSummary && (xmlMode === "post" || xmlMode === "patch")
+    selectedXmlFamilySummary &&
+    selectedXmlVariantSummary &&
+    (xmlMode === "post" ||
+      xmlMode === "patch" ||
+      xmlMode === "bulkPost" ||
+      xmlMode === "bulkUdidiPost" ||
+      xmlMode === "bulkPatch")
       ? {
           productFamily: selectedXmlFamilySummary.product_family,
           productVariant: selectedXmlVariantSummary.product_variant,
           mode: xmlMode,
+          basicUdiDi: xmlMode === "bulkPatch" ? selectedBulkPatchBasicUdiDi || null : null,
         }
       : null;
   const {
@@ -2620,6 +2628,9 @@ export function App() {
     setXmlOperationAssessment,
     setXmlOperationAssessmentError,
     clearPreviewState: () => {
+      setXmlBulkPostPreview(null);
+      setXmlBulkUdidiPostPreview(null);
+      setXmlBulkPatchPreview(null);
       setXmlPairPreview(null);
       setXmlPatchPreview(null);
       setSelectedPostXmlSectionId(null);
@@ -4320,7 +4331,7 @@ export function App() {
               }
               if (xmlMode === "bulkUdidiPost") {
                 return {
-                  count: selectedBulkEligibleUdidiPostCount,
+                  count: assessedBulkChildRecordCount ?? selectedBulkEligibleUdidiPostCount,
                   noun: "eligible child row in variant",
                 };
               }
@@ -4814,11 +4825,47 @@ export function App() {
                     patchXmlPreviewLineRefs={patchXmlPreviewLineRefs}
                     patchXmlPreviewContainerRef={patchXmlPreviewContainerRef}
                   />
+                ) : xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? (
+                  <BulkXmlPreviewPanel
+                    successXmlInputRef={postSuccessXmlInputRef}
+                    handleSuccessXmlSelected={handlePostSuccessXmlSelected}
+                    title={genericPreviewTitle}
+                    generateButtonLabel={
+                      xmlMode === "bulkPost"
+                        ? "Generate Bulk BASIC UDI-DI POST"
+                        : xmlMode === "bulkUdidiPost"
+                          ? "Generate Bulk DEVICE UDI-DI POST"
+                          : "Generate Bulk PATCH"
+                    }
+                    downloadButtonLabel={
+                      xmlMode === "bulkPost"
+                        ? "Download Bulk BASIC UDI-DI POST ZIP"
+                        : xmlMode === "bulkUdidiPost"
+                          ? "Download Bulk DEVICE UDI-DI POST ZIP"
+                          : "Download Bulk PATCH ZIP"
+                    }
+                    canGenerateCurrentXml={canGenerateCurrentXml}
+                    canDownloadCurrentXml={canDownloadCurrentXml}
+                    isGeneratingXml={isGeneratingXml}
+                    isDownloadingXml={isDownloadingXml}
+                    isUploadingSuccessXml={isUploadingSuccessXml}
+                    onGeneratePreview={() => void generateXmlPreview()}
+                    onDownload={() => void downloadXmlRecord()}
+                    onUploadClick={handleUploadSuccessXmlClick}
+                    xmlActionMessage={xmlActionMessage}
+                    activePreviewLabel={activePreviewLabel}
+                    selectedBatchValidation={selectedBatchValidation}
+                    validationStatusLabel={validationStatusLabel}
+                    selectedSchemaLabel={selectedSchemaLabel}
+                    activePreviewFileName={activePreviewFileName}
+                    previewStatusMessage={genericPreviewStatusMessage}
+                    xmlPreviewLines={xmlPreviewLines}
+                  />
                 ) : (
                   <>
                     <GenericXmlPreviewPanel
                       title={genericPreviewTitle}
-                      useBulkMetaLayout={xmlMode === "bulkPatch" || xmlMode === "bulkPost"}
+                      useBulkMetaLayout={false}
                       activePreviewLabel={activePreviewLabel}
                       selectedBatchValidation={selectedBatchValidation}
                       validationStatusLabel={validationStatusLabel}
@@ -4832,14 +4879,14 @@ export function App() {
               </div>
 
               <div className="xml-sidebar-surface">
-                {xmlMode === "patch" ? null : (
+                {xmlMode === "patch" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? null : (
                 <div className="draft-actions-bar xml-actions-bar">
                   <button
                     className="action-button"
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
+                      ((xmlMode === "single" || xmlMode === "marketInfo") && !selectedXmlVariantSummary) ||
                       !canGenerateCurrentXml ||
                       isGeneratingXml ||
                       isDownloadingXml
@@ -4849,20 +4896,16 @@ export function App() {
                       ? "Generating..."
                       : xmlMode === "single"
                         ? "Generate XML"
-                        : xmlMode === "marketInfo"
-                          ? "Generate Market Info"
-                          : xmlMode === "bulkPost"
-                              ? "Generate Bulk Basic UDI POST"
-                              : xmlMode === "bulkUdidiPost"
-                                ? "Generate Bulk UDI-DI POST"
-                              : "Generate Bulk PATCH"}
+                      : xmlMode === "marketInfo"
+                        ? "Generate Market Info"
+                        : "Generate XML"}
                   </button>
                   <button
                     className="ghost-button"
                     type="button"
                     onClick={() => void generateXmlPreview()}
                     disabled={
-                      ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
+                      ((xmlMode === "single" || xmlMode === "marketInfo") && !selectedXmlVariantSummary) ||
                       !canGenerateCurrentXml ||
                       isGeneratingXml ||
                       isDownloadingXml
@@ -4875,7 +4918,7 @@ export function App() {
                     type="button"
                     onClick={() => void downloadXmlRecord()}
                     disabled={
-                      ((xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch") && !selectedXmlVariantSummary) ||
+                      ((xmlMode === "single" || xmlMode === "marketInfo") && !selectedXmlVariantSummary) ||
                       !canDownloadCurrentXml ||
                       isGeneratingXml ||
                       isDownloadingXml
@@ -4886,12 +4929,8 @@ export function App() {
                       : xmlMode === "single"
                         ? "Download XML"
                       : xmlMode === "marketInfo"
-                          ? "Download Market Info"
-                          : xmlMode === "bulkPost"
-                              ? "Download Bulk Basic UDI POST ZIP"
-                              : xmlMode === "bulkUdidiPost"
-                                ? "Download Bulk UDI-DI POST ZIP"
-                              : "Download Bulk PATCH ZIP"}
+                        ? "Download Market Info"
+                        : "Download XML"}
                   </button>
                   {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
                 </div>
@@ -5055,14 +5094,14 @@ export function App() {
                   ) : (
                   <BulkPostWorkspace
                     familyVariantLabel={`${selectedXmlFamilySummary?.product_family} / ${selectedXmlVariantSummary.product_variant}`}
-                    title={xmlMode === "bulkPost" ? "Bulk POST" : "Bulk UDI-DI POST"}
-                    stepOneTitle={xmlMode === "bulkPost" ? "1. Confirm parent candidates" : "1. Confirm existing parent"}
+                    title={xmlMode === "bulkPost" ? "Bulk BASIC UDI-DI POST" : "Bulk DEVICE UDI-DI POST"}
+                    stepOneTitle={xmlMode === "bulkPost" ? "Parent registration scope" : "Child registration scope"}
                     stepOneCount={xmlMode === "bulkPost" ? selectedBulkUnpostedBasicUdiCount : selectedBulkEligibleUdidiPostCount}
                     stepOneLabel={xmlMode === "bulkPost" ? "unposted parent" : "eligible device"}
                     stepOneCopy={
                       xmlMode === "bulkPost"
-                        ? "Confirm Basic UDI-DI parent scope for this POST."
-                        : "Confirm child scope under an existing Basic UDI-DI parent."
+                        ? "These Basic UDI-DI parent registrations are currently available for this selected family and variant."
+                        : "These Device UDI-DI child registrations are currently available under tracked Basic UDI-DI parents."
                     }
                     stepOneFooter={xmlMode === "bulkPost" ? bulkPostReadinessMessage : undefined}
                     selectedBulkRecordCount={selectedBulkRecordCount}

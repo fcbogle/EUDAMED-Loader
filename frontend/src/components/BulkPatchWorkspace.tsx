@@ -1,6 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import type { BulkPatchPostedEntry, BulkPatchPostedParentGroup, CriticalWarningCodeOption, XmlValidationResult } from "../types";
+import { XmlAssessmentCard } from "./XmlAssessmentCard";
+import { XmlStatusStrip } from "./XmlStatusStrip";
+import { XmlWorkspaceHeader } from "./XmlWorkspaceHeader";
 
 type PatchScenarioOption = {
   id: string;
@@ -106,18 +109,19 @@ export function BulkPatchWorkspace({
     <>
       <div className="draft-list xml-record-stack">
         <div className="draft-card xml-record-card">
-          <div className="draft-card-head">
-            <strong>{familyVariantLabel}</strong>
-            <span className="status-pill ok compact">Bulk PATCH</span>
-          </div>
+          <XmlWorkspaceHeader
+            title={familyVariantLabel}
+            statusLabel="Bulk PATCH"
+            subtitle="Review the registered parent scope, PATCH device selection, and scenario change set for this family and variant."
+          />
           <div className="bulk-patch-layout">
             <div className="bulk-patch-config-column">
-              <div className="draft-card">
-                <div className="draft-card-head">
-                  <strong>1. Choose posted parent</strong>
-                  <span className="status-pill ok compact">{displayedBulkPatchParentOptions.length} available</span>
-                </div>
-                <p className="panel-copy">Confirm Basic UDI-DI for this PATCH.</p>
+              <XmlAssessmentCard
+                title="Registered parent scope"
+                statusLabel={`${displayedBulkPatchParentOptions.length} available`}
+                subtitle="Tracked Basic UDI-DI parents"
+              >
+                <p className="panel-copy">Select the registered Basic UDI-DI parent that anchors this bulk PATCH package.</p>
                 <label className="field-label" htmlFor="xml-bulk-patch-parent-selector">
                   Basic UDI-DI parent
                 </label>
@@ -150,14 +154,14 @@ export function BulkPatchWorkspace({
                     })}
                   </div>
                 ) : null}
-              </div>
+              </XmlAssessmentCard>
 
-              <div className="draft-card">
-                <div className="draft-card-head">
-                  <strong>2. Choose device scope</strong>
-                  <span className="status-pill ok compact">{selectedBulkPatchSelectedCount} selected</span>
-                </div>
-                <p className="panel-copy">Determine scope of this PATCH.</p>
+              <XmlAssessmentCard
+                title="PATCH device scope"
+                statusLabel={`${selectedBulkPatchSelectedCount} selected`}
+                subtitle="Devices included in this package"
+              >
+                <p className="panel-copy">Choose which posted Device UDI-DI rows will receive the selected PATCH scenario.</p>
                 <label className="field-label" htmlFor="xml-bulk-patch-scope-mode">
                   Scope mode
                 </label>
@@ -238,14 +242,14 @@ export function BulkPatchWorkspace({
                     </p>
                   </>
                 ) : null}
-              </div>
+              </XmlAssessmentCard>
 
-              <div className="draft-card">
-                <div className="draft-card-head">
-                  <strong>3. Choose PATCH scenario</strong>
-                  <span className="status-pill ok compact">{patchScenarioStatusLabel}</span>
-                </div>
-                <p className="panel-copy">Select PATCH operation for your chosen scope.</p>
+              <XmlAssessmentCard
+                title="Scenario and change set"
+                statusLabel={patchScenarioStatusLabel}
+                subtitle="Applied to the selected devices"
+              >
+                <p className="panel-copy">Select the PATCH scenario and define the business change that will be applied across the package.</p>
                 <label className="field-label" htmlFor="xml-bulk-patch-scenario-selector">
                   Bulk PATCH scenario
                 </label>
@@ -270,7 +274,7 @@ export function BulkPatchWorkspace({
                   </div>
                 ) : null}
                 {selectedPatchScenarioId === "equivalent_first_patch" ? (
-                  <p className="panel-copy">This option creates the explicit version `2` PATCH with no business-field change.</p>
+                  <p className="panel-copy">This scenario creates the explicit version `2` PATCH with no business-field change.</p>
                 ) : null}
                 {selectedPatchScenarioId === "trade_name_edit" ? (
                   <div className="patch-field patch-field-full">
@@ -430,21 +434,13 @@ export function BulkPatchWorkspace({
                     </div>
                   </>
                 ) : null}
-              </div>
+              </XmlAssessmentCard>
             </div>
           </div>
-          <div className="validation-pill-row bulk-patch-pill-row">
-            <span className="status-pill ok compact bulk-patch-status-pill">Schema target: Message.xsd</span>
-            <span
-              className={
-                selectedBatchValidation?.valid
-                  ? "status-pill ok compact bulk-patch-status-pill"
-                  : "status-pill warn compact bulk-patch-status-pill"
-              }
-            >
-              Validation output: {selectedBatchValidation ? (selectedBatchValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
-            </span>
-          </div>
+          <XmlStatusStrip
+            validationValid={selectedBatchValidation?.valid ?? null}
+            validationStatusLabel={selectedBatchValidation ? (selectedBatchValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
+          />
         </div>
       </div>
     </>

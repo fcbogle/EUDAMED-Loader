@@ -834,10 +834,26 @@ class TestingStateStore:
         family_candidates = cls._normalized_family_candidates(product_family)
         if not family_candidates:
             return f"{table_name}.normalized_product_family = ''", ()
-        if len(family_candidates) == 1:
-            return f"{table_name}.normalized_product_family = ?", family_candidates
-        placeholders = ", ".join("?" for _ in family_candidates)
-        return f"{table_name}.normalized_product_family IN ({placeholders})", family_candidates
+        clauses: list[str] = []
+        params: list[str] = []
+        for candidate in family_candidates:
+            clauses.append(
+                f"({table_name}.normalized_product_family = ? "
+                f"OR {table_name}.normalized_product_family LIKE ? "
+                f"OR {table_name}.normalized_product_family LIKE ? "
+                f"OR {table_name}.normalized_product_family LIKE ?)"
+            )
+            params.extend(
+                (
+                    candidate,
+                    f"{candidate}/%",
+                    f"%/{candidate}",
+                    f"%/{candidate}/%",
+                )
+            )
+        if len(clauses) == 1:
+            return clauses[0], tuple(params)
+        return f"({' OR '.join(clauses)})", tuple(params)
 
     @classmethod
     def _normalize_identity(cls, value: object) -> str:

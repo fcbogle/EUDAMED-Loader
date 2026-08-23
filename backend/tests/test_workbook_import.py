@@ -37,6 +37,7 @@ from app.routers.xml_generation import (
     xml_generation_scope,
 )
 from app.services.testing_state_store import TestingStateStore as PlaygroundStateStore
+from app.services.testing_success_xml import TestingSuccessXmlService
 from app.services.canonical_validation import CanonicalValidationService
 from app.services.testing_read_model import TestingReadModelService
 from app.services.workbook_import import ImportedSourceRow, WorkbookImportService
@@ -375,6 +376,123 @@ def _insert_reviewed_post_baseline(
         connection.commit()
     finally:
         connection.close()
+
+
+def test_success_xml_upload_records_bulk_udidi_post_acknowledgements(
+    isolated_workbook_import_db: Path,
+) -> None:
+    PlaygroundStateStore()
+    first_subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L3S",
+        primary_udi_di="05050649058226",
+        basic_udi_di="5050649ESPRITVZ",
+    )
+    second_subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L3SD",
+        primary_udi_di="05050649058233",
+        basic_udi_di="5050649ESPRITVZ",
+    )
+
+    xml_payload = """<?xml version='1.0' encoding='utf-8'?>
+<m:PullAck xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1">
+  <m:correlationID>bulk-success-correlation</m:correlationID>
+  <m:creationDateTime>2026-08-23T15:30:00+00:00</m:creationDateTime>
+  <m:messageID>bulk-success-message</m:messageID>
+  <m:sender>
+    <m:node>
+      <s:nodeActorCode>EUDAMED</s:nodeActorCode>
+    </m:node>
+    <m:service>
+      <s:serviceID>UDI_DI</s:serviceID>
+      <s:serviceOperation>POST</s:serviceOperation>
+    </m:service>
+  </m:sender>
+  <m:responseEntity>
+    <m:responseCode>SUCCESS</m:responseCode>
+    <m:entityCode>05050649058226</m:entityCode>
+    <m:entityVersion>1</m:entityVersion>
+  </m:responseEntity>
+  <m:responseEntity>
+    <m:responseCode>SUCCESS</m:responseCode>
+    <m:entityCode>05050649058233</m:entityCode>
+    <m:entityVersion>1</m:entityVersion>
+  </m:responseEntity>
+</m:PullAck>
+"""
+
+    result = TestingSuccessXmlService().record_success_xml(
+        xml_bytes=xml_payload.encode("utf-8"),
+        source_file_name="bulk-udidi-success.xml",
+    )
+
+    assert result.message_type == "UDI_DI.POST"
+    assert result.operation_label == "Device UDI-DI POST"
+    assert result.entity_count == 2
+    assert result.recorded_event_count == 2
+    assert result.duplicate_event_count == 0
+    assert result.created_subject_count == 0
+    assert result.duplicate_event is False
+    assert "2 of 2 response entities" in result.summary_message
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+      rows = connection.execute(
+          """
+          SELECT id, catalogue_number, post_success, latest_successful_version
+          FROM testing_subjects
+          WHERE id IN (?, ?)
+          ORDER BY id
+          """,
+          (first_subject_id, second_subject_id),
+      ).fetchall()
+      assert [dict(row) for row in rows] == [
+          {
+              "id": first_subject_id,
+              "catalogue_number": "ESP22L3S",
+              "post_success": 1,
+              "latest_successful_version": "1",
+          },
+          {
+              "id": second_subject_id,
+              "catalogue_number": "ESP22L3SD",
+              "post_success": 1,
+              "latest_successful_version": "1",
+          },
+      ]
+      event_rows = connection.execute(
+          """
+          SELECT subject_id, event_index, message_type, status, version
+          FROM testing_events
+          WHERE subject_id IN (?, ?)
+          ORDER BY subject_id, event_index
+          """,
+          (first_subject_id, second_subject_id),
+      ).fetchall()
+      assert [dict(row) for row in event_rows] == [
+          {
+              "subject_id": first_subject_id,
+              "event_index": 0,
+              "message_type": "UDI_DI.POST",
+              "status": "SUCCESS",
+              "version": "1",
+          },
+          {
+              "subject_id": second_subject_id,
+              "event_index": 0,
+              "message_type": "UDI_DI.POST",
+              "status": "SUCCESS",
+              "version": "1",
+          },
+      ]
+    finally:
+      connection.close()
 
 
 def test_workbook_import_service_persists_import_batch_and_subjects(

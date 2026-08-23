@@ -3,12 +3,13 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { api } from "./api";
 import type { OperationAssessment, TestingSubjectReadModelSummary } from "./types";
 
-type UploadMode = "post" | "patch";
+type UploadMode = "post" | "patch" | "bulkPost" | "bulkUdidiPost" | "bulkPatch";
 
 type UploadScope = {
   productFamily: string;
   productVariant: string;
   mode: UploadMode;
+  basicUdiDi?: string | null;
 };
 
 type UseSuccessXmlUploadArgs = {
@@ -45,25 +46,39 @@ export function useSuccessXmlUpload({
     try {
       const xmlContent = await file.text();
       const result = await api.uploadSuccessXml(file.name, xmlContent);
+      const assessmentRequest =
+        scope.mode === "patch"
+          ? api.assessSinglePatch(scope.productFamily, scope.productVariant)
+          : scope.mode === "post"
+            ? api.assessSinglePost(scope.productFamily, scope.productVariant)
+            : scope.mode === "bulkPatch"
+              ? api.assessBulkPatch(scope.productFamily, scope.productVariant, scope.basicUdiDi ?? undefined)
+              : api.assessBulkPost(scope.productFamily, scope.productVariant);
       const [updatedSummaries, updatedAssessment] = await Promise.all([
         api.testingSubjectSummaries({
           product_family: scope.productFamily,
           product_variant: scope.productVariant,
           limit: 10000,
         }),
-        scope.mode === "patch"
-          ? api.assessSinglePatch(scope.productFamily, scope.productVariant)
-          : api.assessSinglePost(scope.productFamily, scope.productVariant),
+        assessmentRequest,
       ]);
 
       setTestingSubjectSummaries(updatedSummaries);
       setXmlOperationAssessment(updatedAssessment);
       setXmlOperationAssessmentError(null);
       clearPreviewState();
+      const operationLabel =
+        scope.mode === "patch"
+          ? "PATCH"
+          : scope.mode === "post"
+            ? "POST"
+            : scope.mode === "bulkPatch"
+              ? "Bulk PATCH"
+              : "Bulk POST";
       setXmlActionMessage(
         result.duplicate_event
-          ? `${result.summary_message} This success XML was already recorded and the ${scope.mode === "patch" ? "PATCH" : "POST"} assessment was refreshed.`
-          : `${result.summary_message} The tracked testing state and ${scope.mode === "patch" ? "PATCH" : "POST"} assessment were refreshed.`,
+          ? `${result.summary_message} This success XML was already recorded and the ${operationLabel} assessment was refreshed.`
+          : `${result.summary_message} The tracked testing state and ${operationLabel} assessment were refreshed.`,
       );
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Failed to upload success XML.";

@@ -1,8 +1,12 @@
 import type { XmlValidationResult } from "../types";
 
+import { XmlAssessmentCard } from "./XmlAssessmentCard";
+import { XmlStatusStrip } from "./XmlStatusStrip";
+import { XmlWorkspaceHeader } from "./XmlWorkspaceHeader";
+
 type BulkPostWorkspaceProps = {
   familyVariantLabel: string;
-  title: "Bulk POST" | "Bulk UDI-DI POST";
+  title: string;
   stepOneTitle: string;
   stepOneCount: number;
   stepOneLabel: string;
@@ -38,17 +42,14 @@ export function BulkPostWorkspace({
   return (
     <div className="draft-list xml-record-stack">
       <div className="draft-card xml-record-card">
-        <div className="draft-card-head">
-          <strong>{familyVariantLabel}</strong>
-          <span className="status-pill ok compact">{title}</span>
-        </div>
+        <XmlWorkspaceHeader
+          title={familyVariantLabel}
+          statusLabel={title}
+          subtitle="Review the current bulk POST scope, package size, and preview chunk for this family and variant."
+        />
         <div className="bulk-patch-layout">
           <div className="bulk-patch-config-column">
-            <div className="draft-card">
-              <div className="draft-card-head">
-                <strong>{stepOneTitle}</strong>
-                <span className="status-pill ok compact">{stepOneCount} available</span>
-              </div>
+            <XmlAssessmentCard title={stepOneTitle} statusLabel={`${stepOneCount} available`} subtitle="Current registration scope">
               <p className="panel-copy">{stepOneCopy}</p>
               <label className="field-label" htmlFor="xml-bulk-post-parent-count">
                 {stepOneLabel}
@@ -60,14 +61,10 @@ export function BulkPostWorkspace({
                 </span>
               </div>
               {stepOneFooter ? <p className="panel-copy">{stepOneFooter}</p> : null}
-            </div>
+            </XmlAssessmentCard>
 
-            <div className="draft-card">
-              <div className="draft-card-head">
-                <strong>2. Choose record count</strong>
-                <span className="status-pill ok compact">{selectedBulkRecordCount} selected</span>
-              </div>
-              <p className="panel-copy">Determine scope of this POST.</p>
+            <XmlAssessmentCard title="Package scope" statusLabel={`${selectedBulkRecordCount} selected`} subtitle="Records included in this package">
+              <p className="panel-copy">Choose how many device rows to include in the generated package.</p>
               <label className="field-label" htmlFor="xml-bulk-record-count">
                 Number of devices
               </label>
@@ -83,16 +80,14 @@ export function BulkPostWorkspace({
                   </option>
                 ))}
               </select>
-            </div>
+            </XmlAssessmentCard>
 
-            <div className="draft-card">
-              <div className="draft-card-head">
-                <strong>3. Prepare output</strong>
-                <span className="status-pill ok compact">
-                  Chunk {selectedXmlChunkSequence} of {selectedBulkChunkCount}
-                </span>
-              </div>
-              <p className="panel-copy">Select preview output for your chosen scope.</p>
+            <XmlAssessmentCard
+              title="Preview output"
+              statusLabel={`Chunk ${selectedXmlChunkSequence} of ${selectedBulkChunkCount}`}
+              subtitle="Current preview package"
+            >
+              <p className="panel-copy">Select which generated chunk to inspect before validation or download.</p>
               <label className="field-label" htmlFor="xml-batch-chunk-sequence">
                 Preview chunk
               </label>
@@ -109,21 +104,13 @@ export function BulkPostWorkspace({
                 ))}
               </select>
               <p className="panel-copy">{selectedChunkSummaryText}</p>
-            </div>
+            </XmlAssessmentCard>
           </div>
         </div>
-        <div className="validation-pill-row bulk-patch-pill-row">
-          <span className="status-pill ok compact bulk-patch-status-pill">Schema target: Message.xsd</span>
-          <span
-            className={
-              selectedBatchValidation?.valid
-                ? "status-pill ok compact bulk-patch-status-pill"
-                : "status-pill warn compact bulk-patch-status-pill"
-            }
-          >
-            Validation output: {selectedBatchValidation ? (selectedBatchValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
-          </span>
-        </div>
+        <XmlStatusStrip
+          validationValid={selectedBatchValidation?.valid ?? null}
+          validationStatusLabel={selectedBatchValidation ? (selectedBatchValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}
+        />
       </div>
     </div>
   );

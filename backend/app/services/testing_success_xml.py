@@ -52,54 +52,81 @@ class TestingSuccessXmlService:
         self.store = TestingStateStore()
 
     def record_success_xml(self, *, xml_bytes: bytes, source_file_name: str | None = None) -> SuccessXmlUploadResult:
-        acknowledgement = self._parse_acknowledgement(xml_bytes=xml_bytes, source_file_name=source_file_name)
+        acknowledgements = self._parse_acknowledgements(xml_bytes=xml_bytes, source_file_name=source_file_name)
+        first_acknowledgement = acknowledgements[0]
+        first_resolution: SubjectResolution | None = None
+        recorded_event_count = 0
+        duplicate_event_count = 0
+        created_subject_count = 0
         with self.store._connect() as connection:
-            resolution = self._resolve_subject(connection, acknowledgement)
-            recorded_event, duplicate_event = self._record_event(connection, resolution.subject_id, acknowledgement)
-            if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"}:
-                connection.execute("UPDATE testing_subjects SET post_success = 1 WHERE id = ?", (resolution.subject_id,))
+            for acknowledgement in acknowledgements:
+                resolution = self._resolve_subject(connection, acknowledgement)
+                if first_resolution is None:
+                    first_resolution = resolution
+                recorded_event, duplicate_event = self._record_event(connection, resolution.subject_id, acknowledgement)
+                created_subject_count += 1 if resolution.created_subject else 0
+                recorded_event_count += 1 if recorded_event else 0
+                duplicate_event_count += 1 if duplicate_event else 0
+                if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"}:
+                    connection.execute(
+                        """
+                        UPDATE testing_subjects
+                        SET post_success = 1,
+                            latest_successful_version = COALESCE(?, latest_successful_version, '1')
+                        WHERE id = ?
+                        """,
+                        (
+                            acknowledgement.entity_version,
+                            resolution.subject_id,
+                        ),
+                    )
+        if first_resolution is None:
+            raise ValueError("Success XML did not resolve any testing subjects.")
+        if len(acknowledgements) == 1:
+            summary_message = (
+                f"Tracked successful {first_acknowledgement.operation_label} for "
+                f"{first_resolution.catalogue_number or first_acknowledgement.entity_code}."
+            )
+        else:
+            summary_message = (
+                f"Tracked successful {first_acknowledgement.operation_label} acknowledgements for "
+                f"{recorded_event_count} of {len(acknowledgements)} response entities."
+            )
+            if duplicate_event_count:
+                summary_message += f" {duplicate_event_count} were already recorded."
         return SuccessXmlUploadResult(
-            summary_message=(
-                f"Tracked successful {acknowledgement.operation_label} for "
-                f"{resolution.catalogue_number or acknowledgement.entity_code}."
-            ),
-            message_type=acknowledgement.message_type,
-            operation_label=acknowledgement.operation_label,
-            entity_code=acknowledgement.entity_code,
-            product_family=resolution.product_family,
-            product_variant=resolution.product_variant,
-            catalogue_number=resolution.catalogue_number,
-            primary_udi_di=resolution.primary_udi_di,
-            basic_udi_di=resolution.basic_udi_di,
-            tested_at=acknowledgement.tested_at,
-            correlation_id=acknowledgement.correlation_id,
-            message_id=acknowledgement.message_id,
-            source_file_name=acknowledgement.source_file_name,
-            subject_id=resolution.subject_id,
-            created_subject=resolution.created_subject,
-            recorded_event=recorded_event,
-            duplicate_event=duplicate_event,
+            summary_message=summary_message,
+            message_type=first_acknowledgement.message_type,
+            operation_label=first_acknowledgement.operation_label,
+            entity_code=first_acknowledgement.entity_code,
+            product_family=first_resolution.product_family,
+            product_variant=first_resolution.product_variant,
+            catalogue_number=first_resolution.catalogue_number,
+            primary_udi_di=first_resolution.primary_udi_di,
+            basic_udi_di=first_resolution.basic_udi_di,
+            tested_at=first_acknowledgement.tested_at,
+            correlation_id=first_acknowledgement.correlation_id,
+            message_id=first_acknowledgement.message_id,
+            source_file_name=first_acknowledgement.source_file_name,
+            subject_id=first_resolution.subject_id,
+            created_subject=created_subject_count > 0,
+            recorded_event=recorded_event_count > 0,
+            duplicate_event=duplicate_event_count == len(acknowledgements),
+            entity_count=len(acknowledgements),
+            recorded_event_count=recorded_event_count,
+            duplicate_event_count=duplicate_event_count,
+            created_subject_count=created_subject_count,
         )
 
-    def _parse_acknowledgement(self, *, xml_bytes: bytes, source_file_name: str | None) -> AcknowledgementPayload:
+    def _parse_acknowledgements(self, *, xml_bytes: bytes, source_file_name: str | None) -> list[AcknowledgementPayload]:
         try:
             root = cast(Any, ET.fromstring(xml_bytes))
         except ET.XMLSyntaxError as exc:
             raise ValueError(f"Success XML could not be parsed: {exc}") from exc
 
         response_entities = root.findall(".//message:responseEntity", NAMESPACES)
-        if len(response_entities) != 1:
-            raise ValueError("Success XML must contain exactly one response entity.")
-
-        response_entity = response_entities[0]
-        response_code = self._node_text(response_entity.find("message:responseCode", NAMESPACES))
-        if response_code != "SUCCESS":
-            raise ValueError(f"Only SUCCESS acknowledgements can be recorded. Received {response_code or 'UNKNOWN'}.")
-
-        entity_code = self._node_text(response_entity.find("message:entityCode", NAMESPACES))
-        if not entity_code:
-            raise ValueError("Success XML is missing responseEntity.entityCode.")
-        entity_version = self._node_text(response_entity.find("message:entityVersion", NAMESPACES))
+        if not response_entities:
+            raise ValueError("Success XML must contain at least one response entity.")
 
         service_id, service_operation = self._resolve_service_identity(root)
         if service_operation not in {"POST", "PATCH"}:
@@ -124,18 +151,35 @@ class TestingSuccessXmlService:
             raise ValueError(
                 f"Unsupported acknowledgement type {service_id or 'UNKNOWN'}.{service_operation or 'UNKNOWN'}."
             )
-        return AcknowledgementPayload(
-            message_type=message_type,
-            operation_label=operation_label,
-            entity_code=entity_code,
-            entity_version=entity_version,
-            tested_at=self._node_text(root.find("message:creationDateTime", NAMESPACES)),
-            correlation_id=self._node_text(root.find("message:correlationID", NAMESPACES)),
-            message_id=self._node_text(root.find("message:messageID", NAMESPACES)),
-            response_code=response_code,
-            source_file_name=source_file_name,
-            raw_xml=xml_bytes.decode("utf-8", errors="replace"),
-        )
+        tested_at = self._node_text(root.find("message:creationDateTime", NAMESPACES))
+        correlation_id = self._node_text(root.find("message:correlationID", NAMESPACES))
+        message_id = self._node_text(root.find("message:messageID", NAMESPACES))
+        raw_xml = xml_bytes.decode("utf-8", errors="replace")
+        acknowledgements: list[AcknowledgementPayload] = []
+        for response_entity in response_entities:
+            response_code = self._node_text(response_entity.find("message:responseCode", NAMESPACES))
+            if response_code != "SUCCESS":
+                raise ValueError(f"Only SUCCESS acknowledgements can be recorded. Received {response_code or 'UNKNOWN'}.")
+
+            entity_code = self._node_text(response_entity.find("message:entityCode", NAMESPACES))
+            if not entity_code:
+                raise ValueError("Success XML is missing responseEntity.entityCode.")
+            entity_version = self._node_text(response_entity.find("message:entityVersion", NAMESPACES))
+            acknowledgements.append(
+                AcknowledgementPayload(
+                    message_type=message_type,
+                    operation_label=operation_label,
+                    entity_code=entity_code,
+                    entity_version=entity_version,
+                    tested_at=tested_at,
+                    correlation_id=correlation_id,
+                    message_id=message_id,
+                    response_code=response_code,
+                    source_file_name=source_file_name,
+                    raw_xml=raw_xml,
+                )
+            )
+        return acknowledgements
 
     def _resolve_service_identity(self, root: Any) -> tuple[str | None, str | None]:
         for path in ("message:sender/message:service", "message:recipient/message:service"):
@@ -323,7 +367,7 @@ class TestingSuccessXmlService:
             (subject_id,),
         ).fetchone()
         next_index = int(next_index_row[0]) if next_index_row is not None else 0
-        version: str | None = None
+        version: str | None = acknowledgement.entity_version if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"} else None
         scenario_id: str | None = None
         scenario_label: str | None = None
         changed_fields_json: str | None = None

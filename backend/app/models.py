@@ -400,6 +400,10 @@ class SuccessXmlUploadResult(BaseModel):
     created_subject: bool = False
     recorded_event: bool = False
     duplicate_event: bool = False
+    entity_count: int = 1
+    recorded_event_count: int = 0
+    duplicate_event_count: int = 0
+    created_subject_count: int = 0
 
 
 class SuccessXmlUploadRequest(BaseModel):
