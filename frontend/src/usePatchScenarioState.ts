@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 
 import type { GeneratedPatchScenarioPreview, PostRegistrationPreview } from "./types";
 
@@ -55,7 +56,7 @@ type UsePatchScenarioStateArgs = {
         primary_udi_di: string | null;
       }
     | null;
-  clearPatchPreview: () => void;
+  setXmlPatchPreview: Dispatch<SetStateAction<GeneratedPatchScenarioPreview | null>>;
 };
 
 export function usePatchScenarioState({
@@ -77,7 +78,7 @@ export function usePatchScenarioState({
   xmlPairPreview,
   xmlPatchPreview,
   selectedPairRequestArgs,
-  clearPatchPreview,
+  setXmlPatchPreview,
 }: UsePatchScenarioStateArgs) {
   const [patchVersionInput, setPatchVersionInput] = useState<string>("3");
   const [patchTradeNameInput, setPatchTradeNameInput] = useState<string>("");
@@ -104,7 +105,7 @@ export function usePatchScenarioState({
           ? String(latestSuccessfulVersion + 1)
           : "2";
     setPatchVersionInput(nextVersion);
-    clearPatchPreview();
+    setXmlPatchPreview(null);
     if (xmlPairPreview?.latest_successful_patch_state) {
       setPatchTradeNameInput(xmlPairPreview.latest_successful_patch_state.trade_name ?? "");
     } else if (selectedPatchWorkspaceRecordTradeName) {
@@ -138,11 +139,11 @@ export function usePatchScenarioState({
     selectedCurrentLatex,
     selectedCurrentStatusCode,
     isSharedAnchorLoading,
-    clearPatchPreview,
+    setXmlPatchPreview,
   ]);
 
   useEffect(() => {
-    clearPatchPreview();
+    setXmlPatchPreview(null);
   }, [
     patchVersionInput,
     patchTradeNameInput,
@@ -153,7 +154,7 @@ export function usePatchScenarioState({
     patchLatexInput,
     patchStatusCodeInput,
     patchStorageConditionInputs,
-    clearPatchPreview,
+    setXmlPatchPreview,
   ]);
 
   const matchesSelectedPatchPreview = Boolean(

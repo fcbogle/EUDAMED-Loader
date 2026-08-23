@@ -33,6 +33,7 @@ type PatchPreviewPanelProps = {
   onSelectSection: (id: string) => void;
   xmlPreviewLines: string;
   patchXmlPreviewLineRefs: MutableRefObject<Record<number, HTMLSpanElement | null>>;
+  patchXmlPreviewContainerRef: MutableRefObject<HTMLPreElement | null>;
 };
 
 export function PatchPreviewPanel({
@@ -58,6 +59,7 @@ export function PatchPreviewPanel({
   onSelectSection,
   xmlPreviewLines,
   patchXmlPreviewLineRefs,
+  patchXmlPreviewContainerRef,
 }: PatchPreviewPanelProps) {
   return (
     <div className="post-preview-card patch-preview-card">
@@ -167,7 +169,7 @@ export function PatchPreviewPanel({
                   : "Inspect the generated XML payload."}
               </span>
             </div>
-            <pre className="xml-preview-block post-preview-block">
+            <pre ref={patchXmlPreviewContainerRef} className="xml-preview-block post-preview-block">
               <code>
                 {xmlPreviewLines.split("\n").map((line, index) => {
                   const isInSelectedSection =

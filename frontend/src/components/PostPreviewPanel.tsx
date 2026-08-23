@@ -35,6 +35,7 @@ type PostPreviewPanelProps = {
   onSelectSection: (id: string) => void;
   xmlPreviewLines: string;
   postXmlPreviewLineRefs: MutableRefObject<Record<number, HTMLSpanElement | null>>;
+  postXmlPreviewContainerRef: MutableRefObject<HTMLPreElement | null>;
 };
 
 export function PostPreviewPanel({
@@ -61,6 +62,7 @@ export function PostPreviewPanel({
   onSelectSection,
   xmlPreviewLines,
   postXmlPreviewLineRefs,
+  postXmlPreviewContainerRef,
 }: PostPreviewPanelProps) {
   return (
     <div className="post-preview-card">
@@ -176,7 +178,7 @@ export function PostPreviewPanel({
                   : "Inspect the generated XML payload."}
               </span>
             </div>
-            <pre className="xml-preview-block post-preview-block">
+            <pre ref={postXmlPreviewContainerRef} className="xml-preview-block post-preview-block">
               <code>
                 {xmlPreviewLines.split("\n").map((line, index) => {
                   const isInSelectedSection =
