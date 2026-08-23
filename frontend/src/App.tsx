@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ApiError, api } from "./api";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
 import canonicalValidationDocumentation from "./content/docs/canonical-validation.md?raw";
+import { PatchPreviewPanel } from "./components/PatchPreviewPanel";
+import { PatchScenarioCard } from "./components/PatchScenarioCard";
+import { PostPreviewPanel } from "./components/PostPreviewPanel";
+import { AcceptedGenerationWorkspace } from "./components/AcceptedGenerationWorkspace";
+import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
 import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
 import eudamedServiceContractFindingsDocumentation from "./content/docs/eudamed-service-contract-findings.md?raw";
 import eudamedTestingGenerationUiDocumentation from "./content/docs/eudamed-testing-generation-ui.md?raw";
@@ -13,6 +18,9 @@ import testingScenariosDocumentation from "./content/docs/testing-scenarios.md?r
 import workbooksDocumentation from "./content/docs/workbooks.md?raw";
 import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import xmlSampleComparisonDocumentation from "./content/docs/xml-sample-comparison.md?raw";
+import { usePatchScenarioState } from "./usePatchScenarioState";
+import { useXmlOperationAssessment } from "./useXmlOperationAssessment";
+import { useSuccessXmlUpload } from "./useSuccessXmlUpload";
 import type {
   BulkPatchPreview,
   BulkPatchPostedEntry,
@@ -43,6 +51,13 @@ import type {
   WorkbookImportSnapshotSummary,
   WorkbookSummary,
 } from "./types";
+import {
+  findRecordByCatalogueNumber,
+  resolveMarketInfoRequestArgs,
+  resolvePatchRequestArgs,
+  resolvePatchWorkspaceRecord,
+  resolvePostWorkspaceRecord,
+} from "./xmlWorkspace";
 
 const focusColumns = [
   "UDI-DI status e.g. On the EU market",
@@ -76,12 +91,6 @@ type PatchScenarioDefinition = {
   implemented: boolean;
   testStatus: "success" | "failure" | "untested";
   optionsSummary?: string;
-};
-
-type PatchScenarioComparisonRow = {
-  label: string;
-  before: string;
-  after: string;
 };
 
 type SelectionAnchorInput = {
@@ -1129,9 +1138,6 @@ export function App() {
   const [bulkPatchCatalogueFilter, setBulkPatchCatalogueFilter] = useState<string>("");
   const [bulkPatchImportText, setBulkPatchImportText] = useState<string>("");
   const [testingSubjectSummaries, setTestingSubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
-  const [xmlOperationAssessment, setXmlOperationAssessment] = useState<OperationAssessment | null>(null);
-  const [xmlOperationAssessmentError, setXmlOperationAssessmentError] = useState<string | null>(null);
-  const [isLoadingXmlOperationAssessment, setIsLoadingXmlOperationAssessment] = useState<boolean>(false);
   const [patchScenarioStatuses, setPatchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
     equivalent_first_patch: "EUDAMED Candidate",
     trade_name_edit: "EUDAMED Candidate",
@@ -1167,26 +1173,12 @@ export function App() {
   const [xmlBulkPatchPreview, setXmlBulkPatchPreview] = useState<BulkPatchPreview | null>(null);
   const [selectedPostXmlSectionId, setSelectedPostXmlSectionId] = useState<string | null>(null);
   const [selectedPatchXmlSectionId, setSelectedPatchXmlSectionId] = useState<string | null>(null);
-  const [patchVersionInput, setPatchVersionInput] = useState<string>("3");
-  const [patchTradeNameInput, setPatchTradeNameInput] = useState<string>("");
-  const [patchWarningCodeInput, setPatchWarningCodeInput] = useState<string>("");
-  const [patchWarningCommentInput, setPatchWarningCommentInput] = useState<string>("");
-  const [patchBaseQuantityInput, setPatchBaseQuantityInput] = useState<string>("");
-  const [patchSterileInput, setPatchSterileInput] = useState<string>("");
-  const [patchLatexInput, setPatchLatexInput] = useState<string>("");
-  const [patchStatusCodeInput, setPatchStatusCodeInput] = useState<string>("");
-  const [patchStorageConditionInputs, setPatchStorageConditionInputs] = useState<Record<string, string>>({
-    SHC006: "",
-    SHC007: "",
-  });
   const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
   const [isDownloadingXml, setIsDownloadingXml] = useState<boolean>(false);
-  const [isUploadingSuccessXml, setIsUploadingSuccessXml] = useState<boolean>(false);
   const [isLoadingStartup, setIsLoadingStartup] = useState<boolean>(true);
   const [isLoadingCanonicalReview, setIsLoadingCanonicalReview] = useState<boolean>(false);
   const [isLoadingCanonicalValidation, setIsLoadingCanonicalValidation] = useState<boolean>(false);
   const [isLoadingSchemas, setIsLoadingSchemas] = useState<boolean>(false);
-  const postSuccessXmlInputRef = useRef<HTMLInputElement | null>(null);
   const documentationSections: DocumentationSection[] = [
     {
       id: "projectStructure",
@@ -2239,6 +2231,19 @@ export function App() {
       : bulkPatchSelectionVersions.length === 1
         ? `Current versions: all ${bulkPatchSelectionVersions[0]}`
         : `Current versions: ${bulkPatchSelectionVersions.join(", ")}`;
+  const {
+    xmlOperationAssessment,
+    setXmlOperationAssessment,
+    xmlOperationAssessmentError,
+    setXmlOperationAssessmentError,
+    isLoadingXmlOperationAssessment,
+  } = useXmlOperationAssessment({
+    activeTab,
+    xmlMode,
+    selectedProductFamily: selectedXmlFamilySummary?.product_family,
+    selectedProductVariant: selectedXmlVariantSummary?.product_variant,
+    selectedBulkPatchBasicUdiDi,
+  });
   const bulkPatchPreviewExcludedRecords = xmlBulkPatchPreview?.excluded_records ?? [];
   const bulkPatchPrePreviewExclusions =
     xmlMode === "bulkPatch" && bulkPatchScopeMode === "import_catalogue_list"
@@ -2274,43 +2279,27 @@ export function App() {
   const assessedPostCandidateCatalogueNumber = assessmentEvidenceString(xmlOperationAssessment, "candidate_catalogue_number");
   const assessedPostCandidatePrimaryUdiDi = assessmentEvidenceString(xmlOperationAssessment, "candidate_primary_udi_di");
   const hasResolvedPostAssessmentCandidate = Boolean(assessedPostCandidateCatalogueNumber || assessedPostCandidatePrimaryUdiDi);
-  const selectedPostCandidateRecord =
-    (assessedPostCandidateCatalogueNumber
-      ? selectedXmlVariantRecords.find((record) => record.catalogue_number === assessedPostCandidateCatalogueNumber)
-      : null) ?? null;
-  const selectedPatchCandidateRecord =
-    (assessedPatchCandidateCatalogueNumber
-      ? selectedXmlVariantRecords.find((record) => record.catalogue_number === assessedPatchCandidateCatalogueNumber)
-      : null) ?? null;
-  const selectedPatchWorkspaceRecord = selectedPatchCandidateRecord ?? selectedXmlPairRecord;
+  const selectedPostCandidateRecord = findRecordByCatalogueNumber(
+    selectedXmlVariantRecords,
+    assessedPostCandidateCatalogueNumber,
+  );
+  const selectedPatchCandidateRecord = findRecordByCatalogueNumber(
+    selectedXmlVariantRecords,
+    assessedPatchCandidateCatalogueNumber,
+  );
+  const selectedPatchWorkspaceRecord = resolvePatchWorkspaceRecord(
+    selectedXmlVariantRecords,
+    assessedPatchCandidateCatalogueNumber,
+    selectedXmlPairRecord,
+  );
   const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
-  const selectedPairRequestArgs =
-    selectedPatchWorkspaceRecord?.catalogue_number
-      ? {
-          product_family: selectedPatchWorkspaceRecord.product_family,
-          product_variant: selectedPatchWorkspaceRecord.product_variant,
-          catalogue_number: selectedPatchWorkspaceRecord.catalogue_number,
-          primary_udi_di: selectedPatchWorkspaceRecord.primary_udi_di ?? assessedPatchCandidatePrimaryUdiDi ?? null,
-        }
-      : assessedPatchCandidateCatalogueNumber &&
-          selectedXmlFamilySummary?.product_family &&
-          selectedXmlVariantSummary?.product_variant
-        ? {
-            product_family: selectedXmlFamilySummary.product_family,
-            product_variant: selectedXmlVariantSummary.product_variant,
-            catalogue_number: assessedPatchCandidateCatalogueNumber,
-            primary_udi_di: assessedPatchCandidatePrimaryUdiDi ?? null,
-          }
-      : null;
-  const selectedMarketInfoRequestArgs =
-    selectedXmlMarketInfoRecord?.catalogue_number
-      ? {
-          product_family: selectedXmlMarketInfoRecord.product_family,
-          product_variant: selectedXmlMarketInfoRecord.product_variant,
-          catalogue_number: selectedXmlMarketInfoRecord.catalogue_number,
-          primary_udi_di: selectedXmlMarketInfoRecord.primary_udi_di,
-        }
-      : null;
+  const selectedPairRequestArgs = resolvePatchRequestArgs(selectedPatchWorkspaceRecord, {
+    assessedCatalogueNumber: assessedPatchCandidateCatalogueNumber,
+    assessedPrimaryUdiDi: assessedPatchCandidatePrimaryUdiDi,
+    selectedProductFamily: selectedXmlFamilySummary?.product_family,
+    selectedProductVariant: selectedXmlVariantSummary?.product_variant,
+  });
+  const selectedMarketInfoRequestArgs = resolveMarketInfoRequestArgs(selectedXmlMarketInfoRecord);
   const hasSelectedPatchBaselinePost = Boolean(selectedPatchWorkspaceRecord);
   const hasReviewedPatchBaselinePost = Boolean(
     selectedPairRequestArgs &&
@@ -2392,78 +2381,6 @@ export function App() {
     };
   }, [selectedXmlFamilySummary?.product_family, selectedXmlVariantSummary?.product_variant]);
   useEffect(() => {
-    if (activeTab !== "xml") {
-      return;
-    }
-    if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) {
-      setXmlOperationAssessment(null);
-      setXmlOperationAssessmentError(null);
-      setIsLoadingXmlOperationAssessment(false);
-      return;
-    }
-    if (xmlMode === "single" || xmlMode === "marketInfo") {
-      setXmlOperationAssessment(null);
-      setXmlOperationAssessmentError(null);
-      setIsLoadingXmlOperationAssessment(false);
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoadingXmlOperationAssessment(true);
-    setXmlOperationAssessment(null);
-    setXmlOperationAssessmentError(null);
-
-    void (async () => {
-      try {
-        const assessment =
-          xmlMode === "post"
-            ? await api.assessSinglePost(
-                selectedXmlFamilySummary.product_family,
-                selectedXmlVariantSummary.product_variant,
-              )
-            : xmlMode === "patch"
-              ? await api.assessSinglePatch(
-                  selectedXmlFamilySummary.product_family,
-                  selectedXmlVariantSummary.product_variant,
-                )
-              : xmlMode === "bulkPatch"
-                ? await api.assessBulkPatch(
-                    selectedXmlFamilySummary.product_family,
-                    selectedXmlVariantSummary.product_variant,
-                    selectedBulkPatchBasicUdiDi || undefined,
-                  )
-                : await api.assessBulkPost(
-                    selectedXmlFamilySummary.product_family,
-                    selectedXmlVariantSummary.product_variant,
-                  );
-        if (!cancelled) {
-          setXmlOperationAssessment(assessment);
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setXmlOperationAssessment(null);
-          setXmlOperationAssessmentError(
-            requestError instanceof Error ? requestError.message : "Operation assessment is unavailable.",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingXmlOperationAssessment(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeTab,
-    xmlMode,
-    selectedXmlFamilySummary,
-    selectedXmlVariantSummary,
-    selectedBulkPatchBasicUdiDi,
-  ]);
-  useEffect(() => {
     if (!selectedBulkPatchParentGroup) {
       setSelectedBulkPatchCatalogueNumbers([]);
       return;
@@ -2528,6 +2445,54 @@ export function App() {
     (xmlMode === "post" || xmlMode === "patch" || xmlMode === "marketInfo") &&
     Boolean(selectedPairRequestArgs) &&
     !xmlPairPreview;
+  const {
+    patchVersionInput,
+    setPatchVersionInput,
+    patchTradeNameInput,
+    setPatchTradeNameInput,
+    patchWarningCodeInput,
+    setPatchWarningCodeInput,
+    patchWarningCommentInput,
+    setPatchWarningCommentInput,
+    patchBaseQuantityInput,
+    setPatchBaseQuantityInput,
+    patchSterileInput,
+    setPatchSterileInput,
+    patchLatexInput,
+    setPatchLatexInput,
+    patchStatusCodeInput,
+    setPatchStatusCodeInput,
+    patchStorageConditionInputs,
+    setPatchStorageConditionInputs,
+    currentAcceptedPatchVersion,
+    currentAcceptedPatchLabel,
+    patchDraftComparisonRows,
+    selectedWarningRequiresComment,
+    isPatchVersionValid,
+    isPatchScenarioReady,
+    patchScenarioReadinessMessage,
+    hasReviewedGeneratedPatchPreview,
+  } = usePatchScenarioState({
+    selectedXmlFamily,
+    selectedXmlVariant,
+    selectedXmlRecordKey,
+    selectedPatchScenario,
+    selectedPatchWorkspaceRecordTradeName: selectedPatchWorkspaceRecord?.trade_name ?? null,
+    selectedPatchWorkspaceCatalogueNumber: selectedPatchWorkspaceRecord?.catalogue_number ?? null,
+    selectedCurrentTradeName,
+    selectedCurrentBaseQuantity,
+    selectedCurrentSterile,
+    selectedCurrentLatex,
+    selectedCurrentStatusCode,
+    selectedPatchWarningCodes,
+    selectedPatchStorageConditionMap,
+    hasReviewedPatchBaselinePost,
+    isSharedAnchorLoading,
+    xmlPairPreview,
+    xmlPatchPreview,
+    selectedPairRequestArgs,
+    clearPatchPreview: () => setXmlPatchPreview(null),
+  });
   useEffect(() => {
     if (!(xmlMode === "patch" || xmlMode === "marketInfo") || !selectedPairRequestArgs) {
       return;
@@ -2599,66 +2564,6 @@ export function App() {
     setXmlBulkPatchPreview(null);
   }, [selectedBulkPatchBasicUdiDi, selectedBulkPatchCatalogueNumbers, selectedPatchScenarioId]);
   useEffect(() => {
-    if (selectedPatchScenarioId !== "equivalent_first_patch" && isSharedAnchorLoading) {
-      return;
-    }
-    const latestSuccessfulVersion = Number(xmlPairPreview?.latest_successful_patch_state?.version ?? "1");
-    const nextVersion =
-      selectedPatchScenarioId === "equivalent_first_patch"
-        ? "2"
-        : Number.isInteger(latestSuccessfulVersion) && latestSuccessfulVersion >= 1
-          ? String(latestSuccessfulVersion + 1)
-          : "2";
-    setPatchVersionInput(nextVersion);
-    setXmlPatchPreview(null);
-    if (xmlPairPreview?.latest_successful_patch_state) {
-      setPatchTradeNameInput(xmlPairPreview.latest_successful_patch_state.trade_name ?? "");
-    } else if (selectedPatchWorkspaceRecord) {
-      setPatchTradeNameInput(selectedPatchWorkspaceRecord.trade_name ?? "");
-    } else {
-      setPatchTradeNameInput("");
-    }
-    setPatchWarningCodeInput("");
-    setPatchWarningCommentInput("");
-    setPatchBaseQuantityInput(
-      selectedCurrentBaseQuantity !== null && selectedCurrentBaseQuantity !== undefined
-        ? String(selectedCurrentBaseQuantity)
-        : "",
-    );
-    setPatchSterileInput(selectedCurrentSterile === null ? "" : selectedCurrentSterile ? "true" : "false");
-    setPatchLatexInput(selectedCurrentLatex === null ? "" : selectedCurrentLatex ? "true" : "false");
-    setPatchStatusCodeInput(selectedCurrentStatusCode ?? "");
-    setPatchStorageConditionInputs({
-      SHC006: "",
-      SHC007: "",
-    });
-  }, [
-    selectedXmlFamily,
-    selectedXmlVariant,
-    selectedPatchScenarioId,
-    selectedXmlRecordKey,
-    xmlPairPreview,
-    selectedPatchWorkspaceRecord,
-    selectedCurrentBaseQuantity,
-    selectedCurrentSterile,
-    selectedCurrentLatex,
-    selectedCurrentStatusCode,
-    isSharedAnchorLoading,
-  ]);
-  useEffect(() => {
-    setXmlPatchPreview(null);
-  }, [
-    patchVersionInput,
-    patchTradeNameInput,
-    patchWarningCodeInput,
-    patchWarningCommentInput,
-    patchBaseQuantityInput,
-    patchSterileInput,
-    patchLatexInput,
-    patchStatusCodeInput,
-    patchStorageConditionInputs,
-  ]);
-  useEffect(() => {
     setXmlBulkPatchPreview(null);
   }, [
     selectedBulkRecordCount,
@@ -2678,207 +2583,6 @@ export function App() {
   useEffect(() => {
     setXmlBulkUdidiPostPreview(null);
   }, [selectedBulkRecordCount]);
-  const matchesSelectedPatchPreview = Boolean(
-    xmlPatchPreview &&
-      selectedPairRequestArgs &&
-      xmlPatchPreview.catalogue_number === selectedPairRequestArgs.catalogue_number &&
-      xmlPatchPreview.product_family === selectedPairRequestArgs.product_family &&
-      xmlPatchPreview.product_variant === selectedPairRequestArgs.product_variant &&
-      xmlPatchPreview.scenario_id === selectedPatchScenario.id,
-  );
-  const currentAcceptedPatchVersion = selectedLatestPatchState
-    ? Number(selectedLatestPatchState.version)
-    : 1;
-  const currentAcceptedPatchLabel = selectedLatestPatchState
-    ? `Latest successful PATCH version ${selectedLatestPatchState.version}`
-    : "Accepted POST version 1";
-  const requiredPatchVersion = selectedPatchScenario.id === "equivalent_first_patch" ? 2 : currentAcceptedPatchVersion + 1;
-  const currentPatchVersion = Number(patchVersionInput);
-  const hasReviewedGeneratedPatchPreview = Boolean(matchesSelectedPatchPreview && xmlPatchPreview);
-  const patchDraftComparisonRows: PatchScenarioComparisonRow[] = matchesSelectedPatchPreview && xmlPatchPreview
-    ? xmlPatchPreview.field_deltas.map((delta) => ({
-        label: delta.label,
-        before: delta.before_value ?? "None",
-        after: delta.after_value ?? "None",
-      }))
-    : selectedPatchWorkspaceRecord
-    ? selectedPatchScenario.id === "equivalent_first_patch"
-      ? [
-          {
-            label: "PATCH Version",
-            before: "1",
-            after: "2",
-          },
-        ]
-      : !selectedPatchScenarioImplemented
-        ? [
-            {
-              label: "PATCH Version",
-              before: String(currentAcceptedPatchVersion),
-              after: patchVersionInput.trim() || "Pending input",
-            },
-            {
-              label: "Candidate Target",
-              before: "Current accepted device state",
-              after: selectedPatchScenario.target,
-            },
-          ]
-      : selectedPatchScenario.id === "trade_name_edit"
-        ? [
-            {
-              label: "PATCH Version",
-              before: String(currentAcceptedPatchVersion),
-              after: patchVersionInput.trim() || "Pending input",
-            },
-            {
-              label: "Trade Name",
-              before: selectedCurrentTradeName ?? "None",
-              after: patchTradeNameInput.trim() || "Pending input",
-            },
-          ]
-        : selectedPatchScenario.id === "base_quantity_edit"
-          ? [
-              {
-                label: "PATCH Version",
-                before: String(currentAcceptedPatchVersion),
-                after: patchVersionInput.trim() || "Pending input",
-              },
-              {
-                label: "Base Quantity",
-                before: selectedCurrentBaseQuantity !== null ? String(selectedCurrentBaseQuantity) : "None",
-                after: patchBaseQuantityInput.trim() || "Pending input",
-              },
-            ]
-        : selectedPatchScenario.id === "sterile_edit"
-          ? [
-              {
-                label: "PATCH Version",
-                before: String(currentAcceptedPatchVersion),
-                after: patchVersionInput.trim() || "Pending input",
-              },
-              {
-                label: "Sterile",
-                before: selectedCurrentSterile === null ? "None" : selectedCurrentSterile ? "true" : "false",
-                after: patchSterileInput.trim() || "Pending input",
-              },
-            ]
-        : selectedPatchScenario.id === "latex_edit"
-          ? [
-              {
-                label: "PATCH Version",
-                before: String(currentAcceptedPatchVersion),
-                after: patchVersionInput.trim() || "Pending input",
-              },
-              {
-                label: "Latex",
-                before: selectedCurrentLatex === null ? "None" : selectedCurrentLatex ? "true" : "false",
-                after: patchLatexInput.trim() || "Pending input",
-              },
-            ]
-        : selectedPatchScenario.id === "status_code_edit"
-          ? [
-              {
-                label: "PATCH Version",
-                before: String(currentAcceptedPatchVersion),
-                after: patchVersionInput.trim() || "Pending input",
-              },
-              {
-                label: "Status Code",
-                before: selectedCurrentStatusCode ?? "None",
-                after: patchStatusCodeInput.trim() || "Pending input",
-              },
-            ]
-        : selectedPatchScenario.id === "warning_add"
-          ? [
-              {
-                label: "PATCH Version",
-                before: String(currentAcceptedPatchVersion),
-                after: patchVersionInput.trim() || "Pending input",
-              },
-              {
-                label: "Critical Warning",
-                before: selectedPatchWarningCodes.join(", ") || "None",
-                after: patchWarningCodeInput.trim()
-                  ? patchWarningCommentInput.trim()
-                    ? `${patchWarningCodeInput.trim()} (${patchWarningCommentInput.trim()})`
-                    : patchWarningCodeInput.trim()
-                  : "Pending input",
-              },
-            ]
-          : [
-              {
-                label: "PATCH Version",
-                before: String(currentAcceptedPatchVersion),
-                after: patchVersionInput.trim() || "Pending input",
-              },
-              {
-                label: "Storage Condition SHC006",
-                before: selectedPatchStorageConditionMap.get("SHC006") ?? "None",
-                after: patchStorageConditionInputs.SHC006?.trim() || "No change entered",
-              },
-              {
-                label: "Storage Condition SHC007",
-                before: selectedPatchStorageConditionMap.get("SHC007") ?? "None",
-                after: patchStorageConditionInputs.SHC007?.trim() || "No change entered",
-              },
-            ]
-    : [];
-  const selectedWarningRequiresComment = patchWarningCodeInput.trim().toUpperCase() === "CW999";
-  const isPatchVersionValid =
-    Number.isInteger(currentPatchVersion) &&
-    currentPatchVersion === requiredPatchVersion;
-  const isPatchScenarioReady =
-    hasReviewedPatchBaselinePost &&
-    selectedPatchScenarioImplemented &&
-    isPatchVersionValid &&
-    (selectedPatchScenario.id === "equivalent_first_patch"
-      ? true
-      : selectedPatchScenario.id === "trade_name_edit"
-      ? Boolean(patchTradeNameInput.trim())
-      : selectedPatchScenario.id === "base_quantity_edit"
-        ? Boolean(patchBaseQuantityInput.trim()) && Number.isInteger(Number(patchBaseQuantityInput)) && Number(patchBaseQuantityInput) > 0
-      : selectedPatchScenario.id === "sterile_edit"
-        ? patchSterileInput === "true" || patchSterileInput === "false"
-      : selectedPatchScenario.id === "latex_edit"
-        ? patchLatexInput === "true" || patchLatexInput === "false"
-      : selectedPatchScenario.id === "status_code_edit"
-        ? Boolean(patchStatusCodeInput.trim())
-      : selectedPatchScenario.id === "warning_add"
-        ? Boolean(patchWarningCodeInput.trim()) && (!selectedWarningRequiresComment || Boolean(patchWarningCommentInput.trim()))
-        : Object.values(patchStorageConditionInputs).some((value) => value.trim()));
-  const patchScenarioReadinessMessage = !selectedPatchWorkspaceRecord?.catalogue_number
-    ? "Generate the baseline POST for an XML-ready POST record first."
-    : !hasReviewedPatchBaselinePost
-      ? "Generate and review the POST for this exact selected record before drafting a PATCH."
-    : !patchVersionInput.trim()
-      ? "Enter the required PATCH version integer."
-      : !selectedPatchScenarioImplemented
-        ? "This candidate scenario has been added to the design and dropdown, but XML generation is not implemented yet."
-      : !isPatchVersionValid
-        ? selectedPatchScenario.id === "equivalent_first_patch"
-          ? "Equivalent First Patch must use PATCH version 2."
-          : `PATCH version must be exactly ${requiredPatchVersion} based on the latest accepted state.`
-        : selectedPatchScenario.id === "trade_name_edit" && !patchTradeNameInput.trim()
-          ? "Enter the replacement trade name to define the after condition."
-          : selectedPatchScenario.id === "base_quantity_edit" &&
-              (!patchBaseQuantityInput.trim() || !Number.isInteger(Number(patchBaseQuantityInput)) || Number(patchBaseQuantityInput) <= 0)
-            ? "Enter a positive integer base quantity."
-          : selectedPatchScenario.id === "sterile_edit" && !(patchSterileInput === "true" || patchSterileInput === "false")
-            ? "Choose true or false for the sterile flag."
-          : selectedPatchScenario.id === "latex_edit" && !(patchLatexInput === "true" || patchLatexInput === "false")
-            ? "Choose true or false for the latex flag."
-          : selectedPatchScenario.id === "status_code_edit" && !patchStatusCodeInput.trim()
-            ? "Choose the replacement status code."
-          : selectedPatchScenario.id === "equivalent_first_patch"
-            ? "Ready to generate the explicit version 2 PATCH that mirrors the accepted POST."
-          : selectedPatchScenario.id === "warning_add" && !patchWarningCodeInput.trim()
-            ? "Enter the replacement warning code to define the after condition."
-            : selectedPatchScenario.id === "warning_add" && selectedWarningRequiresComment && !patchWarningCommentInput.trim()
-              ? "Enter the warning comment required for CW999."
-            : selectedPatchScenario.id === "storage_condition_edit" &&
-                !Object.values(patchStorageConditionInputs).some((value) => value.trim())
-              ? "Enter at least one replacement storage-condition comment to define the after condition."
-              : "Ready to generate a derived PATCH preview from the current accepted device state.";
   const selectedPairAnchor =
     xmlPairPreview?.registered_device_anchor ??
     ((xmlMode === "patch" || xmlMode === "marketInfo") && selectedPairRequestArgs
@@ -2891,19 +2595,38 @@ export function App() {
     xmlMode === "marketInfo"
         ? selectedMarketInfoAnchor
         : xmlPatchPreview?.registered_device_anchor ?? selectedPairAnchor;
-  const selectedPostPreviewRecord =
-    xmlPairPreview && selectedPostCandidateRecord
+  const selectedPostWorkspaceRecord = resolvePostWorkspaceRecord(
+    xmlPairPreview,
+    selectedPostCandidateRecord,
+    xmlOperationAssessment?.status === "available",
+  );
+  const successXmlUploadScope =
+    selectedXmlFamilySummary && selectedXmlVariantSummary && (xmlMode === "post" || xmlMode === "patch")
       ? {
-          catalogue_number: xmlPairPreview.catalogue_number,
-          product_family: xmlPairPreview.product_family ?? selectedPostCandidateRecord.product_family,
-          product_variant: xmlPairPreview.product_variant ?? selectedPostCandidateRecord.product_variant,
-          trade_name: selectedPostCandidateRecord.trade_name,
-          primary_udi_di: xmlPairPreview.primary_udi_di,
-          issuing_entity: selectedPostCandidateRecord.issuing_entity,
+          productFamily: selectedXmlFamilySummary.product_family,
+          productVariant: selectedXmlVariantSummary.product_variant,
+          mode: xmlMode,
         }
       : null;
-  const selectedPostWorkspaceRecord =
-    selectedPostPreviewRecord ?? (xmlOperationAssessment?.status === "available" ? selectedPostCandidateRecord : null);
+  const {
+    isUploadingSuccessXml,
+    successXmlInputRef: postSuccessXmlInputRef,
+    handleUploadSuccessXmlClick,
+    handleSuccessXmlSelected: handlePostSuccessXmlSelected,
+  } = useSuccessXmlUpload({
+    scope: successXmlUploadScope,
+    setError,
+    setXmlActionMessage,
+    setTestingSubjectSummaries,
+    setXmlOperationAssessment,
+    setXmlOperationAssessmentError,
+    clearPreviewState: () => {
+      setXmlPairPreview(null);
+      setXmlPatchPreview(null);
+      setSelectedPostXmlSectionId(null);
+      setSelectedPatchXmlSectionId(null);
+    },
+  });
   const isOperationAssessmentMode =
     xmlMode === "post" ||
     xmlMode === "patch" ||
@@ -3763,68 +3486,6 @@ export function App() {
     } finally {
       setIsDownloadingXml(false);
     }
-  }
-
-  async function uploadSuccessXml(file: File): Promise<void> {
-    if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) {
-      return;
-    }
-    setIsUploadingSuccessXml(true);
-    setError(null);
-    setXmlActionMessage(`Uploading success XML for ${file.name}...`);
-    try {
-      const xmlContent = await file.text();
-      const result = await api.uploadSuccessXml(file.name, xmlContent);
-      const [updatedSummaries, updatedAssessment] = await Promise.all([
-        api.testingSubjectSummaries({
-          product_family: selectedXmlFamilySummary.product_family,
-          product_variant: selectedXmlVariantSummary.product_variant,
-          limit: 10000,
-        }),
-        xmlMode === "patch"
-          ? api.assessSinglePatch(
-              selectedXmlFamilySummary.product_family,
-              selectedXmlVariantSummary.product_variant,
-            )
-          : api.assessSinglePost(
-              selectedXmlFamilySummary.product_family,
-              selectedXmlVariantSummary.product_variant,
-            ),
-      ]);
-      setTestingSubjectSummaries(updatedSummaries);
-      setXmlOperationAssessment(updatedAssessment);
-      setXmlOperationAssessmentError(null);
-      setXmlPairPreview(null);
-      setXmlPatchPreview(null);
-      setSelectedPostXmlSectionId(null);
-      setSelectedPatchXmlSectionId(null);
-      setXmlActionMessage(
-        result.duplicate_event
-          ? `${result.summary_message} This success XML was already recorded and the ${xmlMode === "patch" ? "PATCH" : "POST"} assessment was refreshed.`
-          : `${result.summary_message} The tracked testing state and ${xmlMode === "patch" ? "PATCH" : "POST"} assessment were refreshed.`,
-      );
-    } catch (requestError) {
-      const message = requestError instanceof Error ? requestError.message : "Failed to upload success XML.";
-      setError(message);
-      setXmlActionMessage(message);
-    } finally {
-      setIsUploadingSuccessXml(false);
-      if (postSuccessXmlInputRef.current) {
-        postSuccessXmlInputRef.current.value = "";
-      }
-    }
-  }
-
-  function handleUploadSuccessXmlClick(): void {
-    postSuccessXmlInputRef.current?.click();
-  }
-
-  function handlePostSuccessXmlSelected(event: ChangeEvent<HTMLInputElement>): void {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-    void uploadSuccessXml(file);
   }
 
   return (
@@ -5205,133 +4866,37 @@ export function App() {
               )
             ) : null}
             {isOperationAssessmentMode ? (
-              <div className="draft-card bulk-patch-summary-bar">
-                <div className="draft-card-head">
-                  <strong>{xmlAssessmentTitle}</strong>
-                  <span
-                    className={
-                      isLoadingXmlOperationAssessment
-                        ? "status-pill warn compact"
-                        : xmlOperationAssessment
-                          ? `status-pill ${operationAssessmentStatusClass(xmlOperationAssessment.status)} compact`
-                          : "status-pill warn compact"
-                    }
-                  >
-                    {isLoadingXmlOperationAssessment
-                      ? "Assessing"
-                      : xmlOperationAssessment
-                        ? operationAssessmentStatusLabel(xmlOperationAssessment.status)
-                        : "Unavailable"}
-                  </span>
-                </div>
-                <div className="bulk-patch-summary-row">
-                  {xmlMode === "post" && xmlOperationAssessment ? (
-                    <div className="post-assessment-layout">
-                      <div className="post-assessment-hero">
-                        {hasResolvedPostAssessmentCandidate ? (
-                          <div className="post-assessment-hero-row">
-                            <div className="post-assessment-hero-item">
-                              <span className="summary-label">Candidate</span>
-                              <strong>{assessedPostCandidateCatalogueNumber ?? "Not resolved"}</strong>
-                            </div>
-                            <div className="post-assessment-hero-item post-assessment-hero-item-secondary">
-                              <span className="summary-label">Device UDI-DI</span>
-                              <strong>{assessedPostCandidatePrimaryUdiDi ?? "Not resolved"}</strong>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="post-assessment-empty-state">
-                            <span className="summary-label">Selected scope</span>
-                            <strong>
-                              {selectedXmlFamilySummary?.product_family ?? "No family selected"} / {selectedXmlVariantSummary?.product_variant ?? "No variant selected"}
-                            </strong>
-                            <p className="panel-copy">
-                              No POST candidate could be resolved from the current canonical validation and tracked SQLite testing state.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      {hasResolvedPostAssessmentCandidate ? (
-                        <div className="post-assessment-chip-row">
-                          {xmlAssessmentSummaryRows.map((row) => (
-                            <div
-                              className={
-                                row.value === "Not yet registered"
-                                  ? "queue-chip post-assessment-chip post-assessment-chip-highlight"
-                                  : "queue-chip post-assessment-chip"
-                              }
-                              key={row.label}
-                            >
-                              <strong>{row.value}</strong>
-                              <span>{row.label}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="post-assessment-chip-row">
-                          <div className="queue-chip post-assessment-chip">
-                            <strong>{selectedBulkEligiblePostCount}</strong>
-                            <span>POST rows in variant</span>
-                          </div>
-                          <div className="queue-chip post-assessment-chip">
-                            <strong>{selectedXmlVariantSummary?.xml_ready_records ?? 0}</strong>
-                            <span>XML-ready rows in variant</span>
-                          </div>
-                          <div className="queue-chip post-assessment-chip">
-                            <strong>{selectedXmlVariantSummary?.xml_blocked_records ?? 0}</strong>
-                            <span>blocked rows in variant</span>
-                          </div>
-                          <div className="queue-chip post-assessment-chip">
-                            <strong>{selectedXmlVariantSummary?.total_records ?? 0}</strong>
-                            <span>total rows in variant</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="bulk-patch-summary-metrics">
-                      {xmlAssessmentSummaryRows.map((row) => (
-                        <div className="workflow-note patch-readiness-note bulk-patch-summary-tile" key={row.label}>
-                          <strong>{row.label}</strong>
-                          <span>{row.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {xmlMode === "post" && xmlOperationAssessment ? (
-                  <div className="post-assessment-interpretation">
-                    <strong>Interpretation</strong>
-                    <p>
-                      {xmlOperationAssessment.summary_message}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="panel-copy bulk-patch-summary-status">
-                    {isLoadingXmlOperationAssessment
-                      ? "Checking the selected operation against current canonical validation and tracked SQLite testing state."
-                      : xmlOperationAssessment?.summary_message ??
-                        xmlOperationAssessmentError ??
-                        "Operation assessment is not available for this selection."}
-                  </p>
-                )}
-                {xmlOperationAssessment?.blocking_reasons.length ? (
-                  <div className="roadmap-list">
-                    {xmlOperationAssessment.blocking_reasons.map((reason, index) => (
-                      <div className="roadmap-item" key={`${reason}-${index}`}>
-                        <strong>{xmlOperationAssessment.status === "blocked" ? "Why blocked" : "Needs attention"}</strong>
-                        <p>{reason}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {xmlOperationAssessment?.recommended_next_action ? (
-                  <div className={xmlMode === "post" ? "workflow-note post-assessment-action" : "workflow-note"}>
-                    <strong>Recommended next action</strong>
-                    <span>{xmlOperationAssessment.recommended_next_action}</span>
-                  </div>
-                ) : null}
-              </div>
+              <XmlOperationAssessmentPanel
+                xmlMode={xmlMode}
+                xmlAssessmentTitle={xmlAssessmentTitle}
+                isLoadingXmlOperationAssessment={isLoadingXmlOperationAssessment}
+                xmlOperationAssessment={xmlOperationAssessment}
+                statusClassName={
+                  isLoadingXmlOperationAssessment
+                    ? "status-pill warn compact"
+                    : xmlOperationAssessment
+                      ? `status-pill ${operationAssessmentStatusClass(xmlOperationAssessment.status)} compact`
+                      : "status-pill warn compact"
+                }
+                statusLabel={
+                  isLoadingXmlOperationAssessment
+                    ? "Assessing"
+                    : xmlOperationAssessment
+                      ? operationAssessmentStatusLabel(xmlOperationAssessment.status)
+                      : "Unavailable"
+                }
+                xmlAssessmentSummaryRows={xmlAssessmentSummaryRows}
+                xmlOperationAssessmentError={xmlOperationAssessmentError}
+                hasResolvedPostAssessmentCandidate={hasResolvedPostAssessmentCandidate}
+                assessedPostCandidateCatalogueNumber={assessedPostCandidateCatalogueNumber}
+                assessedPostCandidatePrimaryUdiDi={assessedPostCandidatePrimaryUdiDi}
+                selectedXmlFamily={selectedXmlFamilySummary?.product_family ?? null}
+                selectedXmlVariant={selectedXmlVariantSummary?.product_variant ?? null}
+                selectedBulkEligiblePostCount={selectedBulkEligiblePostCount}
+                selectedXmlVariantXmlReadyRecords={selectedXmlVariantSummary?.xml_ready_records ?? 0}
+                selectedXmlVariantBlockedRecords={selectedXmlVariantSummary?.xml_blocked_records ?? 0}
+                selectedXmlVariantTotalRecords={selectedXmlVariantSummary?.total_records ?? 0}
+              />
             ) : xmlMode === "marketInfo" ? (
               <div className="workflow-note">
                 <strong>Assessment status</strong>
@@ -5339,145 +4904,31 @@ export function App() {
               </div>
             ) : null}
             {xmlMode === "post" ? (
-              <div className="post-preview-card">
-                <div className="post-preview-layout">
-                  <div className="post-preview-topbar">
-                    <div className="post-preview-title-block">
-                      <h2>POST Preview</h2>
-                    </div>
-                    <div className="draft-actions-bar xml-actions-bar post-actions-bar">
-                      <input
-                        ref={postSuccessXmlInputRef}
-                        type="file"
-                        accept=".xml,text/xml,application/xml"
-                        className="visually-hidden"
-                        onChange={handlePostSuccessXmlSelected}
-                      />
-                      <button
-                        className="action-button"
-                        type="button"
-                        onClick={() => void generateXmlPreview()}
-                        disabled={!canGenerateCurrentXml || isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
-                      >
-                        {isGeneratingXml ? "Generating..." : "Generate POST"}
-                      </button>
-                      <button
-                        className="ghost-button post-secondary-action"
-                        type="button"
-                        onClick={() => void generateXmlPreview()}
-                        disabled={!canGenerateCurrentXml || isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
-                      >
-                        Validate Against XSD
-                      </button>
-                      <button
-                        className="ghost-button post-tertiary-action"
-                        type="button"
-                        onClick={() => void downloadXmlRecord()}
-                        disabled={!canDownloadCurrentXml || isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
-                      >
-                        {isDownloadingXml ? "Preparing ZIP..." : "Download POST ZIP"}
-                      </button>
-                      <button
-                        className="ghost-button post-tertiary-action"
-                        type="button"
-                        onClick={handleUploadSuccessXmlClick}
-                        disabled={isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
-                      >
-                        {isUploadingSuccessXml ? "Uploading Success XML..." : "Upload Success XML"}
-                      </button>
-                    </div>
-                  </div>
-                  {xmlActionMessage ? <div className="save-message post-preview-action-message">{xmlActionMessage}</div> : null}
-                  <div className="post-preview-summary-row">
-                    <div className="workflow-note post-preview-status">
-                      <strong>Preview status</strong>
-                      <span>
-                        {xmlPairPreview
-                          ? `Generated for ${xmlPairPreview.catalogue_number} · ${activePreviewLabel}`
-                          : selectedPostWorkspaceRecord
-                            ? `Awaiting preview for ${selectedPostWorkspaceRecord.catalogue_number}.`
-                            : "No available Device UDI-DI POST candidate is currently available for the selected family and variant."}
-                      </span>
-                    </div>
-                    <div className="xml-preview-meta post-preview-meta">
-                      <div className="xml-preview-meta-block">
-                        <span className="summary-label">Active view</span>
-                        <strong>{activePreviewLabel}</strong>
-                      </div>
-                      <div className="xml-preview-meta-block">
-                        <span className="summary-label">Validation</span>
-                        <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                          {validationStatusLabel}
-                        </span>
-                      </div>
-                      <div className="xml-preview-meta-block">
-                        <span className="summary-label">Schema</span>
-                        <strong>{selectedSchemaLabel ?? "Message.xsd pending"}</strong>
-                      </div>
-                      <div className="xml-preview-meta-block">
-                        <span className="summary-label">File</span>
-                        <strong>{activePreviewFileName ?? "Not generated yet"}</strong>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="post-preview-content-grid">
-                    <div className="post-preview-structure-panel">
-                      <div className="post-preview-subhead">
-                        <strong>XML structure</strong>
-                        <span>Navigate the main POST message sections.</span>
-                      </div>
-                      <div className="post-preview-structure-list">
-                        {postXmlStructureSections.map((section) => (
-                          <button
-                            key={section.id}
-                            className={selectedPostXmlSection?.id === section.id ? "post-structure-item active" : "post-structure-item"}
-                            type="button"
-                            onClick={() => setSelectedPostXmlSectionId(section.id)}
-                          >
-                            <span className="post-structure-line-range">
-                              Lines {section.lineStart + 1}-{section.lineEnd + 1}
-                            </span>
-                            <strong>{section.label}</strong>
-                            <span>{section.detail}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="post-preview-xml-panel">
-                      <div className="post-preview-subhead">
-                        <strong>Raw XML preview</strong>
-                        <span>
-                          {selectedPostXmlSection
-                            ? `Focused on ${selectedPostXmlSection.label.toLowerCase()}.`
-                            : "Inspect the generated XML payload."}
-                        </span>
-                      </div>
-                      <pre className="xml-preview-block post-preview-block">
-                        <code>
-                          {xmlPreviewLines.split("\n").map((line, index) => {
-                            const isInSelectedSection =
-                              selectedPostXmlSection !== null &&
-                              index >= selectedPostXmlSection.lineStart &&
-                              index <= selectedPostXmlSection.lineEnd;
-                            return (
-                              <span
-                                key={`post-xml-line-${index}`}
-                                ref={(element) => {
-                                  postXmlPreviewLineRefs.current[index] = element;
-                                }}
-                                className={isInSelectedSection ? "xml-preview-line xml-preview-line-highlight" : "xml-preview-line"}
-                              >
-                                <span className="xml-preview-line-number">{index + 1}</span>
-                                <span className="xml-preview-line-text">{line}</span>
-                              </span>
-                            );
-                          })}
-                        </code>
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <PostPreviewPanel
+                postSuccessXmlInputRef={postSuccessXmlInputRef}
+                handlePostSuccessXmlSelected={handlePostSuccessXmlSelected}
+                canGenerateCurrentXml={canGenerateCurrentXml}
+                canDownloadCurrentXml={canDownloadCurrentXml}
+                isGeneratingXml={isGeneratingXml}
+                isDownloadingXml={isDownloadingXml}
+                isUploadingSuccessXml={isUploadingSuccessXml}
+                onGeneratePreview={() => void generateXmlPreview()}
+                onDownload={() => void downloadXmlRecord()}
+                onUploadClick={handleUploadSuccessXmlClick}
+                xmlActionMessage={xmlActionMessage}
+                xmlPairPreview={xmlPairPreview}
+                selectedPostWorkspaceRecord={selectedPostWorkspaceRecord}
+                activePreviewLabel={activePreviewLabel}
+                selectedBatchValidation={selectedBatchValidation}
+                validationStatusLabel={validationStatusLabel}
+                selectedSchemaLabel={selectedSchemaLabel}
+                activePreviewFileName={activePreviewFileName}
+                postXmlStructureSections={postXmlStructureSections}
+                selectedPostXmlSection={selectedPostXmlSection}
+                onSelectSection={setSelectedPostXmlSectionId}
+                xmlPreviewLines={xmlPreviewLines}
+                postXmlPreviewLineRefs={postXmlPreviewLineRefs}
+              />
             ) : (
             <div
               className={
@@ -5490,139 +4941,30 @@ export function App() {
             >
               <div className="xml-preview-surface">
                 {xmlMode === "patch" ? (
-                  <div className="post-preview-card patch-preview-card">
-                    <div className="post-preview-layout">
-                      <div className="post-preview-topbar">
-                        <div className="post-preview-title-block">
-                          <h2>PATCH Preview</h2>
-                        </div>
-                        <div className="draft-actions-bar xml-actions-bar post-actions-bar">
-                          <input
-                            ref={postSuccessXmlInputRef}
-                            type="file"
-                            accept=".xml,text/xml,application/xml"
-                            className="visually-hidden"
-                            onChange={handlePostSuccessXmlSelected}
-                          />
-                          <button
-                            className="action-button"
-                            type="button"
-                            onClick={() => void generateXmlPreview()}
-                            disabled={!canGenerateCurrentXml || isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
-                          >
-                            {isGeneratingXml ? "Generating..." : "Generate Patch Scenario"}
-                          </button>
-                          <button
-                            className="ghost-button post-secondary-action"
-                            type="button"
-                            onClick={() => void generateXmlPreview()}
-                            disabled={!canGenerateCurrentXml || isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
-                          >
-                            Validate Against XSD
-                          </button>
-                          <button
-                            className="ghost-button post-tertiary-action"
-                            type="button"
-                            onClick={() => void downloadXmlRecord()}
-                            disabled={!canDownloadCurrentXml || isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
-                          >
-                            {isDownloadingXml ? "Preparing ZIP..." : "Download Patch Scenario ZIP"}
-                          </button>
-                          <button
-                            className="ghost-button post-tertiary-action"
-                            type="button"
-                            onClick={handleUploadSuccessXmlClick}
-                            disabled={isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
-                          >
-                            {isUploadingSuccessXml ? "Uploading Success XML..." : "Upload Success XML"}
-                          </button>
-                        </div>
-                      </div>
-                      {xmlActionMessage ? <div className="save-message post-preview-action-message">{xmlActionMessage}</div> : null}
-                      <div className="post-preview-summary-row">
-                        <div className="workflow-note post-preview-status">
-                          <strong>Preview status</strong>
-                          <span>{patchPreviewStatusMessage}</span>
-                        </div>
-                        <div className="xml-preview-meta post-preview-meta">
-                          <div className="xml-preview-meta-block">
-                            <span className="summary-label">Active view</span>
-                            <strong>{activePreviewLabel}</strong>
-                          </div>
-                          <div className="xml-preview-meta-block">
-                            <span className="summary-label">Validation</span>
-                            <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
-                              {validationStatusLabel}
-                            </span>
-                          </div>
-                          <div className="xml-preview-meta-block">
-                            <span className="summary-label">Schema</span>
-                            <strong>{selectedSchemaLabel ?? "Message.xsd pending"}</strong>
-                          </div>
-                          <div className="xml-preview-meta-block">
-                            <span className="summary-label">File</span>
-                            <strong>{activePreviewFileName ?? "Not generated yet"}</strong>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="post-preview-content-grid">
-                        <div className="post-preview-structure-panel">
-                          <div className="post-preview-subhead">
-                            <strong>PATCH structure</strong>
-                            <span>Navigate the main PATCH message sections.</span>
-                          </div>
-                          <div className="post-preview-structure-list">
-                            {patchXmlStructureSections.map((section) => (
-                              <button
-                                key={section.id}
-                                className={selectedPatchXmlSection?.id === section.id ? "post-structure-item active" : "post-structure-item"}
-                                type="button"
-                                onClick={() => setSelectedPatchXmlSectionId(section.id)}
-                              >
-                                <span className="post-structure-line-range">
-                                  Lines {section.lineStart + 1}-{section.lineEnd + 1}
-                                </span>
-                                <strong>{section.label}</strong>
-                                <span>{section.detail}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="post-preview-xml-panel">
-                          <div className="post-preview-subhead">
-                            <strong>Raw XML preview</strong>
-                            <span>
-                              {selectedPatchXmlSection
-                                ? `Focused on ${selectedPatchXmlSection.label.toLowerCase()}.`
-                                : "Inspect the generated XML payload."}
-                            </span>
-                          </div>
-                          <pre className="xml-preview-block post-preview-block">
-                            <code>
-                              {xmlPreviewLines.split("\n").map((line, index) => {
-                                const isInSelectedSection =
-                                  selectedPatchXmlSection !== null &&
-                                  index >= selectedPatchXmlSection.lineStart &&
-                                  index <= selectedPatchXmlSection.lineEnd;
-                                return (
-                                  <span
-                                    key={`patch-xml-line-${index}`}
-                                    ref={(element) => {
-                                      patchXmlPreviewLineRefs.current[index] = element;
-                                    }}
-                                    className={isInSelectedSection ? "xml-preview-line xml-preview-line-highlight" : "xml-preview-line"}
-                                  >
-                                    <span className="xml-preview-line-number">{index + 1}</span>
-                                    <span className="xml-preview-line-text">{line}</span>
-                                  </span>
-                                );
-                              })}
-                            </code>
-                          </pre>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <PatchPreviewPanel
+                    postSuccessXmlInputRef={postSuccessXmlInputRef}
+                    handlePostSuccessXmlSelected={handlePostSuccessXmlSelected}
+                    canGenerateCurrentXml={canGenerateCurrentXml}
+                    canDownloadCurrentXml={canDownloadCurrentXml}
+                    isGeneratingXml={isGeneratingXml}
+                    isDownloadingXml={isDownloadingXml}
+                    isUploadingSuccessXml={isUploadingSuccessXml}
+                    onGeneratePreview={() => void generateXmlPreview()}
+                    onDownload={() => void downloadXmlRecord()}
+                    onUploadClick={handleUploadSuccessXmlClick}
+                    xmlActionMessage={xmlActionMessage}
+                    patchPreviewStatusMessage={patchPreviewStatusMessage}
+                    activePreviewLabel={activePreviewLabel}
+                    selectedBatchValidation={selectedBatchValidation}
+                    validationStatusLabel={validationStatusLabel}
+                    selectedSchemaLabel={selectedSchemaLabel}
+                    activePreviewFileName={activePreviewFileName}
+                    patchXmlStructureSections={patchXmlStructureSections}
+                    selectedPatchXmlSection={selectedPatchXmlSection}
+                    onSelectSection={setSelectedPatchXmlSectionId}
+                    xmlPreviewLines={xmlPreviewLines}
+                    patchXmlPreviewLineRefs={patchXmlPreviewLineRefs}
+                  />
                 ) : (
                   <>
                     <div>
@@ -5815,333 +5157,52 @@ export function App() {
                   )
                 ) : xmlMode === "patch" ? (
                   selectedPatchWorkspaceRecord ? (
-                    <div className="draft-list xml-record-stack">
-                      <div className="draft-card xml-record-card">
-                        <div className="draft-card-head">
-                          <strong>{selectedPatchScenario.label}</strong>
-                          <span className={selectedPatchScenarioStatus === "EUDAMED Accepted" ? "status-pill ok compact" : "status-pill warn compact"}>
-                            {selectedPatchScenarioStatus}
-                          </span>
-                        </div>
-                        <p className="draft-meta">
-                          Parent POST {selectedPatchWorkspaceRecord.catalogue_number} · Current accepted base {currentAcceptedPatchLabel}
-                        </p>
-                        <div className="family-scope-pill-row xml-status-row">
-                          <span className={hasReviewedPatchBaselinePost ? "status-pill ok compact" : "status-pill warn compact"}>
-                            {hasReviewedPatchBaselinePost ? "Baseline POST reviewed" : "Baseline POST required"}
-                          </span>
-                          <span className="status-pill ok compact">Parent POST</span>
-                          <span className="status-pill ok compact">{selectedPatchWorkspaceRecord.catalogue_number}</span>
-                        </div>
-                        <p className="panel-copy">{selectedPatchScenario.summary}</p>
-                        {hasReviewedPatchBaselinePost ? (
-                          <>
-                            <div className="patch-compare-grid">
-                              <div className="patch-compare-card">
-                                <span className="summary-label">Before</span>
-                                <strong>{currentAcceptedPatchLabel}</strong>
-                                <p>
-                                  Parent POST {selectedPatchWorkspaceRecord.catalogue_number} · Version {String(currentAcceptedPatchVersion)}
-                                </p>
-                                <ul className="patch-compare-list">
-                                  {patchDraftComparisonRows.map((row) => (
-                                    <li key={`before-${row.label}`}>
-                                      <strong>{row.label}</strong>
-                                      <span>{row.before}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                              <div className="patch-compare-card patch-compare-card-accent">
-                                <span className="summary-label">After</span>
-                                <strong>Derived scenario PATCH draft</strong>
-                                <p>
-                                  Same parent device lineage · Version {patchVersionInput.trim() || "Pending"}
-                                </p>
-                                <ul className="patch-compare-list">
-                                  {patchDraftComparisonRows.map((row) => (
-                                    <li key={`after-${row.label}`}>
-                                      <strong>{row.label}</strong>
-                                      <span>{row.after}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            </div>
-                            <div className="patch-form-grid">
-                              <div className="patch-field">
-                                <label className="field-label" htmlFor="patch-scenario-selector">
-                                  Candidate PATCH scenario
-                                </label>
-                                <select
-                                  id="patch-scenario-selector"
-                                  className="rule-select patch-select"
-                                  value={selectedPatchScenario.id}
-                                  onChange={(event) => setSelectedPatchScenarioId(event.target.value as PatchScenarioId)}
-                                >
-                                  {PATCH_SCENARIOS.map((scenario) => (
-                                    <option key={scenario.id} value={scenario.id}>
-                                      {patchScenarioOptionLabel(scenario)}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div className="patch-field">
-                                <label className="field-label" htmlFor="patch-version-input">
-                                  Scenario PATCH version
-                                </label>
-                                <input
-                                  id="patch-version-input"
-                                  className="rule-select patch-select"
-                                  type="number"
-                                  min={2}
-                                  step={1}
-                                  value={patchVersionInput}
-                                  onChange={(event) => setPatchVersionInput(event.target.value)}
-                                />
-                              </div>
-                              {!selectedPatchScenarioImplemented ? (
-                                <div className="patch-field patch-field-full">
-                                  <div className="workflow-note patch-readiness-note">
-                                    <strong>Design placeholder</strong>
-                                    <span>
-                                      This candidate scenario is now listed in the dropdown for design review, but XML generation is not implemented yet.
-                                      {selectedPatchScenario.optionsSummary ? ` Allowed options: ${selectedPatchScenario.optionsSummary}` : ""}
-                                    </span>
-                                  </div>
-                                </div>
-                              ) : null}
-                              {selectedPatchScenario.id === "equivalent_first_patch" ? (
-                                <div className="patch-field patch-field-full">
-                                  <p className="panel-copy">
-                                    This option creates the explicit version `2` PATCH that mirrors the accepted POST and makes no business-field change.
-                                  </p>
-                                </div>
-                              ) : null}
-                              {selectedPatchScenario.id === "trade_name_edit" ? (
-                                <div className="patch-field patch-field-full">
-                                  <label className="field-label" htmlFor="patch-trade-name-input">
-                                    New trade name
-                                  </label>
-                                  <input
-                                    id="patch-trade-name-input"
-                                    className="rule-select patch-select"
-                                    type="text"
-                                    value={patchTradeNameInput}
-                                    onChange={(event) => setPatchTradeNameInput(event.target.value)}
-                                  />
-                                </div>
-                              ) : null}
-                              {selectedPatchScenario.id === "base_quantity_edit" ? (
-                                <div className="patch-field patch-field-full">
-                                  <label className="field-label" htmlFor="patch-base-quantity-input">
-                                    New base quantity
-                                  </label>
-                                  <input
-                                    id="patch-base-quantity-input"
-                                    className="rule-select patch-select"
-                                    type="number"
-                                    min={1}
-                                    step={1}
-                                    value={patchBaseQuantityInput}
-                                    onChange={(event) => setPatchBaseQuantityInput(event.target.value)}
-                                  />
-                                  <p className="field-source-note">
-                                    Current value: {selectedCurrentBaseQuantity !== null ? selectedCurrentBaseQuantity : "None"}
-                                  </p>
-                                </div>
-                              ) : null}
-                              {selectedPatchScenario.id === "sterile_edit" ? (
-                                <div className="patch-field patch-field-full">
-                                  <label className="field-label" htmlFor="patch-sterile-input">
-                                    Sterile
-                                  </label>
-                                  <select
-                                    id="patch-sterile-input"
-                                    className="rule-select patch-select"
-                                    value={patchSterileInput}
-                                    onChange={(event) => setPatchSterileInput(event.target.value)}
-                                  >
-                                    <option value="">Select value</option>
-                                    <option value="true">true</option>
-                                    <option value="false">false</option>
-                                  </select>
-                                  <p className="field-source-note">
-                                    Current value: {selectedCurrentSterile === null ? "None" : selectedCurrentSterile ? "true" : "false"}
-                                  </p>
-                                </div>
-                              ) : null}
-                              {selectedPatchScenario.id === "latex_edit" ? (
-                                <div className="patch-field patch-field-full">
-                                  <label className="field-label" htmlFor="patch-latex-input">
-                                    Latex
-                                  </label>
-                                  <select
-                                    id="patch-latex-input"
-                                    className="rule-select patch-select"
-                                    value={patchLatexInput}
-                                    onChange={(event) => setPatchLatexInput(event.target.value)}
-                                  >
-                                    <option value="">Select value</option>
-                                    <option value="true">true</option>
-                                    <option value="false">false</option>
-                                  </select>
-                                  <p className="field-source-note">
-                                    Current value: {selectedCurrentLatex === null ? "None" : selectedCurrentLatex ? "true" : "false"}
-                                  </p>
-                                </div>
-                              ) : null}
-                              {selectedPatchScenario.id === "status_code_edit" ? (
-                                <div className="patch-field patch-field-full">
-                                  <label className="field-label" htmlFor="patch-status-code-input">
-                                    Status code
-                                  </label>
-                                  <select
-                                    id="patch-status-code-input"
-                                    className="rule-select patch-select"
-                                    value={patchStatusCodeInput}
-                                    onChange={(event) => setPatchStatusCodeInput(event.target.value)}
-                                  >
-                                    <option value="">Select value</option>
-                                    <option value="NOT_INTENDED_FOR_EU_MARKET">NOT_INTENDED_FOR_EU_MARKET</option>
-                                    <option value="ON_THE_MARKET">ON_THE_MARKET</option>
-                                    <option value="NO_LONGER_PLACED_ON_THE_MARKET">NO_LONGER_PLACED_ON_THE_MARKET</option>
-                                  </select>
-                                  <p className="field-source-note">
-                                    Current value: {selectedCurrentStatusCode ?? "None"}
-                                  </p>
-                                </div>
-                              ) : null}
-                              {selectedPatchScenario.id === "warning_add" ? (
-                                <>
-                                  <div className="patch-field patch-field-full">
-                                    <label className="field-label" htmlFor="patch-warning-current-input">
-                                      Current critical warning set
-                                    </label>
-                                    <input
-                                      id="patch-warning-current-input"
-                                      className="rule-select patch-select"
-                                      type="text"
-                                      value={selectedPatchWarningCodes.join(", ") || "None"}
-                                      readOnly
-                                    />
-                                    {selectedPatchWarningDescriptions.length ? (
-                                      <p className="field-source-note">
-                                        {selectedPatchWarningDescriptions.join(" | ")}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                  <div className="patch-field">
-                                    <label className="field-label" htmlFor="patch-warning-code-input">
-                                      Replacement warning code
-                                    </label>
-                                    <input
-                                      id="patch-warning-code-input"
-                                      className="rule-select patch-select"
-                                      type="text"
-                                      list="critical-warning-code-options"
-                                      value={patchWarningCodeInput}
-                                      onChange={(event) => setPatchWarningCodeInput(event.target.value)}
-                                    />
-                                  </div>
-                                  <datalist id="critical-warning-code-options">
-                                    {criticalWarningCodeOptions.map((option) => (
-                                      <option key={option.code} value={option.code}>
-                                        {option.description ? `${option.code} - ${option.description}` : option.code}
-                                      </option>
-                                    ))}
-                                  </datalist>
-                                  {selectedWarningRequiresComment || patchWarningCommentInput.trim() ? (
-                                    <div className="patch-field patch-field-full">
-                                      <label className="field-label" htmlFor="patch-warning-comment-input">
-                                        Warning comment
-                                      </label>
-                                      <input
-                                        id="patch-warning-comment-input"
-                                        className="rule-select patch-select"
-                                        type="text"
-                                        value={patchWarningCommentInput}
-                                        onChange={(event) => setPatchWarningCommentInput(event.target.value)}
-                                      />
-                                    </div>
-                                  ) : null}
-                                </>
-                              ) : null}
-                              {selectedPatchScenario.id === "storage_condition_edit" ? (
-                                <>
-                                  <div className="patch-field">
-                                    <label className="field-label" htmlFor="patch-storage-shc006-input">
-                                      Storage condition SHC006
-                                    </label>
-                                    <input
-                                      id="patch-storage-shc006-input"
-                                      className="rule-select patch-select"
-                                      type="text"
-                                      value={patchStorageConditionInputs.SHC006 ?? ""}
-                                      onChange={(event) =>
-                                        setPatchStorageConditionInputs((current) => ({
-                                          ...current,
-                                          SHC006: event.target.value,
-                                        }))
-                                      }
-                                    />
-                                  </div>
-                                  <div className="patch-field">
-                                    <label className="field-label" htmlFor="patch-storage-shc007-input">
-                                      Storage condition SHC007
-                                    </label>
-                                    <input
-                                      id="patch-storage-shc007-input"
-                                      className="rule-select patch-select"
-                                      type="text"
-                                      value={patchStorageConditionInputs.SHC007 ?? ""}
-                                      onChange={(event) =>
-                                        setPatchStorageConditionInputs((current) => ({
-                                          ...current,
-                                          SHC007: event.target.value,
-                                        }))
-                                      }
-                                    />
-                                  </div>
-                                </>
-                              ) : null}
-                            </div>
-                            <div className="workflow-note patch-readiness-note">
-                              <strong>Draft readiness</strong>
-                              <span>{patchScenarioReadinessMessage}</span>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="workflow-note patch-readiness-note">
-                            <strong>POST review required</strong>
-                            <span>
-                              Generate and review `POST` for `{selectedPatchWorkspaceRecord.catalogue_number}` first.
-                              Scenario drafting stays blocked until that exact baseline POST has been loaded in this session.
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      {xmlPatchPreview ? (
-                        <div className="draft-card">
-                          <div className="draft-card-head">
-                            <strong>Generated XML Change Summary</strong>
-                            <span className="status-pill ok compact">{`${xmlPatchPreview.field_deltas.length} changes`}</span>
-                          </div>
-                          <div className="patch-change-summary-list">
-                            {xmlPatchPreview.field_deltas.map((delta) => (
-                              <div className="patch-change-summary-item" key={delta.field_key}>
-                                <strong>{delta.label}</strong>
-                                <div className="patch-change-summary-values">
-                                  <span>{delta.before_value ?? "None"}</span>
-                                  <span className="patch-change-summary-arrow" aria-hidden="true">{"->"}</span>
-                                  <span>{delta.after_value ?? "None"}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
+                    <PatchScenarioCard
+                      selectedPatchScenarioLabel={selectedPatchScenario.label}
+                      selectedPatchScenarioStatus={selectedPatchScenarioStatus}
+                      selectedPatchWorkspaceCatalogueNumber={selectedPatchWorkspaceRecord.catalogue_number}
+                      currentAcceptedPatchLabel={currentAcceptedPatchLabel}
+                      hasReviewedPatchBaselinePost={hasReviewedPatchBaselinePost}
+                      selectedPatchScenarioSummary={selectedPatchScenario.summary}
+                      patchDraftComparisonRows={patchDraftComparisonRows}
+                      currentAcceptedPatchVersion={currentAcceptedPatchVersion}
+                      patchVersionInput={patchVersionInput}
+                      patchScenarioOptions={PATCH_SCENARIOS.map((scenario) => ({
+                        id: scenario.id,
+                        label: patchScenarioOptionLabel(scenario),
+                      }))}
+                      selectedPatchScenarioId={selectedPatchScenario.id}
+                      onScenarioChange={(scenarioId) => setSelectedPatchScenarioId(scenarioId as PatchScenarioId)}
+                      onPatchVersionChange={setPatchVersionInput}
+                      selectedPatchScenarioImplemented={selectedPatchScenarioImplemented}
+                      selectedPatchScenarioOptionsSummary={selectedPatchScenario.optionsSummary}
+                      patchTradeNameInput={patchTradeNameInput}
+                      onPatchTradeNameChange={setPatchTradeNameInput}
+                      patchBaseQuantityInput={patchBaseQuantityInput}
+                      onPatchBaseQuantityChange={setPatchBaseQuantityInput}
+                      selectedCurrentBaseQuantity={selectedCurrentBaseQuantity}
+                      patchSterileInput={patchSterileInput}
+                      onPatchSterileChange={setPatchSterileInput}
+                      selectedCurrentSterile={selectedCurrentSterile}
+                      patchLatexInput={patchLatexInput}
+                      onPatchLatexChange={setPatchLatexInput}
+                      selectedCurrentLatex={selectedCurrentLatex}
+                      patchStatusCodeInput={patchStatusCodeInput}
+                      onPatchStatusCodeChange={setPatchStatusCodeInput}
+                      selectedCurrentStatusCode={selectedCurrentStatusCode}
+                      selectedPatchWarningCodes={selectedPatchWarningCodes}
+                      selectedPatchWarningDescriptions={selectedPatchWarningDescriptions}
+                      criticalWarningCodeOptions={criticalWarningCodeOptions}
+                      patchWarningCodeInput={patchWarningCodeInput}
+                      onPatchWarningCodeChange={setPatchWarningCodeInput}
+                      selectedWarningRequiresComment={selectedWarningRequiresComment}
+                      patchWarningCommentInput={patchWarningCommentInput}
+                      onPatchWarningCommentChange={setPatchWarningCommentInput}
+                      patchStorageConditionInputs={patchStorageConditionInputs}
+                      setPatchStorageConditionInputs={setPatchStorageConditionInputs}
+                      patchScenarioReadinessMessage={patchScenarioReadinessMessage}
+                      xmlPatchPreview={xmlPatchPreview}
+                    />
                   ) : null
                 ) : xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? (
                   <div className="draft-list xml-record-stack">
@@ -6986,105 +6047,26 @@ export function App() {
             "Preparing validated device records required for accepted EUDAMED generation.",
           )
         ) : (
-          <section className="tab-stack">
-            <section className="summary-grid">
-              <div className="summary-card">
-                <span className="summary-label">Accepted XML patterns</span>
-                <strong>{acceptedXmlModes.length}</strong>
-                <p>Only user-confirmed EUDAMED accepted patterns appear in this workspace.</p>
-              </div>
-              <div className="summary-card">
-                <span className="summary-label">Current accepted mode</span>
-                <strong>POST</strong>
-                <p>The accepted baseline POST remains the operationally enabled XML generation path.</p>
-              </div>
-              <div className="summary-card">
-                <span className="summary-label">Candidate PATCH scenarios</span>
-                <strong>{PATCH_SCENARIOS.length}</strong>
-                <p>Candidate PATCH scenarios remain available in EUDAMED Testing until promoted.</p>
-              </div>
-              <div className="summary-card">
-                <span className="summary-label">Validation-ready rows</span>
-                <strong>{xmlReadyRecords.length}</strong>
-                <p>Accepted generation is still downstream of canonical validation.</p>
-              </div>
-            </section>
-
-            <section className="panel xml-full-workspace-panel">
-              <div className="section-heading">
-                <div>
-                  <span className="section-kicker">Accepted XML Only</span>
-                  <h2>EUDAMED Generation Workspace</h2>
-                </div>
-              </div>
-              <p className="panel-copy">
-                Only `EUDAMED Accepted` XML patterns are available here. Use `EUDAMED Testing` to review and promote candidate patterns.
-              </p>
-              <div className="draft-list xml-record-stack">
-                {acceptedXmlModes.map((mode) => (
-                  <div className="draft-card xml-record-card" key={mode.id}>
-                    <div className="draft-card-head">
-                      <strong>{mode.label}</strong>
-                      <span className="status-pill ok compact">{mode.status}</span>
-                    </div>
-                    <p className="panel-copy">{mode.summary}</p>
-                  </div>
-                ))}
-              </div>
-              {selectedPostWorkspaceRecord ? (
-                <div className="xml-focus-layout">
-                  <div className="xml-preview-surface">
-                    <div className="section-heading xml-preview-heading">
-                      <div>
-                        <span className="section-kicker">Accepted Preview</span>
-                        <h2>POST</h2>
-                      </div>
-                    </div>
-                    <pre className="xml-preview-block">
-                      <code>
-                        {xmlPairPreview
-                          ? xmlPairPreview.post_xml
-                          : [
-                              "<!-- Generate the accepted POST preview -->",
-                              `<catalogue-number>${selectedPostWorkspaceRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
-                            ].join("\n")}
-                      </code>
-                    </pre>
-                  </div>
-                  <div className="xml-sidebar-surface">
-                    <div className="draft-actions-bar xml-actions-bar">
-                      <button className="action-button" type="button" onClick={() => void generateXmlPreview()} disabled={!selectedPostWorkspaceRecord || isGeneratingXml || isDownloadingXml}>
-                        {isGeneratingXml ? "Generating..." : "Generate Accepted POST"}
-                      </button>
-                      <button className="ghost-button" type="button" onClick={() => void generateXmlPreview()} disabled={!selectedPostWorkspaceRecord || isGeneratingXml || isDownloadingXml}>
-                        Validate Against XSD
-                      </button>
-                      <button className="ghost-button" type="button" onClick={() => void downloadXmlRecord()} disabled={!selectedPostWorkspaceRecord || isGeneratingXml || isDownloadingXml}>
-                        {isDownloadingXml ? "Preparing ZIP..." : "Download POST Package"}
-                      </button>
-                      {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
-                    </div>
-                    <div className="draft-list xml-record-stack">
-                      <div className="draft-card xml-record-card">
-                        <div className="draft-card-head">
-                          <strong>{selectedPostWorkspaceRecord.catalogue_number}</strong>
-                          <span className="status-pill ok compact">EUDAMED Accepted</span>
-                        </div>
-                        <p className="draft-meta">
-                          {selectedPostWorkspaceRecord.product_family} / {selectedPostWorkspaceRecord.product_variant}
-                        </p>
-                        <p className="panel-copy">
-                          Generate only the accepted baseline `POST` in this workspace.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="panel-copy">No XML-ready POST record is currently available for accepted `POST` generation for the selected family and variant.</p>
-              )}
-            </section>
-          </section>
+          <AcceptedGenerationWorkspace
+            acceptedXmlModes={acceptedXmlModes}
+            patchScenarioCount={PATCH_SCENARIOS.length}
+            xmlReadyRecordCount={xmlReadyRecords.length}
+            selectedPostWorkspaceRecord={selectedPostWorkspaceRecord}
+            xmlPairPreviewPostXml={xmlPairPreview?.post_xml ?? null}
+            acceptedPreviewPlaceholder={
+              selectedPostWorkspaceRecord
+                ? [
+                    "<!-- Generate the accepted POST preview -->",
+                    `<catalogue-number>${selectedPostWorkspaceRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
+                  ].join("\n")
+                : "<!-- No accepted POST preview is currently available -->"
+            }
+            isGeneratingXml={isGeneratingXml}
+            isDownloadingXml={isDownloadingXml}
+            xmlActionMessage={xmlActionMessage}
+            onGeneratePreview={() => void generateXmlPreview()}
+            onDownload={() => void downloadXmlRecord()}
+          />
         )
       ) : null}
 
