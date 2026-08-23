@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 import json
 import sqlite3
 from typing import Any, cast
@@ -314,6 +315,118 @@ class TestingStateStore:
             ).fetchone()
         return row is not None
 
+    def record_generated_patch_context(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+        primary_udi_di: str,
+        basic_udi_di: str | None,
+        patch_version: str,
+        scenario_id: str,
+        scenario_label: str,
+        changed_fields: list[dict[str, Any]],
+        latest_successful_state: dict[str, Any],
+    ) -> None:
+        with self._connect() as connection:
+            subject_id = self._ensure_testing_subject(
+                connection,
+                product_family=product_family,
+                product_variant=product_variant,
+                catalogue_number=catalogue_number,
+                primary_udi_di=primary_udi_di,
+                basic_udi_di=basic_udi_di,
+            )
+            existing_row = connection.execute(
+                """
+                SELECT id
+                FROM testing_events
+                WHERE subject_id = ?
+                  AND message_type = 'UDI_DI.PATCH'
+                  AND status = 'GENERATED'
+                  AND version = ?
+                ORDER BY event_index DESC
+                LIMIT 1
+                """,
+                (subject_id, patch_version),
+            ).fetchone()
+            payload_created_at = datetime.now(UTC).isoformat(timespec="milliseconds")
+            raw_event_json = json.dumps(
+                {
+                    "message_type": "UDI_DI.PATCH",
+                    "status": "GENERATED",
+                    "scenario_id": scenario_id,
+                    "scenario_label": scenario_label,
+                    "catalogue_number": catalogue_number,
+                    "primary_udi_di": primary_udi_di,
+                    "basic_udi_di": basic_udi_di,
+                    "version": patch_version,
+                    "latest_successful_state": latest_successful_state,
+                }
+            )
+            changed_fields_json = json.dumps(changed_fields)
+            if existing_row is not None:
+                connection.execute(
+                    """
+                    UPDATE testing_events
+                    SET scenario_id = ?,
+                        scenario_label = ?,
+                        payload_created_at = ?,
+                        changed_fields_json = ?,
+                        raw_event_json = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        scenario_id,
+                        scenario_label,
+                        payload_created_at,
+                        changed_fields_json,
+                        raw_event_json,
+                        int(existing_row["id"]),
+                    ),
+                )
+                return
+
+            next_index_row = connection.execute(
+                "SELECT COALESCE(MAX(event_index), -1) + 1 FROM testing_events WHERE subject_id = ?",
+                (subject_id,),
+            ).fetchone()
+            next_index = int(next_index_row[0]) if next_index_row is not None else 0
+            connection.execute(
+                """
+                INSERT INTO testing_events (
+                    subject_id,
+                    event_index,
+                    message_type,
+                    status,
+                    version,
+                    scenario_id,
+                    scenario_label,
+                    tested_at,
+                    transaction_id,
+                    submission_id,
+                    payload_created_at,
+                    correlation_id,
+                    message_id,
+                    changed_fields_json,
+                    retained_fields_json,
+                    unchanged_fields_json,
+                    raw_event_json
+                ) VALUES (?, ?, 'UDI_DI.PATCH', 'GENERATED', ?, ?, ?, NULL, NULL, NULL, ?, NULL, NULL, ?, NULL, NULL, ?)
+                """,
+                (
+                    subject_id,
+                    next_index,
+                    patch_version,
+                    scenario_id,
+                    scenario_label,
+                    payload_created_at,
+                    changed_fields_json,
+                    raw_event_json,
+                ),
+            )
+
     @classmethod
     def clear_reviewed_posts(cls) -> None:
         settings = get_settings()
@@ -474,6 +587,92 @@ class TestingStateStore:
                     self._normalize_identity(catalogue_number),
                 ),
             ).fetchone()
+
+    def _ensure_testing_subject(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+        primary_udi_di: str,
+        basic_udi_di: str | None,
+    ) -> int:
+        subject_row = connection.execute(
+            """
+            SELECT id
+            FROM testing_subjects
+            WHERE normalized_product_family IN ({family_placeholders})
+              AND normalized_product_variant = ?
+              AND normalized_catalogue_number = ?
+            LIMIT 1
+            """.format(
+                family_placeholders=", ".join("?" for _ in self._normalized_family_candidates(product_family)),
+            ),
+            (
+                *self._normalized_family_candidates(product_family),
+                self._normalize_identity(product_variant),
+                self._normalize_identity(catalogue_number),
+            ),
+        ).fetchone()
+        if subject_row is not None:
+            return int(subject_row["id"])
+
+        device_subject_id = self._resolve_device_subject_id(
+            connection,
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+            primary_udi_di=primary_udi_di,
+        )
+        subject_key = self._normalize_identity(
+            f"{product_family}|{product_variant}|{catalogue_number}|{primary_udi_di or basic_udi_di or ''}"
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_subjects (
+                subject_key,
+                device_subject_id,
+                normalized_product_family,
+                normalized_product_variant,
+                normalized_catalogue_number,
+                normalized_primary_udi_di,
+                normalized_basic_udi_di,
+                product_family,
+                product_variant,
+                catalogue_number,
+                primary_udi_di,
+                basic_udi_di,
+                source_workbook,
+                source_sheet,
+                source_row_index,
+                post_success,
+                baseline_patch_success,
+                exclude_from_post_wave,
+                exclude_from_baseline_patch_wave,
+                latest_successful_version,
+                latest_successful_state_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, 0, 0, 0, NULL, NULL)
+            """,
+            (
+                subject_key,
+                device_subject_id,
+                self._normalize_identity(product_family),
+                self._normalize_identity(product_variant),
+                self._normalize_identity(catalogue_number),
+                self._normalize_identity(primary_udi_di),
+                self._normalize_identity(basic_udi_di),
+                self._optional_string(product_family),
+                self._optional_string(product_variant),
+                self._optional_string(catalogue_number),
+                self._optional_string(primary_udi_di),
+                self._optional_string(basic_udi_di),
+            ),
+        )
+        inserted_row = connection.execute("SELECT last_insert_rowid()").fetchone()
+        if inserted_row is None:
+            raise ValueError("Testing subject insert succeeded but no row id was returned.")
+        return int(inserted_row[0])
 
     @staticmethod
     def _table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:

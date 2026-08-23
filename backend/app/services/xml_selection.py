@@ -25,8 +25,11 @@ class ValidationRecordSelector:
         bundle = self._bundle()
         for record in bundle.records:
             if (
-                record.product_family == product_family
-                and record.product_variant == product_variant
+                self._record_matches_family_variant(
+                    record,
+                    product_family=product_family,
+                    product_variant=product_variant,
+                )
                 and record.catalogue_number == catalogue_number
                 and record.xml_readiness.status == "complete"
             ):
@@ -46,8 +49,11 @@ class ValidationRecordSelector:
         bundle = self._bundle()
         for record in bundle.records:
             if (
-                record.product_family == product_family
-                and record.product_variant == product_variant
+                self._record_matches_family_variant(
+                    record,
+                    product_family=product_family,
+                    product_variant=product_variant,
+                )
                 and record.catalogue_number == catalogue_number
                 and record.xml_readiness.status == "complete"
                 and (record.submission_operation or "").upper() == "POST"
@@ -68,10 +74,61 @@ class ValidationRecordSelector:
         return [
             record
             for record in records
-            if record.product_family == product_family
-            and record.product_variant == product_variant
+            if ValidationRecordSelector._record_matches_family_variant(
+                record,
+                product_family=product_family,
+                product_variant=product_variant,
+            )
             and record.xml_readiness.status == "complete"
         ]
+
+    @staticmethod
+    def _optional_string(value: object) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return str(value)
+        normalized = value.strip()
+        return normalized or None
+
+    @classmethod
+    def _normalize_identity(cls, value: object) -> str:
+        text = cls._optional_string(value)
+        if not text:
+            return ""
+        return "".join(text.casefold().split())
+
+    @classmethod
+    def _normalized_family_candidates(cls, product_family: object) -> tuple[str, ...]:
+        normalized_full = cls._normalize_identity(product_family)
+        if not normalized_full:
+            return ()
+        candidates = {normalized_full}
+        family_text = cls._optional_string(product_family)
+        if family_text and "/" in family_text:
+            candidates.update(
+                cls._normalize_identity(part)
+                for part in family_text.split("/")
+                if cls._normalize_identity(part)
+            )
+        return tuple(sorted(candidates))
+
+    @classmethod
+    def _record_matches_family_variant(
+        cls,
+        record: CanonicalValidationRecord,
+        *,
+        product_family: str,
+        product_variant: str,
+    ) -> bool:
+        requested_family_candidates = set(cls._normalized_family_candidates(product_family))
+        record_family_candidates = set(cls._normalized_family_candidates(record.product_family))
+        if not requested_family_candidates or not record_family_candidates:
+            return False
+        return (
+            bool(requested_family_candidates & record_family_candidates)
+            and cls._normalize_identity(record.product_variant) == cls._normalize_identity(product_variant)
+        )
 
     @staticmethod
     def chunk_records(

@@ -1215,6 +1215,171 @@ def test_operation_assessment_routes_report_single_patch_availability_from_sqlit
     assert payload["evidence"]["latest_accepted_version"] == "1"
 
 
+def test_single_patch_prefers_unpatched_available_device_before_higher_patch_version(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    base_bundle = _synthetic_validation_bundle_from_promotions(
+        {
+            ("synthetic.xlsx", "Variant A", 2): {
+                "product_family": "Family A",
+                "product_variant": "Variant A",
+                "catalogue_number": "CAT-001",
+                "primary_udi_di": "111111",
+                "submission_operation": "POST",
+                "basic_udi_di": "BASIC-1",
+                "canonical_status": "xml_ready",
+            }
+        }
+    )
+    first_record = base_bundle.records[0]
+    second_record = first_record.model_copy(
+        update={
+            "catalogue_number": "CAT-002",
+            "primary_udi_di": "222222",
+        }
+    )
+    third_record = first_record.model_copy(
+        update={
+            "catalogue_number": "CAT-003",
+            "primary_udi_di": "333333",
+        }
+    )
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_variant_post_records_with_exclusions",
+        lambda self, **kwargs: ([first_record, second_record, third_record], [], 3),
+    )
+
+    first_subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-001",
+        primary_udi_di="111111",
+        basic_udi_di="BASIC-1",
+        post_success=1,
+        baseline_patch_success=1,
+        latest_successful_version="3",
+        latest_successful_state_json=json.dumps({"version": 3}),
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=first_subject_id,
+        event_index=0,
+        message_type="DEVICE.POST",
+        status="SUCCESS",
+        version="1",
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=first_subject_id,
+        event_index=1,
+        message_type="UDI_DI.PATCH",
+        status="SUCCESS",
+        version="3",
+    )
+    _insert_reviewed_post_baseline(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-001",
+    )
+
+    second_subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-002",
+        primary_udi_di="222222",
+        basic_udi_di="BASIC-1",
+        post_success=1,
+        latest_successful_version="1",
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=second_subject_id,
+        event_index=0,
+        message_type="UDI_DI.POST",
+        status="SUCCESS",
+        version="1",
+    )
+    _insert_reviewed_post_baseline(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-002",
+    )
+
+    third_subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-003",
+        primary_udi_di="333333",
+        basic_udi_di="BASIC-1",
+        post_success=1,
+        latest_successful_version="1",
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=third_subject_id,
+        event_index=0,
+        message_type="UDI_DI.POST",
+        status="SUCCESS",
+        version="1",
+    )
+    _insert_reviewed_post_baseline(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-003",
+    )
+
+    payload = assess_single_patch(
+        {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+        }
+    )
+
+    assert payload["operation_type"] == "single_patch"
+    assert payload["status"] == "available"
+    assert payload["identity_scope"]["catalogue_number"] == "CAT-002"
+    assert payload["evidence"]["latest_accepted_version"] == "1"
+
+
+def test_operation_assessment_accepts_family_alias_for_single_post(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    promotions = {
+        ("synthetic.xlsx", "Esprit", 2): {
+            "product_family": "Epirus / Esprit",
+            "product_variant": "Esprit",
+            "catalogue_number": "ESP22L2S",
+            "primary_udi_di": "05050649058202",
+            "submission_operation": "POST",
+            "basic_udi_di": "5050649ESPRITVZ",
+            "canonical_status": "xml_ready",
+        }
+    }
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_validation_bundle",
+        lambda self: _synthetic_validation_bundle_from_promotions(promotions),
+    )
+
+    payload = assess_single_post({"product_family": "Epirus", "product_variant": "Esprit"})
+
+    assert payload["operation_type"] == "single_post"
+    assert payload["status"] == "available"
+    assert payload["identity_scope"]["catalogue_number"] == "ESP22L2S"
+    assert payload["evidence"]["candidate_catalogue_number"] == "ESP22L2S"
+
+
 def test_operation_assessment_reports_registered_parent_without_further_child_post_candidates(
     isolated_workbook_import_db: Path,
     monkeypatch: pytest.MonkeyPatch,

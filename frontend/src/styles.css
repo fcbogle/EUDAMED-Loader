@@ -475,7 +475,7 @@ select {
 
 .device-subject-metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -836,6 +836,48 @@ select {
   font-size: 0.84rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.patch-change-summary-list {
+  display: grid;
+  gap: 8px;
+}
+
+.patch-change-summary-item {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(76, 111, 122, 0.12);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.patch-change-summary-item strong {
+  font-size: 0.8rem;
+  letter-spacing: 0.01em;
+}
+
+.patch-change-summary-values {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+  color: #4c6f7a;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.patch-change-summary-values span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.patch-change-summary-arrow {
+  color: #0b8ba5;
+  font-weight: 700;
+  flex: 0 0 auto;
 }
 
 input[type="search"] {
@@ -2444,36 +2486,76 @@ a.ghost-button:visited {
   order: -1;
 }
 
+.patch-focus-layout {
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.patch-focus-layout .xml-sidebar-surface {
+  order: -1;
+}
+
 .xml-equal-panel {
   min-width: 0;
 }
 
 .xml-anchor-panel {
   margin-top: 16px;
-  padding: 16px 18px;
+  padding: 10px 14px;
   border: 1px solid rgba(76, 111, 122, 0.2);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.78);
   display: grid;
+  gap: 8px;
+}
+
+.xml-anchor-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .xml-anchor-header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: flex-start;
+  align-items: center;
+  flex: 1 1 220px;
 }
 
 .xml-anchor-header h3 {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   font-family: "IBM Plex Serif", Georgia, serif;
-  font-size: 1.05rem;
+  font-size: 0.96rem;
   color: #002a3a;
 }
 
 .xml-anchor-summary {
   margin-top: 0;
+}
+
+.xml-anchor-summary-compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  flex: 0 1 auto;
+}
+
+.xml-anchor-summary-compact .queue-chip {
+  min-height: auto;
+  padding: 8px 10px;
+}
+
+.xml-anchor-summary-compact .queue-chip strong {
+  font-size: 0.88rem;
+}
+
+.xml-anchor-summary-compact .queue-chip span {
+  font-size: 0.7rem;
 }
 
 .xml-top-panel {
@@ -2893,11 +2975,38 @@ a.ghost-button:visited {
   align-self: end;
 }
 
+.patch-actions-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 8px 0 0;
+  flex: 0 0 auto;
+  justify-self: end;
+  align-self: end;
+}
+
 .post-actions-bar .action-button,
-.post-actions-bar .ghost-button {
+.post-actions-bar .ghost-button,
+.patch-actions-bar .action-button,
+.patch-actions-bar .ghost-button {
   width: 100%;
   justify-content: center;
   text-align: center;
+}
+
+.patch-preview-card {
+  margin-top: 0;
+}
+
+.patch-preview-toggle {
+  margin-top: 10px;
+}
+
+.patch-blocked-card {
+  border: 1px solid rgba(176, 117, 34, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 244, 0.98), rgba(255, 255, 255, 0.94)),
+    rgba(255, 255, 255, 0.96);
 }
 
 .post-review-note {
@@ -2961,6 +3070,11 @@ a.ghost-button:visited {
   }
 
   .post-actions-bar {
+    grid-template-columns: 1fr;
+    justify-self: stretch;
+  }
+
+  .patch-actions-bar {
     grid-template-columns: 1fr;
     justify-self: stretch;
   }

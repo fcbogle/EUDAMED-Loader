@@ -133,13 +133,18 @@ class OperationAssessmentService:
 
         blocked_reasons: list[str] = []
         fallback_record: CanonicalValidationRecord | None = None
+        available_assessments: list[OperationAssessment] = []
         for record in candidate_records:
             assessment = self._assess_single_patch_record(record)
             if assessment.status == "available":
-                return assessment
+                available_assessments.append(assessment)
+                continue
             blocked_reasons.extend(assessment.blocking_reasons)
             if fallback_record is None:
                 fallback_record = record
+
+        if available_assessments:
+            return min(available_assessments, key=self._single_patch_priority_key)
 
         blocking_reasons = self._deduplicated_reasons(blocked_reasons)
         if not candidate_records:
@@ -512,6 +517,16 @@ class OperationAssessmentService:
             ),
             evidence=evidence,
         )
+
+    @staticmethod
+    def _single_patch_priority_key(assessment: OperationAssessment) -> tuple[int, int, str]:
+        version_text = assessment.evidence.get("latest_accepted_version")
+        try:
+            version_number = int(str(version_text).strip()) if version_text is not None else 999999
+        except (TypeError, ValueError):
+            version_number = 999999
+        catalogue_number = str(assessment.evidence.get("catalogue_number") or "").strip()
+        return (version_number, version_number, catalogue_number)
 
     @staticmethod
     def _find_record(records: list[CanonicalValidationRecord], catalogue_number: str) -> CanonicalValidationRecord | None:

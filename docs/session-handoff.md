@@ -149,12 +149,58 @@ with the current implementation focus now being:
     - one PATCH flow should always target one exact child device lineage
     - the system should not infer a PATCH target from family and variant alone when multiple sibling child devices exist
     - the resolved PATCH target should remain stable across assessment, preview, download, and later response handling
-  - implemented `POST` shape refinement confirmed on Thursday, August 20, 2026:
-    - single `POST` now emits `DEVICE.POST` when the parent `Basic UDI-DI` is not yet registered
-    - single `POST` now emits child-only `UDI_DI.POST` when the parent `Basic UDI-DI` is already registered and the `Device UDI-DI` is still available
-    - the child-only payload still references the registered parent through `basicUDIIdentifier`
-  - this should be implemented as explicit operation-specific readiness assessment rather than one generic workflow engine
-  - no data-model change has yet been agreed for linking testing history beyond the current `device_subject`-anchored direction; discuss that separately before implementation
+- implemented `POST` shape refinement confirmed on Thursday, August 20, 2026:
+  - single `POST` now emits `DEVICE.POST` when the parent `Basic UDI-DI` is not yet registered
+  - single `POST` now emits child-only `UDI_DI.POST` when the parent `Basic UDI-DI` is already registered and the `Device UDI-DI` is still available
+  - the child-only payload still references the registered parent through `basicUDIIdentifier`
+- latest implemented UI and persistence refinements on Friday, August 21, 2026 and Saturday, August 22, 2026:
+  - single `POST` preview now uses a dedicated full-width card layout with:
+    - title and right-aligned action row
+    - compact preview status strip
+    - four metadata cards
+    - XML structure navigator
+    - highlighted raw XML preview
+  - single `POST` now includes an `Upload Success XML` action in the preview workspace
+  - the backend now exposes `/api/xml/upload-success-xml`
+  - that endpoint currently accepts successful EUDAMED acknowledgement XML for:
+    - `DEVICE.POST`
+    - `UDI_DI.POST`
+  - the upload endpoint now:
+    - parses the acknowledgement XML
+    - rejects non-`SUCCESS` acknowledgements
+    - resolves the tracked subject by:
+      - `basic_udi_di` for `DEVICE.POST`
+      - `primary_udi_di` for `UDI_DI.POST`
+    - records the success idempotently in `testing_events`
+    - marks `testing_subjects.post_success = 1`
+  - the frontend sends uploaded success XML as JSON payload content rather than multipart form data to avoid introducing `python-multipart`
+  - single `POST` scope and count pills were refined to use exact tracked-success differences rather than broad XML-ready totals
+  - single `PATCH` preview now follows the same visual language as single `POST`:
+    - full-width preview card
+    - right-aligned action row
+    - compact preview status strip
+    - four metadata cards
+    - XML structure navigator
+    - highlighted raw XML preview
+  - single `PATCH` no longer exposes the earlier `Base Message` / `Derived Patch` toggle in the main preview
+  - single `PATCH` now presents one derived PATCH preview path only in the primary preview card
+  - redundant single-PATCH review and validation subpanels beneath the preview were removed so the preview card is the main source of preview/validation state
+  - current agreed code-structure direction:
+    - continue converging single `POST` and single `PATCH` UI first
+    - only then refactor `frontend/src/App.tsx`
+    - the intended refactor boundary is shared preview/layout primitives reusable by:
+      - single `POST`
+      - single `PATCH`
+      - `Bulk Basic UDI POST`
+      - `Bulk UDI-DI POST`
+      - `Bulk PATCH`
+  - current important design conclusion on Saturday, August 22, 2026:
+    - do not assume EUDAMED Playground mirrors Production registration state
+    - workbook/import business state and Playground testing evidence should remain distinct concepts
+    - this means current PATCH gating should not be redesigned solely on the basis of Playground visibility gaps
+    - however, the current implemented PATCH gate still relies on SQLite-tracked POST lineage and does not yet promote workbook-declared PATCH/registered state into that accepted-state model
+- this should be implemented as explicit operation-specific readiness assessment rather than one generic workflow engine
+- no data-model change has yet been agreed for linking testing history beyond the current `device_subject`-anchored direction; discuss that separately before implementation
 
 ## Current Repo State
 
@@ -257,6 +303,15 @@ General XML tools:
 - `Bulk Basic UDI POST`
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
+
+Current visual direction:
+
+- single `POST` and single `PATCH` should use the same card language and theme
+- action-heavy XML workspaces should prefer:
+  - one primary preview card
+  - compact status/meta strips
+  - fewer duplicated review/validation panels
+- future refactoring should extract these shared UI primitives rather than duplicating more mode-specific JSX inside `frontend/src/App.tsx`
 
 Current directional design intent:
 
@@ -446,6 +501,27 @@ Recommended implementation rule:
   - if both parent `Basic UDI-DI` and child `UDI-DI` are already known, the record is skipped
   - if the parent is known but the child is not, single `POST` should present that child as the next available `POST` candidate under the registered parent
   - if neither parent nor child is known, that record may be offered as a genuine new registration candidate
+- Current single `POST` preview UI now:
+  - uses a dedicated full-width preview card
+  - includes:
+    - `Generate POST`
+    - `Validate Against XSD`
+    - `Download POST ZIP`
+    - `Upload Success XML`
+  - presents:
+    - preview status
+    - active view
+    - validation status
+    - schema target
+    - generated file name
+    - XML structure navigation
+    - highlighted raw XML preview
+- `POST` success XML upload is now part of the implemented workflow:
+  - upload uses `/api/xml/upload-success-xml`
+  - accepted message types:
+    - `DEVICE.POST`
+    - `UDI_DI.POST`
+  - re-uploading the same acknowledgement should be idempotent rather than duplicating events
 - Validates locally against the schema set.
 - Supports `POST` ZIP download.
 - The old combined `Post + Patch` baseline workspace is no longer the user-facing design and should be treated as replaced by `POST` plus `Patch XML`.
@@ -483,12 +559,42 @@ It now:
   - blocked by Playground business rules: `sterile_edit`, `latex_edit`
   - present in the UI but still unimplemented / untested: `production_identifier_edit`, `sterilization_edit`, `reprocessed_edit`, `number_of_reuses_edit`, `mdn_codes_edit`
 - requires explicit user-supplied `PATCH` version input
-- shows:
+- current single `PATCH` preview UI now:
+  - uses a dedicated full-width preview card matching the single `POST` card language
+  - includes:
+    - `Generate Patch Scenario`
+    - `Validate Against XSD`
+    - `Download Patch Scenario ZIP`
+  - presents:
+    - preview status
+    - active view
+    - validation status
+    - schema target
+    - generated file name
+    - XML structure navigation
+    - highlighted raw XML preview
+  - no longer uses the earlier `Base Message` / `Derived Patch` toggle in the main preview
+  - now treats the primary preview as one derived PATCH preview path
+- shows in the scenario/config workspace:
   - baseline-versus-draft business comparison
   - draft readiness messaging
-  - baseline-versus-derived XML toggle
   - generated XML change summary after preview
 - validates generated XML locally and supports download
+
+Current implemented limitation and wording note:
+
+- current single `PATCH` availability still depends on the SQLite-backed accepted-state model, not directly on workbook-declared `PATCH` rows
+- as of Saturday, August 22, 2026, this means some families/variants may show many workbook/canonical `PATCH` rows but zero PATCH-ready records in the current implemented design
+- current tracked count snapshot from SQLite-backed testing state:
+  - `17` tracked PATCH-base records overall
+  - `0` for `Echelon / Echelon`
+- this is an acknowledged mismatch between:
+  - workbook/import business classification
+  - SQLite-tracked accepted lineage used by the current PATCH gate
+- current design decision:
+  - do not redesign this solely because Playground may not reflect Production registrations
+  - revisit wording first
+  - revisit accepted-state import/promotion later as a distinct architecture decision
 
 Record-based meaning:
 
@@ -506,6 +612,8 @@ Important limitation:
 - the testing-state store is SQLite-backed today and is expected to evolve within SQLite rather than be replaced by a different database platform
 - later scenario drafting still assumes an equivalent-first accepted `PATCH` baseline when no later accepted `PATCH` state has been recorded for that exact record
 - this is now an acknowledged design constraint to replace
+- `frontend/src/App.tsx` has improved visually but still contains substantial mode-specific branching
+- once single `POST` and single `PATCH` wording stabilise, refactor `frontend/src/App.tsx` by extracting shared preview/layout primitives rather than continuing to add inline mode-specific branches
 
 ### Market Info
 

@@ -57,6 +57,25 @@ class XmlGenerationService:
     def project_root(self):
         return self.settings.schema_dir.parents[1]
 
+    @staticmethod
+    def _patch_state_snapshot_payload(record) -> dict[str, Any]:
+        return {
+            "version": str(record.patch_version_override or record.source_version_marker or ""),
+            "trade_name": record.trade_name,
+            "base_quantity": record.base_quantity,
+            "sterile": record.sterile,
+            "contains_latex": record.contains_latex,
+            "status_code": record.status_code,
+            "storage_conditions": [
+                {"code": item.code, "comment": item.comment}
+                for item in record.storage_conditions
+            ],
+            "critical_warnings": [
+                {"code": item.code, "comment": item.comment}
+                for item in record.critical_warnings
+            ],
+        }
+
     def _validation_bundle(self):
         try:
             return self.canonical_projection_service.latest_bundle(require_import=self.require_import)
@@ -95,6 +114,54 @@ class XmlGenerationService:
             raise ValueError(f"record_count must be between 1 and {max_records}.")
         return normalized
 
+    @staticmethod
+    def _optional_string(value: object) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return str(value)
+        normalized = value.strip()
+        return normalized or None
+
+    @classmethod
+    def _normalize_identity(cls, value: object) -> str:
+        text = cls._optional_string(value)
+        if not text:
+            return ""
+        return "".join(text.casefold().split())
+
+    @classmethod
+    def _normalized_family_candidates(cls, product_family: object) -> tuple[str, ...]:
+        normalized_full = cls._normalize_identity(product_family)
+        if not normalized_full:
+            return ()
+        candidates = {normalized_full}
+        family_text = cls._optional_string(product_family)
+        if family_text and "/" in family_text:
+            candidates.update(
+                cls._normalize_identity(part)
+                for part in family_text.split("/")
+                if cls._normalize_identity(part)
+            )
+        return tuple(sorted(candidates))
+
+    @classmethod
+    def _record_matches_family_variant(
+        cls,
+        record: CanonicalValidationRecord,
+        *,
+        product_family: str,
+        product_variant: str,
+    ) -> bool:
+        requested_family_candidates = set(cls._normalized_family_candidates(product_family))
+        record_family_candidates = set(cls._normalized_family_candidates(record.product_family))
+        if not requested_family_candidates or not record_family_candidates:
+            return False
+        return (
+            bool(requested_family_candidates & record_family_candidates)
+            and cls._normalize_identity(record.product_variant) == cls._normalize_identity(product_variant)
+        )
+
     def _variant_post_records_with_exclusions(
         self,
         *,
@@ -106,7 +173,11 @@ class XmlGenerationService:
         variant_records = [
             record
             for record in bundle.records
-            if record.product_family == product_family and record.product_variant == product_variant
+            if self._record_matches_family_variant(
+                record,
+                product_family=product_family,
+                product_variant=product_variant,
+            )
         ]
         excluded: list[BulkXmlExcludedRecord] = []
         eligible_posts: list[CanonicalValidationRecord] = []
@@ -179,8 +250,11 @@ class XmlGenerationService:
         return [
             record
             for record in bundle.records
-            if record.product_family == product_family
-            and record.product_variant == product_variant
+            if self._record_matches_family_variant(
+                record,
+                product_family=product_family,
+                product_variant=product_variant,
+            )
             and record.xml_readiness.status == "complete"
         ]
 
@@ -1179,6 +1253,18 @@ class XmlGenerationService:
             product_variant=post_record.product_variant,
             catalogue_number=post_record.catalogue_number,
             scenario_id=scenario_id,
+        )
+        self.testing_state_store.record_generated_patch_context(
+            product_family=post_record.product_family,
+            product_variant=post_record.product_variant,
+            catalogue_number=post_record.catalogue_number,
+            primary_udi_di=post_record.primary_udi_di,
+            basic_udi_di=post_record.basic_identifier_code,
+            patch_version=normalized_version,
+            scenario_id=scenario_id,
+            scenario_label=scenario_label,
+            changed_fields=[delta.model_dump(mode="json") for delta in field_deltas],
+            latest_successful_state=self._patch_state_snapshot_payload(derived_patch_record),
         )
 
         return GeneratedPatchScenarioPreview(

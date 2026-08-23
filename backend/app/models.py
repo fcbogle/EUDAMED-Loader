@@ -384,8 +384,8 @@ class TestingSubjectHistory(BaseModel):
 
 class SuccessXmlUploadResult(BaseModel):
     summary_message: str
-    message_type: Literal["DEVICE.POST", "UDI_DI.POST"]
-    operation_label: Literal["Basic UDI-DI POST", "Device UDI-DI POST"]
+    message_type: Literal["DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH"]
+    operation_label: Literal["Basic UDI-DI POST", "Device UDI-DI POST", "Device UDI-DI PATCH"]
     entity_code: str
     product_family: str | None = None
     product_variant: str | None = None

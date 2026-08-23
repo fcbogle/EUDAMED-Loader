@@ -18,8 +18,8 @@ NAMESPACES: dict[str, str] = {
 }
 
 
-SuccessMessageType = Literal["DEVICE.POST", "UDI_DI.POST"]
-SuccessOperationLabel = Literal["Basic UDI-DI POST", "Device UDI-DI POST"]
+SuccessMessageType = Literal["DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH"]
+SuccessOperationLabel = Literal["Basic UDI-DI POST", "Device UDI-DI POST", "Device UDI-DI PATCH"]
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,7 @@ class AcknowledgementPayload:
     message_type: SuccessMessageType
     operation_label: SuccessOperationLabel
     entity_code: str
+    entity_version: str | None
     tested_at: str | None
     correlation_id: str | None
     message_id: str | None
@@ -55,7 +56,8 @@ class TestingSuccessXmlService:
         with self.store._connect() as connection:
             resolution = self._resolve_subject(connection, acknowledgement)
             recorded_event, duplicate_event = self._record_event(connection, resolution.subject_id, acknowledgement)
-            connection.execute("UPDATE testing_subjects SET post_success = 1 WHERE id = ?", (resolution.subject_id,))
+            if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"}:
+                connection.execute("UPDATE testing_subjects SET post_success = 1 WHERE id = ?", (resolution.subject_id,))
         return SuccessXmlUploadResult(
             summary_message=(
                 f"Tracked successful {acknowledgement.operation_label} for "
@@ -97,27 +99,36 @@ class TestingSuccessXmlService:
         entity_code = self._node_text(response_entity.find("message:entityCode", NAMESPACES))
         if not entity_code:
             raise ValueError("Success XML is missing responseEntity.entityCode.")
+        entity_version = self._node_text(response_entity.find("message:entityVersion", NAMESPACES))
 
         service_id, service_operation = self._resolve_service_identity(root)
-        if service_operation != "POST":
+        if service_operation not in {"POST", "PATCH"}:
             raise ValueError(
-                f"Only POST acknowledgements are supported. Received {service_id or 'UNKNOWN'}.{service_operation or 'UNKNOWN'}."
+                f"Only POST and PATCH acknowledgements are supported. Received {service_id or 'UNKNOWN'}.{service_operation or 'UNKNOWN'}."
             )
         if service_id not in {"DEVICE", "UDI_DI"}:
             raise ValueError(
-                f"Only DEVICE.POST and UDI_DI.POST acknowledgements are supported. Received {service_id or 'UNKNOWN'}."
+                f"Only DEVICE.POST, UDI_DI.POST, and UDI_DI.PATCH acknowledgements are supported. Received {service_id or 'UNKNOWN'}.{service_operation or 'UNKNOWN'}."
             )
 
-        if service_id == "DEVICE":
+        if service_id == "DEVICE" and service_operation == "POST":
             message_type: SuccessMessageType = "DEVICE.POST"
             operation_label: SuccessOperationLabel = "Basic UDI-DI POST"
-        else:
+        elif service_id == "UDI_DI" and service_operation == "POST":
             message_type = "UDI_DI.POST"
             operation_label = "Device UDI-DI POST"
+        elif service_id == "UDI_DI" and service_operation == "PATCH":
+            message_type = "UDI_DI.PATCH"
+            operation_label = "Device UDI-DI PATCH"
+        else:
+            raise ValueError(
+                f"Unsupported acknowledgement type {service_id or 'UNKNOWN'}.{service_operation or 'UNKNOWN'}."
+            )
         return AcknowledgementPayload(
             message_type=message_type,
             operation_label=operation_label,
             entity_code=entity_code,
+            entity_version=entity_version,
             tested_at=self._node_text(root.find("message:creationDateTime", NAMESPACES)),
             correlation_id=self._node_text(root.find("message:correlationID", NAMESPACES)),
             message_id=self._node_text(root.find("message:messageID", NAMESPACES)),
@@ -185,7 +196,7 @@ class TestingSuccessXmlService:
                 self.store._normalize_identity(acknowledgement.entity_code),
             ),
         ).fetchall()
-        if acknowledgement.message_type == "UDI_DI.POST":
+        if acknowledgement.message_type in {"UDI_DI.POST", "UDI_DI.PATCH"}:
             for row in rows:
                 if self.store._matches_identity(row["primary_udi_di"], acknowledgement.entity_code):
                     return row
@@ -220,7 +231,7 @@ class TestingSuccessXmlService:
             ORDER BY ds.id
             """
         ).fetchall()
-        if acknowledgement.message_type == "UDI_DI.POST":
+        if acknowledgement.message_type in {"UDI_DI.POST", "UDI_DI.PATCH"}:
             for row in rows:
                 if self.store._matches_identity(row["primary_udi_di"], acknowledgement.entity_code):
                     return row
@@ -312,19 +323,71 @@ class TestingSuccessXmlService:
             (subject_id,),
         ).fetchone()
         next_index = int(next_index_row[0]) if next_index_row is not None else 0
-        raw_event_json = json.dumps(
-            {
-                "source_file_name": acknowledgement.source_file_name,
-                "message_type": acknowledgement.message_type,
-                "operation_label": acknowledgement.operation_label,
-                "entity_code": acknowledgement.entity_code,
-                "response_code": acknowledgement.response_code,
-                "correlation_id": acknowledgement.correlation_id,
-                "message_id": acknowledgement.message_id,
-                "tested_at": acknowledgement.tested_at,
-                "xml": acknowledgement.raw_xml,
-            }
-        )
+        version: str | None = None
+        scenario_id: str | None = None
+        scenario_label: str | None = None
+        changed_fields_json: str | None = None
+        retained_fields_json: str | None = None
+        unchanged_fields_json: str | None = None
+        raw_event_payload: dict[str, Any] = {
+            "source_file_name": acknowledgement.source_file_name,
+            "message_type": acknowledgement.message_type,
+            "operation_label": acknowledgement.operation_label,
+            "entity_code": acknowledgement.entity_code,
+            "entity_version": acknowledgement.entity_version,
+            "response_code": acknowledgement.response_code,
+            "correlation_id": acknowledgement.correlation_id,
+            "message_id": acknowledgement.message_id,
+            "tested_at": acknowledgement.tested_at,
+            "xml": acknowledgement.raw_xml,
+        }
+        if acknowledgement.message_type == "UDI_DI.PATCH":
+            generated_row = connection.execute(
+                """
+                SELECT version, scenario_id, scenario_label, changed_fields_json, retained_fields_json, unchanged_fields_json, raw_event_json
+                FROM testing_events
+                WHERE subject_id = ?
+                  AND message_type = 'UDI_DI.PATCH'
+                  AND status = 'GENERATED'
+                ORDER BY event_index DESC
+                LIMIT 1
+                """,
+                (subject_id,),
+            ).fetchone()
+            if generated_row is not None:
+                version = self.store._optional_string(generated_row["version"])
+                scenario_id = self.store._optional_string(generated_row["scenario_id"])
+                scenario_label = self.store._optional_string(generated_row["scenario_label"])
+                changed_fields_json = self.store._optional_string(generated_row["changed_fields_json"])
+                retained_fields_json = self.store._optional_string(generated_row["retained_fields_json"])
+                unchanged_fields_json = self.store._optional_string(generated_row["unchanged_fields_json"])
+                generated_raw_json = self.store._optional_string(generated_row["raw_event_json"])
+                if generated_raw_json:
+                    try:
+                        generated_payload = json.loads(generated_raw_json)
+                    except json.JSONDecodeError:
+                        generated_payload = None
+                    if isinstance(generated_payload, dict):
+                        raw_event_payload["generated_patch_context"] = generated_payload
+                        latest_state = generated_payload.get("latest_successful_state")
+                        if isinstance(latest_state, dict):
+                            connection.execute(
+                                """
+                                UPDATE testing_subjects
+                                SET post_success = 1,
+                                    baseline_patch_success = CASE WHEN ? = '2' THEN 1 ELSE baseline_patch_success END,
+                                    latest_successful_version = ?,
+                                    latest_successful_state_json = ?
+                                WHERE id = ?
+                                """,
+                                (
+                                    version,
+                                    version,
+                                    json.dumps(latest_state),
+                                    subject_id,
+                                ),
+                            )
+        raw_event_json = json.dumps(raw_event_payload)
         connection.execute(
             """
             INSERT INTO testing_events (
@@ -345,16 +408,22 @@ class TestingSuccessXmlService:
                 retained_fields_json,
                 unchanged_fields_json,
                 raw_event_json
-            ) VALUES (?, ?, ?, 'SUCCESS', NULL, NULL, NULL, ?, NULL, NULL, ?, ?, ?, NULL, NULL, NULL, ?)
+            ) VALUES (?, ?, ?, 'SUCCESS', ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 subject_id,
                 next_index,
                 acknowledgement.message_type,
+                version,
+                scenario_id,
+                scenario_label,
                 acknowledgement.tested_at,
                 acknowledgement.tested_at,
                 acknowledgement.correlation_id,
                 acknowledgement.message_id,
+                changed_fields_json,
+                retained_fields_json,
+                unchanged_fields_json,
                 raw_event_json,
             ),
         )
