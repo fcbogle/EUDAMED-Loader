@@ -2,27 +2,53 @@
 
 ## Purpose
 
-This note describes the current UI direction for separating:
+This note describes the current UI direction for:
 
-- XML patterns being tested or reviewed
-- XML patterns considered ready for actual EUDAMED upload preparation
-
-The goal is to keep candidate XML patterns available for review and external testing without making them appear operationally ready.
+- operationally accurate XML assessment
+- controlled XML preview and validation
+- successful Playground outcome capture
+- separation between testing workflows and accepted-only generation workflows
 
 ## Top-Level Areas
 
-Two top-level areas now exist:
+Two top-level areas remain:
 
 - `EUDAMED Testing`
 - `EUDAMED Generation`
 
-`EUDAMED Testing` is the workspace for comparison, candidate scenario review, preview, validation, and export.
+`EUDAMED Testing` is the active operator workspace for assessment, preview, validation, download, and success-XML upload.
 
-`EUDAMED Generation` is the workspace for accepted-only XML generation patterns.
+`EUDAMED Generation` remains the accepted-only area.
+
+## Current EUDAMED Testing Modes
+
+The current testing modes are:
+
+- `POST`
+- `Patch XML`
+- `Market Info`
+- `Bulk Basic UDI-DI POST`
+- `Bulk Device UDI-DI POST`
+- `Bulk PATCH`
+
+The older `Post + Patch` and `Single XML` labels are no longer the current user-facing design.
+
+## Current Workspace Pattern
+
+The active UI direction is to keep each operation workspace aligned around the same pattern:
+
+- an assessment card
+- a preview card
+- a compact metadata strip
+- explicit action buttons
+- XML structure and raw XML review
+- success upload where the workflow supports it
+
+This pattern has already been applied substantially to single `POST` and single `PATCH` and is being extended across the bulk workspaces.
 
 ## Status Labels
 
-Only two status labels are currently used:
+Only two business-status labels should be presented consistently:
 
 - `EUDAMED Candidate`
 - `EUDAMED Accepted`
@@ -30,203 +56,69 @@ Only two status labels are currently used:
 Intended meaning:
 
 - `EUDAMED Candidate`
-  - available for local review and external EUDAMED testing
+  - ready for local review and Playground testing
   - not yet confirmed as accepted by EUDAMED
 - `EUDAMED Accepted`
-  - user-confirmed as accepted by EUDAMED
-  - suitable for operational generation workflows
+  - confirmed through user-provided returned success XML
+  - suitable to act as tracked accepted lineage
 
-Current UI behavior:
+## `POST` Workspace
 
-- PATCH scenario status is user-editable in the UI
-- the accepted baseline `Post + Patch` pair is treated as `EUDAMED Accepted`
-- the three active PATCH scenarios start as `EUDAMED Candidate`
+Single `POST` is now a unified workspace that can produce:
 
-## EUDAMED Testing Workspace
+- the next Basic UDI-DI parent-seeding registration
+- or the next Device UDI-DI child registration
 
-The former `XML Generation` area is now `EUDAMED Testing`.
+The UI should explain which situation applies and should not present a misleading generic device candidate when the Basic UDI-DI parent is already tracked as registered.
 
-Current pill order:
+The workspace should therefore:
 
-- `Post + Patch`
-- `Patch XML`
-- `Market Info`
-- divider
-- `Single XML`
-- `Batch XML`
+- assess availability first
+- explain whether the next candidate is parent-seeding or child-only
+- generate preview only for the current next valid candidate
+- allow success-XML upload after confirmed Playground success
 
-This layout intentionally separates:
+## `Patch XML` Workspace
 
-- shared registered-device testing tools
-- general XML tools
+Single `PATCH` is a controlled scenario-driven workspace.
 
-### Shared Registered-Device Testing Group
+The UI should:
 
-These three modes now relate to the same registered device:
+- identify the next eligible accepted-state device
+- show the scenario being prepared
+- display concise before/after business meaning
+- generate the derived PATCH from the latest successful tracked version
+- allow success-XML upload after confirmed Playground success
 
-- `Post + Patch`
-- `Patch XML`
-- `Market Info`
+This workspace is not intended to be a freeform PATCH editor.
 
-They use a shared `Registered Device Anchor`, currently surfaced in the UI only for these three modes.
+## Bulk Workspaces
 
-The anchor panel is intended to show that all three XML patterns relate to the same registered device after successful POST registration.
+Bulk workspaces should follow the same UI language as the single-device workspaces while preserving operation-specific controls.
 
-### General XML Tools
+Important distinctions remain:
 
-These two modes remain general XML generation/review tools:
+- `Bulk Basic UDI-DI POST` is parent-only
+- `Bulk Device UDI-DI POST` is child-only
+- `Bulk PATCH` depends on tracked accepted device state
 
-- `Single XML`
-- `Batch XML`
+Bulk status messaging should stay tied to the selected operation, not broad XML-ready counts that can mislead the operator.
 
-They do not use the registered device anchor.
+## Success Upload Direction
 
-They still work from the broader XML-ready validation selection model:
+Where success upload is available, the UI should make three things clear:
 
-- `Product Family`
-- `Product Variant`
-- and, for single-record generation, one selected record
+- the returned XML is evidence of success
+- upload updates tracked SQLite operational state
+- the workspace should refresh so the next available candidate and remaining counts change immediately
 
-## Patch XML Scope
+## Why This UI Direction
 
-`Patch XML` is part of `EUDAMED Testing`, not a separate top-level area.
+The UI is no longer just a document viewer around generated XML. It is an operational testing surface.
 
-Current scope remains deliberately narrow:
+That means the interface must:
 
-- one candidate PATCH scenario at a time
-- generated preview and download
-- no freeform PATCH editing
-- strict dependency on a reviewed `POST` baseline for the exact selected record
-
-Current redesign direction now implemented:
-
-- build on the generated `POST` baseline for the selected record
-- treat the explicit `Equivalent First Patch` as an optional version `2` lineage step
-- resolve the latest successful tracked state for that same device before generating later scenario PATCH drafts
-- require the user to enter the version integer for each scenario PATCH draft
-- show business-field before/after comparison before generation
-- show toggle-based XML comparison between:
-  - current accepted base state
-  - derived scenario `PATCH`
-
-Active candidate scenarios:
-
-- `equivalent_first_patch`
-  - explicit version `2` baseline `PATCH`
-  - no business-field change
-- `trade_name_edit`
-  - replacement free-text trade name
-  - example:
-    - before: `ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS`
-    - after: `ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED`
-- `warning_add`
-  - replacement warning code plus optional comment
-  - example:
-    - before: `CW010`
-    - after: `CW011`
-- `storage_condition_edit`
-  - replacement comment for one or more existing storage-condition codes
-  - example:
-    - `SHC006` from `Minus 15C` to `Store in a dry location`
-- `base_quantity_edit`
-  - positive integer only
-  - examples:
-    - `1`
-    - `2`
-    - `10`
-- `sterile_edit`
-  - boolean only
-  - values:
-    - `true`
-    - `false`
-- `latex_edit`
-  - boolean only
-  - values:
-    - `true`
-    - `false`
-- `status_code_edit`
-  - controlled enum
-  - values:
-    - `NOT_INTENDED_FOR_EU_MARKET`
-    - `ON_THE_MARKET`
-    - `NO_LONGER_PLACED_ON_THE_MARKET`
-
-Design-only candidate scenarios now shown in the dropdown:
-
-- `production_identifier_edit`
-- `sterilization_edit`
-- `reprocessed_edit`
-- `number_of_reuses_edit`
-- `mdn_codes_edit`
-
-Current implementation direction:
-
-- scenario-driven UI
-- scenario metadata rather than per-scenario hardcoded screens
-- one selected parent `POST` per selected record
-- explicit, user-supplied scenario PATCH version input
-- exact lineage preserved through `catalogue_number`
-- scenario drafting blocked until `POST` has been generated and reviewed for that same record
-
-## PATCH Version Rule
-
-The current intended version model is:
-
-- baseline `POST` is version `1`
-- baseline equivalent first `PATCH` is version `2`
-- every later scenario PATCH draft requires a user-entered integer version
-- every later scenario PATCH draft must be greater than the latest successful tracked version for that device
-
-The user should provide the scenario PATCH version because the user can inspect the current version state in the EUDAMED playground.
-
-The UI should therefore:
-
-- display the current accepted base version for the selected device lineage
-- collect the proposed scenario PATCH version as an explicit input
-- never silently auto-increment it
-
-## PATCH Comparison Direction
-
-The current `Patch XML` workspace is now comparison-driven and record-driven.
-
-Current comparison areas:
-
-- parent `POST` and current accepted device-state context
-- scenario-specific editable fields only
-- before/after business values
-- toggle-based XML comparison between baseline and derived scenario PATCH
-
-## EUDAMED Generation Workspace
-
-`EUDAMED Generation` is a separate top-level area alongside `EUDAMED Testing`.
-
-This workspace exposes only `EUDAMED Accepted` XML patterns.
-
-Current state:
-
-- `Post + Patch` is available here
-- candidate PATCH scenarios are not yet available here
-
-## Visibility Rule
-
-Current operating rule:
-
-- `EUDAMED Testing` may show both `EUDAMED Candidate` and `EUDAMED Accepted`
-- `EUDAMED Generation` shows only `EUDAMED Accepted`
-
-Suggested user message remains:
-
-`Only EUDAMED Accepted XML patterns are available here. Use EUDAMED Testing to review and promote candidate patterns.`
-
-## Why This Split
-
-This keeps the UI aligned with the current project phase:
-
-- the application is still a preparation and review tool
-- several PATCH scenarios are still candidate patterns rather than operationally proven flows
-- local schema validity and internal comparison do not prove EUDAMED acceptance by themselves
-
-The interface should therefore make a clear distinction between:
-
-- XML patterns under test
-- XML patterns ready for real upload preparation
+- reflect backend-assessed truth
+- explain regulatory meaning clearly
+- distinguish parent, child, and PATCH lineage correctly
+- stay visually consistent across single and bulk workflows

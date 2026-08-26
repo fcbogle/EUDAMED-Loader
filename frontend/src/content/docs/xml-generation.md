@@ -2,148 +2,115 @@
 
 ## Purpose
 
-The current XML UI now serves two related but distinct purposes:
+The XML workspace supports controlled EUDAMED preparation, local schema validation, Playground testing, and capture of confirmed successful outcomes.
+
+Two related top-level areas remain:
 
 - `EUDAMED Testing`
 - `EUDAMED Generation`
 
-`EUDAMED Testing` is used for preview, comparison, validation, and external testing support.
+`EUDAMED Testing` is the active operational workspace for assessment, preview, validation, export, and success capture.
 
-`EUDAMED Generation` is used for accepted-only generation patterns intended for real upload preparation.
+`EUDAMED Generation` remains the accepted-only generation area.
 
 ## Current Mode Split
 
-Inside `EUDAMED Testing`, the XML modes are now split into two groups.
+Inside `EUDAMED Testing`, the active XML modes are:
 
-### Shared Registered-Device Testing Modes
-
-- `Post + Patch`
+- `POST`
 - `Patch XML`
 - `Market Info`
+- `Bulk Basic UDI-DI POST`
+- `Bulk Device UDI-DI POST`
+- `Bulk PATCH`
 
-These modes are tied to the same registered device anchor for the current selected testing record.
-
-They are intended to model the state after successful device registration, where several follow-on XML operations should all relate to the same registered device.
-
-Current `Patch XML` behavior is now more specific:
-
-- require a reviewed `Post + Patch` pair for the selected record
-- reuse the existing generated `Post + Patch` pair for that same selected record
-- treat the first child `PATCH` from that pair as the lineage starting point
-- derive approved scenario PATCH drafts from the latest successful tracked state for that device, falling back to that first child `PATCH` when needed
-
-### General XML Tools
-
-- `Single XML`
-- `Batch XML`
-
-These modes are not tied to the registered device anchor.
-
-They remain general XML generation tools driven from the broader XML-ready validation selection model.
+These modes are intentionally separate because they represent different regulatory actions and different lineage rules.
 
 ## Current Selection Model
 
-### Shared Registered-Device Testing Modes
+The current XML workflows are assessment-first rather than record-pick-first.
 
-`Post + Patch`, `Patch XML`, and `Market Info` use the shared registered device anchor.
+The usual flow is:
 
-These testing modes now operate from the currently selected XML-ready parent `POST` record rather than from any fixed sample device.
+1. select `Product Family`
+2. select `Product Variant`
+3. let the backend assess the current tracked operational state
+4. generate only the next valid XML candidate for that operation
 
-### General XML Tools
+This is important because the next valid operation may differ depending on tracked state:
 
-`Single XML` and `Batch XML` still start from:
-
-- `Product Family`
-- `Product Variant`
-
-Selection then branches by mode:
-
-- `Single XML` also requires one selected XML-ready record
-- `Batch XML` generates all XML-ready records for the selected variant
+- a `POST` may need to seed a new Basic UDI-DI parent registration
+- a `POST` may instead be the next available child Device UDI-DI registration
+- a `PATCH` may only be available if the device has tracked accepted lineage
 
 ## Current Supported Outputs
 
-### Post + Patch
+### `POST`
 
-- accepted baseline `POST` preview
-- equivalent first `PATCH` preview
-- independent local XSD validation for both messages
-- downloadable `.zip` containing both XML files and a manifest
+Single `POST` now supports both regulatory shapes through one workspace:
 
-### Patch XML
+- Basic UDI-DI parent-seeding `POST`
+- Device UDI-DI child `POST`
 
-Current implementation:
+The workspace explains which shape is currently available for the selected family/variant and generates only the next eligible candidate.
 
-- selected record resolves one parent `POST`
-- `Post + Patch` must be generated and reviewed first for that exact record
-- existing generated `Post + Patch` pair provides the equivalent first `PATCH` for that same selected row
-- later scenario generation resolves the latest successful tracked state for that device when available
-- user enters the version integer for the scenario PATCH draft
-- user edits only approved scenario fields
-- UI shows before/after business-field comparison before generation
-- UI shows toggle-based XML comparison between baseline and derived PATCH
-- generated candidate PATCH XML remains downloadable and locally validated
+### `Patch XML`
 
-### Market Info
+Single `PATCH` is a controlled scenario workspace:
 
-- standalone `MARKET_INFO.PUT` preview
-- local XSD validation result
-- downloadable `.xml`
+- one next eligible accepted-state device at a time
+- scenario-based edits only
+- local validation and download
+- success-XML upload to advance tracked device state
 
-### Single XML
+Derived `PATCH` XML builds from the latest successful tracked version for that device.
 
-- one selected XML-ready record preview
-- local XSD validation result
-- downloadable `.xml`
+### `Market Info`
 
-### Batch XML
+`Market Info` remains a separate operation and should not be collapsed into the `POST` or `PATCH` workspaces.
 
-- selected variant batch preview
-- per-chunk validation result
-- downloadable `.zip`
+### `Bulk Basic UDI-DI POST`
+
+This mode creates parent-only registration packages.
+
+### `Bulk Device UDI-DI POST`
+
+This mode creates child-only registration packages under an already tracked Basic UDI-DI parent.
+
+### `Bulk PATCH`
+
+This mode creates PATCH packages derived from tracked accepted device state. Bulk scope is controlled through operational selection, such as:
+
+- all posted devices in scope
+- next N devices
+- selected catalogue numbers
+- imported catalogue list
 
 ## Current Service Profiles
 
-Accepted baseline `POST`:
+Current service profiles in active use include:
 
-- service `DEVICE.POST`
-- payload root `device:Device`
+- parent or child registration through `POST`
+- `UDI_DI.PATCH`
+- `MARKET_INFO.PUT`
 
-Accepted baseline `PATCH`:
+The exact generated XML shape depends on the assessed operation and current tracked state, not only on the selected family/variant.
 
-- service `UDI_DI.PATCH`
-- payload root `device:UDIDIData`
+## Success XML
 
-Equivalent first `PATCH` test path:
+Successful Playground outcomes can now be recorded through the success-XML upload workflow.
 
-- uses `UDI_DI.PATCH`
-- forces `e:version = 2`
-- keeps `marketInfos` identical to the equivalent `POST`
+Current supported success capture includes:
 
-Scenario-derived later `PATCH` path:
+- successful single `POST`
+- successful bulk `POST`
+- successful single `PATCH`
+- successful bulk `PATCH`
 
-- starts from the latest successful tracked state for the same device lineage
-- falls back to the proven first child `PATCH` when no later accepted state has been recorded
-- preserves the parent POST / baseline PATCH identity chain
-- requires a user-supplied `e:version` integer
-- changes only scenario-approved fields
-
-Standalone `MARKET_INFO.PUT`:
-
-- service `MARKET_INFO.PUT`
-- payload root `mktinfo:DTXMarketInfo`
-- uses `uDIDIIdentifier` to target one UDI-DI record
+Success capture updates SQLite-backed operational state, including latest successful version and next-operation availability.
 
 ## Important Note
 
-The XML layer now consumes a typed XML projection built from validation records and generated scenario inputs.
+The current XML layer is tied directly to the operational state model.
 
-`Patch XML` is generated dynamically from the reviewed baseline pair and the tracked accepted state for the selected record.
-
-Some XML generation paths are now intentionally more conservative than others:
-
-- shared-device testing paths are anchored to the selected reviewed baseline pair
-- later PATCH scenarios remain anchored to the same device lineage and tracked accepted state
-- general XML tools still operate over broader XML-ready canonical validation scope
-
-This is deliberate and matches the current staged testing approach.
+It is therefore no longer accurate to describe XML generation as a stateless preview utility. Candidate resolution, version lineage, remaining counts, and next available actions all depend on the tracked SQLite state.

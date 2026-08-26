@@ -36,6 +36,34 @@ with the current implementation focus now being:
 
 ## Latest Confirmed Decisions
 
+- Latest implemented and verified direction on Sunday, August 23, 2026:
+  - the single `POST` / single `PATCH` refactor has now been extended into the bulk workspaces at the shell/layout level
+  - `Bulk Basic UDI-DI POST`, `Bulk DEVICE UDI-DI POST`, and `Bulk PATCH` now use the same general preview-card language as single `POST` / single `PATCH`:
+    - right-aligned action row
+    - compact preview status strip
+    - metadata cards
+    - full-width raw XML preview
+  - bulk workspace wording was simplified to be more operational and less wizard-like
+  - `Upload Success XML` is now exposed in the bulk preview card as well as the single preview cards
+  - the backend success-XML parser now accepts multi-entity EUDAMED acknowledgement XML rather than requiring exactly one `responseEntity`
+  - bulk child `UDI_DI.POST` success XML can now be recorded in one upload transaction
+  - successful `POST` acknowledgements now stamp `latest_successful_version = 1` for the affected tracked testing subjects
+  - this matters because successful bulk child `POST` uploads should immediately create valid version `1` baselines for later `PATCH`
+  - a successful `Epirus / Esprit` bulk child `UDI_DI.POST` wave of `50` devices was recorded
+  - after that upload, SQLite verification confirmed:
+    - `50` affected child devices were marked `post_success = 1`
+    - those `50` affected child devices were stamped `latest_successful_version = 1`
+  - an alias-resolution bug was then traced in `TestingStateStore`:
+    - bulk child-post exclusion logic was querying family `Epirus`
+    - newly recorded testing rows were stored under `Epirus / Esprit`
+    - the family match helper did not previously treat those as the same scope
+  - that alias bug is now fixed, and bulk child-post eligibility now excludes the newly recorded `50` successful child posts correctly
+  - current verified post-upload remaining bulk child-post count for `Epirus / Esprit` is now `366`
+  - the bulk child `POST` summary pills in the UI were also aligned so the top-line `Ready` count and `In scope` count use the same backend-assessed child-post count
+  - current next execution step:
+    - verify that Bulk `POST` visibly refreshes its workspace state immediately after successful XML upload without requiring a manual page reload
+    - then move on to operational testing of `Bulk PATCH`
+
 - As of Sunday, August 9, 2026, the live EUDAMED Playground validator rejected `m:Push version="3.0.30"` and required `3.0.32` instead.
 - The repo has therefore been hotfixed to default `EUDAMED_MESSAGE_SCHEMA_VERSION` to `3.0.32` for current Playground testing.
 - The bundled local `MessageType.xsd` fixed `m:Push@version` value has also been hotfixed from `3.0.30` to `3.0.32` so local validation and tests remain aligned with current Playground behavior.
@@ -307,6 +335,7 @@ General XML tools:
 Current visual direction:
 
 - single `POST` and single `PATCH` should use the same card language and theme
+- `Bulk Basic UDI-DI POST`, `Bulk DEVICE UDI-DI POST`, and `Bulk PATCH` should now continue converging toward that same card language rather than keeping an older sidebar-style preview/actions layout
 - action-heavy XML workspaces should prefer:
   - one primary preview card
   - compact status/meta strips
@@ -439,6 +468,7 @@ Recommended implementation rule:
   - `Operation`
 - the backend assessment should be loaded first
 - preview, generate, and download controls should then be enabled only when the assessment says the operation is currently possible
+- after successful XML upload, the currently selected operation workspace should refresh its assessment and visible counts automatically rather than leaving stale preview state on screen
 
 ### Planned EUDAMED Testing Logging
 
@@ -521,7 +551,9 @@ Recommended implementation rule:
   - accepted message types:
     - `DEVICE.POST`
     - `UDI_DI.POST`
+  - the same route now also accepts multi-entity successful acknowledgements, including bulk child `UDI_DI.POST` success XML
   - re-uploading the same acknowledgement should be idempotent rather than duplicating events
+  - successful `POST` acknowledgements should stamp tracked `latest_successful_version = 1`
 - Validates locally against the schema set.
 - Supports `POST` ZIP download.
 - The old combined `Post + Patch` baseline workspace is no longer the user-facing design and should be treated as replaced by `POST` plus `Patch XML`.
@@ -705,6 +737,15 @@ Important limitation:
 - The old prototype behavior that reserved the first row as a fallback parent seed is no longer the target model.
 - If the parent does not exist yet, this flow should stop and instruct the user to run `Bulk Basic UDI POST` first.
 - If no genuinely new child rows remain after tracked-state filtering, the UI should say so explicitly rather than generate duplicate child XML.
+- Bulk success XML upload is now implemented for this flow.
+- A successful `Epirus / Esprit` bulk child `UDI_DI.POST` wave of `50` devices was recorded on Sunday, August 23, 2026.
+- After that upload:
+  - the affected tracked testing subjects were stamped `post_success = 1`
+  - the affected tracked testing subjects were stamped `latest_successful_version = 1`
+  - bulk child-post eligibility for `Epirus / Esprit` dropped to `366`
+- A traced alias bug in `TestingStateStore` previously prevented family `Epirus` from matching stored testing rows under `Epirus / Esprit`; that bug is now fixed.
+- Current remaining check:
+  - confirm the Bulk `POST` UI visibly refreshes immediately after successful XML upload without requiring manual reload
 
 ## Historical Playground Findings
 
@@ -728,6 +769,8 @@ Important limitation:
 - Dependency: all targeted `Device UDI-DI` records must already exist in Playground.
 - Base-state rule: each child device must resolve its own latest accepted state before the next PATCH is derived.
 - Bulk PATCH therefore cannot rely on one shared wave baseline; it must behave as a per-device PATCH lineage operation executed in bulk.
+- Bulk `PATCH` now shares the newer preview-card shell used by the single workspaces and the bulk POST workspaces.
+- The next active testing objective is now to check the operation of `Bulk PATCH` after the recent bulk UI and success-upload changes.
 
 ## Implemented Guardrails
 
@@ -761,18 +804,16 @@ Important limitation:
 
 ## Immediate Next Checks
 
+- verify whether Bulk `POST` visibly refreshes its workspace state immediately after successful XML upload
+- check the operation of `Bulk PATCH`
 - verify the current operation-assessment UI text for:
-  - single `POST`
-  - single `PATCH`
-  - `Bulk Basic UDI POST`
-  - `Bulk UDI-DI POST`
+  - `Bulk Basic UDI-DI POST`
+  - `Bulk DEVICE UDI-DI POST`
   - `Bulk PATCH`
 - continue refining the plain-language readiness and blocking messages so they describe the actual record or cohort being assessed
 - design SQLite-backed replacement of the remaining YAML-driven testing-history reads before changing response-processing behavior
 - continue Playground testing for:
-  - child-only `UDI_DI.POST`
   - record-based `PATCH`
-  - `Bulk UDI-DI POST`
   - `Bulk PATCH`
   - `Market Info`
 - keep all new successful or rejected Playground results reflected in:

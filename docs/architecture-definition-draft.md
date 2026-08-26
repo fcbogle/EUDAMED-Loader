@@ -2,492 +2,408 @@
 
 ## Purpose Of This Draft
 
-This draft assembles the sections of the Architecture Definition Document that can be populated from the current project documentation and implemented design. It is intended as source material for the formal ADD, not as the final controlled architecture document.
+This draft restates the architecture around the application as it exists now, not as it existed during the earlier workbook-analysis phase. It is intended to be used as source material for the formal Architecture Definition Document and to keep the architecture narrative aligned with the implemented codebase.
+
+## Document Status
+
+This is a working architecture draft based on the codebase, current UI workspaces, current SQLite persistence, and the documented direction in [session-handoff.md](/Users/frankbogle/PycharmProjects/Eudamed/EudamedUploader/docs/session-handoff.md).
+
+It reflects the state of the application as of August 24, 2026.
 
 ## Scope
 
-This project is an analysis-first, schema-aware preparation application for EUDAMED regulatory data. The current scope is limited to `MDR` device data held across multiple Excel workbooks, authoritative Basic UDI reference data, local EUDAMED XSD/schema files, canonical interpretation, validation, and controlled XML preview/download workflows.
+The application is a schema-aware EUDAMED preparation and testing platform for MDR device data. It no longer stops at workbook review and XML preview alone. It now includes:
 
-Current in-scope capabilities include:
+- workbook ingestion and profiling
+- canonical interpretation and validation
+- SQLite-backed operational state
+- single-device XML workspaces
+- bulk XML workspaces
+- local XSD validation
+- manual EUDAMED Playground testing support
+- success-XML upload and persistence of confirmed outcomes
 
-- source workbook inventory and profiling
-- reference-data-assisted product variant linkage
-- canonical mapping review
-- canonical validation and XML readiness analysis
-- XML preview, local XSD validation, and download
-- controlled baseline `POST` / `PATCH` and scenario-derived later `PATCH` review
-- controlled bulk parent and child registration XML generation for Playground testing
+Current in-scope XML/testing capabilities are:
 
-Current out-of-scope capabilities include:
+- `POST`
+- `Patch XML`
+- `Market Info`
+- `Bulk Basic UDI-DI POST`
+- `Bulk Device UDI-DI POST`
+- `Bulk PATCH`
 
-- live EUDAMED submission
-- M2M / AS4 / eDelivery transport
-- submission history and response management
-- database-backed persistence
-- operational audit history beyond current in-memory review workflows
+Current out-of-scope capabilities remain:
+
+- direct EUDAMED submission
+- AS4 / eDelivery / M2M transport
+- automated receipt polling
+- production reconciliation workflows
+- final production-grade submission history and audit controls
 
 ## Business Context
 
-The business currently relies on multiple Excel workbooks as source evidence for device and regulatory data. These workbooks vary in structure, completeness, and consistency. The authoritative variant reference source is `BasicUDIs.xlsx`, while a legacy tracekey workbook still contributes supplemental SRN enrichment.
+The business uses multiple source Excel workbooks to hold MDR device data. Those workbooks are incomplete as an operating model for EUDAMED because they do not by themselves provide:
 
-The immediate business need is not direct live submission. The current need is to create a controlled digital preparation layer that can:
+- stable operational identity
+- reliable registration lineage
+- explicit accepted-state tracking
+- controlled XML generation paths
+- operational feedback from Playground testing
 
-- understand workbook structure and content
-- expose data quality and readiness issues early
-- interpret workbook content as stable regulatory meaning
-- align source data to EUDAMED-oriented schema and message expectations
-- support safe XML review and packaging before later submission support is introduced
+The application therefore acts as a preparation and testing layer between workbook evidence and eventual regulatory submission workflows.
 
-This work is intended to reduce manual interpretation risk and build a path toward repeatable EUDAMED preparation rather than a one-off spreadsheet transformation utility.
+The immediate business objective is controlled XML generation and controlled recording of successful EUDAMED Playground outcomes. This is especially important for:
+
+- separating parent Basic UDI-DI registration from child Device UDI-DI registration
+- keeping PATCH generation anchored to the latest accepted per-device state
+- making bulk workflows operationally accurate rather than generic batch exports
 
 ## Architecture Vision Summary
 
-The target direction is a schema-aware regulatory data preparation platform with clear separation between:
+The target architecture is a regulatory preparation platform with explicit separation between:
 
-- workbook/source parsing
-- source profiling
-- canonical regulatory modeling
-- mapping definitions
-- business-rule-based validation
-- XML generation and validation
-- future submission history and audit
-- future M2M / transport integration
+- source evidence
+- canonical regulatory interpretation
+- readiness validation
+- XML generation
+- operational testing state
+- accepted-state lineage
+- future submission transport
 
-The current implemented flow is:
+The current implemented architecture has already moved materially toward that target. The application now operates as:
 
-`Excel review -> Canonical review -> Canonical validation -> XML preview/download`
+`Workbook evidence -> canonical interpretation -> canonical validation -> operation assessment -> XML generation -> Playground success capture -> SQLite operational state`
 
-The near-term intent is to mature the preparation layer so that XML generation is built on validated, traceable, canonicalized data. The longer-term intent is to support manual submission preparation first, then later extend toward automated integration.
+This is the key change from the earlier architecture narrative. SQLite-backed state and success capture are now part of the active operating design, not future-only ideas.
 
 ## Architecture Principles
 
-The current documentation supports these working principles:
+The current architecture follows these principles:
 
-1. Do not build a one-off Excel-to-XML script.
-2. Keep parsing, canonical interpretation, validation, and XML generation separate.
-3. Use source workbooks as evidence, not as the target operating model.
-4. Keep XML profiles explicit by scenario.
-5. Prefer conservative review and testing workflows over premature automation.
-6. Delay delivery and integration logic until preparation and submission objects are properly defined.
-7. Keep documentation aligned with the implemented workflow.
+1. Do not build a one-off Excel-to-XML converter.
+2. Keep source evidence, canonical interpretation, validation, and XML assembly separate.
+3. Treat Playground-confirmed outcomes as operational state, not temporary UI state.
+4. Keep parent Basic UDI-DI registration, child Device UDI-DI registration, and PATCH as separate regulatory workflows.
+5. Make operation availability explicit through assessment services before XML generation.
+6. Keep PATCH lineage anchored to accepted per-device state.
+7. Keep UI terminology aligned with regulatory meaning and backend behavior.
+8. Keep documentation aligned with implemented workflow, not historical intent.
 
 ## Stakeholders, Actors, Roles And Responsibilities
 
 ### Business Sponsor
 
-Owns the business case and expected outcomes. Approves scope, priorities, and phased delivery, and ensures the solution addresses the business need for EUDAMED preparation capability.
+Owns business priority, workflow direction, and delivery sequencing.
 
 ### Regulatory Affairs Lead
 
-Owns regulatory correctness. Confirms source-data interpretation, canonical expectations, mapping decisions, validation expectations, and whether XML patterns are suitable for testing or operational use.
+Owns regulatory correctness, message-shape expectations, and interpretation of what constitutes a valid candidate, valid lineage, and valid accepted-state transition.
 
 ### Regulatory Operations User
 
-Uses the preparation workflow. Reviews validation findings, baseline `POST` / `PATCH` output, scenario `PATCH` changes, and prepares XML packages for later manual submission activity.
+Uses the application to:
 
-### Product Data / Source Data Owner
+- assess operation availability
+- generate XML
+- validate XML locally
+- test messages in EUDAMED Playground
+- upload success XML
+- monitor remaining operational candidates
 
-Owns source-data meaning. Explains workbook fields, resolves missing or inconsistent values, and confirms intended product, market, storage, and warning semantics.
+### Product / Source Data Owner
+
+Owns meaning of workbook content and resolves source data issues or interpretation gaps.
 
 ### Solution Architect
 
-Owns the target architecture. Preserves separation of concerns, manages long-term platform direction, and prevents the solution from collapsing into a fragile point utility.
+Owns platform direction, separation of concerns, and prevention of workflow collapse into ad hoc XML utilities.
 
 ### Engineering
 
-Builds and maintains the backend and frontend services that profile workbooks, interpret canonical data, validate readiness, and render XML review workflows.
+Implements backend services, frontend workspaces, persistence, and testing-state logic.
 
-### Quality / Compliance
+## Current Implemented Business Capability
 
-Reviews traceability, control points, and evidence expectations to ensure the platform supports regulated preparation practices.
+The application currently provides a real controlled testing workflow rather than a review-only prototype.
 
-### IT / Platform / Integration Owner
+Implemented business capability now includes:
 
-Supports deployment direction, supportability, and future persistence and integration concerns.
+- assessment of whether a `POST` or `PATCH` is actually available for a selected family/variant scope
+- distinction between parent-seeding and child-only `POST` candidates
+- generation of single-device `POST` XML
+- generation of single-device scenario-based `PATCH` XML
+- generation of bulk Basic UDI-DI parent registration XML
+- generation of bulk Device UDI-DI child registration XML
+- generation of bulk PATCH XML
+- local XSD validation against the wrapped EUDAMED service message schema set
+- upload of EUDAMED success XML to record confirmed successful outcomes in SQLite
 
-## Baseline Business Capability
+This is now materially beyond the earlier “review and preview” posture.
 
-Before this project matures, business capability remains spreadsheet-led and heavily dependent on manual interpretation. The business can store and review device data in Excel and manually inspect schema assets, but it cannot yet consistently prepare EUDAMED submission data through a governed digital workflow.
+## Current Application Architecture
 
-Baseline limitations include:
-
-- fragmented workbook structure and naming
-- limited traceability from source values to regulatory meaning
-- limited early visibility of completeness and consistency issues
-- no governed platform workflow for controlled XML package preparation
-- no structured handling of later `PATCH` change scenarios
-- no submission history, manual upload tracking, or automated integration
-
-## Target Business Capability
-
-The intended business capability is a platform-led EUDAMED preparation workflow that can:
-
-- profile and interpret workbook data consistently
-- expose quality and readiness issues before XML generation
-- map workbook fields into a stable canonical regulatory model
-- validate records against EUDAMED-oriented expectations
-- generate and review baseline `POST` / `PATCH` XML in a controlled manner
-- generate staged bulk registration XML with distinct parent and child flows
-- derive approved later `PATCH` scenarios from a reviewed baseline chain
-- prepare XML packages safely for later manual upload activity
-- provide the foundation for future submission tracking and automated delivery
-
-## Baseline Application Architecture
-
-The current application is a Python/React web application consisting of:
+The application is a Python and React web application consisting of:
 
 - a FastAPI backend
 - a React/TypeScript/Vite frontend
-- local configuration for normalization and canonical mapping review artifacts
-- local workbook, reference, and schema data sources
+- workbook and schema assets under `data/`
+- SQLite-backed operational persistence
 
-Current major application capabilities are grouped into:
+The main user-facing workspaces are:
 
-- workbook profiling
-- canonical review
-- canonical validation
-- XML generation / review
-
-The XML workspace is currently split between:
-
+- `Submission Data`
+- `Canonical Validation`
 - `EUDAMED Testing`
-- `EUDAMED Generation`
 
-Within `EUDAMED Testing`, the current modes are:
+Within `EUDAMED Testing`, the active operation modes are:
 
-- `Post + Patch`
+- `POST`
 - `Patch XML`
 - `Market Info`
-- `Single XML`
-- `Bulk Basic UDI POST`
-- `Bulk UDI-DI POST`
+- `Bulk Basic UDI-DI POST`
+- `Bulk Device UDI-DI POST`
 - `Bulk PATCH`
 
-The most mature controlled testing path is now:
+The older `Post + Patch` and `Single XML` framing is obsolete and should not be treated as the current architecture.
 
-- select one XML-ready parent `POST` record
-- generate and review baseline `Post + Patch`
-- derive approved scenario `PATCH` drafts from that reviewed first child `PATCH`
+## Current Logical Architecture
 
-The current validated bulk registration path is now:
+The current logical architecture is composed of the following layers.
 
-- register the parent once through `Bulk Basic UDI POST`
-- register child UDI-DIs under that accepted parent through `Bulk UDI-DI POST`
-- apply later changes only through per-device lineage-aware `Bulk PATCH`
+### 1. Source Evidence Layer
 
-## Target Application Architecture
+This layer reads workbook and reference inputs from local files and normalizes raw source values.
 
-The target application architecture is evolving toward a clearer separation of preparation, submission, delivery, and history concerns.
+### 2. Canonical Interpretation Layer
 
-Target application responsibilities are expected to include:
+This layer interprets workbook rows into stable regulatory meaning, including family/variant identity, device identity, and XML-relevant attributes.
 
-- source ingestion and profiling
-- canonical interpretation and mapping
-- validation and rule execution
-- XML package generation and schema validation
-- manual submission support
-- submission history and audit
-- later transport integration
+### 3. Canonical Validation Layer
 
-The current codebase is primarily in the preparation layer, with an initial XML assembly slice that should later be formalized into a distinct submission layer.
+This layer determines readiness for downstream XML workflows and produces the “XML-ready” population used by the testing workspaces.
 
-## Baseline Data Architecture
+### 4. Operation Assessment Layer
 
-The current data architecture is evidence-driven and file-backed.
+This layer determines whether a selected scope has an eligible next operation. It does not simply expose raw rows. It evaluates current tracked state and returns:
 
-Primary data sources:
+- available vs blocked outcome
+- candidate identity
+- parent/child registration interpretation
+- recommended next action
+- counts relevant to the selected operation
 
-- source Excel workbooks under `data/source_excel/`
-- authoritative Basic UDI reference workbook under `data/basic_udi_reference/BasicUDIs.xlsx`
-- legacy SRN fallback workbook
-- local EUDAMED schema pack under `data/schemas/`
+### 5. XML Generation Layer
 
-Current logical interpretation layers:
+This layer generates operation-specific XML payloads for:
 
-- source workbook rows
-- variant linkage to authoritative reference data
-- canonical mapping review
-- canonical validation / XML-facing contract
-- typed XML projection
+- single `POST`
+- single `PATCH`
+- `Market Info`
+- bulk parent `POST`
+- bulk child `POST`
+- bulk `PATCH`
 
-Current core domain concepts documented in the canonical layer include:
+### 6. Success Capture Layer
 
-- `Manufacturer`
-- `BasicDevice`
-- `DeviceRecord`
-- `MarketAvailability`
-- `StorageCondition`
-- `CriticalWarning`
+This layer parses returned EUDAMED success XML and applies confirmed changes to the SQLite state model.
 
-Known current limitation:
+### 7. Operational Read Model Layer
 
-- canonical and XML-facing field names are close but not yet perfectly normalized, with some alias drift between review, validation, and XML layers
+This layer powers UI counts, next-candidate logic, lineage interpretation, and “what is available now” behavior.
 
-## Target Data Architecture
+## Current Data Architecture
 
-The target data architecture should formalize a stable canonical regulatory model and isolate it from workbook-specific field naming. It should support:
+The current data architecture is hybrid: file-backed for source evidence and SQLite-backed for operational state.
 
-- source-to-canonical mapping definitions
-- normalized business-rule evaluation
-- explicit schema-facing transformation
-- later persistence of submission artifacts and state
+### File-Backed Inputs
 
-Near-term target direction is to reduce naming drift between canonical models and XML-facing paths while keeping XML profile logic explicit by scenario.
+Primary file-backed inputs include:
 
-## Baseline Technology Architecture
+- source Excel workbooks
+- Basic UDI reference workbook
+- local EUDAMED schema pack
+- configuration/mapping assets
 
-Current technology stack:
+### SQLite-Backed Operational State
 
-- Python 3.11
-- FastAPI
-- Pydantic
-- React
-- TypeScript
-- Vite
-- `openpyxl` for Excel handling
-- `lxml` for XML/XSD handling
-- local file-backed configuration and schema assets
+SQLite is now part of the current application architecture. It is not future-only.
 
-Current deployment position:
+The operational SQLite layer currently stores and supports:
 
-- the application is not yet deployed
-- frontend target hosting is `Azure Static Web Apps`
-- backend target hosting still requires confirmation
+- testing subjects
+- registration success state
+- latest successful version per device
+- per-device accepted-state lineage
+- success XML upload outcomes
+- counts and read models used by UI panels
 
-## Target Technology Architecture
+This layer now materially affects candidate selection for `POST`, `Patch XML`, `Bulk Device UDI-DI POST`, and `Bulk PATCH`.
 
-The target technology architecture remains modular. The backend is expected to remain Python-based, while the frontend remains React/TypeScript-based and is intended to be hosted on `Azure Static Web Apps`. The target architecture is expected to add:
+## Target Data Direction
 
-- persistence
-- explicit submission-domain storage
-- operational workflow state
-- later delivery/integration adapters
+The next data-architecture direction remains relational cleanup and stronger identity linkage. The target is to:
 
-Detailed runtime topology, security architecture, and operational support design still require further input.
+- use stable device-subject identity consistently
+- reduce string-matched lineage logic
+- tie accepted-state records back to a stable device subject
+- expand submission and audit history
+- track scenario-level change intent more explicitly
 
-## Integration And External Interface Architecture
+That said, the current SQLite layer is already operationally significant and must be documented as current architecture rather than deferred architecture.
 
-Current external interface focus is schema and message alignment, not live submission.
+## Current XML Workflow Architecture
 
-Implemented XML service profiles include:
+### Single `POST`
+
+Single `POST` works as an assessment-first flow:
+
+1. user selects family/variant scope
+2. backend assesses whether a valid next candidate exists
+3. UI explains whether the next operation is:
+   - a parent-seeding Basic UDI-DI `POST`, or
+   - a child Device UDI-DI `POST`
+4. preview is generated only for the next eligible candidate
+5. success XML can be uploaded to persist the confirmed result
+
+### `Patch XML`
+
+Single-device PATCH is a controlled scenario workspace:
+
+1. user selects family/variant scope
+2. backend identifies the next eligible accepted-state device
+3. scenario selection determines the intended business change
+4. the derived PATCH is built from the latest accepted tracked state
+5. success XML records the confirmed successful PATCH and advances version state
+
+### `Market Info`
+
+`Market Info` remains a distinct operation area and should continue to be treated separately from `POST` and `PATCH`.
+
+### `Bulk Basic UDI-DI POST`
+
+This generates parent-only registration packages. It is intentionally separate from child registration.
+
+### `Bulk Device UDI-DI POST`
+
+This generates child-only registration packages under an already tracked parent Basic UDI-DI. The current design expects the XML shape to remain purely child-oriented in this mode.
+
+### `Bulk PATCH`
+
+This generates PATCH packages derived from tracked accepted device state. The current UI direction includes operational scoping such as:
+
+- all posted devices
+- next N devices
+- selected catalogue numbers
+- imported catalogue lists
+
+## Current Success XML Architecture
+
+The application now supports success-XML upload as a first-class operational workflow.
+
+The current success-XML endpoint accepts success XML for:
 
 - `DEVICE.POST`
 - `UDI_DI.POST`
 - `UDI_DI.PATCH`
-- `MARKET_INFO.PUT`
 
-Current implemented XML behavior includes:
+The parser also supports multi-entity acknowledgements for bulk operations.
 
-- baseline `POST`
-- equivalent first child `PATCH` with `e:version = 2`
-- scenario-derived later `PATCH` from that reviewed baseline
-- staged bulk parent registration through `DEVICE.POST`
-- staged bulk child registration through standalone `UDI_DI.POST`
-- local XSD validation against the bundled schema set
+Current persistence behavior includes:
 
-Agreed target XML behavior now moves in a more explicit direction:
+- stamping successful `POST` records at version `1`
+- incrementing `PATCH` lineage using the accepted returned state
+- recording scenario information for successful PATCH updates where available
+- updating the state that drives next-operation availability and remaining counts
 
-- the baseline registration workspace should become `POST` only
-- `Patch XML` should own all `PATCH` generation
-- `Equivalent First Patch` should become an explicit `PATCH` option
-- a version `2` `PATCH` should be allowed to be the first real update derived directly from the accepted `POST`
-- that version `2` `PATCH` must match the accepted `POST` in all non-target fields
-- only the explicitly changed field or fields should differ
-- version `3+` `PATCH` messages should derive from the latest accepted tracked `PATCH` state for the same device lineage
+This capability is a major part of the current architecture and should be treated as such.
 
-Current `Patch XML` control model includes:
+## Current UI Architecture Direction
 
-- exact parent-record lineage through `catalogue_number`
-- reviewed baseline gating
-- tracked successful Playground registration gating before first real version `2` `PATCH`
-- explicit user-entered later `PATCH` version
-- scenario-specific field changes only
+The current UI direction is to keep all operation workspaces aligned around the same pattern:
 
-### Bulk Registration Architecture
+- assessment card
+- preview card
+- compact metadata strip
+- explicit next-action controls
+- XML structure / XML preview review area
+- upload-success action when the workflow supports it
 
-The bulk registration architecture is no longer treated as one generic batch XML generator. It now separates parent and child registration because Playground testing confirmed those flows have different constraints.
+This pattern has already been applied substantially to single `POST` and single `PATCH`, and is being extended to bulk operations.
 
-Current design rules are:
+The architecture implication is that the frontend is moving from one large mixed workspace toward operation-specific components with shared UI language and shared orchestration patterns.
 
-- `Bulk Basic UDI POST` creates at most one parent registration per distinct `Basic UDI-DI` in a wave
-- `Bulk Basic UDI POST` must scan the full XML-ready variant population before applying the transport message cap so parent eligibility is not distorted by early row order
-- duplicate parent creation attempts for the same `Basic UDI-DI` in the same wave should be suppressed before XML generation
-- if the selected family and variant already have a tracked successful parent `DEVICE.POST`, the UI should stop the parent flow and direct the operator to `Bulk UDI-DI POST`
-- `Bulk UDI-DI POST` is used only after the parent `Basic UDI-DI` has already been accepted
-- `Bulk UDI-DI POST` must exclude any child `primary UDI-DI` already known as successfully registered in tracked state
-- if no genuinely new child devices remain, the UI should say so explicitly rather than emit duplicate child XML
-- each child registration message is a standalone `UDI_DI.POST`
-- the validated standalone child wrapper is `device:UDIDIData` with `xsi:type="udidi:MDRUDIDIDataType"`
-- child messages link back to the accepted parent through `basicUDIIdentifier`
-- bulk `PATCH` must resolve the latest accepted state independently for each targeted child device lineage rather than rely on one shared bulk baseline
+## Current Persistence And State Architecture
 
-This staged design is now the working architecture for Playground bulk registration and should replace references to a generic `Batch XML` mode in later controlled documents.
+The present persistence model is operational rather than archival. Its job is to answer:
 
-### PATCH Scenario Architecture
+- what is already known to be successfully tested
+- what the latest accepted version is for a device
+- whether a new `POST` is parent-seeding or child-only
+- whether a `PATCH` can be built safely
+- how many eligible operations remain in a selected scope
 
-The architecture now treats `PATCH` generation as a controlled scenario framework rather than as a generic XML editing function.
+The current model is therefore not just passive storage. It is part of the workflow engine.
 
-Current design rules are:
+## Current Constraints And Assumptions
 
-- each generated `PATCH` belongs to one explicit scenario type
-- each scenario is anchored to one exact selected device lineage
-- a first real version `2` `PATCH` is valid only when the application has both:
-  - a reviewed baseline `POST` preview for the exact selected record in the current session
-  - a tracked successful Playground registration for that same device lineage
-- version `2` `PATCH` should derive directly from the accepted `POST` baseline for that same lineage
-- version `3+` `PATCH` should derive from the latest accepted tracked `PATCH` state for that same lineage
-- all non-target fields should remain aligned with the chosen base state
-- only the scenario-approved target field or fields should change
-- the active testing-state model now persists accepted device state and `PATCH` lineage in SQLite
+Current constraints and assumptions include:
 
-### Single And Bulk Testing Flow Rules
+- EUDAMED Playground availability is external and unstable
+- Playground-confirmed state may not equal production truth
+- workbook data alone does not define accepted EUDAMED state
+- accepted-state tracking currently depends on local recorded outcomes
+- current lineage logic still contains some text-matching and alias handling
+- UI and backend must stay aligned on family/variant alias behavior
 
-The implemented testing workflow now distinguishes four eligibility paths rather than treating `POST` and `PATCH` as generic XML generation:
+## Current Risks And Issues
 
-- `Single POST`
-- `Bulk Basic UDI POST`
-- `Bulk UDI-DI POST`
-- `Single PATCH` and `Bulk PATCH`
+The main current architecture risks are:
 
-The current rules are:
-
-- `Single POST` must select the next valid candidate from the chosen family and variant rather than simply the first workbook row
-- `Single POST` must not offer a record whose parent `Basic UDI-DI` is already known and whose child `UDI-DI` is already known
-- if the parent is already known but the child is not, `Single POST` should stop and direct the operator toward `Bulk UDI-DI POST`
-- if neither parent nor child is known, `Single POST` may offer that record as a genuine new registration candidate
-- `Bulk Basic UDI POST` is a parent-creation flow only and should never knowingly regenerate an already accepted parent lineage
-- `Bulk UDI-DI POST` is a child-creation flow only and should never knowingly regenerate an already accepted child lineage
-- `Single PATCH` and `Bulk PATCH` are state-based flows and must build from tracked accepted lineage rather than raw workbook values alone
-- `Bulk PATCH` candidate selection must come from tracked posted entries under the selected `Basic UDI-DI` parent and not from arbitrary variant workbook rows
-- UI messaging is part of the control design: when no valid candidate remains, the operator should receive a direct reason rather than a silent failure or misleading empty preview
-
-The current implemented single-field or narrow-scope scenario families are:
-
-- `Equivalent First Patch`
-- `Trade Name Edit`
-- `Critical Warnings`
-- `Storage Condition Edit`
-- `Base Quantity`
-- `Sterile`
-- `Latex`
-- `Status Code`
-
-The next scenario families remain intentionally staged:
-
-- list-based updates such as `Production Identifier` and `MDN Codes`
-- additional boolean or numeric state changes such as `Sterilization`, `Reprocessed`, and `Number Of Reuses`
-- later multi-field `PATCH` scenarios, once single-field lineage and acceptance behavior are better proven
-
-The architecture document should record the scenario framework, lineage rules, and persistence model. Detailed allowed values, examples, and executed Playground test evidence should remain in the testing and reporting documents rather than being duplicated here.
-
-Future integration direction includes:
-
-- manual upload preparation and tracking
-- later AS4 / eDelivery / M2M integration
-
-## Constraints And Assumptions
-
-Documented constraints include:
-
-- `MDR` only in current scope
-- accessories workbook visible but excluded from active mapping
-- `BasicUDIs.xlsx` is authoritative for variant linkage
-- legacy tracekey workbook still supplies SRN fallback data
-- current XML work is limited to preview, validation, and download
-- no live EUDAMED submission is implemented
-
-Documented assumptions include:
-
-- local schema validity is necessary but not sufficient for operational acceptance
-- scenario `PATCH` drafting should remain conservative and controlled
-- version `2` `PATCH` generation should be able to derive directly from the accepted `POST` without requiring an unchanged no-op `PATCH`
-- the solution should be extensible toward later submission support
-
-## Risks And Issues
-
-Current documented risks and issues include:
-
-- workbook inconsistency and naming variation
-- canonical-to-XML field-name drift
-- lack of persistence for status and review state
-- incomplete scenario coverage
-- no manual upload state tracking yet
-- no database-backed history or audit model yet
-- accepted device state should be treated as SQLite-backed in the current application model, with retained legacy YAML artifacts kept only as historical reference and not as operational state
+- `App.tsx` remains too large and still contains legacy paths that should be extracted or removed
+- some workflows still rely on fallback or transitional UI structures
+- operational counts can become misleading if they are not tied precisely to the selected mode
+- bulk PATCH preview generation may become slow for larger selections because current derivation work is done per device before package assembly
+- success capture is stronger than before, but broader audit and replay tooling is still limited
 
 ## Transition Architecture And Roadmap
 
-Current phased direction remains:
+The current transition path is:
 
-1. data and schema discovery
-2. canonical model proposal
-3. mapping and validation
-4. XML package generation
-5. manual submission support
-6. future M2M transport
+1. finish aligning `POST`, `Patch XML`, `Bulk Device UDI-DI POST`, and `Bulk PATCH` around a consistent workspace design
+2. continue extracting large operation-specific UI logic out of `App.tsx`
+3. strengthen SQLite-backed identity and accepted-state linkage
+4. expand documentation so it matches implemented behavior
+5. improve bulk performance and operator feedback
+6. only then consider later transport integration
 
-Near-term roadmap items already documented include:
+## Major Architecture Decisions Reflected Here
 
-- reduce field-name drift
-- harden workbook parsing
-- keep XML profiles explicit by scenario
-- redesign the baseline testing workspace from `Post + Patch` to `POST` only
-- redesign `Patch XML` so it supports:
-  - explicit `Equivalent First Patch`
-  - real first-update version `2` `PATCH` from accepted `POST`
-  - later version `3+` `PATCH` from latest accepted tracked `PATCH`
-- keep bulk registration split into:
-  - `Bulk Basic UDI POST`
-  - `Bulk UDI-DI POST`
-  - `Bulk PATCH`
-- implement `Bulk PATCH` as a per-device lineage-aware operation rather than a shared bulk baseline transform
-- define submission-domain models
-- add manual upload workflow support after XML review
-- add persistence and later delivery adapters
+This draft reflects the following major architecture decisions already present in the codebase:
 
-## Architecture Decisions And Rationale
+- SQLite is the active operational store
+- success-XML upload is part of the active workflow
+- parent and child `POST` flows remain separate in bulk mode
+- `Patch XML` is the single-device PATCH workspace
+- operation assessment precedes XML generation
+- accepted-state lineage controls PATCH generation
+- Playground testing outcomes are used to drive subsequent availability decisions
 
-Current major decisions reflected in the documentation include:
+## Open Architecture Questions
 
-- the project is a preparation and review application first, not a live submission platform
-- workbook parsing, canonical interpretation, validation, and XML generation remain separate
-- XML testing and accepted generation are separated in the UI
-- the baseline registration flow should converge toward `POST` only
-- all `PATCH` generation should converge into `Patch XML`
-- version `2` `PATCH` should derive from accepted `POST`
-- version `3+` `PATCH` should derive from the latest accepted tracked `PATCH`
-- scenario `PATCH` generation must target the exact selected parent record
-- `Patch XML` should not be a freeform XML editor
-- bulk registration should be split into explicit parent and child POST flows rather than a generic batch mode
-- bulk child registration should use standalone `UDI_DI.POST` messages under an already accepted parent
-- future bulk PATCH must honor independent accepted-state lineage for each targeted device
+Open questions that still need deliberate architecture decisions include:
 
-## Dependencies
-
-Known dependencies include:
-
-- source Excel workbook quality and consistency
-- authoritative Basic UDI reference workbook
-- local EUDAMED schema pack
-- continued regulatory clarification on scenario suitability and later operational acceptance
-
-## Open Questions
-
-Current open questions include:
-
-- whether accepted scenario `PATCH` patterns should later appear in `EUDAMED Generation`
-- how baseline review and scenario acceptance state should be persisted
-- whether the unchanged equivalent first-child `PATCH` remains only as an optional controlled testing path
-- whether `Single XML` remains a long-term mode
-- how the eventual database model should persist parent/child registration lineage for bulk PATCH orchestration
-- what audit, retention, and security controls will be required in later phases
+- how far the SQLite model should go before a more formal relational identity cleanup
+- how scenario change capture for PATCH should evolve beyond the current first-pass recording
+- how bulk PATCH generation should scale toward larger selections
+- what the final submission-history and audit model should be
+- how much of the current frontend orchestration should move into reusable workspace components
 
 ## Sections Still Requiring Additional Input
 
-The following ADD areas are only partially supported by current documentation and require further stakeholder input:
+The following sections can now be drafted more accurately later, but still need explicit stakeholder input:
 
-- security architecture
-- audit and retention architecture
-- detailed deployment/runtime topology
-- operational support model
-- future integration architecture in implementation detail
+- formal non-functional requirements
+- deployment architecture and hosting topology
+- support and operational ownership model
+- security model for later upload/transport phases
+- production submission and reconciliation architecture

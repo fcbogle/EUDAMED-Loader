@@ -84,7 +84,7 @@ const focusColumns = [
 type MainTab = "workbooks" | "canonicalValidation" | "xml" | "generation" | "documentation";
 type ScopeMode = "all" | "sheet";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
-type BulkPatchScopeMode = "all_posted" | "selected_catalogue_numbers" | "import_catalogue_list";
+type BulkPatchScopeMode = "all_posted" | "next_10" | "next_25" | "selected_catalogue_numbers" | "import_catalogue_list";
 type PatchScenarioId =
   | "equivalent_first_patch"
   | "trade_name_edit"
@@ -2186,6 +2186,10 @@ export function App() {
   const effectiveBulkPatchCatalogueNumbers =
     bulkPatchScopeMode === "all_posted"
       ? (bulkPatchPostedCatalogueNumbers.length > 0 ? bulkPatchPostedCatalogueNumbers : selectedBulkPatchFallbackCatalogueNumbers)
+      : bulkPatchScopeMode === "next_10"
+        ? (bulkPatchPostedCatalogueNumbers.length > 0 ? bulkPatchPostedCatalogueNumbers : selectedBulkPatchFallbackCatalogueNumbers).slice(0, 10)
+        : bulkPatchScopeMode === "next_25"
+          ? (bulkPatchPostedCatalogueNumbers.length > 0 ? bulkPatchPostedCatalogueNumbers : selectedBulkPatchFallbackCatalogueNumbers).slice(0, 25)
       : bulkPatchScopeMode === "selected_catalogue_numbers"
         ? selectedBulkPatchCatalogueNumbers
         : bulkPatchImportedMatchedCatalogueNumbers;
@@ -2201,12 +2205,17 @@ export function App() {
     Boolean(selectedBulkPatchParentGroup) &&
     (
       (bulkPatchScopeMode === "all_posted" && selectedBulkPatchEligibleCount > 0) ||
+      ((bulkPatchScopeMode === "next_10" || bulkPatchScopeMode === "next_25") && selectedBulkPatchSelectedCount > 0) ||
       (bulkPatchScopeMode !== "all_posted" && selectedBulkPatchSelectedCount > 0)
     );
   const bulkPatchReadinessReason = !selectedBulkPatchParentGroup
     ? "No Basic UDI-DI parent is selected."
     : bulkPatchScopeMode === "all_posted" && selectedBulkPatchEligibleCount < 1
       ? "No posted child devices are currently available under the selected parent."
+      : bulkPatchScopeMode === "next_10" && selectedBulkPatchSelectedCount < 1
+        ? "No posted child devices are currently available for the next 10-device PATCH scope."
+      : bulkPatchScopeMode === "next_25" && selectedBulkPatchSelectedCount < 1
+        ? "No posted child devices are currently available for the next 25-device PATCH scope."
       : bulkPatchScopeMode === "selected_catalogue_numbers" && selectedBulkPatchSelectedCount < 1
         ? "Select at least one posted catalogue number."
       : bulkPatchScopeMode === "import_catalogue_list" && selectedBulkPatchSelectedCount < 1
@@ -2215,6 +2224,10 @@ export function App() {
   const bulkPatchScopeLabel =
     bulkPatchScopeMode === "all_posted"
       ? "All posted devices"
+      : bulkPatchScopeMode === "next_10"
+        ? "Next 10 devices"
+      : bulkPatchScopeMode === "next_25"
+        ? "Next 25 devices"
       : bulkPatchScopeMode === "selected_catalogue_numbers"
         ? "Selected catalogue numbers"
         : "Import catalogue list";
@@ -3103,6 +3116,9 @@ export function App() {
         return selectedBulkPatchFallbackCatalogueNumbers;
       }
       return selectedBulkPatchFallbackCatalogueNumbers;
+    }
+    if (bulkPatchScopeMode === "next_10" || bulkPatchScopeMode === "next_25") {
+      return effectiveBulkPatchCatalogueNumbers;
     }
     if (bulkPatchScopeMode === "selected_catalogue_numbers") {
       return selectedBulkPatchCatalogueNumbers;

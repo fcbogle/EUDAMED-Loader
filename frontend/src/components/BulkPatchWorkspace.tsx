@@ -10,7 +10,7 @@ type PatchScenarioOption = {
   label: string;
 };
 
-type BulkPatchScopeMode = "all_posted" | "selected_catalogue_numbers" | "import_catalogue_list";
+type BulkPatchScopeMode = "all_posted" | "next_10" | "next_25" | "selected_catalogue_numbers" | "import_catalogue_list";
 
 type BulkPatchWorkspaceProps = {
   familyVariantLabel: string;
@@ -172,11 +172,19 @@ export function BulkPatchWorkspace({
                   onChange={(event) => onScopeModeChange(event.target.value as BulkPatchScopeMode)}
                 >
                   <option value="all_posted">All posted devices</option>
+                  <option value="next_10">Next 10 devices</option>
+                  <option value="next_25">Next 25 devices</option>
                   <option value="selected_catalogue_numbers">Select catalogue numbers</option>
                   <option value="import_catalogue_list">Import catalogue list</option>
                 </select>
                 {bulkPatchScopeMode === "all_posted" ? (
                   <p className="panel-copy">Apply this PATCH to every posted Device UDI-DI record under the selected Basic UDI-DI.</p>
+                ) : null}
+                {bulkPatchScopeMode === "next_10" ? (
+                  <p className="panel-copy">Apply this PATCH to the next 10 posted Device UDI-DI records under the selected Basic UDI-DI.</p>
+                ) : null}
+                {bulkPatchScopeMode === "next_25" ? (
+                  <p className="panel-copy">Apply this PATCH to the next 25 posted Device UDI-DI records under the selected Basic UDI-DI.</p>
                 ) : null}
                 {bulkPatchScopeMode === "selected_catalogue_numbers" ? (
                   <>
