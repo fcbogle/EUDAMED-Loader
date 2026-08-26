@@ -50,6 +50,12 @@ export function XmlOperationAssessmentPanel({
         <strong>{xmlAssessmentTitle}</strong>
         <span className={statusClassName}>{statusLabel}</span>
       </div>
+      {isLoadingXmlOperationAssessment ? (
+        <div className="xml-refresh-indicator" aria-live="polite">
+          <strong>Refreshing...</strong>
+          <span>Updating the current operation assessment for the selected family and variant.</span>
+        </div>
+      ) : null}
       <div className="bulk-patch-summary-row">
         {xmlMode === "post" && xmlOperationAssessment ? (
           <div className="post-assessment-layout">
@@ -59,10 +65,12 @@ export function XmlOperationAssessmentPanel({
                   <div className="post-assessment-hero-item">
                     <span className="summary-label">Candidate</span>
                     <strong>{assessedPostCandidateCatalogueNumber ?? "Not resolved"}</strong>
+                    {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                   </div>
                   <div className="post-assessment-hero-item post-assessment-hero-item-secondary">
                     <span className="summary-label">Device UDI-DI</span>
                     <strong>{assessedPostCandidatePrimaryUdiDi ?? "Not resolved"}</strong>
+                    {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                   </div>
                 </div>
               ) : (
@@ -71,6 +79,7 @@ export function XmlOperationAssessmentPanel({
                   <strong>
                     {selectedXmlFamily ?? "No family selected"} / {selectedXmlVariant ?? "No variant selected"}
                   </strong>
+                  {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                   <p className="panel-copy">
                     No POST candidate could be resolved from the current canonical validation and tracked SQLite testing state.
                   </p>
@@ -90,6 +99,7 @@ export function XmlOperationAssessmentPanel({
                   >
                     <strong>{row.value}</strong>
                     <span>{row.label}</span>
+                    {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                   </div>
                 ))}
               </div>
@@ -98,18 +108,22 @@ export function XmlOperationAssessmentPanel({
                 <div className="queue-chip post-assessment-chip">
                   <strong>{selectedBulkEligiblePostCount}</strong>
                   <span>POST rows in variant</span>
+                  {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                 </div>
                 <div className="queue-chip post-assessment-chip">
                   <strong>{selectedXmlVariantXmlReadyRecords}</strong>
                   <span>XML-ready rows in variant</span>
+                  {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                 </div>
                 <div className="queue-chip post-assessment-chip">
                   <strong>{selectedXmlVariantBlockedRecords}</strong>
                   <span>blocked rows in variant</span>
+                  {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                 </div>
                 <div className="queue-chip post-assessment-chip">
                   <strong>{selectedXmlVariantTotalRecords}</strong>
                   <span>total rows in variant</span>
+                  {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                 </div>
               </div>
             )}
@@ -120,6 +134,7 @@ export function XmlOperationAssessmentPanel({
               <div className="workflow-note patch-readiness-note bulk-patch-summary-tile" key={row.label}>
                 <strong>{row.label}</strong>
                 <span>{row.value}</span>
+                {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
               </div>
             ))}
           </div>

@@ -14,6 +14,7 @@ type BulkPatchScopeMode = "all_posted" | "next_10" | "next_25" | "selected_catal
 
 type BulkPatchWorkspaceProps = {
   familyVariantLabel: string;
+  isRefreshing: boolean;
   displayedBulkPatchParentOptions: BulkPatchPostedParentGroup[];
   selectedBulkPatchParentGroup: BulkPatchPostedParentGroup | null;
   onSelectParent: (basicUdiDi: string) => void;
@@ -61,6 +62,7 @@ type BulkPatchWorkspaceProps = {
 
 export function BulkPatchWorkspace({
   familyVariantLabel,
+  isRefreshing,
   displayedBulkPatchParentOptions,
   selectedBulkPatchParentGroup,
   onSelectParent,
@@ -120,6 +122,7 @@ export function BulkPatchWorkspace({
                 title="Registered parent scope"
                 statusLabel={`${displayedBulkPatchParentOptions.length} available`}
                 subtitle="Tracked Basic UDI-DI parents"
+                isRefreshing={isRefreshing}
               >
                 <p className="panel-copy">Select the registered Basic UDI-DI parent that anchors this bulk PATCH package.</p>
                 <label className="field-label" htmlFor="xml-bulk-patch-parent-selector">
@@ -160,6 +163,7 @@ export function BulkPatchWorkspace({
                 title="PATCH device scope"
                 statusLabel={`${selectedBulkPatchSelectedCount} selected`}
                 subtitle="Devices included in this package"
+                isRefreshing={isRefreshing}
               >
                 <p className="panel-copy">Choose which posted Device UDI-DI rows will receive the selected PATCH scenario.</p>
                 <label className="field-label" htmlFor="xml-bulk-patch-scope-mode">
@@ -256,6 +260,7 @@ export function BulkPatchWorkspace({
                 title="Scenario and change set"
                 statusLabel={patchScenarioStatusLabel}
                 subtitle="Applied to the selected devices"
+                isRefreshing={isRefreshing}
               >
                 <p className="panel-copy">Select the PATCH scenario and define the business change that will be applied across the package.</p>
                 <label className="field-label" htmlFor="xml-bulk-patch-scenario-selector">

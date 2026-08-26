@@ -7,6 +7,7 @@ import { XmlWorkspaceHeader } from "./XmlWorkspaceHeader";
 type BulkPostWorkspaceProps = {
   familyVariantLabel: string;
   title: string;
+  isRefreshing: boolean;
   stepOneTitle: string;
   stepOneCount: number;
   stepOneLabel: string;
@@ -25,6 +26,7 @@ type BulkPostWorkspaceProps = {
 export function BulkPostWorkspace({
   familyVariantLabel,
   title,
+  isRefreshing,
   stepOneTitle,
   stepOneCount,
   stepOneLabel,
@@ -49,7 +51,12 @@ export function BulkPostWorkspace({
         />
         <div className="bulk-patch-layout">
           <div className="bulk-patch-config-column">
-            <XmlAssessmentCard title={stepOneTitle} statusLabel={`${stepOneCount} available`} subtitle="Current registration scope">
+            <XmlAssessmentCard
+              title={stepOneTitle}
+              statusLabel={`${stepOneCount} available`}
+              subtitle="Current registration scope"
+              isRefreshing={isRefreshing}
+            >
               <p className="panel-copy">{stepOneCopy}</p>
               <label className="field-label" htmlFor="xml-bulk-post-parent-count">
                 {stepOneLabel}
@@ -63,7 +70,12 @@ export function BulkPostWorkspace({
               {stepOneFooter ? <p className="panel-copy">{stepOneFooter}</p> : null}
             </XmlAssessmentCard>
 
-            <XmlAssessmentCard title="Package scope" statusLabel={`${selectedBulkRecordCount} selected`} subtitle="Records included in this package">
+            <XmlAssessmentCard
+              title="Package scope"
+              statusLabel={`${selectedBulkRecordCount} selected`}
+              subtitle="Records included in this package"
+              isRefreshing={isRefreshing}
+            >
               <p className="panel-copy">Choose how many device rows to include in the generated package.</p>
               <label className="field-label" htmlFor="xml-bulk-record-count">
                 Number of devices
@@ -86,6 +98,7 @@ export function BulkPostWorkspace({
               title="Preview output"
               statusLabel={`Chunk ${selectedXmlChunkSequence} of ${selectedBulkChunkCount}`}
               subtitle="Current preview package"
+              isRefreshing={isRefreshing}
             >
               <p className="panel-copy">Select which generated chunk to inspect before validation or download.</p>
               <label className="field-label" htmlFor="xml-batch-chunk-sequence">

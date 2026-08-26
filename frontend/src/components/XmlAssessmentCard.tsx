@@ -7,6 +7,7 @@ type XmlAssessmentCardProps = {
   statusLabel?: string;
   statusClassName?: string;
   subtitle?: string;
+  isRefreshing?: boolean;
   children: ReactNode;
 };
 
@@ -15,6 +16,7 @@ export function XmlAssessmentCard({
   statusLabel,
   statusClassName,
   subtitle,
+  isRefreshing = false,
   children,
 }: XmlAssessmentCardProps) {
   return (
@@ -25,6 +27,12 @@ export function XmlAssessmentCard({
         statusClassName={statusClassName}
         subtitle={subtitle}
       />
+      {isRefreshing ? (
+        <div className="xml-refresh-indicator" aria-live="polite">
+          <strong>Refreshing...</strong>
+          <span>Updating this panel for the selected family and variant.</span>
+        </div>
+      ) : null}
       {children}
     </div>
   );

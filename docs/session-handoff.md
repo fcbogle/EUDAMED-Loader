@@ -1180,6 +1180,41 @@ Files refreshed in this pass:
 - workbook-drift detection between the reviewed baseline pair and newer workbook state
 - any later decision on workbook-refreshed scenario PATCH regeneration
 
+## Production Cutover Direction
+
+- The current implemented eligibility model is intentionally Playground-centric:
+  - single `PATCH` still depends on locally tracked successful `POST` lineage in SQLite
+  - bulk `PATCH` still depends on locally tracked accepted-state lineage in SQLite
+  - this remains appropriate for controlled Playground proving
+- Production cutover should not keep that same restriction for workbook/reference rows already classified as `PATCH`.
+- Agreed production direction:
+  - any row classified as `POST` should remain eligible for `POST` under the current `POST` design
+  - any row classified as `PATCH` should be eligible for `PATCH` without requiring an application-generated prior `POST`
+  - this is especially important for families/variants whose source/reference model already assumes an existing registered lifecycle
+- Important distinction:
+  - this is a future Production cutover rule, not a reason to weaken the current Playground testing controls immediately
+  - the current Playground/testing implementation should continue to rely on SQLite-tracked accepted lineage until the Production cutover model is introduced deliberately
+- `PATCH` version handling at cutover will need a trusted source:
+  - preferred: retrieve the current version from EUDAMED before generating the next `PATCH`
+  - controlled fallback: use workbook/reference `Version` as an assumed accepted-state baseline where business ownership confirms that assumption
+  - last resort: require explicit user confirmation of the current version before generation
+- This implies two distinct operating modes for later design:
+  - `Testing lineage mode`
+    - current behavior
+    - relies on locally tracked `POST` / `PATCH` success history in SQLite
+  - `Production assumed-registered mode`
+    - allows workbook/reference `PATCH` rows to proceed without an app-generated `POST`
+    - relies on trusted version state from EUDAMED or a controlled assumed baseline
+- `Echelon / Echelon` is the clearest example of why this matters:
+  - current source/reference classification marks it as `PATCH`
+  - current Playground-centric implementation therefore blocks both `POST` and `PATCH`
+  - Production cutover design should allow such `PATCH`-classified scopes to proceed as `PATCH` once version state is trustworthy
+- Treat this as an explicit architecture change for later implementation, not a minor UI tweak:
+  - it affects eligibility rules
+  - version-state sourcing
+  - SQLite state meaning
+  - later Production submission behavior
+
 ## Open Work / Next Steps
 
 Focus next on consolidating the remaining testing architecture onto SQLite and extending it carefully:
@@ -1190,3 +1225,5 @@ Focus next on consolidating the remaining testing architecture onto SQLite and e
 4. design the next SQLite-backed submission / response model so successful EUDAMED responses can update tracked state cleanly
 5. after the testing-history model is stable, extend canonical and accepted-state persistence tied to `device_subject`
 6. only after those relationships are stable, introduce migration tooling if needed for controlled SQLite schema evolution
+7. document and later implement a Production cutover mode where workbook/reference `PATCH` rows can proceed without locally generated `POST` lineage
+8. decide whether Production `PATCH` version state will come from live EUDAMED lookup, controlled source-version assumptions, or explicit operator confirmation

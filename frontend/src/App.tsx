@@ -10,7 +10,7 @@ import canonicalValidationDocumentation from "./content/docs/canonical-validatio
 import { PatchPreviewPanel } from "./components/PatchPreviewPanel";
 import { PatchScenarioCard } from "./components/PatchScenarioCard";
 import { PostPreviewPanel } from "./components/PostPreviewPanel";
-import { AcceptedGenerationWorkspace } from "./components/AcceptedGenerationWorkspace";
+import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
 import { XmlValidationStack } from "./components/XmlValidationStack";
 import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
@@ -64,6 +64,7 @@ import type {
   SheetSummary,
   SingleRecordXmlPreview,
   TestingSubjectReadModelSummary,
+  TestingWorkspaceSummary,
   WorkbookImportDuplicateGroup,
   WorkbookImportSnapshotSummary,
   WorkbookSummary,
@@ -81,7 +82,7 @@ const focusColumns = [
   "Select the language e.g English",
 ];
 
-type MainTab = "workbooks" | "canonicalValidation" | "xml" | "generation" | "documentation";
+type MainTab = "workbooks" | "canonicalValidation" | "xml" | "testingSummary" | "documentation";
 type ScopeMode = "all" | "sheet";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
 type BulkPatchScopeMode = "all_posted" | "next_10" | "next_25" | "selected_catalogue_numbers" | "import_catalogue_list";
@@ -1146,6 +1147,8 @@ export function App() {
   const [selectedDeviceSubjectVariant, setSelectedDeviceSubjectVariant] = useState<string>("");
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
   const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
+  const [selectedTestingSummaryFamily, setSelectedTestingSummaryFamily] = useState<string>("");
+  const [selectedTestingSummaryVariant, setSelectedTestingSummaryVariant] = useState<string>("");
   const [selectedXmlRecordKey, setSelectedXmlRecordKey] = useState<string | null>(null);
   const [xmlMode, setXmlMode] = useState<"post" | "single" | "marketInfo" | "bulkPost" | "bulkUdidiPost" | "patch" | "bulkPatch">("post");
   const [selectedPatchScenarioId, setSelectedPatchScenarioId] = useState<PatchScenarioId>("equivalent_first_patch");
@@ -1155,6 +1158,10 @@ export function App() {
   const [bulkPatchCatalogueFilter, setBulkPatchCatalogueFilter] = useState<string>("");
   const [bulkPatchImportText, setBulkPatchImportText] = useState<string>("");
   const [testingSubjectSummaries, setTestingSubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
+  const [testingSummaryWorkspaceSummary, setTestingSummaryWorkspaceSummary] = useState<TestingWorkspaceSummary | null>(null);
+  const [testingSummarySubjectSummaries, setTestingSummarySubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
+  const [isLoadingTestingSummary, setIsLoadingTestingSummary] = useState<boolean>(false);
+  const [testingSummaryError, setTestingSummaryError] = useState<string | null>(null);
   const [patchScenarioStatuses, setPatchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
     equivalent_first_patch: "EUDAMED Candidate",
     trade_name_edit: "EUDAMED Candidate",
@@ -1492,7 +1499,7 @@ export function App() {
     if (
       (activeTab === "canonicalValidation" ||
         activeTab === "xml" ||
-        activeTab === "generation") &&
+        activeTab === "testingSummary") &&
       !canonicalValidation
     ) {
       void loadCanonicalValidationBundle();
@@ -1504,7 +1511,7 @@ export function App() {
     if (
       (activeTab === "canonicalValidation" ||
         activeTab === "xml" ||
-        activeTab === "generation") &&
+        activeTab === "testingSummary") &&
       latestImportBatchId !== undefined &&
       canonicalValidation &&
       canonicalValidation.source_import_batch_id !== latestImportBatchId
@@ -1671,10 +1678,33 @@ export function App() {
   }, [selectedXmlFamily, selectedXmlVariant]);
 
   useEffect(() => {
-    if (activeTab === "generation" && xmlMode !== "post") {
-      setXmlMode("post");
+    if (!canonicalValidation?.family_summaries.length) {
+      if (selectedTestingSummaryFamily) {
+        setSelectedTestingSummaryFamily("");
+      }
+      return;
     }
-  }, [activeTab, xmlMode]);
+    if (!selectedTestingSummaryFamily) {
+      return;
+    }
+    if (canonicalValidation.family_summaries.some((summary) => summary.product_family === selectedTestingSummaryFamily)) {
+      return;
+    }
+    setSelectedTestingSummaryFamily("");
+  }, [canonicalValidation, selectedTestingSummaryFamily]);
+
+  useEffect(() => {
+    const availableVariants = (canonicalValidation?.variant_summaries ?? [])
+      .filter((summary) => (selectedTestingSummaryFamily ? summary.product_family === selectedTestingSummaryFamily : false))
+      .map((summary) => summary.product_variant);
+    if (!selectedTestingSummaryVariant) {
+      return;
+    }
+    if (availableVariants.includes(selectedTestingSummaryVariant)) {
+      return;
+    }
+    setSelectedTestingSummaryVariant("");
+  }, [canonicalValidation, selectedTestingSummaryFamily, selectedTestingSummaryVariant]);
 
   const selectedRuleFile = rules.find((item) => item.column === selectedColumn);
   const acceptedValues = Array.from(new Set(selectedRuleFile?.rules.map((rule) => rule.normalized) ?? []));
@@ -2183,6 +2213,190 @@ export function App() {
   const bulkPatchImportedNotFoundCatalogueNumbers = bulkPatchImportedCatalogueNumbers.filter(
     (catalogueNumber) => !bulkPatchPostedCatalogueSet.has(catalogueNumber),
   );
+  const testingSummaryFamilyOptions = canonicalValidation?.family_summaries.map((summary) => summary.product_family) ?? [];
+  const testingSummaryVariantOptions = Array.from(
+    new Set(
+      (canonicalValidation?.variant_summaries ?? [])
+        .filter((summary) => (selectedTestingSummaryFamily ? summary.product_family === selectedTestingSummaryFamily : false))
+        .map((summary) => summary.product_variant),
+    ),
+  );
+  const testingSummaryXmlReadyPostRecords = xmlReadyRecords.filter((record) => {
+    if ((record.submission_operation ?? "").toUpperCase() !== "POST") {
+      return false;
+    }
+    if (selectedTestingSummaryFamily && record.product_family !== selectedTestingSummaryFamily) {
+      return false;
+    }
+    if (selectedTestingSummaryVariant && record.product_variant !== selectedTestingSummaryVariant) {
+      return false;
+    }
+    return true;
+  });
+  const testingSummarySuccessfulPrimaryUdiSet = new Set(
+    testingSummarySubjectSummaries
+      .filter((summary) => summary.has_successful_device_post || summary.has_successful_child_post_or_patch || summary.post_success)
+      .map((summary) => (summary.primary_udi_di ?? "").trim().toLowerCase())
+      .filter((value): value is string => Boolean(value)),
+  );
+  const testingSummaryRegisteredBasicUdiSet = new Set(
+    testingSummarySubjectSummaries
+      .filter((summary) => summary.post_success && summary.basic_udi_di)
+      .map((summary) => summary.basic_udi_di as string),
+  );
+  const testingSummaryAvailablePostCount = testingSummaryXmlReadyPostRecords.filter((record) => {
+    const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
+    return primaryUdiDi ? !testingSummarySuccessfulPrimaryUdiSet.has(primaryUdiDi) : true;
+  }).length;
+  const testingSummaryAvailableBulkPostCount = testingSummaryXmlReadyPostRecords.filter((record) => {
+    const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
+    const basicUdiDi = basicUdiDiForRecord(record);
+    return (
+      typeof basicUdiDi === "string" &&
+      (!primaryUdiDi || !testingSummarySuccessfulPrimaryUdiSet.has(primaryUdiDi)) &&
+      testingSummaryRegisteredBasicUdiSet.has(basicUdiDi)
+    );
+  }).length;
+  const testingSummaryPatchReadyCount = testingSummarySubjectSummaries.filter(
+    (summary) =>
+      Boolean(summary.reviewed_post_at) &&
+      (summary.post_success || summary.has_successful_device_post || summary.has_successful_child_post_or_patch),
+  ).length;
+  const testingSummaryRows = (canonicalValidation?.variant_summaries ?? [])
+    .filter((summary) => (selectedTestingSummaryFamily ? summary.product_family === selectedTestingSummaryFamily : true))
+    .filter((summary) => (selectedTestingSummaryVariant ? summary.product_variant === selectedTestingSummaryVariant : true))
+    .map((summary) => {
+      const matchingRecords = xmlReadyRecords.filter(
+        (record) =>
+          record.product_family === summary.product_family &&
+          record.product_variant === summary.product_variant &&
+          (record.submission_operation ?? "").toUpperCase() === "POST",
+      );
+      const matchingSubjects = testingSummarySubjectSummaries.filter(
+        (subject) => subject.product_family === summary.product_family && subject.product_variant === summary.product_variant,
+      );
+      const rowSuccessfulPrimaryUdiSet = new Set(
+        matchingSubjects
+          .filter((subject) => subject.has_successful_device_post || subject.has_successful_child_post_or_patch || subject.post_success)
+          .map((subject) => (subject.primary_udi_di ?? "").trim().toLowerCase())
+          .filter((value): value is string => Boolean(value)),
+      );
+      const rowRegisteredBasicUdiSet = new Set(
+        matchingSubjects
+          .filter((subject) => subject.post_success && subject.basic_udi_di)
+          .map((subject) => subject.basic_udi_di as string),
+      );
+      const rowBasicUdiCodes = Array.from(
+        new Set(
+          [
+            ...matchingSubjects.map((subject) => subject.basic_udi_di),
+            ...matchingRecords.map((record) => basicUdiDiForRecord(record)),
+          ].filter((value): value is string => Boolean(value)),
+        ),
+      );
+      const availableChildPostCount = matchingRecords.filter((record) => {
+        const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
+        const basicUdiDi = basicUdiDiForRecord(record);
+        return (
+          typeof basicUdiDi === "string" &&
+          (!primaryUdiDi || !rowSuccessfulPrimaryUdiSet.has(primaryUdiDi)) &&
+          rowRegisteredBasicUdiSet.has(basicUdiDi)
+        );
+      }).length;
+      const patchReadyCount = matchingSubjects.filter(
+        (subject) =>
+          Boolean(subject.reviewed_post_at) &&
+          (subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch),
+      ).length;
+      const patchCompletedCount = matchingSubjects.filter((subject) => Number(subject.latest_successful_version ?? "0") > 1).length;
+      const latestVersionNumber = matchingSubjects.reduce((max, subject) => {
+        const versionNumber = Number(subject.latest_successful_version ?? "0");
+        return Number.isFinite(versionNumber) && versionNumber > max ? versionNumber : max;
+      }, 0);
+      const availablePostCount = matchingRecords.filter((record) => {
+        const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
+        return primaryUdiDi ? !rowSuccessfulPrimaryUdiSet.has(primaryUdiDi) : true;
+      }).length;
+      const parentRegisteredCount = rowRegisteredBasicUdiSet.size;
+      const successfulChildPostCount = matchingSubjects.filter((subject) => subject.has_successful_child_post_or_patch).length;
+      const statusLabel =
+        patchReadyCount > 0
+          ? "PATCH ready"
+          : availablePostCount > 0
+            ? "POST ready"
+            : parentRegisteredCount > 0
+              ? "In progress"
+              : "Blocked";
+      const statusClassName =
+        patchReadyCount > 0 || availablePostCount > 0
+          ? "status-pill ok compact"
+          : parentRegisteredCount > 0
+            ? "status-pill warn compact"
+            : "status-pill danger compact";
+      return {
+        key: `${summary.product_family}::${summary.product_variant}`,
+        productFamily: summary.product_family,
+        productVariant: summary.product_variant,
+        basicUdiDiLabel:
+          rowBasicUdiCodes.length === 1
+            ? rowBasicUdiCodes[0]
+            : rowBasicUdiCodes.length > 1
+              ? `${rowBasicUdiCodes.length} tracked parents`
+              : "Not resolved",
+        parentRegistered: parentRegisteredCount > 0,
+        parentRegisteredCount,
+        successfulChildPostCount,
+        availableChildPostCount,
+        patchReadyCount,
+        patchCompletedCount,
+        latestVersionLabel: latestVersionNumber > 0 ? `v${latestVersionNumber}` : "v-",
+        statusLabel,
+        statusClassName,
+      };
+    })
+    .sort((left, right) => {
+      const familyCompare = left.productFamily.localeCompare(right.productFamily);
+      return familyCompare !== 0 ? familyCompare : left.productVariant.localeCompare(right.productVariant);
+    });
+  const testingSummaryMetrics = [
+    {
+      label: "Parent POST",
+      value: `${testingSummaryWorkspaceSummary?.successful_device_post_count ?? 0}`,
+      detail: "successful",
+      className: "summary-card-kpi-post",
+    },
+    {
+      label: "Child POST",
+      value: `${testingSummaryWorkspaceSummary?.successful_child_post_count ?? 0}`,
+      detail: "successful",
+      className: "summary-card-kpi-post",
+    },
+    {
+      label: "PATCH",
+      value: `${testingSummaryWorkspaceSummary?.successful_patch_count ?? 0}`,
+      detail: "successful",
+      className: "summary-card-kpi-patch",
+    },
+    {
+      label: "POST Ready",
+      value: `${testingSummaryAvailablePostCount}`,
+      detail: "available",
+    },
+    {
+      label: "PATCH Ready",
+      value: `${testingSummaryPatchReadyCount}`,
+      detail: "available",
+    },
+    {
+      label: "Bulk Child POST",
+      value: `${testingSummaryAvailableBulkPostCount}`,
+      detail: "available",
+    },
+  ];
+  const testingSummaryRecentSubjects = [...testingSummarySubjectSummaries]
+    .filter((summary) => Boolean(summary.latest_tested_at))
+    .sort((left, right) => (right.latest_tested_at ?? "").localeCompare(left.latest_tested_at ?? ""))
+    .slice(0, 5);
   const effectiveBulkPatchCatalogueNumbers =
     bulkPatchScopeMode === "all_posted"
       ? (bulkPatchPostedCatalogueNumbers.length > 0 ? bulkPatchPostedCatalogueNumbers : selectedBulkPatchFallbackCatalogueNumbers)
@@ -2393,6 +2607,48 @@ export function App() {
       cancelled = true;
     };
   }, [selectedXmlFamilySummary?.product_family, selectedXmlVariantSummary?.product_variant]);
+  useEffect(() => {
+    if (activeTab !== "testingSummary") {
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingTestingSummary(true);
+    setTestingSummaryError(null);
+    void Promise.all([
+      api.testingWorkspaceSummary({
+        product_family: selectedTestingSummaryFamily || undefined,
+        product_variant: selectedTestingSummaryVariant || undefined,
+      }),
+      api.testingSubjectSummaries({
+        product_family: selectedTestingSummaryFamily || undefined,
+        product_variant: selectedTestingSummaryVariant || undefined,
+        limit: 10000,
+      }),
+    ])
+      .then(([summary, subjectSummaries]) => {
+        if (cancelled) {
+          return;
+        }
+        setTestingSummaryWorkspaceSummary(summary);
+        setTestingSummarySubjectSummaries(subjectSummaries);
+      })
+      .catch((requestError: Error) => {
+        if (cancelled) {
+          return;
+        }
+        setTestingSummaryWorkspaceSummary(null);
+        setTestingSummarySubjectSummaries([]);
+        setTestingSummaryError(requestError.message);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingTestingSummary(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, selectedTestingSummaryFamily, selectedTestingSummaryVariant]);
   useEffect(() => {
     if (!selectedBulkPatchParentGroup) {
       setSelectedBulkPatchCatalogueNumbers([]);
@@ -3397,11 +3653,11 @@ export function App() {
             EUDAMED Testing
           </button>
           <button
-            className={activeTab === "generation" ? "nav-link active" : "nav-link"}
+            className={activeTab === "testingSummary" ? "nav-link active" : "nav-link"}
             type="button"
-            onClick={() => setActiveTab("generation")}
+            onClick={() => setActiveTab("testingSummary")}
           >
-            EUDAMED Generation
+            Testing Summary
           </button>
           <button
             className={activeTab === "documentation" ? "nav-link active" : "nav-link"}
@@ -3445,12 +3701,12 @@ export function App() {
               </p>
             </>
           ) : null}
-          {activeTab === "generation" ? (
+          {activeTab === "testingSummary" ? (
             <>
-              <p className="eyebrow">EUDAMED Generation</p>
-              <h1>Generate Accepted EUDAMED XML Only</h1>
+              <p className="eyebrow">Testing Summary</p>
+              <h1>Review Successful Testing And Next Available Actions</h1>
               <p className="hero-copy">
-                Use only XML patterns with user-confirmed EUDAMED acceptance evidence when preparing real upload-oriented files.
+                Start with the current Playground-tested position, Basic UDI-DI registration status, and next available POST or PATCH actions before moving into the operation workspaces.
               </p>
             </>
           ) : null}
@@ -3516,12 +3772,14 @@ export function App() {
               </p>
             </>
           ) : null}
-          {activeTab === "generation" ? (
+          {activeTab === "testingSummary" ? (
             <>
-              <span className="status-label">Accepted scope</span>
-              <span className="status-pill ok">1 accepted XML pattern</span>
+              <span className="status-label">Testing state</span>
+              <span className="status-pill ok">SQLite live</span>
               <p className="status-detail">
-                Only `POST` is currently marked `EUDAMED Accepted` and available for generation here.
+                {testingSummaryWorkspaceSummary
+                  ? `${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count} successful testing event${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count === 1 ? "" : "s"} recorded in the current scope.`
+                  : "Testing summary loads the current SQLite-backed Playground state."}
               </p>
             </>
           ) : null}
@@ -4645,25 +4903,35 @@ export function App() {
                       {selectedBulkRecordCount > 0
                         ? `${selectedBulkRecordCount} device${selectedBulkRecordCount === 1 ? "" : "s"}`
                         : "No devices selected"}
-                    </span>
+                      </span>
                   </div>
+                  {isLoadingXmlOperationAssessment ? (
+                    <div className="xml-refresh-indicator" aria-live="polite">
+                      <strong>Refreshing...</strong>
+                      <span>Updating the bulk POST scope for the selected family and variant.</span>
+                    </div>
+                  ) : null}
                   <div className="bulk-patch-summary-row">
                     <div className="bulk-patch-summary-metrics">
                       <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                         <strong>Basic UDI-DI parents</strong>
                         <span>{selectedBulkUnpostedBasicUdiCount || "None available"}</span>
+                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                       </div>
                       <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                         <strong>Number of devices</strong>
                         <span>{selectedBulkRecordCount || "Not selected"}</span>
+                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                       </div>
                       <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                         <strong>Variant</strong>
                         <span>{selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}</span>
+                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                       </div>
                       <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                         <strong>Preview chunk</strong>
                         <span>Chunk {selectedXmlChunkSequence} of {selectedBulkChunkCount}</span>
+                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                       </div>
                     </div>
                   </div>
@@ -4679,25 +4947,35 @@ export function App() {
                       {selectedBulkRecordCount > 0
                         ? `${selectedBulkRecordCount} device${selectedBulkRecordCount === 1 ? "" : "s"}`
                         : "No devices selected"}
-                    </span>
+                      </span>
                   </div>
+                  {isLoadingXmlOperationAssessment ? (
+                    <div className="xml-refresh-indicator" aria-live="polite">
+                      <strong>Refreshing...</strong>
+                      <span>Updating the bulk DEVICE UDI-DI POST scope for the selected family and variant.</span>
+                    </div>
+                  ) : null}
                   <div className="bulk-patch-summary-row">
                     <div className="bulk-patch-summary-metrics">
                       <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                         <strong>Eligible child devices</strong>
                         <span>{selectedBulkEligibleUdidiPostCount || "None available"}</span>
+                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                       </div>
                       <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                         <strong>Number of devices</strong>
                         <span>{selectedBulkRecordCount || "Not selected"}</span>
+                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                       </div>
                       <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                         <strong>Variant</strong>
                         <span>{selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}</span>
+                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                       </div>
                       <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                         <strong>Preview chunk</strong>
                         <span>Chunk {selectedXmlChunkSequence} of {selectedBulkChunkCount}</span>
+                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                       </div>
                     </div>
                   </div>
@@ -4713,25 +4991,35 @@ export function App() {
                     {selectedBulkPatchSelectedCount > 0
                       ? `${selectedBulkPatchSelectedCount} child device${selectedBulkPatchSelectedCount === 1 ? "" : "s"}`
                       : "No posted devices"}
-                  </span>
+                    </span>
                 </div>
+                {isLoadingXmlOperationAssessment ? (
+                  <div className="xml-refresh-indicator" aria-live="polite">
+                    <strong>Refreshing...</strong>
+                    <span>Updating the bulk PATCH scope for the selected family and variant.</span>
+                  </div>
+                ) : null}
                 <div className="bulk-patch-summary-row">
                   <div className="bulk-patch-summary-metrics">
                     <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                       <strong>Basic UDI-DI</strong>
                       <span>{selectedBulkPatchParentGroup?.basic_udi_di ?? "No posted parent"}</span>
+                      {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                     </div>
                     <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                       <strong>Number of devices</strong>
                       <span>{selectedBulkPatchSelectedCount > 0 ? selectedBulkPatchSelectedCount : "No posted devices"}</span>
+                      {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                     </div>
                     <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                       <strong>PATCH option</strong>
                       <span>{patchScenarioOptionLabel(selectedPatchScenario)}</span>
+                      {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                     </div>
                     <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
                       <strong>Scope</strong>
                       <span>{selectedBulkPatchSelectedCount > 0 ? bulkPatchScopeLabel : "Not available"}</span>
+                      {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
                     </div>
                   </div>
                 </div>
@@ -4790,6 +5078,7 @@ export function App() {
                 onDownload={() => void downloadXmlRecord()}
                 onUploadClick={handleUploadSuccessXmlClick}
                 xmlActionMessage={xmlActionMessage}
+                isRefreshing={isLoadingXmlOperationAssessment}
                 xmlPairPreview={xmlPairPreview}
                 selectedPostWorkspaceRecord={selectedPostWorkspaceRecord}
                 activePreviewLabel={activePreviewLabel}
@@ -4828,6 +5117,7 @@ export function App() {
                     onDownload={() => void downloadXmlRecord()}
                     onUploadClick={handleUploadSuccessXmlClick}
                     xmlActionMessage={xmlActionMessage}
+                    isRefreshing={isLoadingXmlOperationAssessment}
                     patchPreviewStatusMessage={patchPreviewStatusMessage}
                     activePreviewLabel={activePreviewLabel}
                     selectedBatchValidation={selectedBatchValidation}
@@ -4869,6 +5159,7 @@ export function App() {
                     onDownload={() => void downloadXmlRecord()}
                     onUploadClick={handleUploadSuccessXmlClick}
                     xmlActionMessage={xmlActionMessage}
+                    isRefreshing={isLoadingXmlOperationAssessment}
                     activePreviewLabel={activePreviewLabel}
                     selectedBatchValidation={selectedBatchValidation}
                     validationStatusLabel={validationStatusLabel}
@@ -5052,6 +5343,7 @@ export function App() {
                   xmlMode === "bulkPatch" ? (
                     <BulkPatchWorkspace
                       familyVariantLabel={`${selectedXmlFamilySummary?.product_family} / ${selectedXmlVariantSummary.product_variant}`}
+                      isRefreshing={isLoadingXmlOperationAssessment}
                       displayedBulkPatchParentOptions={displayedBulkPatchParentOptions}
                       selectedBulkPatchParentGroup={selectedBulkPatchParentGroup}
                       onSelectParent={(basicUdiDi) => {
@@ -5111,6 +5403,7 @@ export function App() {
                   <BulkPostWorkspace
                     familyVariantLabel={`${selectedXmlFamilySummary?.product_family} / ${selectedXmlVariantSummary.product_variant}`}
                     title={xmlMode === "bulkPost" ? "Bulk BASIC UDI-DI POST" : "Bulk DEVICE UDI-DI POST"}
+                    isRefreshing={isLoadingXmlOperationAssessment}
                     stepOneTitle={xmlMode === "bulkPost" ? "Parent registration scope" : "Child registration scope"}
                     stepOneCount={xmlMode === "bulkPost" ? selectedBulkUnpostedBasicUdiCount : selectedBulkEligibleUdidiPostCount}
                     stepOneLabel={xmlMode === "bulkPost" ? "unposted parent" : "eligible device"}
@@ -5186,32 +5479,33 @@ export function App() {
         )
       ) : null}
 
-      {activeTab === "generation" ? (
-        isLoadingCanonicalValidation ? (
+      {activeTab === "testingSummary" ? (
+        isLoadingCanonicalValidation && !canonicalValidation ? (
           renderLoadingPanel(
-            "Loading accepted generation workspace",
-            "Preparing validated device records required for accepted EUDAMED generation.",
+            "Loading testing summary",
+            "Preparing the current SQLite-backed testing position and available next actions.",
           )
         ) : (
-          <AcceptedGenerationWorkspace
-            acceptedXmlModes={acceptedXmlModes}
-            patchScenarioCount={PATCH_SCENARIOS.length}
-            xmlReadyRecordCount={xmlReadyRecords.length}
-            selectedPostWorkspaceRecord={selectedPostWorkspaceRecord}
-            xmlPairPreviewPostXml={xmlPairPreview?.post_xml ?? null}
-            acceptedPreviewPlaceholder={
-              selectedPostWorkspaceRecord
-                ? [
-                    "<!-- Generate the accepted POST preview -->",
-                    `<catalogue-number>${selectedPostWorkspaceRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
-                  ].join("\n")
-                : "<!-- No accepted POST preview is currently available -->"
-            }
-            isGeneratingXml={isGeneratingXml}
-            isDownloadingXml={isDownloadingXml}
-            xmlActionMessage={xmlActionMessage}
-            onGeneratePreview={() => void generateXmlPreview()}
-            onDownload={() => void downloadXmlRecord()}
+          <TestingSummaryWorkspace
+            isLoading={isLoadingTestingSummary}
+            error={testingSummaryError}
+            selectedFamily={selectedTestingSummaryFamily}
+            selectedVariant={selectedTestingSummaryVariant}
+            familyOptions={testingSummaryFamilyOptions}
+            variantOptions={testingSummaryVariantOptions}
+            onFamilyChange={(value) => {
+              setSelectedTestingSummaryFamily(value);
+              setSelectedTestingSummaryVariant("");
+            }}
+            onVariantChange={setSelectedTestingSummaryVariant}
+            onClearFilters={() => {
+              setSelectedTestingSummaryFamily("");
+              setSelectedTestingSummaryVariant("");
+            }}
+            workspaceSummary={testingSummaryWorkspaceSummary}
+            metrics={testingSummaryMetrics}
+            rows={testingSummaryRows}
+            recentSubjects={testingSummaryRecentSubjects}
           />
         )
       ) : null}

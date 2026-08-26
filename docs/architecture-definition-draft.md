@@ -376,6 +376,56 @@ The current transition path is:
 5. improve bulk performance and operator feedback
 6. only then consider later transport integration
 
+## Production Cutover Planning
+
+The current implemented workflow is a controlled Playground-testing architecture. It is intentionally conservative:
+
+- single `PATCH` depends on SQLite-tracked successful `POST` lineage
+- bulk `PATCH` depends on SQLite-tracked accepted-state lineage
+- operation availability is constrained by locally confirmed testing evidence
+
+That is appropriate for the current testing phase, but it is not the final Production cutover model.
+
+The Production cutover direction should be:
+
+- any row classified as `POST` remains eligible for `POST`
+- any row classified as `PATCH` becomes eligible for `PATCH` without requiring an application-generated prior `POST`
+- source/reference lifecycle classification should therefore be allowed to drive Production `PATCH` eligibility once version state is trustworthy
+
+This is particularly important for families and variants already modeled as being in a `PATCH` lifecycle in the authoritative reference data.
+
+### Planned Operating Modes
+
+The architecture should later support two distinct modes:
+
+#### 1. Testing Lineage Mode
+
+This is the current implemented behavior.
+
+- local SQLite success history is the authority for accepted lineage
+- `PATCH` remains blocked until tracked successful registration exists
+- suited to Playground proving and controlled workflow hardening
+
+#### 2. Production Assumed-Registered Mode
+
+This is the intended cutover direction.
+
+- workbook/reference `PATCH` rows may proceed without an app-generated `POST`
+- eligibility depends on trusted lifecycle classification plus trusted version state
+- suited to Production-aligned operations where prior registration is assumed or externally confirmed
+
+### Version-State Strategy For Production `PATCH`
+
+Production cutover requires a trusted source for the current accepted version before generating the next `PATCH`.
+
+The preferred order is:
+
+1. live EUDAMED lookup of current version state
+2. controlled use of workbook/reference version markers where business ownership confirms that assumption
+3. explicit operator-confirmed current version as a fallback
+
+The architecture should not assume that local SQLite testing history alone is sufficient for Production `PATCH` versioning.
+
 ## Major Architecture Decisions Reflected Here
 
 This draft reflects the following major architecture decisions already present in the codebase:
@@ -395,6 +445,8 @@ Open questions that still need deliberate architecture decisions include:
 - how far the SQLite model should go before a more formal relational identity cleanup
 - how scenario change capture for PATCH should evolve beyond the current first-pass recording
 - how bulk PATCH generation should scale toward larger selections
+- how Production cutover should switch from testing-lineage gating to assumed-registered `PATCH` gating
+- how Production `PATCH` version state should be sourced from EUDAMED, trusted source version markers, or explicit operator confirmation
 - what the final submission-history and audit model should be
 - how much of the current frontend orchestration should move into reusable workspace components
 

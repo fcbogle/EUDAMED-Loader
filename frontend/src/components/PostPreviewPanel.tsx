@@ -23,6 +23,7 @@ type PostPreviewPanelProps = {
   onDownload: () => void;
   onUploadClick: () => void;
   xmlActionMessage: string | null;
+  isRefreshing: boolean;
   xmlPairPreview: PostRegistrationPreview | null;
   selectedPostWorkspaceRecord: XmlWorkspaceRecord | null;
   activePreviewLabel: string;
@@ -50,6 +51,7 @@ export function PostPreviewPanel({
   onDownload,
   onUploadClick,
   xmlActionMessage,
+  isRefreshing,
   xmlPairPreview,
   selectedPostWorkspaceRecord,
   activePreviewLabel,
@@ -114,6 +116,12 @@ export function PostPreviewPanel({
           </div>
         </div>
         {xmlActionMessage ? <div className="save-message post-preview-action-message">{xmlActionMessage}</div> : null}
+        {isRefreshing ? (
+          <div className="xml-refresh-indicator post-preview-refresh-indicator" aria-live="polite">
+            <strong>Refreshing...</strong>
+            <span>Updating the POST preview context for the selected family and variant.</span>
+          </div>
+        ) : null}
         <div className="post-preview-summary-row">
           <div className="workflow-note post-preview-status">
             <strong>Preview status</strong>
@@ -124,25 +132,30 @@ export function PostPreviewPanel({
                   ? `Awaiting preview for ${selectedPostWorkspaceRecord.catalogue_number}.`
                   : "No available Device UDI-DI POST candidate is currently available for the selected family and variant."}
             </span>
+            {isRefreshing ? <span className="xml-refresh-inline">Refreshing...</span> : null}
           </div>
           <div className="xml-preview-meta post-preview-meta">
             <div className="xml-preview-meta-block">
               <span className="summary-label">Active view</span>
               <strong>{activePreviewLabel}</strong>
+              {isRefreshing ? <span className="xml-refresh-inline">Refreshing...</span> : null}
             </div>
             <div className="xml-preview-meta-block">
               <span className="summary-label">Validation</span>
               <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
                 {validationStatusLabel}
               </span>
+              {isRefreshing ? <span className="xml-refresh-inline">Refreshing...</span> : null}
             </div>
             <div className="xml-preview-meta-block">
               <span className="summary-label">Schema</span>
               <strong>{selectedSchemaLabel ?? "Message.xsd pending"}</strong>
+              {isRefreshing ? <span className="xml-refresh-inline">Refreshing...</span> : null}
             </div>
             <div className="xml-preview-meta-block">
               <span className="summary-label">File</span>
               <strong>{activePreviewFileName ?? "Not generated yet"}</strong>
+              {isRefreshing ? <span className="xml-refresh-inline">Refreshing...</span> : null}
             </div>
           </div>
         </div>
