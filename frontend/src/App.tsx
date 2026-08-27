@@ -4787,13 +4787,13 @@ export function App() {
                 <h2>{xmlWorkspaceTitle}</h2>
               </div>
             </div>
-            <div className="xml-header-band">
-              <div className="xml-mode-groups">
-                <div className="xml-mode-group">
-                  <div className="xml-mode-group-head">
-                    <span className="section-kicker">Single device</span>
-                  </div>
-                  <div className="xml-mode-toggle xml-top-tabs">
+	            <div className="xml-header-band">
+	              <div className="xml-mode-groups">
+	                <div className="xml-mode-group">
+	                  <div className="xml-mode-group-head">
+	                    <span className="section-kicker">Single device</span>
+	                  </div>
+	                  <div className="xml-mode-toggle xml-top-tabs">
                     <button
                       className={xmlMode === "post" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
                       type="button"
@@ -4801,24 +4801,17 @@ export function App() {
                     >
                       Single POST
                     </button>
-                    <button
-                      className={xmlMode === "patch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                      type="button"
-                      onClick={() => setXmlMode("patch")}
-                    >
-                      Single PATCH
-                    </button>
-                    <button
-                      className={xmlMode === "marketInfo" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                      type="button"
-                      onClick={() => setXmlMode("marketInfo")}
-                    >
-                      Market Info
-                    </button>
-                  </div>
-                </div>
-                <div className="xml-mode-group">
-                  <div className="xml-mode-group-head">
+	                    <button
+	                      className={xmlMode === "patch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+	                      type="button"
+	                      onClick={() => setXmlMode("patch")}
+	                    >
+	                      Single PATCH
+	                    </button>
+	                  </div>
+	                </div>
+	                <div className="xml-mode-group">
+	                  <div className="xml-mode-group-head">
                     <span className="section-kicker">Multiple devices</span>
                   </div>
                   <div className="xml-mode-toggle xml-top-tabs">
@@ -4829,23 +4822,37 @@ export function App() {
                     >
                       Bulk POST
                     </button>
-                    <button
-                      className={xmlMode === "bulkPatch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                      type="button"
-                      onClick={() => setXmlMode("bulkPatch")}
-                    >
-                      Bulk PATCH
-                    </button>
-                    <button
-                      className={xmlMode === "marketInfo" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
-                      type="button"
-                      onClick={() => setXmlMode("marketInfo")}
-                    >
-                      Market Info
-                    </button>
-                  </div>
-                </div>
-              </div>
+	                    <button
+	                      className={xmlMode === "bulkPatch" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+	                      type="button"
+	                      onClick={() => setXmlMode("bulkPatch")}
+	                    >
+	                      Bulk PATCH
+	                    </button>
+	                  </div>
+	                </div>
+	                <div className="xml-mode-group">
+	                  <div className="xml-mode-group-head">
+	                    <span className="section-kicker">Market info</span>
+	                  </div>
+	                  <div className="xml-mode-toggle xml-top-tabs xml-top-tabs-two-up">
+	                    <button
+	                      className={xmlMode === "marketInfo" ? "action-button xml-mode-button active" : "ghost-button xml-mode-button"}
+	                      type="button"
+	                      onClick={() => setXmlMode("marketInfo")}
+	                    >
+	                      Single Market Info
+	                    </button>
+	                    <button
+	                      className="ghost-button xml-mode-button"
+	                      type="button"
+	                      disabled
+	                    >
+	                      Bulk Market Info
+	                    </button>
+	                  </div>
+	                </div>
+	              </div>
               <div className="xml-header-context">
                 <div className="xml-header-context-block">
                   <span className="summary-label">Purpose</span>

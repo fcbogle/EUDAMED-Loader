@@ -2828,7 +2828,7 @@ a.ghost-button:visited {
 
 .xml-mode-groups {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -2856,8 +2856,8 @@ a.ghost-button:visited {
   gap: 10px;
 }
 
-.xml-mode-group:last-child .xml-top-tabs {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.xml-top-tabs-two-up {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
 }
 
 .xml-mode-group .xml-mode-button {
