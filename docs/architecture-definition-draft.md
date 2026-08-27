@@ -279,6 +279,14 @@ Single-device PATCH is a controlled scenario workspace:
 
 `Market Info` remains a distinct operation area and should continue to be treated separately from `POST` and `PATCH`.
 
+Current architecture assumption:
+
+- publicly accessible EUDAMED and MDCG guidance does not currently give a clear verified rule for whether `MARKET-INFO.PUT` increments the accepted device version, leaves it unchanged, or uses a distinct market-information version concept
+- the implemented and planned architecture should therefore treat Market Info version handling as evidence-led
+- `MARKET-INFO.PUT` should use the current accepted device version as input context when needed by the XML shape
+- successful `MARKET-INFO.PUT` should not, by default, advance the core tracked device/PATCH version lineage
+- Market Info success state should instead be persisted separately until Playground or restricted EUDAMED documentation proves that version advancement is required
+
 ### `Bulk Basic UDI-DI POST`
 
 This generates parent-only registration packages. It is intentionally separate from child registration.
@@ -314,6 +322,8 @@ Current persistence behavior includes:
 - incrementing `PATCH` lineage using the accepted returned state
 - recording scenario information for successful PATCH updates where available
 - updating the state that drives next-operation availability and remaining counts
+
+The current success-capture architecture does not yet treat `MARKET-INFO.PUT` as part of the same version lineage as `PATCH`. That separation is intentional until operational evidence proves otherwise.
 
 This capability is a major part of the current architecture and should be treated as such.
 
@@ -425,6 +435,18 @@ The preferred order is:
 3. explicit operator-confirmed current version as a fallback
 
 The architecture should not assume that local SQLite testing history alone is sufficient for Production `PATCH` versioning.
+
+### Version-State Strategy For Production `MARKET-INFO.PUT`
+
+Production cutover should keep Market Info version handling separate from PATCH lineage until evidence proves coupling.
+
+The current intended rule is:
+
+1. use the current accepted device version as context if the Market Info XML/service contract requires it
+2. record successful Market Info outcomes in separate Market Info state fields or events
+3. do not increment the core accepted device version solely because a `MARKET-INFO.PUT` succeeded unless EUDAMED acknowledgement evidence or restricted technical guidance proves that this is required
+
+This prevents the architecture from incorrectly advancing PATCH lineage on the basis of an assumption that is not yet verified from public EUDAMED guidance.
 
 ## Major Architecture Decisions Reflected Here
 

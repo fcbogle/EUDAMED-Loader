@@ -6,6 +6,8 @@ import { BulkPatchWorkspace } from "./components/BulkPatchWorkspace";
 import { BulkPostWorkspace } from "./components/BulkPostWorkspace";
 import { BulkXmlPreviewPanel } from "./components/BulkXmlPreviewPanel";
 import { GenericXmlPreviewPanel } from "./components/GenericXmlPreviewPanel";
+import { MarketInfoPreviewPanel } from "./components/MarketInfoPreviewPanel";
+import { MarketInfoScenarioCard } from "./components/MarketInfoScenarioCard";
 import canonicalValidationDocumentation from "./content/docs/canonical-validation.md?raw";
 import { PatchPreviewPanel } from "./components/PatchPreviewPanel";
 import { PatchScenarioCard } from "./components/PatchScenarioCard";
@@ -116,6 +118,12 @@ type SelectionAnchorInput = {
   product_variant: string;
   catalogue_number: string;
   primary_udi_di: string | null;
+};
+
+type MarketInfoScenarioItem = {
+  id: string;
+  country: string;
+  originalPlacedOnMarket: boolean;
 };
 
 type BulkPreviewMode = "bulkPost" | "bulkUdidiPost" | "bulkPatch";
@@ -795,6 +803,23 @@ function parseCatalogueNumberList(value: string): string[] {
   return Array.from(new Set(normalized));
 }
 
+function createMarketInfoScenarioId(): string {
+  return `market-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function buildMarketInfoScenarioItems(
+  items: Array<{ country: string; original_placed_on_market: boolean }>,
+): MarketInfoScenarioItem[] {
+  if (items.length < 1) {
+    return [{ id: createMarketInfoScenarioId(), country: "", originalPlacedOnMarket: false }];
+  }
+  return items.map((item) => ({
+    id: createMarketInfoScenarioId(),
+    country: item.country,
+    originalPlacedOnMarket: item.original_placed_on_market,
+  }));
+}
+
 function basicUdiMatchLabel(matchStatus: string | null | undefined): string {
   if (matchStatus === "matched") {
     return "Matched in BasicUDIs.xlsx";
@@ -1196,7 +1221,11 @@ export function App() {
   const [xmlPatchPreview, setXmlPatchPreview] = useState<GeneratedPatchScenarioPreview | null>(null);
   const [xmlBulkPatchPreview, setXmlBulkPatchPreview] = useState<BulkPatchPreview | null>(null);
   const [selectedPostXmlSectionId, setSelectedPostXmlSectionId] = useState<string | null>(null);
+  const [selectedMarketInfoXmlSectionId, setSelectedMarketInfoXmlSectionId] = useState<string | null>(null);
   const [selectedPatchXmlSectionId, setSelectedPatchXmlSectionId] = useState<string | null>(null);
+  const [marketInfoScenarioItems, setMarketInfoScenarioItems] = useState<MarketInfoScenarioItem[]>([
+    { id: createMarketInfoScenarioId(), country: "", originalPlacedOnMarket: false },
+  ]);
   const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
   const [isDownloadingXml, setIsDownloadingXml] = useState<boolean>(false);
   const [isLoadingStartup, setIsLoadingStartup] = useState<boolean>(true);
@@ -2529,6 +2558,11 @@ export function App() {
     selectedXmlPairRecord,
   );
   const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
+  const selectedCurrentMarketInfoItems = (selectedXmlMarketInfoRecord?.market_availability_items ?? []).map((item, index) => ({
+    id: `current-market-${index}-${item.country}`,
+    country: item.country,
+    originalPlacedOnMarket: item.original_placed_on_market,
+  }));
   const selectedPairRequestArgs = resolvePatchRequestArgs(selectedPatchWorkspaceRecord, {
     assessedCatalogueNumber: assessedPatchCandidateCatalogueNumber,
     assessedPrimaryUdiDi: assessedPatchCandidatePrimaryUdiDi,
@@ -2831,6 +2865,15 @@ export function App() {
     setXmlBulkPatchPreview(null);
   }, [selectedXmlFamily, selectedXmlVariant]);
   useEffect(() => {
+    setMarketInfoScenarioItems(
+      buildMarketInfoScenarioItems(selectedXmlMarketInfoRecord?.market_availability_items ?? []),
+    );
+    setXmlMarketInfoPreview(null);
+  }, [selectedXmlMarketInfoRecord?.catalogue_number, selectedXmlMarketInfoRecord?.product_family, selectedXmlMarketInfoRecord?.product_variant]);
+  useEffect(() => {
+    setXmlMarketInfoPreview(null);
+  }, [marketInfoScenarioItems]);
+  useEffect(() => {
     if (selectedBulkRecordCount > Math.max(selectedBulkCapacity, 1)) {
       setSelectedBulkRecordCount(Math.max(selectedBulkCapacity, 1));
     }
@@ -2871,6 +2914,20 @@ export function App() {
     xmlMode === "marketInfo"
         ? selectedMarketInfoAnchor
         : xmlPatchPreview?.registered_device_anchor ?? selectedPairAnchor;
+  const normalizedMarketInfoScenarioItems = marketInfoScenarioItems
+    .map((item) => ({
+      country: item.country.trim().toUpperCase(),
+      original_placed_on_market: item.originalPlacedOnMarket,
+    }))
+    .filter((item, index, items) => item.country && items.findIndex((candidate) => candidate.country === item.country) === index);
+  const isMarketInfoScenarioReady = Boolean(selectedTestingAnchor) && normalizedMarketInfoScenarioItems.length > 0;
+  const marketInfoReadinessMessage = !selectedTestingAnchor
+    ? "No registered device anchor is currently available for MARKET_INFO.PUT generation."
+    : normalizedMarketInfoScenarioItems.length < 1
+      ? "Add at least one country to generate a standalone market information update."
+      : `Ready to generate a standalone market information update with ${normalizedMarketInfoScenarioItems.length} countr${
+          normalizedMarketInfoScenarioItems.length === 1 ? "y" : "ies"
+        }.`;
   const selectedPostWorkspaceRecord = resolvePostWorkspaceRecord(
     xmlPairPreview,
     selectedPostCandidateRecord,
@@ -2970,6 +3027,15 @@ export function App() {
       : null;
   const postXmlPreviewLineRefs = useRef<Record<number, HTMLSpanElement | null>>({});
   const postXmlPreviewContainerRef = useRef<HTMLPreElement | null>(null);
+  const marketInfoXmlStructureSections = xmlMode === "marketInfo" ? extractXmlStructureSections(xmlPreviewLines) : [];
+  const selectedMarketInfoXmlSection =
+    xmlMode === "marketInfo"
+      ? marketInfoXmlStructureSections.find((section) => section.id === selectedMarketInfoXmlSectionId) ??
+        marketInfoXmlStructureSections[0] ??
+        null
+      : null;
+  const marketInfoXmlPreviewLineRefs = useRef<Record<number, HTMLSpanElement | null>>({});
+  const marketInfoXmlPreviewContainerRef = useRef<HTMLPreElement | null>(null);
   const patchXmlStructureSections = xmlMode === "patch" ? extractXmlStructureSections(xmlPreviewLines) : [];
   const selectedPatchXmlSection =
     xmlMode === "patch"
@@ -3013,6 +3079,11 @@ export function App() {
       : hasSelectedPatchBaselinePost
         ? "Review the baseline POST first. Scenario PATCH generation stays blocked until that POST has been generated for this exact record."
         : "No baseline POST is currently available for the selected family and variant.";
+  const marketInfoPreviewStatusMessage = xmlMarketInfoPreview
+    ? `Market Info preview generated for ${xmlMarketInfoPreview.product_family} / ${xmlMarketInfoPreview.product_variant} / ${xmlMarketInfoPreview.catalogue_number}.`
+    : selectedTestingAnchor
+      ? `Awaiting preview for ${selectedTestingAnchor.catalogue_number}.`
+      : "No registered testing anchor is currently available for MARKET_INFO.PUT generation.";
   const xmlModeUi = resolveXmlModeUi(xmlMode);
   const xmlModeLabel = xmlModeUi.label;
   const xmlModeDescription = xmlModeUi.description;
@@ -3063,7 +3134,7 @@ export function App() {
       : xmlMode === "single"
         ? Boolean(selectedXmlRecord)
         : xmlMode === "marketInfo"
-          ? Boolean(selectedTestingAnchor)
+          ? isMarketInfoScenarioReady
           : xmlMode === "patch"
             ? canRunPatchFromAssessment
             : xmlMode === "bulkPost"
@@ -3077,7 +3148,7 @@ export function App() {
       : xmlMode === "single"
         ? Boolean(selectedXmlRecord)
         : xmlMode === "marketInfo"
-          ? Boolean(selectedTestingAnchor)
+          ? Boolean(selectedTestingAnchor && xmlMarketInfoPreview)
           : xmlMode === "patch"
             ? Boolean(hasReviewedPatchBaselinePost && hasReviewedGeneratedPatchPreview)
             : xmlMode === "bulkPost"
@@ -3112,6 +3183,37 @@ export function App() {
     const nextScrollTop = container.scrollTop + (targetTop - containerTop) - 12;
     container.scrollTo({ top: Math.max(nextScrollTop, 0), behavior: "auto" });
   }, [xmlMode, selectedPostXmlSection?.id, selectedPostXmlSection?.lineStart]);
+
+  useEffect(() => {
+    if (xmlMode !== "marketInfo") {
+      return;
+    }
+    if (marketInfoXmlStructureSections.length < 1) {
+      setSelectedMarketInfoXmlSectionId(null);
+      return;
+    }
+    if (
+      !selectedMarketInfoXmlSectionId ||
+      !marketInfoXmlStructureSections.some((section) => section.id === selectedMarketInfoXmlSectionId)
+    ) {
+      setSelectedMarketInfoXmlSectionId(marketInfoXmlStructureSections[0].id);
+    }
+  }, [xmlMode, marketInfoXmlStructureSections, selectedMarketInfoXmlSectionId]);
+
+  useEffect(() => {
+    if (xmlMode !== "marketInfo" || !selectedMarketInfoXmlSection) {
+      return;
+    }
+    const container = marketInfoXmlPreviewContainerRef.current;
+    const targetLine = marketInfoXmlPreviewLineRefs.current[selectedMarketInfoXmlSection.lineStart];
+    if (!container || !targetLine) {
+      return;
+    }
+    const containerTop = container.getBoundingClientRect().top;
+    const targetTop = targetLine.getBoundingClientRect().top;
+    const nextScrollTop = container.scrollTop + (targetTop - containerTop) - 12;
+    container.scrollTo({ top: Math.max(nextScrollTop, 0), behavior: "auto" });
+  }, [xmlMode, selectedMarketInfoXmlSection?.id, selectedMarketInfoXmlSection?.lineStart]);
 
   useEffect(() => {
     if (xmlMode !== "patch") {
@@ -3319,6 +3421,10 @@ export function App() {
     }
   }
 
+  function currentMarketInfoScenarioInputs(): Array<{ country: string; original_placed_on_market: boolean }> {
+    return normalizedMarketInfoScenarioItems;
+  }
+
   function currentPatchScenarioInputs(): Record<string, unknown> {
     if (selectedPatchScenario.id === "equivalent_first_patch" || !selectedPatchScenario.implemented) {
       return {};
@@ -3427,6 +3533,7 @@ export function App() {
           selectedMarketInfoRequestArgs.product_family,
           selectedMarketInfoRequestArgs.product_variant,
           selectedMarketInfoRequestArgs.catalogue_number,
+          currentMarketInfoScenarioInputs(),
         );
         setXmlMarketInfoPreview(preview);
       } else if (xmlMode === "patch") {
@@ -3533,6 +3640,7 @@ export function App() {
               selectedMarketInfoRequestArgs.product_family,
               selectedMarketInfoRequestArgs.product_variant,
               selectedMarketInfoRequestArgs.catalogue_number,
+              currentMarketInfoScenarioInputs(),
             )
           : xmlMode === "patch"
           ? await api.downloadGeneratedPatchScenario(
@@ -5083,9 +5191,44 @@ export function App() {
                 selectedXmlVariantTotalRecords={selectedXmlVariantSummary?.total_records ?? 0}
               />
             ) : xmlMode === "marketInfo" ? (
-              <div className="workflow-note">
-                <strong>Assessment status</strong>
-                <span>Market Info operational assessment is deferred and is not yet driven by the new backend contract.</span>
+              <div className="draft-card bulk-patch-summary-bar market-info-summary-bar">
+                <div className="draft-card-head">
+                  <strong>Market Info Assessment</strong>
+                  <span className={selectedTestingAnchor ? "status-pill ok compact" : "status-pill warn compact"}>
+                    {selectedTestingAnchor ? "Available" : "Blocked"}
+                  </span>
+                </div>
+                {isLoadingXmlOperationAssessment ? (
+                  <div className="xml-refresh-indicator" aria-live="polite">
+                    <strong>Refreshing...</strong>
+                    <span>Updating the Market Info scope for the selected family and variant.</span>
+                  </div>
+                ) : null}
+                <div className="bulk-patch-summary-row">
+                  <div className="bulk-patch-summary-metrics">
+                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                      <strong>Candidate catalogue</strong>
+                      <span>{selectedTestingAnchor?.catalogue_number ?? "Not resolved"}</span>
+                    </div>
+                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                      <strong>Device UDI-DI</strong>
+                      <span>{selectedTestingAnchor?.primary_udi_di ?? "Not resolved"}</span>
+                    </div>
+                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                      <strong>Current countries</strong>
+                      <span>{selectedCurrentMarketInfoItems.length}</span>
+                    </div>
+                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
+                      <strong>Draft countries</strong>
+                      <span>{normalizedMarketInfoScenarioItems.length}</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="panel-copy bulk-patch-summary-status">
+                  {selectedTestingAnchor
+                    ? `Market Info is available for ${selectedTestingAnchor.catalogue_number}. This registered device can receive a standalone market information update.`
+                    : "Market Info is blocked because no registered device anchor is currently available for this family and variant."}
+                </p>
               </div>
             ) : null}
             {xmlMode === "post" ? (
@@ -5154,6 +5297,29 @@ export function App() {
                     patchXmlPreviewLineRefs={patchXmlPreviewLineRefs}
                     patchXmlPreviewContainerRef={patchXmlPreviewContainerRef}
                   />
+                ) : xmlMode === "marketInfo" ? (
+                  <MarketInfoPreviewPanel
+                    canGenerateCurrentXml={canGenerateCurrentXml}
+                    canDownloadCurrentXml={canDownloadCurrentXml}
+                    isGeneratingXml={isGeneratingXml}
+                    isDownloadingXml={isDownloadingXml}
+                    onGeneratePreview={() => void generateXmlPreview()}
+                    onDownload={() => void downloadXmlRecord()}
+                    xmlActionMessage={xmlActionMessage}
+                    isRefreshing={isLoadingXmlOperationAssessment}
+                    previewStatusMessage={marketInfoPreviewStatusMessage}
+                    activePreviewLabel={activePreviewLabel}
+                    selectedBatchValidation={selectedBatchValidation}
+                    validationStatusLabel={validationStatusLabel}
+                    selectedSchemaLabel={selectedSchemaLabel}
+                    activePreviewFileName={activePreviewFileName}
+                    marketInfoXmlStructureSections={marketInfoXmlStructureSections}
+                    selectedMarketInfoXmlSection={selectedMarketInfoXmlSection}
+                    onSelectSection={setSelectedMarketInfoXmlSectionId}
+                    xmlPreviewLines={xmlPreviewLines}
+                    marketInfoXmlPreviewLineRefs={marketInfoXmlPreviewLineRefs}
+                    marketInfoXmlPreviewContainerRef={marketInfoXmlPreviewContainerRef}
+                  />
                 ) : xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? (
                   <BulkXmlPreviewPanel
                     successXmlInputRef={postSuccessXmlInputRef}
@@ -5209,7 +5375,7 @@ export function App() {
               </div>
 
               <div className="xml-sidebar-surface">
-                {xmlMode === "patch" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? null : (
+                {xmlMode === "patch" || xmlMode === "marketInfo" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? null : (
                 <div className="draft-actions-bar xml-actions-bar">
                   <button
                     className="action-button"
@@ -5294,25 +5460,41 @@ export function App() {
                     <p className="panel-copy">No XML-ready sample row is currently available for the selected family and variant.</p>
                   )
                 ) : xmlMode === "marketInfo" ? (
-                  selectedTestingAnchor ? (
-                    <div className="draft-list xml-record-stack">
-                      <div className="draft-card xml-record-card">
-                        <div className="draft-card-head">
-                          <strong>{selectedTestingAnchor.catalogue_number}</strong>
-                          <span className="status-pill ok compact">Market info</span>
-                        </div>
-                        <p className="draft-meta">
-                          {selectedTestingAnchor.product_family} / {selectedTestingAnchor.product_variant}
-                        </p>
-                        <p className="panel-copy">
-                          UDI-DI {selectedTestingAnchor.primary_udi_di} · Registered device anchor
-                        </p>
-                        <p className="panel-copy">Review a standalone market information update message against the same registered device used for `POST` and the candidate patch scenarios.</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="panel-copy">No registered testing anchor is currently available for MARKET_INFO.PUT generation.</p>
-                  )
+                  <MarketInfoScenarioCard
+                    catalogueNumber={selectedTestingAnchor?.catalogue_number ?? null}
+                    primaryUdiDi={selectedTestingAnchor?.primary_udi_di ?? null}
+                    productFamily={selectedTestingAnchor?.product_family ?? selectedXmlFamilyLabel}
+                    productVariant={selectedTestingAnchor?.product_variant ?? selectedXmlVariantLabel}
+                    currentMarketItems={selectedCurrentMarketInfoItems}
+                    draftMarketItems={marketInfoScenarioItems}
+                    onCountryChange={(id, value) =>
+                      setMarketInfoScenarioItems((current) =>
+                        current.map((item) =>
+                          item.id === id ? { ...item, country: value.toUpperCase().slice(0, 2) } : item,
+                        ),
+                      )
+                    }
+                    onOriginalPlacedOnMarketChange={(id, value) =>
+                      setMarketInfoScenarioItems((current) =>
+                        current.map((item) =>
+                          item.id === id ? { ...item, originalPlacedOnMarket: value } : item,
+                        ),
+                      )
+                    }
+                    onAddCountry={() =>
+                      setMarketInfoScenarioItems((current) => [
+                        ...current,
+                        { id: createMarketInfoScenarioId(), country: "", originalPlacedOnMarket: false },
+                      ])
+                    }
+                    onRemoveCountry={(id) =>
+                      setMarketInfoScenarioItems((current) =>
+                        current.length > 1 ? current.filter((item) => item.id !== id) : current,
+                      )
+                    }
+                    readinessMessage={marketInfoReadinessMessage}
+                    isReady={isMarketInfoScenarioReady}
+                  />
                 ) : xmlMode === "patch" ? (
                   selectedPatchWorkspaceRecord ? (
                     <PatchScenarioCard
@@ -5456,7 +5638,7 @@ export function App() {
                 ) : (
                   <p className="panel-copy">No XML-ready bulk scope is currently available for the selected family and variant.</p>
                 )}
-                {xmlMode !== "bulkPatch" && xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" && xmlMode !== "patch" ? (
+                {xmlMode !== "bulkPatch" && xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" && xmlMode !== "patch" && xmlMode !== "marketInfo" ? (
                   <div className="workflow-note">
                       <strong>
                         {xmlMode === "single"

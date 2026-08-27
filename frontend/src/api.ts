@@ -228,11 +228,17 @@ export const api = {
       product_family: productFamily,
       product_variant: productVariant,
     }),
-  previewXmlMarketInfoPut: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+  previewXmlMarketInfoPut: (
+    productFamily: string,
+    productVariant: string,
+    catalogueNumber: string,
+    marketCountries?: Array<{ country: string; original_placed_on_market: boolean }>,
+  ) =>
     sendJson<MarketInfoPutPreview>("/xml/preview-market-info-put", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
+      market_countries: marketCountries,
     }),
   previewGeneratedPatchScenario: (
     productFamily: string,
@@ -356,11 +362,17 @@ export const api = {
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
     }),
-  downloadXmlMarketInfoPut: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+  downloadXmlMarketInfoPut: (
+    productFamily: string,
+    productVariant: string,
+    catalogueNumber: string,
+    marketCountries?: Array<{ country: string; original_placed_on_market: boolean }>,
+  ) =>
     sendDownload("/xml/download-market-info-put", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
+      market_countries: marketCountries,
     }),
   downloadGeneratedPatchScenario: (
     productFamily: string,

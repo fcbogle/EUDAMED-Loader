@@ -946,6 +946,55 @@ select {
   overflow-wrap: anywhere;
 }
 
+.market-info-editor-list {
+  display: grid;
+  gap: 10px;
+}
+
+.market-info-editor-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.market-info-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.market-info-field input.patch-select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.market-info-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  color: #355864;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.market-info-editor-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.market-info-remove-button {
+  min-height: 38px;
+}
+
+.market-info-draft-summary-list {
+  margin-top: 8px;
+}
+
 .patch-change-summary-list {
   display: grid;
   gap: 8px;

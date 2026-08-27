@@ -36,6 +36,19 @@ with the current implementation focus now being:
 
 ## Latest Confirmed Decisions
 
+- Latest confirmed Market Info direction on Thursday, August 27, 2026:
+  - public EUDAMED pages and publicly accessible MDCG guidance do not currently give a clear verified rule for whether `MARKET-INFO.PUT` increments the accepted device version, leaves it unchanged, or uses a separate market-information version concept
+  - the current application design should therefore treat Market Info version handling as evidence-led rather than fully specified by public guidance
+  - current working rule:
+    - successful `DEVICE.POST` and `UDI_DI.POST` establish tracked version `1`
+    - successful `UDI_DI.PATCH` advances the tracked accepted device version
+    - `MARKET-INFO.PUT` should target the current accepted device identity and current accepted device version as input context when the XML shape requires version context
+    - `MARKET-INFO.PUT` should not, by default, advance `latest_successful_version`
+  - until Playground or restricted EUDAMED documentation proves otherwise, Market Info success should be persisted separately from core device-version lineage
+  - production-cutover implication:
+    - keep Market Info success tracking separate from PATCH lineage
+    - capture enough acknowledgement evidence from future successful Market Info tests to determine whether EUDAMED mutates device version, returns a distinct market-state version, or leaves version unchanged
+
 - Latest implemented and verified direction on Sunday, August 23, 2026:
   - the single `POST` / single `PATCH` refactor has now been extended into the bulk workspaces at the shell/layout level
   - `Bulk Basic UDI-DI POST`, `Bulk DEVICE UDI-DI POST`, and `Bulk PATCH` now use the same general preview-card language as single `POST` / single `PATCH`:
@@ -652,6 +665,10 @@ Important limitation:
 - Uses the selected XML-ready record / shared testing anchor
 - Generates one standalone `MARKET_INFO.PUT` message
 - Validates locally and supports download
+- Current version-handling assumption:
+  - use the current accepted device version as input context only
+  - do not automatically advance tracked PATCH/device version after successful `MARKET-INFO.PUT`
+  - record Market Info success state separately so the rule can be revised safely later if Production evidence shows version coupling
 
 ### Bulk XML
 
@@ -1198,6 +1215,10 @@ Files refreshed in this pass:
   - preferred: retrieve the current version from EUDAMED before generating the next `PATCH`
   - controlled fallback: use workbook/reference `Version` as an assumed accepted-state baseline where business ownership confirms that assumption
   - last resort: require explicit user confirmation of the current version before generation
+- `MARKET-INFO.PUT` version handling at cutover should remain explicitly separate until verified:
+  - do not assume that a successful Market Info update increments the accepted device version
+  - use current accepted version as context if required by the operation
+  - persist Market Info outcomes separately from `PATCH` lineage unless EUDAMED evidence proves they share one version counter
 - This implies two distinct operating modes for later design:
   - `Testing lineage mode`
     - current behavior

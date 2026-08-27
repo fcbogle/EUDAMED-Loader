@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import Any
 
 from app.config import get_settings
 from app.services.canonical_projection import (
+    CanonicalValidationBundle,
     CanonicalProjectionNoImportError,
     CanonicalProjectionService,
     CanonicalProjectionUnavailableError,
 )
 from app.services.canonical_validation import CanonicalValidationService
 from app.services.xml_packaging import XmlPackageBuilder
-from app.services.xml_projection import DeviceXmlProjectionBuilder
+from app.services.xml_projection import DeviceXmlProjectionBuilder, DeviceXmlRecord
 from app.services.xml_rendering import EudamedMessageRenderer
 from app.services.xml_selection import ValidationRecordSelector
 from app.services.testing_state_store import TestingStateStore
@@ -58,7 +60,7 @@ class XmlGenerationService:
         return self.settings.schema_dir.parents[1]
 
     @staticmethod
-    def _patch_state_snapshot_payload(record) -> dict[str, Any]:
+    def _patch_state_snapshot_payload(record: DeviceXmlRecord) -> dict[str, Any]:
         return {
             "version": str(record.patch_version_override or record.source_version_marker or ""),
             "trade_name": record.trade_name,
@@ -76,7 +78,7 @@ class XmlGenerationService:
             ],
         }
 
-    def _validation_bundle(self):
+    def _validation_bundle(self) -> CanonicalValidationBundle:
         try:
             return self.canonical_projection_service.latest_bundle(require_import=self.require_import)
         except (CanonicalProjectionNoImportError, CanonicalProjectionUnavailableError) as exc:
@@ -1477,6 +1479,7 @@ class XmlGenerationService:
         product_family: str,
         product_variant: str,
         catalogue_number: str,
+        market_countries: list[tuple[str, bool]] | None = None,
     ) -> MarketInfoPutPreview:
         record = self.selector.find_xml_ready_record(
             product_family=product_family,
@@ -1484,6 +1487,12 @@ class XmlGenerationService:
             catalogue_number=catalogue_number,
         )
         market_info_record = self.projection_builder.build_market_info_record(record)
+        if market_countries is not None:
+            normalized_market_countries = self._normalized_market_info_countries(market_countries)
+            market_info_record = replace(
+                market_info_record,
+                market_countries=normalized_market_countries,
+            )
         xml_bytes = self.renderer.render_market_info_message(market_info_record)
         validation = self.xml_validation_service.validate_message(xml_bytes)
         return MarketInfoPutPreview(
@@ -1527,17 +1536,37 @@ class XmlGenerationService:
         product_family: str,
         product_variant: str,
         catalogue_number: str,
+        market_countries: list[tuple[str, bool]] | None = None,
     ) -> tuple[str, bytes]:
         preview = self.preview_market_info_put(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
+            market_countries=market_countries,
         )
         return preview.file_name, preview.xml.encode("utf-8")
 
+    @staticmethod
+    def _normalized_market_info_countries(
+        market_countries: list[tuple[str, bool]],
+    ) -> list[tuple[str, bool]]:
+        normalized_items: list[tuple[str, bool]] = []
+        seen_countries: set[str] = set()
+        for country_code, original in market_countries:
+            normalized_country_code = country_code.strip().upper()
+            if not normalized_country_code:
+                continue
+            if normalized_country_code in seen_countries:
+                continue
+            seen_countries.add(normalized_country_code)
+            normalized_items.append((normalized_country_code, bool(original)))
+        if not normalized_items:
+            raise ValueError("At least one market country is required for MARKET_INFO.PUT generation.")
+        return normalized_items
+
     def _registered_device_anchor(
         self,
-        post_record,
+        post_record: DeviceXmlRecord,
     ) -> RegisteredDeviceAnchor:
         return RegisteredDeviceAnchor(
             product_family=post_record.product_family,
@@ -1821,13 +1850,18 @@ class XmlGenerationService:
             raise ValueError("patch_version must be an integer greater than or equal to 2.")
         return str(parsed)
 
-    def _patch_edit_base_record(self, post_record, scenario_base_record, base_message_type: str):
+    def _patch_edit_base_record(
+        self,
+        post_record: DeviceXmlRecord,
+        scenario_base_record: DeviceXmlRecord,
+        base_message_type: str,
+    ) -> DeviceXmlRecord:
         if base_message_type == "POST":
             return self.projection_builder.build_equivalent_first_patch(post_record)
         return scenario_base_record
 
     @staticmethod
-    def _scenario_before_version(base_message_type: str, scenario_base_record) -> str:
+    def _scenario_before_version(base_message_type: str, scenario_base_record: DeviceXmlRecord) -> str:
         if base_message_type == "POST":
             return "1"
         return scenario_base_record.patch_version_override or "2"

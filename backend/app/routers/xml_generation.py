@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Protocol, TypedDict, cast
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
@@ -10,6 +12,16 @@ from app.services.testing_success_xml import TestingSuccessXmlService
 from app.services.xml_generation import XmlGenerationService
 
 router = APIRouter(tags=["xml-generation"])
+
+
+class _BulkPatchPostedParentGroup(TypedDict):
+    basic_udi_di: str
+    posted_child_count: int
+    sample_catalogue_numbers: list[str]
+
+
+class _ModelDumpable(Protocol):
+    def model_dump(self, *, mode: str) -> dict[str, object]: ...
 
 
 def _xml_service() -> XmlGenerationService:
@@ -28,6 +40,44 @@ def _testing_success_xml() -> TestingSuccessXmlService:
     return TestingSuccessXmlService()
 
 
+def _parse_market_info_countries(payload: dict[str, object]) -> list[tuple[str, bool]] | None:
+    raw_items = payload.get("market_countries")
+    if raw_items is None:
+        return None
+    if not isinstance(raw_items, list):
+        raise HTTPException(status_code=400, detail="market_countries must be a list when provided.")
+    parsed_items: list[tuple[str, bool]] = []
+    for index, raw_item in enumerate(raw_items, start=1):
+        if not isinstance(raw_item, dict):
+            raise HTTPException(status_code=400, detail=f"market_countries[{index}] must be an object.")
+        raw_country = raw_item.get("country")
+        if not isinstance(raw_country, str) or not raw_country.strip():
+            raise HTTPException(status_code=400, detail=f"market_countries[{index}].country is required.")
+        raw_original = raw_item.get("original_placed_on_market", False)
+        parsed_items.append((raw_country, bool(raw_original)))
+    return parsed_items
+
+
+def _summary_entry(summary: dict | object) -> dict[str, object]:
+    if isinstance(summary, dict):
+        return cast(dict[str, object], summary)
+    return cast(_ModelDumpable, summary).model_dump(mode="python")
+
+
+def _required_payload_string(payload: dict[str, object], key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise HTTPException(status_code=400, detail="product_family, product_variant, and catalogue_number are required.")
+    return value.strip()
+
+
+def _required_string_with_detail(payload: dict[str, object], key: str, detail: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise HTTPException(status_code=400, detail=detail)
+    return value.strip()
+
+
 def _bulk_patch_posted_entries_from_summaries(
     summaries: list[dict] | list[object],
     *,
@@ -36,7 +86,7 @@ def _bulk_patch_posted_entries_from_summaries(
     normalized_basic_udi_di = "".join(basic_udi_di.casefold().split())
     entries: list[dict[str, object]] = []
     for summary in summaries:
-        entry = summary if isinstance(summary, dict) else summary.model_dump(mode="python")
+        entry = _summary_entry(summary)
         if not entry.get("post_success") or not entry.get("has_successful_child_post_or_patch"):
             continue
         entry_basic_udi_di = str(entry.get("basic_udi_di") or "").strip()
@@ -55,10 +105,12 @@ def _bulk_patch_posted_entries_from_summaries(
     return entries
 
 
-def _bulk_patch_posted_parent_groups_from_summaries(summaries: list[dict] | list[object]) -> list[dict[str, object]]:
-    grouped: dict[str, dict[str, object]] = {}
+def _bulk_patch_posted_parent_groups_from_summaries(
+    summaries: list[dict] | list[object],
+) -> list[_BulkPatchPostedParentGroup]:
+    grouped: dict[str, _BulkPatchPostedParentGroup] = {}
     for summary in summaries:
-        entry = summary if isinstance(summary, dict) else summary.model_dump(mode="python")
+        entry = _summary_entry(summary)
         if not entry.get("post_success") or not entry.get("has_successful_child_post_or_patch"):
             continue
         basic_udi_di = str(entry.get("basic_udi_di") or "").strip()
@@ -73,29 +125,50 @@ def _bulk_patch_posted_parent_groups_from_summaries(summaries: list[dict] | list
                 "sample_catalogue_numbers": [],
             },
         )
-        group["posted_child_count"] = int(group["posted_child_count"]) + 1
-        if catalogue_number and len(group["sample_catalogue_numbers"]) < 10 and catalogue_number not in group["sample_catalogue_numbers"]:
+        group["posted_child_count"] += 1
+        if (
+            catalogue_number
+            and len(group["sample_catalogue_numbers"]) < 10
+            and catalogue_number not in group["sample_catalogue_numbers"]
+        ):
             group["sample_catalogue_numbers"].append(catalogue_number)
     return [grouped[key] for key in sorted(grouped)]
 
 
 def _parse_generated_patch_payload(payload: dict) -> tuple[str, str, str, str, str, dict]:
-    product_family = payload.get("product_family")
-    product_variant = payload.get("product_variant")
-    catalogue_number = payload.get("catalogue_number")
-    scenario_id = payload.get("scenario_id")
+    typed_payload = cast(dict[str, object], payload)
+    product_family = _required_string_with_detail(
+        typed_payload,
+        "product_family",
+        "product_family, product_variant, catalogue_number, scenario_id, and patch_version are required.",
+    )
+    product_variant = _required_string_with_detail(
+        typed_payload,
+        "product_variant",
+        "product_family, product_variant, catalogue_number, scenario_id, and patch_version are required.",
+    )
+    catalogue_number = _required_string_with_detail(
+        typed_payload,
+        "catalogue_number",
+        "product_family, product_variant, catalogue_number, scenario_id, and patch_version are required.",
+    )
+    scenario_id = _required_string_with_detail(
+        typed_payload,
+        "scenario_id",
+        "product_family, product_variant, catalogue_number, scenario_id, and patch_version are required.",
+    )
     patch_version = payload.get("patch_version")
     scenario_inputs = payload.get("scenario_inputs") or {}
-    if not product_family or not product_variant or not catalogue_number or not scenario_id or patch_version is None:
+    if patch_version is None:
         raise HTTPException(
             status_code=400,
             detail="product_family, product_variant, catalogue_number, scenario_id, and patch_version are required.",
         )
     return (
-        str(product_family),
-        str(product_variant),
-        str(catalogue_number),
-        str(scenario_id),
+        product_family,
+        product_variant,
+        catalogue_number,
+        scenario_id,
         str(patch_version),
         scenario_inputs if isinstance(scenario_inputs, dict) else {},
     )
@@ -112,14 +185,10 @@ def xml_generation_scope() -> dict:
 
 @router.post("/xml/preview-record")
 def preview_xml_record(payload: dict[str, str]) -> dict:
-    product_family = payload.get("product_family")
-    product_variant = payload.get("product_variant")
-    catalogue_number = payload.get("catalogue_number")
-    if not product_family or not product_variant or not catalogue_number:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family, product_variant, and catalogue_number are required.",
-        )
+    typed_payload = cast(dict[str, object], payload)
+    product_family = _required_payload_string(typed_payload, "product_family")
+    product_variant = _required_payload_string(typed_payload, "product_variant")
+    catalogue_number = _required_payload_string(typed_payload, "catalogue_number")
     try:
         preview = _xml_service().preview_single_record(
             product_family=product_family,
@@ -133,14 +202,10 @@ def preview_xml_record(payload: dict[str, str]) -> dict:
 
 @router.post("/xml/download-record")
 def download_xml_record(payload: dict[str, str]) -> Response:
-    product_family = payload.get("product_family")
-    product_variant = payload.get("product_variant")
-    catalogue_number = payload.get("catalogue_number")
-    if not product_family or not product_variant or not catalogue_number:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family, product_variant, and catalogue_number are required.",
-        )
+    typed_payload = cast(dict[str, object], payload)
+    product_family = _required_payload_string(typed_payload, "product_family")
+    product_variant = _required_payload_string(typed_payload, "product_variant")
+    catalogue_number = _required_payload_string(typed_payload, "catalogue_number")
     try:
         file_name, xml_bytes = _xml_service().download_single_record(
             product_family=product_family,
@@ -155,14 +220,10 @@ def download_xml_record(payload: dict[str, str]) -> Response:
 
 @router.post("/xml/preview-post-registration")
 def preview_xml_post_registration(payload: dict[str, str]) -> dict:
-    product_family = payload.get("product_family")
-    product_variant = payload.get("product_variant")
-    catalogue_number = payload.get("catalogue_number")
-    if not product_family or not product_variant or not catalogue_number:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family, product_variant, and catalogue_number are required.",
-        )
+    typed_payload = cast(dict[str, object], payload)
+    product_family = _required_payload_string(typed_payload, "product_family")
+    product_variant = _required_payload_string(typed_payload, "product_variant")
+    catalogue_number = _required_payload_string(typed_payload, "catalogue_number")
     try:
         preview = _xml_service().preview_post_registration(
             product_family=product_family,
@@ -176,13 +237,9 @@ def preview_xml_post_registration(payload: dict[str, str]) -> dict:
 
 @router.post("/xml/preview-next-post-registration")
 def preview_xml_next_post_registration(payload: dict[str, str]) -> dict:
-    product_family = payload.get("product_family")
-    product_variant = payload.get("product_variant")
-    if not product_family or not product_variant:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family and product_variant are required.",
-        )
+    typed_payload = cast(dict[str, object], payload)
+    product_family = _required_string_with_detail(typed_payload, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(typed_payload, "product_variant", "product_family and product_variant are required.")
     try:
         preview = _xml_service().preview_next_post_registration(
             product_family=product_family,
@@ -195,14 +252,10 @@ def preview_xml_next_post_registration(payload: dict[str, str]) -> dict:
 
 @router.post("/xml/download-post-package")
 def download_xml_post_package(payload: dict[str, str]) -> Response:
-    product_family = payload.get("product_family")
-    product_variant = payload.get("product_variant")
-    catalogue_number = payload.get("catalogue_number")
-    if not product_family or not product_variant or not catalogue_number:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family, product_variant, and catalogue_number are required.",
-        )
+    typed_payload = cast(dict[str, object], payload)
+    product_family = _required_payload_string(typed_payload, "product_family")
+    product_variant = _required_payload_string(typed_payload, "product_variant")
+    catalogue_number = _required_payload_string(typed_payload, "catalogue_number")
     try:
         file_name, zip_bytes = _xml_service().download_post_package(
             product_family=product_family,
@@ -229,20 +282,17 @@ def upload_success_xml(payload: SuccessXmlUploadRequest) -> SuccessXmlUploadResu
 
 
 @router.post("/xml/preview-market-info-put")
-def preview_xml_market_info_put(payload: dict[str, str]) -> dict:
-    product_family = payload.get("product_family")
-    product_variant = payload.get("product_variant")
-    catalogue_number = payload.get("catalogue_number")
-    if not product_family or not product_variant or not catalogue_number:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family, product_variant, and catalogue_number are required.",
-        )
+def preview_xml_market_info_put(payload: dict[str, object]) -> dict:
+    product_family = _required_payload_string(payload, "product_family")
+    product_variant = _required_payload_string(payload, "product_variant")
+    catalogue_number = _required_payload_string(payload, "catalogue_number")
+    market_countries = _parse_market_info_countries(payload)
     try:
         preview = _xml_service().preview_market_info_put(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
+            market_countries=market_countries,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -250,20 +300,17 @@ def preview_xml_market_info_put(payload: dict[str, str]) -> dict:
 
 
 @router.post("/xml/download-market-info-put")
-def download_xml_market_info_put(payload: dict[str, str]) -> Response:
-    product_family = payload.get("product_family")
-    product_variant = payload.get("product_variant")
-    catalogue_number = payload.get("catalogue_number")
-    if not product_family or not product_variant or not catalogue_number:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family, product_variant, and catalogue_number are required.",
-        )
+def download_xml_market_info_put(payload: dict[str, object]) -> Response:
+    product_family = _required_payload_string(payload, "product_family")
+    product_variant = _required_payload_string(payload, "product_variant")
+    catalogue_number = _required_payload_string(payload, "catalogue_number")
+    market_countries = _parse_market_info_countries(payload)
     try:
         file_name, xml_bytes = _xml_service().download_market_info_put(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
+            market_countries=market_countries,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -312,17 +359,15 @@ def download_generated_patch_scenario(payload: dict) -> Response:
 
 @router.post("/xml/preview-bulk-post")
 def preview_xml_bulk_post(payload: dict[str, str | int] | None = None) -> dict:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     record_count = int(data.get("record_count", 1))
     chunk_sequence = int(data.get("chunk_sequence", 1))
-    if not product_family or not product_variant:
-        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
         preview = _xml_service().preview_bulk_post(
-            product_family=str(product_family),
-            product_variant=str(product_variant),
+            product_family=product_family,
+            product_variant=product_variant,
             record_count=record_count,
             chunk_sequence=chunk_sequence,
         )
@@ -333,12 +378,18 @@ def preview_xml_bulk_post(payload: dict[str, str | int] | None = None) -> dict:
 
 @router.post("/xml/download-bulk-post")
 def download_xml_bulk_post(payload: dict[str, str | int] | None = None) -> Response:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(
+        data,
+        "product_family",
+        "product_family and product_variant are required.",
+    )
+    product_variant = _required_string_with_detail(
+        data,
+        "product_variant",
+        "product_family and product_variant are required.",
+    )
     record_count = int(data.get("record_count", 1))
-    if not product_family or not product_variant:
-        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
         file_name, zip_bytes = _xml_service().download_bulk_post(
             product_family=product_family,
@@ -353,17 +404,15 @@ def download_xml_bulk_post(payload: dict[str, str | int] | None = None) -> Respo
 
 @router.post("/xml/preview-bulk-udidi-post")
 def preview_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) -> dict:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     record_count = int(data.get("record_count", 1))
     chunk_sequence = int(data.get("chunk_sequence", 1))
-    if not product_family or not product_variant:
-        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
         preview = _xml_service().preview_bulk_udidi_post(
-            product_family=str(product_family),
-            product_variant=str(product_variant),
+            product_family=product_family,
+            product_variant=product_variant,
             record_count=record_count,
             chunk_sequence=chunk_sequence,
         )
@@ -374,16 +423,14 @@ def preview_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) -> 
 
 @router.post("/xml/download-bulk-udidi-post")
 def download_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) -> Response:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     record_count = int(data.get("record_count", 1))
-    if not product_family or not product_variant:
-        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
         file_name, zip_bytes = _xml_service().download_bulk_udidi_post(
-            product_family=str(product_family),
-            product_variant=str(product_variant),
+            product_family=product_family,
+            product_variant=product_variant,
             record_count=record_count,
         )
     except ValueError as exc:
@@ -394,27 +441,30 @@ def download_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) ->
 
 @router.post("/xml/preview-bulk-patch")
 def preview_xml_bulk_patch(payload: dict | None = None) -> dict:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
-    basic_udi_di = data.get("basic_udi_di")
-    scenario_id = data.get("scenario_id")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(
+        data, "product_family", "product_family, product_variant, basic_udi_di, and scenario_id are required."
+    )
+    product_variant = _required_string_with_detail(
+        data, "product_variant", "product_family, product_variant, basic_udi_di, and scenario_id are required."
+    )
+    basic_udi_di = _required_string_with_detail(
+        data, "basic_udi_di", "product_family, product_variant, basic_udi_di, and scenario_id are required."
+    )
+    scenario_id = _required_string_with_detail(
+        data, "scenario_id", "product_family, product_variant, basic_udi_di, and scenario_id are required."
+    )
     record_count = int(data.get("record_count", 1))
     chunk_sequence = int(data.get("chunk_sequence", 1))
     scenario_inputs = data.get("scenario_inputs") or {}
     selected_catalogue_numbers = data.get("selected_catalogue_numbers") or []
-    if not product_family or not product_variant or not basic_udi_di or not scenario_id:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family, product_variant, basic_udi_di, and scenario_id are required.",
-        )
     try:
         preview = _xml_service().preview_bulk_patch(
-            product_family=str(product_family),
-            product_variant=str(product_variant),
-            basic_udi_di=str(basic_udi_di),
+            product_family=product_family,
+            product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
             record_count=record_count,
-            scenario_id=str(scenario_id),
+            scenario_id=scenario_id,
             scenario_inputs=scenario_inputs if isinstance(scenario_inputs, dict) else {},
             selected_catalogue_numbers=[
                 str(value) for value in selected_catalogue_numbers if isinstance(value, str) and value.strip()
@@ -428,26 +478,29 @@ def preview_xml_bulk_patch(payload: dict | None = None) -> dict:
 
 @router.post("/xml/download-bulk-patch")
 def download_xml_bulk_patch(payload: dict | None = None) -> Response:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
-    basic_udi_di = data.get("basic_udi_di")
-    scenario_id = data.get("scenario_id")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(
+        data, "product_family", "product_family, product_variant, basic_udi_di, and scenario_id are required."
+    )
+    product_variant = _required_string_with_detail(
+        data, "product_variant", "product_family, product_variant, basic_udi_di, and scenario_id are required."
+    )
+    basic_udi_di = _required_string_with_detail(
+        data, "basic_udi_di", "product_family, product_variant, basic_udi_di, and scenario_id are required."
+    )
+    scenario_id = _required_string_with_detail(
+        data, "scenario_id", "product_family, product_variant, basic_udi_di, and scenario_id are required."
+    )
     record_count = int(data.get("record_count", 1))
     scenario_inputs = data.get("scenario_inputs") or {}
     selected_catalogue_numbers = data.get("selected_catalogue_numbers") or []
-    if not product_family or not product_variant or not basic_udi_di or not scenario_id:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family, product_variant, basic_udi_di, and scenario_id are required.",
-        )
     try:
         file_name, zip_bytes = _xml_service().download_bulk_patch(
-            product_family=str(product_family),
-            product_variant=str(product_variant),
-            basic_udi_di=str(basic_udi_di),
+            product_family=product_family,
+            product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
             record_count=record_count,
-            scenario_id=str(scenario_id),
+            scenario_id=scenario_id,
             scenario_inputs=scenario_inputs if isinstance(scenario_inputs, dict) else {},
             selected_catalogue_numbers=[
                 str(value) for value in selected_catalogue_numbers if isinstance(value, str) and value.strip()
@@ -461,51 +514,41 @@ def download_xml_bulk_patch(payload: dict | None = None) -> Response:
 
 @router.post("/xml/bulk-patch-posted-entries")
 def bulk_patch_posted_entries(payload: dict | None = None) -> dict:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
-    basic_udi_di = data.get("basic_udi_di")
-    if not product_family or not product_variant or not basic_udi_di:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family, product_variant, and basic_udi_di are required.",
-        )
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family, product_variant, and basic_udi_di are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family, product_variant, and basic_udi_di are required.")
+    basic_udi_di = _required_string_with_detail(data, "basic_udi_di", "product_family, product_variant, and basic_udi_di are required.")
     summaries = _testing_read_model().list_subject_summaries(
-        product_family=str(product_family),
-        product_variant=str(product_variant),
+        product_family=product_family,
+        product_variant=product_variant,
         limit=10000,
     )
     entries = _bulk_patch_posted_entries_from_summaries(
         summaries,
-        basic_udi_di=str(basic_udi_di),
+        basic_udi_di=basic_udi_di,
     )
     return {
-        "product_family": str(product_family),
-        "product_variant": str(product_variant),
-        "basic_udi_di": str(basic_udi_di),
+        "product_family": product_family,
+        "product_variant": product_variant,
+        "basic_udi_di": basic_udi_di,
         "entries": entries,
     }
 
 
 @router.post("/xml/bulk-patch-posted-parents")
 def bulk_patch_posted_parents(payload: dict | None = None) -> dict:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
-    if not product_family or not product_variant:
-        raise HTTPException(
-            status_code=400,
-            detail="product_family and product_variant are required.",
-        )
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     summaries = _testing_read_model().list_subject_summaries(
-        product_family=str(product_family),
-        product_variant=str(product_variant),
+        product_family=product_family,
+        product_variant=product_variant,
         limit=10000,
     )
     groups = _bulk_patch_posted_parent_groups_from_summaries(summaries)
     return {
-        "product_family": str(product_family),
-        "product_variant": str(product_variant),
+        "product_family": product_family,
+        "product_variant": product_variant,
         "parents": groups,
     }
 
@@ -522,14 +565,12 @@ def testing_workspace_summary(payload: dict | None = None) -> dict:
 
 @router.post("/xml/assess-single-post")
 def assess_single_post(payload: dict | None = None) -> dict:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
-    if not product_family or not product_variant:
-        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     assessment = _operation_assessment().assess_single_post(
-        product_family=str(product_family),
-        product_variant=str(product_variant),
+        product_family=product_family,
+        product_variant=product_variant,
         catalogue_number=str(data["catalogue_number"]) if data.get("catalogue_number") else None,
     )
     return assessment.model_dump(mode="json")
@@ -537,14 +578,12 @@ def assess_single_post(payload: dict | None = None) -> dict:
 
 @router.post("/xml/assess-single-patch")
 def assess_single_patch(payload: dict | None = None) -> dict:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
-    if not product_family or not product_variant:
-        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     assessment = _operation_assessment().assess_single_patch(
-        product_family=str(product_family),
-        product_variant=str(product_variant),
+        product_family=product_family,
+        product_variant=product_variant,
         catalogue_number=str(data["catalogue_number"]) if data.get("catalogue_number") else None,
     )
     return assessment.model_dump(mode="json")
@@ -552,28 +591,24 @@ def assess_single_patch(payload: dict | None = None) -> dict:
 
 @router.post("/xml/assess-bulk-post")
 def assess_bulk_post(payload: dict | None = None) -> dict:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
-    if not product_family or not product_variant:
-        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     assessment = _operation_assessment().assess_bulk_post(
-        product_family=str(product_family),
-        product_variant=str(product_variant),
+        product_family=product_family,
+        product_variant=product_variant,
     )
     return assessment.model_dump(mode="json")
 
 
 @router.post("/xml/assess-bulk-patch")
 def assess_bulk_patch(payload: dict | None = None) -> dict:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
-    if not product_family or not product_variant:
-        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     assessment = _operation_assessment().assess_bulk_patch(
-        product_family=str(product_family),
-        product_variant=str(product_variant),
+        product_family=product_family,
+        product_variant=product_variant,
         basic_udi_di=str(data["basic_udi_di"]) if data.get("basic_udi_di") else None,
     )
     return assessment.model_dump(mode="json")
@@ -581,7 +616,7 @@ def assess_bulk_patch(payload: dict | None = None) -> dict:
 
 @router.post("/xml/testing-subject-summaries")
 def testing_subject_summaries(payload: dict | None = None) -> list[dict]:
-    data = payload or {}
+    data = cast(dict[str, object], payload or {})
     limit = int(data.get("limit", 200))
     if limit < 1 or limit > 10000:
         raise HTTPException(status_code=400, detail="limit must be between 1 and 10000.")
@@ -602,16 +637,14 @@ def testing_subject_history(subject_id: int) -> dict:
 
 
 def preview_xml_batch(payload: dict[str, str | int] | None = None) -> dict:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     chunk_sequence = int(data.get("chunk_sequence", 1))
-    if not product_family or not product_variant:
-        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
     try:
         preview = _xml_service().preview_batch(
-            product_family=str(product_family),
-            product_variant=str(product_variant),
+            product_family=product_family,
+            product_variant=product_variant,
             chunk_sequence=chunk_sequence,
         )
     except ValueError as exc:
@@ -620,15 +653,13 @@ def preview_xml_batch(payload: dict[str, str | int] | None = None) -> dict:
 
 
 def download_xml_batch(payload: dict[str, str | int] | None = None) -> Response:
-    data = payload or {}
-    product_family = data.get("product_family")
-    product_variant = data.get("product_variant")
-    if not product_family or not product_variant:
-        raise HTTPException(status_code=400, detail="product_family and product_variant are required.")
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     try:
         file_name, zip_bytes = _xml_service().download_batch(
-            product_family=str(product_family),
-            product_variant=str(product_variant),
+            product_family=product_family,
+            product_variant=product_variant,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
