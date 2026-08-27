@@ -227,6 +227,16 @@ select {
   margin-top: 10px;
 }
 
+.status-detail-emphasis {
+  color: #005f99;
+  font-weight: 700;
+}
+
+.status-detail-line {
+  display: block;
+  margin-top: 4px;
+}
+
 .inline-stat-pill {
   display: inline-flex;
   align-items: center;

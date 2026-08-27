@@ -2096,6 +2096,13 @@ export function App() {
     selectedXmlVariantSummaries.find((summary) => summary.product_variant === selectedXmlVariant) ??
     selectedXmlVariantSummaries[0] ??
     null;
+  const selectedXmlFamilyLabel =
+    selectedXmlFamily ?? selectedXmlFamilySummary?.product_family ?? xmlFamilySummaries[0]?.product_family ?? "No family selected";
+  const selectedXmlVariantLabel =
+    selectedXmlVariant ??
+    selectedXmlVariantSummary?.product_variant ??
+    selectedXmlVariantSummaries[0]?.product_variant ??
+    "No variant selected";
   const selectedXmlVariantRecords = xmlReadyRecords.filter(
     (record) =>
       record.product_family === (selectedXmlFamilySummary?.product_family ?? selectedXmlFamily) &&
@@ -3626,7 +3633,7 @@ export function App() {
           <div className="nav-title-block">
             <strong>EUDAMED Profiling Workspace</strong>
             <span className="nav-subtitle">
-              Submission data, canonical mapping, and EUDAMED XML preparation
+              Submission data, validation, testing, and tracking
             </span>
           </div>
         </div>
@@ -3673,11 +3680,10 @@ export function App() {
         <div className="hero-copy-block">
           {activeTab === "workbooks" ? (
             <>
-              <p className="eyebrow">Workbook Analysis</p>
+              <p className="eyebrow">Operational Data</p>
               <h1>Submission Data</h1>
               <p className="hero-copy hero-copy-compact">
-                Review imported workbook coverage, device counts, XML readiness, duplicates, and
-                current SQLite status.
+                Review imported workbook state, device coverage, XML readiness, duplicates, and current SQLite status.
               </p>
             </>
           ) : null}
@@ -3686,37 +3692,34 @@ export function App() {
               <p className="eyebrow">Canonical Validation</p>
               <h1>Canonical Validation</h1>
               <p className="hero-copy">
-                Check which families and variants are ready for canonical use, then inspect the
-                supporting source-to-canonical mapping before XML generation.
+                Review family and variant readiness, then inspect source-to-canonical mapping before XML generation.
               </p>
             </>
           ) : null}
           {activeTab === "xml" ? (
             <>
               <p className="eyebrow">EUDAMED Testing</p>
-              <h1>Review Candidate And Accepted EUDAMED XML</h1>
+              <h1>EUDAMED Testing Workspace</h1>
               <p className="hero-copy">
-                Produce previewable wrapped `Push` messages, review accepted baseline POST XML with candidate
-                PATCH scenarios, validate them against the local schema set, and prepare controlled external test files.
+                Assess availability, generate POST, PATCH, and bulk XML, validate locally, and prepare controlled Playground test files.
               </p>
             </>
           ) : null}
           {activeTab === "testingSummary" ? (
             <>
               <p className="eyebrow">Testing Summary</p>
-              <h1>Review Successful Testing And Next Available Actions</h1>
+              <h1>EUDAMED Testing Snapshot</h1>
               <p className="hero-copy">
-                Start with the current Playground-tested position, Basic UDI-DI registration status, and next available POST or PATCH actions before moving into the operation workspaces.
+                Review recorded testing outcomes, Basic UDI-DI registration status, and the next available POST and PATCH actions.
               </p>
             </>
           ) : null}
           {activeTab === "documentation" ? (
             <>
               <p className="eyebrow">Documentation</p>
-              <h1>Application Architecture Documentation</h1>
+              <h1>Architecture And Workflow Notes</h1>
               <p className="hero-copy">
-                Documentation outlines the software engineering thought process, guiding principles,
-                design realization, and future roadmap for the application.
+                Review the current architecture position, workflow design, implementation notes, and roadmap.
               </p>
             </>
           ) : null}
@@ -3724,7 +3727,7 @@ export function App() {
         <aside className="status-card">
           {activeTab === "workbooks" ? (
             <>
-              <span className="status-label">Current snapshot</span>
+              <span className="status-label">Data Snapshot</span>
               <div className="status-card-toolbar">
                 <button
                   className="action-button import-workbooks-button"
@@ -3740,35 +3743,48 @@ export function App() {
               </div>
               {latestImportBatch ? (
                 <p className="status-detail status-detail-tight">
-                  {`${submissionSnapshotStatus.detail} · Last import: ${formatIsoDateTime(latestImportBatch.imported_at)}`}
+                  <>
+                    {`Workbook import batch #${latestImportBatch.import_batch_id} is current.`}
+                    <span className="status-detail-line">
+                      Last import: <span className="status-detail-emphasis">{formatIsoDateTime(latestImportBatch.imported_at)}</span>.
+                    </span>
+                  </>
                 </p>
               ) : (
-                <p className="status-detail status-detail-tight">{submissionSnapshotStatus.detail}</p>
+                <p className="status-detail status-detail-tight">
+                  {submissionSnapshotStatus.detail}
+                </p>
               )}
               {workbookImportActionMessage ? <p className="status-detail status-detail-tight">{workbookImportActionMessage}</p> : null}
             </>
           ) : null}
           {activeTab === "canonicalValidation" ? (
             <>
-              <span className="status-label">Validation scope</span>
-              <span className={`status-pill ${canonicalProjectionUiStatus.className}`}>{canonicalProjectionUiStatus.label}</span>
+              <span className="status-label">Validation Snapshot</span>
+              <span className="status-pill ok">Validation ready</span>
               <p className="status-detail">
-                {canonicalValidation?.family_scope
-                  ? `${canonicalValidation.family_scope} · ${canonicalProjectionUiStatus.detail}`
-                  : canonicalProjectionUiStatus.detail}
+                {latestImportBatch
+                  ? <>
+                      Showing validated data mapped from source Excel for XML generation in{" "}
+                      <span className="status-detail-emphasis">batch #{latestImportBatch.import_batch_id}</span>.
+                    </>
+                  : "Showing validated data mapped from source Excel for XML generation."}
               </p>
             </>
           ) : null}
           {activeTab === "xml" ? (
             <>
-              <span className="status-label">Current phase</span>
+              <span className="status-label">Testing Snapshot</span>
               <span className={xmlReadyRecords.length ? "status-pill ok" : "status-pill warn"}>
                 {xmlReadyRecords.length ? "Testing workspace ready" : "Testing workspace blocked"}
               </span>
               <p className="status-detail">
                 {xmlReadyRecords.length
-                  ? `${xmlReadyRecords.length} validated product-variant row${xmlReadyRecords.length === 1 ? "" : "s"} are currently eligible for EUDAMED testing workflows.`
-                  : "EUDAMED testing remains downstream of canonical mapping and awaits validation-ready records."}
+                  ? <>
+                      <span className="status-detail-emphasis">{xmlReadyRecords.length}</span>{" "}
+                      XML-ready record{xmlReadyRecords.length === 1 ? "" : "s"} available across the testing workspaces.
+                    </>
+                  : "Waiting for validation-ready records."}
               </p>
             </>
           ) : null}
@@ -3972,11 +3988,11 @@ export function App() {
               <div className="queue-summary">
                 <div className="queue-chip">
                   <strong>{latestImportBatch ? sourceSnapshotTables.reduce((sum, table) => sum + table.row_count, 0) : "N/A"}</strong>
-                  <span>workbook snapshot tables</span>
+                  <span>Operational Data Rows</span>
                 </div>
                 <div className="queue-chip">
                   <strong>{latestImportBatch ? testingStateTables.reduce((sum, table) => sum + table.row_count, 0) : "N/A"}</strong>
-                  <span>testing state tables</span>
+                  <span>Testing Data Rows</span>
                 </div>
               </div>
               {latestImportBatch ? (
@@ -4662,9 +4678,9 @@ export function App() {
               <div>
                 <span className="section-kicker">Validation Status</span>
                 <strong>
-                  {selectedXmlVariantSummary
-                    ? `${selectedXmlFamilySummary?.product_family ?? "No family selected"} / ${selectedXmlVariantSummary.product_variant}`
-                    : selectedXmlFamilySummary?.product_family ?? "XML workspace"}
+                  {selectedXmlVariant
+                    ? `${selectedXmlFamilyLabel} / ${selectedXmlVariantLabel}`
+                    : selectedXmlFamilyLabel}
                 </strong>
                 <p className="panel-copy">
                   The selected {xmlModeLabel} operation is summarised below with the next recommended action and the current family/variant scope.
@@ -4846,20 +4862,20 @@ export function App() {
                     <strong>
                     {xmlMode === "post" || xmlMode === "marketInfo" || xmlMode === "patch"
                       ? xmlMode === "post"
-                        ? selectedXmlFamilySummary?.product_family ?? "No family selected"
+                        ? selectedXmlFamilyLabel
                         : xmlMode === "patch" && !hasReviewedPatchBaselinePost
                           ? "No reviewed POST"
                           : selectedTestingAnchor?.product_family ?? "No testing anchor"
-                      : selectedXmlFamilySummary?.product_family ?? "No family selected"}
+                      : selectedXmlFamilyLabel}
                   </strong>
                   <p>
                     {xmlMode === "post" || xmlMode === "marketInfo" || xmlMode === "patch"
                       ? xmlMode === "post"
-                        ? selectedXmlVariantSummary?.product_variant ?? "No variant selected"
+                        ? selectedXmlVariantLabel
                         : xmlMode === "patch" && !hasReviewedPatchBaselinePost
                           ? "Select a variant with an XML-ready POST record"
                           : selectedTestingAnchor?.product_variant ?? "No anchor variant"
-                      : selectedXmlVariantSummary?.product_variant ?? "No variant selected"}
+                      : selectedXmlVariantLabel}
                   </p>
                 </div>
               </div>
@@ -5342,7 +5358,7 @@ export function App() {
                 ) : xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? (
                   xmlMode === "bulkPatch" ? (
                     <BulkPatchWorkspace
-                      familyVariantLabel={`${selectedXmlFamilySummary?.product_family} / ${selectedXmlVariantSummary.product_variant}`}
+                      familyVariantLabel={`${selectedXmlFamilyLabel} / ${selectedXmlVariantLabel}`}
                       isRefreshing={isLoadingXmlOperationAssessment}
                       displayedBulkPatchParentOptions={displayedBulkPatchParentOptions}
                       selectedBulkPatchParentGroup={selectedBulkPatchParentGroup}
@@ -5401,7 +5417,7 @@ export function App() {
                     />
                   ) : (
                   <BulkPostWorkspace
-                    familyVariantLabel={`${selectedXmlFamilySummary?.product_family} / ${selectedXmlVariantSummary.product_variant}`}
+                    familyVariantLabel={`${selectedXmlFamilyLabel} / ${selectedXmlVariantLabel}`}
                     title={xmlMode === "bulkPost" ? "Bulk BASIC UDI-DI POST" : "Bulk DEVICE UDI-DI POST"}
                     isRefreshing={isLoadingXmlOperationAssessment}
                     stepOneTitle={xmlMode === "bulkPost" ? "Parent registration scope" : "Child registration scope"}
