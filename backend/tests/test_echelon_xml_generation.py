@@ -365,6 +365,25 @@ def test_market_info_put_preview_requires_version() -> None:
         )
 
 
+def test_market_info_put_preview_normalizes_greece_alias_to_el() -> None:
+    preview = XmlGenerationService().preview_market_info_put(
+        product_family="Echelon",
+        product_variant="Echelon",
+        catalogue_number="EC22L1S",
+        market_info_version="2",
+        market_countries=[
+            ("Germany", True),
+            ("Greece", False),
+            ("GR", False),
+        ],
+    )
+
+    assert preview.validation.valid is True
+    assert "<marketinfo:country>EL</marketinfo:country>" in preview.xml
+    assert preview.xml.count("<marketinfo:country>EL</marketinfo:country>") == 1
+    assert "<marketinfo:country>GR</marketinfo:country>" not in preview.xml
+
+
 def test_market_info_put_routes_return_payloads(route_xml_service_without_import: None) -> None:
     payload = preview_xml_market_info_put(
         {

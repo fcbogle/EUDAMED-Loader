@@ -84,8 +84,50 @@ const COUNTRY_FLAG_BY_NAME: Record<(typeof MARKET_COUNTRY_OPTIONS)[number], stri
   Sweden: "🇸🇪",
 };
 
+const COUNTRY_CODE_BY_NAME: Record<(typeof MARKET_COUNTRY_OPTIONS)[number], string> = {
+  Austria: "AT",
+  Belgium: "BE",
+  Bulgaria: "BG",
+  Croatia: "HR",
+  Cyprus: "CY",
+  Czechia: "CZ",
+  Denmark: "DK",
+  Estonia: "EE",
+  Finland: "FI",
+  France: "FR",
+  Germany: "DE",
+  Greece: "EL",
+  Hungary: "HU",
+  Ireland: "IE",
+  Italy: "IT",
+  Latvia: "LV",
+  Lithuania: "LT",
+  Luxembourg: "LU",
+  Malta: "MT",
+  Netherlands: "NL",
+  Norway: "NO",
+  Poland: "PL",
+  Portugal: "PT",
+  Romania: "RO",
+  Slovakia: "SK",
+  Slovenia: "SI",
+  Spain: "ES",
+  Sweden: "SE",
+};
+
+const COUNTRY_NAME_BY_CODE = Object.fromEntries(
+  Object.entries(COUNTRY_CODE_BY_NAME).map(([name, code]) => [code, name]),
+) as Record<string, (typeof MARKET_COUNTRY_OPTIONS)[number]>;
+COUNTRY_NAME_BY_CODE.GR = "Greece";
+
+function resolveCountryName(country: string): string {
+  const normalized = country.trim().toUpperCase();
+  return COUNTRY_NAME_BY_CODE[normalized] ?? country;
+}
+
 function countryFlag(country: string): string {
-  return COUNTRY_FLAG_BY_NAME[country as keyof typeof COUNTRY_FLAG_BY_NAME] ?? "🏳️";
+  const countryName = resolveCountryName(country);
+  return COUNTRY_FLAG_BY_NAME[countryName as keyof typeof COUNTRY_FLAG_BY_NAME] ?? "🏳️";
 }
 
 export function MarketInfoScenarioCard({
@@ -107,7 +149,7 @@ export function MarketInfoScenarioCard({
   const [removeCountryValue, setRemoveCountryValue] = useState("");
   const currentOriginalMarket = currentMarketItems.find((item) => item.originalPlacedOnMarket)?.country ?? null;
   const draftOriginalMarket = draftMarketItems.find((item) => item.originalPlacedOnMarket)?.country ?? "";
-  const draftCountryNames = draftMarketItems.map((item) => item.country).filter(Boolean);
+  const draftCountryNames = draftMarketItems.map((item) => resolveCountryName(item.country)).filter(Boolean);
   const availableCountryOptions = MARKET_COUNTRY_OPTIONS.filter((country) => !draftCountryNames.includes(country));
 
   return (
@@ -198,7 +240,7 @@ export function MarketInfoScenarioCard({
                 <option value="">Select country</option>
                 {draftMarketItems.map((item) => (
                   <option key={`remove-${item.id}`} value={item.country}>
-                    {item.country || "Pending"}
+                    {resolveCountryName(item.country) || "Pending"}
                   </option>
                 ))}
               </select>
@@ -214,7 +256,7 @@ export function MarketInfoScenarioCard({
                 <option value="">Select original market</option>
                 {draftMarketItems.map((item) => (
                   <option key={`original-${item.id}`} value={item.country}>
-                    {item.country || "Pending"}
+                    {resolveCountryName(item.country) || "Pending"}
                   </option>
                 ))}
               </select>
@@ -230,7 +272,7 @@ export function MarketInfoScenarioCard({
                     className={item.originalPlacedOnMarket ? "market-info-chip market-info-chip-original" : "market-info-chip"}
                   >
                     <span className="market-info-chip-flag" aria-hidden="true">{countryFlag(item.country)}</span>
-                    <span>{item.country}</span>
+                    <span>{resolveCountryName(item.country)}</span>
                   </span>
                 ))
               ) : (
@@ -248,7 +290,7 @@ export function MarketInfoScenarioCard({
                     className={item.originalPlacedOnMarket ? "market-info-chip-row market-info-chip-row-original" : "market-info-chip-row"}
                   >
                     <span className="market-info-chip-flag" aria-hidden="true">{countryFlag(item.country)}</span>
-                    <span className="market-info-chip-label">{item.country || "Pending"}</span>
+                    <span className="market-info-chip-label">{resolveCountryName(item.country) || "Pending"}</span>
                     {item.originalPlacedOnMarket ? <span className="market-info-chip-badge">Original</span> : null}
                   </div>
                 ))

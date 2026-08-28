@@ -839,6 +839,11 @@ export type TestingEventReadModelEntry = {
   submission_id: string | null;
   correlation_id: string | null;
   message_id: string | null;
+  details_summary: string | null;
+  added_countries: string[];
+  removed_countries: string[];
+  original_market_before: string | null;
+  original_market_after: string | null;
 };
 
 export type TestingSubjectReadModelSummary = {
@@ -855,6 +860,13 @@ export type TestingSubjectReadModelSummary = {
   has_successful_child_post_or_patch: boolean;
   latest_successful_version: string | null;
   latest_successful_market_info_version: string | null;
+  latest_successful_market_info_state: {
+    version?: string;
+    market_countries?: Array<{
+      country: string;
+      original_placed_on_market: boolean;
+    }>;
+  } | null;
   latest_success_message_type: string | null;
   latest_tested_at: string | null;
   reviewed_post_at: string | null;

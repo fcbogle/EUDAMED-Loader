@@ -501,7 +501,7 @@ def test_success_xml_upload_records_bulk_udidi_post_acknowledgements(
 def test_success_xml_upload_records_market_info_put_without_advancing_patch_version(
     isolated_workbook_import_db: Path,
 ) -> None:
-    PlaygroundStateStore()
+    store = PlaygroundStateStore()
     subject_id = _insert_testing_subject(
         isolated_workbook_import_db,
         product_family="Epirus",
@@ -511,6 +511,21 @@ def test_success_xml_upload_records_market_info_put_without_advancing_patch_vers
         basic_udi_di="5050649ESPRITVZ",
         post_success=1,
         latest_successful_version="3",
+    )
+    store.record_generated_market_info_context(
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L1S",
+        primary_udi_di="05050649058189",
+        basic_udi_di="5050649ESPRITVZ",
+        market_info_version="2",
+        baseline_market_countries=[
+            {"country": "AT", "original_placed_on_market": False},
+            {"country": "DE", "original_placed_on_market": True},
+        ],
+        market_countries=[
+            {"country": "DE", "original_placed_on_market": True},
+        ],
     )
 
     xml_payload = """<?xml version='1.0' encoding='utf-8'?>
@@ -553,36 +568,190 @@ def test_success_xml_upload_records_market_info_put_without_advancing_patch_vers
     try:
         row = connection.execute(
             """
-            SELECT id, catalogue_number, post_success, latest_successful_version, latest_successful_market_info_version
+            SELECT
+                id,
+                catalogue_number,
+                post_success,
+                latest_successful_version,
+                latest_successful_market_info_version,
+                latest_successful_market_info_state_json
             FROM testing_subjects
             WHERE id = ?
             """,
             (subject_id,),
         ).fetchone()
         assert row is not None
-        assert dict(row) == {
-            "id": subject_id,
-            "catalogue_number": "ESP22L1S",
-            "post_success": 1,
-            "latest_successful_version": "3",
-            "latest_successful_market_info_version": "2",
+        assert row["id"] == subject_id
+        assert row["catalogue_number"] == "ESP22L1S"
+        assert row["post_success"] == 1
+        assert row["latest_successful_version"] == "3"
+        assert row["latest_successful_market_info_version"] == "2"
+        assert json.loads(str(row["latest_successful_market_info_state_json"])) == {
+            "version": "2",
+            "market_countries": [
+                {"country": "DE", "original_placed_on_market": True},
+            ],
         }
         event_row = connection.execute(
             """
-            SELECT subject_id, event_index, message_type, status, version
+            SELECT subject_id, event_index, message_type, status, version, raw_event_json
             FROM testing_events
             WHERE subject_id = ?
+              AND status = 'SUCCESS'
             ORDER BY event_index
+            DESC
+            LIMIT 1
             """,
             (subject_id,),
         ).fetchone()
         assert event_row is not None
-        assert dict(event_row) == {
-            "subject_id": subject_id,
-            "event_index": 0,
-            "message_type": "MARKET_INFO.PUT",
-            "status": "SUCCESS",
+        assert event_row["subject_id"] == subject_id
+        assert event_row["message_type"] == "MARKET_INFO.PUT"
+        assert event_row["status"] == "SUCCESS"
+        assert event_row["version"] == "2"
+        event_payload = json.loads(str(event_row["raw_event_json"]))
+        assert event_payload["market_info_delta"] == {
+            "added_countries": [],
+            "removed_countries": ["AT"],
+            "original_market_before": "DE",
+            "original_market_after": "DE",
+        }
+    finally:
+        connection.close()
+
+
+def test_duplicate_market_info_success_upload_repairs_tracked_state_from_generated_context(
+    isolated_workbook_import_db: Path,
+) -> None:
+    store = PlaygroundStateStore()
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L1S",
+        primary_udi_di="05050649058189",
+        basic_udi_di="5050649ESPRITVZ",
+        post_success=1,
+        latest_successful_version="3",
+        latest_successful_market_info_version="1",
+    )
+    store.record_generated_market_info_context(
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L1S",
+        primary_udi_di="05050649058189",
+        basic_udi_di="5050649ESPRITVZ",
+        market_info_version="2",
+        baseline_market_countries=[
+            {"country": "AT", "original_placed_on_market": False},
+            {"country": "DE", "original_placed_on_market": True},
+        ],
+        market_countries=[
+            {"country": "DE", "original_placed_on_market": True},
+        ],
+    )
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        connection.execute(
+            """
+            INSERT INTO testing_events (
+                subject_id,
+                event_index,
+                message_type,
+                status,
+                version,
+                scenario_id,
+                scenario_label,
+                tested_at,
+                transaction_id,
+                submission_id,
+                payload_created_at,
+                correlation_id,
+                message_id,
+                changed_fields_json,
+                retained_fields_json,
+                unchanged_fields_json,
+                raw_event_json
+            ) VALUES (?, ?, 'MARKET_INFO.PUT', 'SUCCESS', NULL, NULL, NULL, ?, NULL, NULL, ?, ?, ?, NULL, NULL, NULL, ?)
+            """,
+            (
+                subject_id,
+                1,
+                "2026-08-28T13:13:55.793+02:00",
+                "2026-08-28T13:13:55.793+02:00",
+                "cd4e1072-2016-4622-9261-1e8afecca573",
+                "fa5bcd9b-dc9f-4bde-aca2-7d505cf22b4a",
+                json.dumps(
+                    {
+                        "source_file_name": "APP-DTX-000111352.xml",
+                        "message_type": "MARKET_INFO.PUT",
+                        "operation_label": "Market Info PUT",
+                        "entity_code": "05050649058189",
+                        "entity_version": None,
+                        "response_code": "SUCCESS",
+                        "correlation_id": "cd4e1072-2016-4622-9261-1e8afecca573",
+                        "message_id": "fa5bcd9b-dc9f-4bde-aca2-7d505cf22b4a",
+                        "tested_at": "2026-08-28T13:13:55.793+02:00",
+                        "xml": "<acknowledgement />",
+                    }
+                ),
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    xml_payload = """<?xml version='1.0' encoding='utf-8'?>
+<m:PullAck xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1">
+  <m:correlationID>cd4e1072-2016-4622-9261-1e8afecca573</m:correlationID>
+  <m:creationDateTime>2026-08-28T13:13:55.793+02:00</m:creationDateTime>
+  <m:messageID>fa5bcd9b-dc9f-4bde-aca2-7d505cf22b4a</m:messageID>
+  <m:sender>
+    <m:node>
+      <s:nodeActorCode>EUDAMED</s:nodeActorCode>
+    </m:node>
+    <m:service>
+      <s:serviceID>MARKET_INFO</s:serviceID>
+      <s:serviceOperation>PUT</s:serviceOperation>
+    </m:service>
+  </m:sender>
+  <m:responseEntity>
+    <m:responseCode>SUCCESS</m:responseCode>
+    <m:entityCode>05050649058189</m:entityCode>
+  </m:responseEntity>
+</m:PullAck>
+"""
+
+    result = TestingSuccessXmlService().record_success_xml(
+        xml_bytes=xml_payload.encode("utf-8"),
+        source_file_name="APP-DTX-000111352.xml",
+    )
+
+    assert result.message_type == "MARKET_INFO.PUT"
+    assert result.recorded_event_count == 0
+    assert result.duplicate_event_count == 1
+    assert result.duplicate_event is True
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        row = connection.execute(
+            """
+            SELECT latest_successful_market_info_version, latest_successful_market_info_state_json
+            FROM testing_subjects
+            WHERE id = ?
+            """,
+            (subject_id,),
+        ).fetchone()
+        assert row is not None
+        assert row["latest_successful_market_info_version"] == "2"
+        assert json.loads(str(row["latest_successful_market_info_state_json"])) == {
             "version": "2",
+            "market_countries": [
+                {"country": "DE", "original_placed_on_market": True},
+            ],
         }
     finally:
         connection.close()

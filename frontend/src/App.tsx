@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, api } from "./api";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
@@ -247,6 +247,18 @@ function resolveTestingEventVersionLabel(event: TestingEventReadModelEntry): str
     return event.version ? `market v${event.version}` : "Recorded";
   }
   return event.version ? `v${event.version}` : "v1";
+}
+
+function resolveNextIncrementalVersion(value: string | null | undefined, fallback = "1"): string {
+  const normalized = (value ?? "").trim();
+  if (!normalized) {
+    return fallback;
+  }
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return fallback;
+  }
+  return String(Math.trunc(parsed) + 1);
 }
 
 const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
@@ -2569,6 +2581,11 @@ export function App() {
     versionLabel: resolveTestingEventVersionLabel(event),
     scenarioLabel: event.scenario_label ?? event.scenario_id ?? "Standard",
     resultLabel: event.status ?? "SUCCESS",
+    detailsSummary: event.details_summary,
+    addedCountries: event.added_countries,
+    removedCountries: event.removed_countries,
+    originalMarketBefore: event.original_market_before,
+    originalMarketAfter: event.original_market_after,
   }));
   const effectiveBulkPatchCatalogueNumbers =
     bulkPatchScopeMode === "all_posted"
@@ -2695,13 +2712,6 @@ export function App() {
     selectedXmlPairRecord,
   );
   const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
-  const selectedCurrentMarketInfoItems =
-    acceptedMarketInfoItems ??
-    (selectedXmlMarketInfoRecord?.market_availability_items ?? []).map((item, index) => ({
-      id: `current-market-${index}-${item.country}`,
-      country: item.country,
-      originalPlacedOnMarket: item.original_placed_on_market,
-    }));
   const selectedPairRequestArgs = resolvePatchRequestArgs(selectedPatchWorkspaceRecord, {
     assessedCatalogueNumber: assessedPatchCandidateCatalogueNumber,
     assessedPrimaryUdiDi: assessedPatchCandidatePrimaryUdiDi,
@@ -3062,24 +3072,53 @@ export function App() {
   const selectedMarketInfoAnchor =
     xmlMarketInfoPreview?.registered_device_anchor ??
     (selectedMarketInfoRequestArgs ? buildSelectionAnchor(selectedMarketInfoRequestArgs) : null);
-  const selectedMarketInfoTrackedVersion =
+  const selectedMarketInfoSummary =
     testingSubjectSummaries.find(
       (summary) =>
         (selectedMarketInfoAnchor?.catalogue_number && summary.catalogue_number === selectedMarketInfoAnchor.catalogue_number) ||
         (selectedMarketInfoAnchor?.primary_udi_di && summary.primary_udi_di === selectedMarketInfoAnchor.primary_udi_di),
-    )?.latest_successful_market_info_version ?? null;
+    ) ?? null;
+  const selectedMarketInfoTrackedVersion = selectedMarketInfoSummary?.latest_successful_market_info_version ?? null;
+  const selectedTrackedMarketInfoItems = useMemo(
+    () =>
+      selectedMarketInfoSummary?.latest_successful_market_info_state?.market_countries?.map(
+        (item: { country: string; original_placed_on_market: boolean }, index) => ({
+          id: `tracked-market-${index}-${item.country}`,
+          country: item.country,
+          originalPlacedOnMarket: item.original_placed_on_market,
+        }),
+      ) ?? [],
+    [selectedMarketInfoSummary?.latest_successful_market_info_state],
+  );
+  const selectedCurrentMarketInfoItems =
+    acceptedMarketInfoItems ??
+    (selectedTrackedMarketInfoItems.length > 0
+      ? selectedTrackedMarketInfoItems
+      : (selectedXmlMarketInfoRecord?.market_availability_items ?? []).map((item, index) => ({
+          id: `current-market-${index}-${item.country}`,
+          country: item.country,
+          originalPlacedOnMarket: item.original_placed_on_market,
+        })));
   useEffect(() => {
     if (!selectedXmlMarketInfoRecord?.catalogue_number && !selectedMarketInfoAnchor?.catalogue_number) {
       return;
     }
-    if (!selectedMarketInfoTrackedVersion?.trim()) {
-      return;
-    }
-    setMarketInfoVersionInput(selectedMarketInfoTrackedVersion.trim());
+    setMarketInfoVersionInput(resolveNextIncrementalVersion(selectedMarketInfoTrackedVersion, "1"));
   }, [
     selectedXmlMarketInfoRecord?.catalogue_number,
     selectedMarketInfoAnchor?.catalogue_number,
     selectedMarketInfoTrackedVersion,
+  ]);
+  useEffect(() => {
+    if (selectedTrackedMarketInfoItems.length < 1) {
+      return;
+    }
+    setAcceptedMarketInfoItems(selectedTrackedMarketInfoItems.map((item) => ({ ...item })));
+    setMarketInfoScenarioItems(selectedTrackedMarketInfoItems.map((item) => ({ ...item })));
+  }, [
+    selectedMarketInfoAnchor?.catalogue_number,
+    selectedMarketInfoAnchor?.primary_udi_di,
+    selectedTrackedMarketInfoItems,
   ]);
   const selectedTestingAnchor =
     xmlMode === "marketInfo"

@@ -136,6 +136,7 @@ class TestingReadModelService:
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH') THEN 1 ELSE 0 END) AS has_successful_child_post_or_patch,
                     ts.latest_successful_version,
                     ts.latest_successful_market_info_version,
+                    ts.latest_successful_market_info_state_json,
                     (
                         SELECT latest_event.message_type
                         FROM testing_events latest_event
@@ -180,6 +181,7 @@ class TestingReadModelService:
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH') THEN 1 ELSE 0 END) AS has_successful_child_post_or_patch,
                     ts.latest_successful_version,
                     ts.latest_successful_market_info_version,
+                    ts.latest_successful_market_info_state_json,
                     (
                         SELECT latest_event.message_type
                         FROM testing_events latest_event
@@ -260,7 +262,8 @@ class TestingReadModelService:
                     event.transaction_id,
                     event.submission_id,
                     event.correlation_id,
-                    event.message_id
+                    event.message_id,
+                    event.raw_event_json
                 FROM testing_events event
                 JOIN testing_subjects ts ON ts.id = event.subject_id
                 WHERE event.status = 'SUCCESS'
@@ -416,6 +419,7 @@ class TestingReadModelService:
             has_successful_child_post_or_patch=bool(row["has_successful_child_post_or_patch"]),
             latest_successful_version=cls._optional_string(row["latest_successful_version"]),
             latest_successful_market_info_version=cls._optional_string(row["latest_successful_market_info_version"]),
+            latest_successful_market_info_state=cls._json_dict(row["latest_successful_market_info_state_json"]),
             latest_success_message_type=cls._optional_string(row["latest_success_message_type"]),
             latest_tested_at=cls._optional_string(row["latest_tested_at"]),
             reviewed_post_at=cls._optional_string(row["reviewed_post_at"]),
@@ -462,6 +466,11 @@ class TestingReadModelService:
             submission_id=cls._optional_string(row["submission_id"]),
             correlation_id=cls._optional_string(row["correlation_id"]),
             message_id=cls._optional_string(row["message_id"]),
+            details_summary=cls._event_details_summary(row["message_type"], row["raw_event_json"]),
+            added_countries=cls._market_info_delta_list(row["raw_event_json"], "added_countries"),
+            removed_countries=cls._market_info_delta_list(row["raw_event_json"], "removed_countries"),
+            original_market_before=cls._market_info_delta_value(row["raw_event_json"], "original_market_before"),
+            original_market_after=cls._market_info_delta_value(row["raw_event_json"], "original_market_after"),
         )
 
     @staticmethod
@@ -473,3 +482,56 @@ class TestingReadModelService:
         except (TypeError, ValueError, json.JSONDecodeError):
             return []
         return payload if isinstance(payload, list) else []
+
+    @staticmethod
+    def _json_dict(value: object) -> dict[str, object] | None:
+        if value is None:
+            return None
+        try:
+            payload = json.loads(str(value))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    @classmethod
+    def _event_details_summary(cls, message_type: object, raw_event_json: object) -> str | None:
+        if cls._optional_string(message_type) != "MARKET_INFO.PUT":
+            return None
+        added_countries = cls._market_info_delta_list(raw_event_json, "added_countries")
+        removed_countries = cls._market_info_delta_list(raw_event_json, "removed_countries")
+        summary_parts: list[str] = []
+        if added_countries:
+            summary_parts.append(f"+{len(added_countries)}")
+        if removed_countries:
+            summary_parts.append(f"-{len(removed_countries)}")
+        original_before = cls._market_info_delta_value(raw_event_json, "original_market_before")
+        original_after = cls._market_info_delta_value(raw_event_json, "original_market_after")
+        if original_before or original_after:
+            if original_before == original_after and original_after:
+                summary_parts.append(f"original {original_after}")
+            elif original_before or original_after:
+                summary_parts.append(f"{original_before or 'none'} -> {original_after or 'none'}")
+        return " · ".join(summary_parts) if summary_parts else "View details"
+
+    @classmethod
+    def _market_info_delta_list(cls, raw_event_json: object, key: str) -> list[str]:
+        payload = cls._json_dict(raw_event_json)
+        if not payload:
+            return []
+        delta = payload.get("market_info_delta")
+        if not isinstance(delta, dict):
+            return []
+        values = delta.get(key)
+        if not isinstance(values, list):
+            return []
+        return [str(value).strip() for value in values if str(value).strip()]
+
+    @classmethod
+    def _market_info_delta_value(cls, raw_event_json: object, key: str) -> str | None:
+        payload = cls._json_dict(raw_event_json)
+        if not payload:
+            return None
+        delta = payload.get("market_info_delta")
+        if not isinstance(delta, dict):
+            return None
+        return cls._optional_string(delta.get(key))

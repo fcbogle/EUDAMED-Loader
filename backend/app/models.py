@@ -355,6 +355,7 @@ class TestingSubjectReadModelSummary(BaseModel):
     has_successful_child_post_or_patch: bool = False
     latest_successful_version: str | None = None
     latest_successful_market_info_version: str | None = None
+    latest_successful_market_info_state: dict[str, Any] | None = None
     latest_success_message_type: str | None = None
     latest_tested_at: str | None = None
     reviewed_post_at: str | None = None
@@ -397,6 +398,11 @@ class TestingEventReadModelEntry(BaseModel):
     submission_id: str | None = None
     correlation_id: str | None = None
     message_id: str | None = None
+    details_summary: str | None = None
+    added_countries: list[str] = Field(default_factory=list)
+    removed_countries: list[str] = Field(default_factory=list)
+    original_market_before: str | None = None
+    original_market_after: str | None = None
 
 
 class TestingSubjectHistory(BaseModel):

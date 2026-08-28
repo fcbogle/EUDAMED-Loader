@@ -485,6 +485,8 @@ class DeviceXmlProjectionBuilder:
         token = value.strip().lower()
         extended_map = {
             **EU_COUNTRY_CODE_MAP,
+            "gr": "EL",
+            "el": "EL",
             "norway": "NO",
             "iceland": "IS",
             "liechtenstein": "LI",

@@ -64,34 +64,10 @@ class TestingSuccessXmlService:
                 if first_resolution is None:
                     first_resolution = resolution
                 recorded_event, duplicate_event = self._record_event(connection, resolution.subject_id, acknowledgement)
+                self._reconcile_subject_success_state(connection, resolution.subject_id, acknowledgement)
                 created_subject_count += 1 if resolution.created_subject else 0
                 recorded_event_count += 1 if recorded_event else 0
                 duplicate_event_count += 1 if duplicate_event else 0
-                if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"}:
-                    connection.execute(
-                        """
-                        UPDATE testing_subjects
-                        SET post_success = 1,
-                            latest_successful_version = COALESCE(?, latest_successful_version, '1')
-                        WHERE id = ?
-                        """,
-                        (
-                            acknowledgement.entity_version,
-                            resolution.subject_id,
-                        ),
-                    )
-                elif acknowledgement.message_type == "MARKET_INFO.PUT":
-                    connection.execute(
-                        """
-                        UPDATE testing_subjects
-                        SET latest_successful_market_info_version = COALESCE(?, latest_successful_market_info_version)
-                        WHERE id = ?
-                        """,
-                        (
-                            acknowledgement.entity_version,
-                            resolution.subject_id,
-                        ),
-                    )
         if first_resolution is None:
             raise ValueError("Success XML did not resolve any testing subjects.")
         if len(acknowledgements) == 1:
@@ -128,6 +104,69 @@ class TestingSuccessXmlService:
             recorded_event_count=recorded_event_count,
             duplicate_event_count=duplicate_event_count,
             created_subject_count=created_subject_count,
+        )
+
+    def _reconcile_subject_success_state(
+        self,
+        connection: sqlite3.Connection,
+        subject_id: int,
+        acknowledgement: AcknowledgementPayload,
+    ) -> None:
+        if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"}:
+            connection.execute(
+                """
+                UPDATE testing_subjects
+                SET post_success = 1,
+                    latest_successful_version = COALESCE(?, latest_successful_version, '1')
+                WHERE id = ?
+                """,
+                (
+                    acknowledgement.entity_version,
+                    subject_id,
+                ),
+            )
+            return
+        if acknowledgement.message_type != "MARKET_INFO.PUT":
+            return
+
+        version = acknowledgement.entity_version
+        market_info_state_json: str | None = None
+        generated_row = connection.execute(
+            """
+            SELECT version, raw_event_json
+            FROM testing_events
+            WHERE subject_id = ?
+              AND message_type = 'MARKET_INFO.PUT'
+              AND status = 'GENERATED'
+            ORDER BY event_index DESC
+            LIMIT 1
+            """,
+            (subject_id,),
+        ).fetchone()
+        if generated_row is not None:
+            version = self.store._optional_string(generated_row["version"]) or version
+            generated_raw_json = self.store._optional_string(generated_row["raw_event_json"])
+            if generated_raw_json:
+                try:
+                    generated_payload = json.loads(generated_raw_json)
+                except json.JSONDecodeError:
+                    generated_payload = None
+                if isinstance(generated_payload, dict):
+                    latest_market_info_state = generated_payload.get("latest_successful_market_info_state")
+                    if isinstance(latest_market_info_state, dict):
+                        market_info_state_json = json.dumps(latest_market_info_state)
+        connection.execute(
+            """
+            UPDATE testing_subjects
+            SET latest_successful_market_info_version = COALESCE(?, latest_successful_market_info_version),
+                latest_successful_market_info_state_json = COALESCE(?, latest_successful_market_info_state_json)
+            WHERE id = ?
+            """,
+            (
+                version,
+                market_info_state_json,
+                subject_id,
+            ),
         )
 
     def _parse_acknowledgements(self, *, xml_bytes: bytes, source_file_name: str | None) -> list[AcknowledgementPayload]:
@@ -451,14 +490,51 @@ class TestingSuccessXmlService:
                                 ),
                             )
         elif acknowledgement.message_type == "MARKET_INFO.PUT":
+            generated_row = connection.execute(
+                """
+                SELECT version, raw_event_json
+                FROM testing_events
+                WHERE subject_id = ?
+                  AND message_type = 'MARKET_INFO.PUT'
+                  AND status = 'GENERATED'
+                ORDER BY event_index DESC
+                LIMIT 1
+                """,
+                (subject_id,),
+            ).fetchone()
+            market_info_state_json: str | None = None
+            market_info_delta: dict[str, Any] | None = None
+            if generated_row is not None:
+                version = self.store._optional_string(generated_row["version"]) or version
+                generated_raw_json = self.store._optional_string(generated_row["raw_event_json"])
+                if generated_raw_json:
+                    try:
+                        generated_payload = json.loads(generated_raw_json)
+                    except json.JSONDecodeError:
+                        generated_payload = None
+                    if isinstance(generated_payload, dict):
+                        raw_event_payload["generated_market_info_context"] = generated_payload
+                        baseline_market_info_state = generated_payload.get("baseline_market_info_state")
+                        latest_market_info_state = generated_payload.get("latest_successful_market_info_state")
+                        if isinstance(baseline_market_info_state, dict) and isinstance(latest_market_info_state, dict):
+                            market_info_delta = self._market_info_delta(
+                                before_state=baseline_market_info_state,
+                                after_state=latest_market_info_state,
+                            )
+                        if isinstance(latest_market_info_state, dict):
+                            market_info_state_json = json.dumps(latest_market_info_state)
+            if market_info_delta:
+                raw_event_payload["market_info_delta"] = market_info_delta
             connection.execute(
                 """
                 UPDATE testing_subjects
-                SET latest_successful_market_info_version = COALESCE(?, latest_successful_market_info_version)
+                SET latest_successful_market_info_version = COALESCE(?, latest_successful_market_info_version),
+                    latest_successful_market_info_state_json = COALESCE(?, latest_successful_market_info_state_json)
                 WHERE id = ?
                 """,
                 (
                     version,
+                    market_info_state_json,
                     subject_id,
                 ),
             )
@@ -503,6 +579,36 @@ class TestingSuccessXmlService:
             ),
         )
         return True, False
+
+    def _market_info_delta(self, *, before_state: dict[str, Any], after_state: dict[str, Any]) -> dict[str, Any]:
+        before_items = before_state.get("market_countries")
+        after_items = after_state.get("market_countries")
+        before_codes = {
+            self.store._optional_string(item.get("country")) if isinstance(item, dict) else None
+            for item in before_items
+        } if isinstance(before_items, list) else set()
+        after_codes = {
+            self.store._optional_string(item.get("country")) if isinstance(item, dict) else None
+            for item in after_items
+        } if isinstance(after_items, list) else set()
+        before_codes = {code for code in before_codes if code}
+        after_codes = {code for code in after_codes if code}
+        return {
+            "added_countries": sorted(after_codes - before_codes),
+            "removed_countries": sorted(before_codes - after_codes),
+            "original_market_before": self._original_market_code(before_items),
+            "original_market_after": self._original_market_code(after_items),
+        }
+
+    def _original_market_code(self, items: Any) -> str | None:
+        if not isinstance(items, list):
+            return None
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if bool(item.get("original_placed_on_market")):
+                return self.store._optional_string(item.get("country"))
+        return None
 
     @staticmethod
     def _node_text(node: Any) -> str | None:

@@ -262,15 +262,7 @@ class XmlGenerationService:
 
     @staticmethod
     def _bulk_record_summary(record: CanonicalValidationRecord) -> BulkXmlRecordSummary:
-        basic_udi_di = next(
-            (
-                field.value
-                for field in record.fields
-                if field.canonical_path in {"basic_device.basic_udi_di", "device_record.basic_udi_identifier"}
-                and field.value
-            ),
-            None,
-        )
+        basic_udi_di = XmlGenerationService._record_basic_udi_di(record)
         return BulkXmlRecordSummary(
             catalogue_number=record.catalogue_number or "",
             primary_udi_di=record.primary_udi_di,
@@ -279,6 +271,18 @@ class XmlGenerationService:
             source_workbook=record.source_workbook,
             source_sheet=record.source_sheet,
             source_row_index=record.source_row_index,
+        )
+
+    @staticmethod
+    def _record_basic_udi_di(record: CanonicalValidationRecord) -> str | None:
+        return next(
+            (
+                field.value
+                for field in record.fields
+                if field.canonical_path in {"basic_device.basic_udi_di", "device_record.basic_udi_identifier"}
+                and field.value
+            ),
+            None,
         )
 
     def _deduplicate_bulk_basic_udi_posts(
@@ -1488,6 +1492,7 @@ class XmlGenerationService:
             catalogue_number=catalogue_number,
         )
         market_info_record = self.projection_builder.build_market_info_record(record)
+        baseline_market_countries = list(market_info_record.market_countries)
         normalized_market_info_version = self._validate_market_info_version(market_info_version)
         if market_countries is not None:
             normalized_market_countries = self._normalized_market_info_countries(market_countries)
@@ -1498,6 +1503,28 @@ class XmlGenerationService:
         market_info_record = replace(
             market_info_record,
             market_info_version=normalized_market_info_version,
+        )
+        self.testing_state_store.record_generated_market_info_context(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            catalogue_number=market_info_record.catalogue_number,
+            primary_udi_di=market_info_record.primary_udi_di,
+            basic_udi_di=self._record_basic_udi_di(record),
+            market_info_version=market_info_record.market_info_version,
+            baseline_market_countries=[
+                {
+                    "country": country_code,
+                    "original_placed_on_market": original_placed_on_market,
+                }
+                for country_code, original_placed_on_market in baseline_market_countries
+            ],
+            market_countries=[
+                {
+                    "country": country_code,
+                    "original_placed_on_market": original_placed_on_market,
+                }
+                for country_code, original_placed_on_market in market_info_record.market_countries
+            ],
         )
         xml_bytes = self.renderer.render_market_info_message(market_info_record)
         validation = self.xml_validation_service.validate_message(xml_bytes)

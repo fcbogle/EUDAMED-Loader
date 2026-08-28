@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import type { TestingSubjectReadModelSummary, TestingWorkspaceSummary } from "../types";
 
@@ -38,6 +38,11 @@ type TestingEventRow = {
   versionLabel: string;
   scenarioLabel: string;
   resultLabel: string;
+  detailsSummary: string | null;
+  addedCountries: string[];
+  removedCountries: string[];
+  originalMarketBefore: string | null;
+  originalMarketAfter: string | null;
 };
 
 type TestingSummaryWorkspaceProps = {
@@ -100,8 +105,10 @@ export function TestingSummaryWorkspace({
 }: TestingSummaryWorkspaceProps) {
   const [eventPage, setEventPage] = useState(1);
   const [eventPageSize, setEventPageSize] = useState(25);
+  const [expandedEventKey, setExpandedEventKey] = useState<string | null>(null);
   useEffect(() => {
     setEventPage(1);
+    setExpandedEventKey(null);
   }, [selectedFamily, selectedVariant]);
   const totalEventPages = Math.max(1, Math.ceil(eventRows.length / eventPageSize));
   const currentEventPage = Math.min(eventPage, totalEventPages);
@@ -316,30 +323,64 @@ export function TestingSummaryWorkspace({
                 <th>Operation</th>
                 <th>Version</th>
                 <th>Scenario</th>
+                <th>Details</th>
                 <th>Result</th>
               </tr>
             </thead>
             <tbody>
               {pagedEventRows.length ? (
                 pagedEventRows.map((row) => (
-                  <tr key={row.key}>
-                    <td>{row.testedAt}</td>
-                    <td>{row.productFamily}</td>
-                    <td>{row.productVariant}</td>
-                    <td>
-                      <code className="testing-summary-code">{row.catalogueNumber}</code>
-                    </td>
-                    <td>{row.operationLabel}</td>
-                    <td>{row.versionLabel}</td>
-                    <td>{row.scenarioLabel}</td>
-                    <td>
-                      <span className="status-pill ok compact">{row.resultLabel}</span>
-                    </td>
-                  </tr>
+                  <Fragment key={row.key}>
+                    <tr>
+                      <td>{row.testedAt}</td>
+                      <td>{row.productFamily}</td>
+                      <td>{row.productVariant}</td>
+                      <td>
+                        <code className="testing-summary-code">{row.catalogueNumber}</code>
+                      </td>
+                      <td>{row.operationLabel}</td>
+                      <td>{row.versionLabel}</td>
+                      <td>{row.scenarioLabel}</td>
+                      <td>
+                        {row.detailsSummary ? (
+                          <button
+                            className="ghost-button testing-summary-clear-button"
+                            type="button"
+                            onClick={() => setExpandedEventKey((current) => (current === row.key ? null : row.key))}
+                          >
+                            {expandedEventKey === row.key ? `Hide · ${row.detailsSummary}` : `View · ${row.detailsSummary}`}
+                          </button>
+                        ) : (
+                          <span className="testing-summary-latest">No detail</span>
+                        )}
+                      </td>
+                      <td>
+                        <span className="status-pill ok compact">{row.resultLabel}</span>
+                      </td>
+                    </tr>
+                    {expandedEventKey === row.key ? (
+                      <tr>
+                        <td colSpan={9} className="testing-summary-event-detail-cell">
+                          <div className="workflow-note">
+                            <strong>Event detail</strong>
+                            <p>
+                              Added countries: {row.addedCountries.length ? row.addedCountries.join(", ") : "None"}
+                            </p>
+                            <p>
+                              Removed countries: {row.removedCountries.length ? row.removedCountries.join(", ") : "None"}
+                            </p>
+                            <p>
+                              Original market: {row.originalMarketBefore ?? "None"} to {row.originalMarketAfter ?? "None"}
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="testing-summary-empty-cell">
+                  <td colSpan={9} className="testing-summary-empty-cell">
                     No successful testing events match the current filter.
                   </td>
                 </tr>

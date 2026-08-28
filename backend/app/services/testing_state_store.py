@@ -65,6 +65,26 @@ class TestingStateStore:
             scenario_id=self._latest_successful_patch_scenario_id(int(row["id"])),
         )
 
+    def latest_successful_market_info_state(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> dict[str, Any] | None:
+        row = self._subject_row(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        if row is None or not row["latest_successful_market_info_state_json"]:
+            return None
+        try:
+            latest_state = json.loads(str(row["latest_successful_market_info_state_json"]))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+        return latest_state if isinstance(latest_state, dict) else None
+
     def posted_entries(
         self,
         *,
@@ -428,6 +448,111 @@ class TestingStateStore:
                 ),
             )
 
+    def record_generated_market_info_context(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+        primary_udi_di: str,
+        basic_udi_di: str | None,
+        market_info_version: str,
+        baseline_market_countries: list[dict[str, Any]],
+        market_countries: list[dict[str, Any]],
+    ) -> None:
+        with self._connect() as connection:
+            subject_id = self._ensure_testing_subject(
+                connection,
+                product_family=product_family,
+                product_variant=product_variant,
+                catalogue_number=catalogue_number,
+                primary_udi_di=primary_udi_di,
+                basic_udi_di=basic_udi_di,
+            )
+            existing_row = connection.execute(
+                """
+                SELECT id
+                FROM testing_events
+                WHERE subject_id = ?
+                  AND message_type = 'MARKET_INFO.PUT'
+                  AND status = 'GENERATED'
+                ORDER BY event_index DESC
+                LIMIT 1
+                """,
+                (subject_id,),
+            ).fetchone()
+            payload_created_at = datetime.now(UTC).isoformat(timespec="milliseconds")
+            raw_event_json = json.dumps(
+                {
+                    "message_type": "MARKET_INFO.PUT",
+                    "status": "GENERATED",
+                    "catalogue_number": catalogue_number,
+                    "primary_udi_di": primary_udi_di,
+                    "basic_udi_di": basic_udi_di,
+                    "market_info_version": market_info_version,
+                    "baseline_market_info_state": {
+                        "market_countries": baseline_market_countries,
+                    },
+                    "latest_successful_market_info_state": {
+                        "version": market_info_version,
+                        "market_countries": market_countries,
+                    },
+                }
+            )
+            if existing_row is not None:
+                connection.execute(
+                    """
+                    UPDATE testing_events
+                    SET payload_created_at = ?,
+                        version = ?,
+                        raw_event_json = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        payload_created_at,
+                        market_info_version,
+                        raw_event_json,
+                        int(existing_row["id"]),
+                    ),
+                )
+                return
+
+            next_index_row = connection.execute(
+                "SELECT COALESCE(MAX(event_index), -1) + 1 FROM testing_events WHERE subject_id = ?",
+                (subject_id,),
+            ).fetchone()
+            next_index = int(next_index_row[0]) if next_index_row is not None else 0
+            connection.execute(
+                """
+                INSERT INTO testing_events (
+                    subject_id,
+                    event_index,
+                    message_type,
+                    status,
+                    version,
+                    scenario_id,
+                    scenario_label,
+                    tested_at,
+                    transaction_id,
+                    submission_id,
+                    payload_created_at,
+                    correlation_id,
+                    message_id,
+                    changed_fields_json,
+                    retained_fields_json,
+                    unchanged_fields_json,
+                    raw_event_json
+                ) VALUES (?, ?, 'MARKET_INFO.PUT', 'GENERATED', ?, NULL, NULL, NULL, NULL, NULL, ?, NULL, NULL, NULL, NULL, NULL, ?)
+                """,
+                (
+                    subject_id,
+                    next_index,
+                    market_info_version,
+                    payload_created_at,
+                    raw_event_json,
+                ),
+            )
+
     @classmethod
     def clear_reviewed_posts(cls) -> None:
         settings = get_settings()
@@ -469,6 +594,7 @@ class TestingStateStore:
                     exclude_from_baseline_patch_wave INTEGER NOT NULL DEFAULT 0,
                     latest_successful_version TEXT,
                     latest_successful_market_info_version TEXT,
+                    latest_successful_market_info_state_json TEXT,
                     latest_successful_state_json TEXT,
                     FOREIGN KEY(device_subject_id) REFERENCES device_subject(id) ON DELETE SET NULL
                 )
@@ -521,6 +647,12 @@ class TestingStateStore:
                 connection,
                 table_name="testing_subjects",
                 column_name="latest_successful_market_info_version",
+                column_definition="TEXT",
+            )
+            self._ensure_column(
+                connection,
+                table_name="testing_subjects",
+                column_name="latest_successful_market_info_state_json",
                 column_definition="TEXT",
             )
             self._ensure_column(
@@ -660,8 +792,9 @@ class TestingStateStore:
                 exclude_from_baseline_patch_wave,
                 latest_successful_version,
                 latest_successful_market_info_version,
+                latest_successful_market_info_state_json,
                 latest_successful_state_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, 0, 0, 0, NULL, NULL, NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, 0, 0, 0, NULL, NULL, NULL, NULL)
             """,
             (
                 subject_key,
