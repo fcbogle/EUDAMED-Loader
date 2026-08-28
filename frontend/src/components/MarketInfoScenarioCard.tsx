@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 type MarketInfoScenarioItem = {
   id: string;
   country: string;
@@ -9,18 +11,81 @@ type MarketInfoScenarioCardProps = {
   primaryUdiDi: string | null;
   productFamily: string | null;
   productVariant: string | null;
+  marketInfoVersion: string;
+  onMarketInfoVersionChange: (value: string) => void;
   currentMarketItems: MarketInfoScenarioItem[];
   draftMarketItems: MarketInfoScenarioItem[];
-  onCountryChange: (id: string, value: string) => void;
-  onOriginalPlacedOnMarketChange: (id: string, value: boolean) => void;
-  onAddCountry: () => void;
-  onRemoveCountry: (id: string) => void;
+  onAddCountry: (country: string) => void;
+  onSetOriginalCountry: (country: string) => void;
+  onRemoveCountry: (country: string) => void;
   readinessMessage: string;
   isReady: boolean;
 };
 
-function renderMarketInfoItemLabel(item: MarketInfoScenarioItem): string {
-  return item.originalPlacedOnMarket ? `${item.country || "Pending"} · original market` : item.country || "Pending";
+const MARKET_COUNTRY_OPTIONS = [
+  "Austria",
+  "Belgium",
+  "Bulgaria",
+  "Croatia",
+  "Cyprus",
+  "Czechia",
+  "Denmark",
+  "Estonia",
+  "Finland",
+  "France",
+  "Germany",
+  "Greece",
+  "Hungary",
+  "Ireland",
+  "Italy",
+  "Latvia",
+  "Lithuania",
+  "Luxembourg",
+  "Malta",
+  "Netherlands",
+  "Norway",
+  "Poland",
+  "Portugal",
+  "Romania",
+  "Slovakia",
+  "Slovenia",
+  "Spain",
+  "Sweden",
+] as const;
+
+const COUNTRY_FLAG_BY_NAME: Record<(typeof MARKET_COUNTRY_OPTIONS)[number], string> = {
+  Austria: "🇦🇹",
+  Belgium: "🇧🇪",
+  Bulgaria: "🇧🇬",
+  Croatia: "🇭🇷",
+  Cyprus: "🇨🇾",
+  Czechia: "🇨🇿",
+  Denmark: "🇩🇰",
+  Estonia: "🇪🇪",
+  Finland: "🇫🇮",
+  France: "🇫🇷",
+  Germany: "🇩🇪",
+  Greece: "🇬🇷",
+  Hungary: "🇭🇺",
+  Ireland: "🇮🇪",
+  Italy: "🇮🇹",
+  Latvia: "🇱🇻",
+  Lithuania: "🇱🇹",
+  Luxembourg: "🇱🇺",
+  Malta: "🇲🇹",
+  Netherlands: "🇳🇱",
+  Norway: "🇳🇴",
+  Poland: "🇵🇱",
+  Portugal: "🇵🇹",
+  Romania: "🇷🇴",
+  Slovakia: "🇸🇰",
+  Slovenia: "🇸🇮",
+  Spain: "🇪🇸",
+  Sweden: "🇸🇪",
+};
+
+function countryFlag(country: string): string {
+  return COUNTRY_FLAG_BY_NAME[country as keyof typeof COUNTRY_FLAG_BY_NAME] ?? "🏳️";
 }
 
 export function MarketInfoScenarioCard({
@@ -28,15 +93,23 @@ export function MarketInfoScenarioCard({
   primaryUdiDi,
   productFamily,
   productVariant,
+  marketInfoVersion,
+  onMarketInfoVersionChange,
   currentMarketItems,
   draftMarketItems,
-  onCountryChange,
-  onOriginalPlacedOnMarketChange,
   onAddCountry,
+  onSetOriginalCountry,
   onRemoveCountry,
   readinessMessage,
   isReady,
 }: MarketInfoScenarioCardProps) {
+  const [addCountryValue, setAddCountryValue] = useState("");
+  const [removeCountryValue, setRemoveCountryValue] = useState("");
+  const currentOriginalMarket = currentMarketItems.find((item) => item.originalPlacedOnMarket)?.country ?? null;
+  const draftOriginalMarket = draftMarketItems.find((item) => item.originalPlacedOnMarket)?.country ?? "";
+  const draftCountryNames = draftMarketItems.map((item) => item.country).filter(Boolean);
+  const availableCountryOptions = MARKET_COUNTRY_OPTIONS.filter((country) => !draftCountryNames.includes(country));
+
   return (
     <div className="draft-list xml-record-stack">
       <div className="draft-card xml-record-card">
@@ -52,80 +125,138 @@ export function MarketInfoScenarioCard({
           <span className="status-pill ok compact">{productFamily ?? "No family"} / {productVariant ?? "No variant"}</span>
         </div>
         <p className="panel-copy">
-          Create a standalone market information update by editing the countries that will appear in `MARKET_INFO.PUT`.
+          Create a standalone market information update by selecting the countries that will appear in `MARKET_INFO.PUT`.
         </p>
-        <div className="patch-compare-grid market-info-compare-grid">
-          <div className="patch-compare-card">
-            <span className="summary-label">Before</span>
-            <strong>Current tracked market countries</strong>
-            <p>Current variant-scoped market countries from the XML-ready source data.</p>
-            <ul className="patch-compare-list market-info-country-list">
+        <div className="market-info-editor-card">
+          <div className="market-info-editor-summary-row">
+            <div className="workflow-note patch-readiness-note market-info-stat-tile">
+              <strong>{currentMarketItems.length}</strong>
+              <span>Current countries</span>
+            </div>
+            <div className="workflow-note patch-readiness-note market-info-stat-tile">
+              <strong>{currentOriginalMarket ?? "Not set"}</strong>
+              <span>Current original market</span>
+            </div>
+            <div className="workflow-note patch-readiness-note market-info-stat-tile">
+              <strong>{draftMarketItems.length}</strong>
+              <span>Proposed countries</span>
+            </div>
+            <div className="workflow-note patch-readiness-note market-info-stat-tile">
+              <strong>{draftOriginalMarket || "Not set"}</strong>
+              <span>Proposed original market</span>
+            </div>
+          </div>
+          <div className="market-info-editor-controls">
+            <label className="market-info-field">
+              <span className="field-label">Market Info version</span>
+              <input
+                className="rule-select patch-select"
+                type="text"
+                inputMode="numeric"
+                value={marketInfoVersion}
+                onChange={(event) => onMarketInfoVersionChange(event.target.value)}
+                placeholder="1"
+              />
+            </label>
+            <label className="market-info-field">
+              <span className="field-label">Add country</span>
+              <select
+                className="rule-select patch-select"
+                value={addCountryValue}
+                onChange={(event) => {
+                  const selectedCountry = event.target.value;
+                  setAddCountryValue(selectedCountry);
+                  if (selectedCountry) {
+                    onAddCountry(selectedCountry);
+                    setAddCountryValue("");
+                  }
+                }}
+              >
+                <option value="">Select country</option>
+                {availableCountryOptions.map((country) => (
+                  <option key={country} value={country}>
+                    {country}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="market-info-field">
+              <span className="field-label">Remove country</span>
+              <select
+                className="rule-select patch-select"
+                value={removeCountryValue}
+                onChange={(event) => {
+                  const selectedCountry = event.target.value;
+                  setRemoveCountryValue(selectedCountry);
+                  if (selectedCountry) {
+                    onRemoveCountry(selectedCountry);
+                    setRemoveCountryValue("");
+                  }
+                }}
+                disabled={draftMarketItems.length <= 1}
+              >
+                <option value="">Select country</option>
+                {draftMarketItems.map((item) => (
+                  <option key={`remove-${item.id}`} value={item.country}>
+                    {item.country || "Pending"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="market-info-field">
+              <span className="field-label">Original market</span>
+              <select
+                className="rule-select patch-select"
+                value={draftOriginalMarket}
+                onChange={(event) => onSetOriginalCountry(event.target.value)}
+                disabled={!draftMarketItems.length}
+              >
+                <option value="">Select original market</option>
+                {draftMarketItems.map((item) => (
+                  <option key={`original-${item.id}`} value={item.country}>
+                    {item.country || "Pending"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <details className="market-info-current-details">
+            <summary>Show current countries</summary>
+            <div className="market-info-chip-list">
               {currentMarketItems.length ? (
                 currentMarketItems.map((item) => (
-                  <li key={`current-${item.id}`}>
-                    <strong>{item.country}</strong>
-                    <span>{item.originalPlacedOnMarket ? "Original placed on market" : "Additional market"}</span>
-                  </li>
+                  <span
+                    key={`current-${item.id}`}
+                    className={item.originalPlacedOnMarket ? "market-info-chip market-info-chip-original" : "market-info-chip"}
+                  >
+                    <span className="market-info-chip-flag" aria-hidden="true">{countryFlag(item.country)}</span>
+                    <span>{item.country}</span>
+                  </span>
                 ))
               ) : (
-                <li>
-                  <strong>Not resolved</strong>
-                  <span>No current market countries are available.</span>
-                </li>
+                <span className="market-info-empty-text">No current market countries are available.</span>
               )}
-            </ul>
-          </div>
-          <div className="patch-compare-card patch-compare-card-accent">
-            <span className="summary-label">After</span>
-            <strong>Draft Market Info scenario</strong>
-            <p>Edit the country list that will be used when generating the standalone message.</p>
-            <div className="market-info-editor-list">
-              {draftMarketItems.map((item, index) => (
-                <div key={item.id} className="market-info-editor-row">
-                  <label className="market-info-field">
-                    <span className="field-label">Country {index + 1}</span>
-                    <input
-                      className="rule-select patch-select"
-                      type="text"
-                      maxLength={2}
-                      value={item.country}
-                      onChange={(event) => onCountryChange(item.id, event.target.value)}
-                      placeholder="GB"
-                    />
-                  </label>
-                  <label className="market-info-toggle">
-                    <input
-                      type="checkbox"
-                      checked={item.originalPlacedOnMarket}
-                      onChange={(event) => onOriginalPlacedOnMarketChange(item.id, event.target.checked)}
-                    />
-                    <span>Original market</span>
-                  </label>
-                  <button
-                    className="ghost-button market-info-remove-button"
-                    type="button"
-                    onClick={() => onRemoveCountry(item.id)}
-                    disabled={draftMarketItems.length <= 1}
+            </div>
+          </details>
+          <details className="market-info-current-details">
+            <summary>Show proposed countries</summary>
+            <div className="market-info-chip-list market-info-chip-list-draft-inline">
+              {draftMarketItems.length ? (
+                draftMarketItems.map((item) => (
+                  <div
+                    key={`draft-${item.id}`}
+                    className={item.originalPlacedOnMarket ? "market-info-chip-row market-info-chip-row-original" : "market-info-chip-row"}
                   >
-                    Remove
-                  </button>
-                </div>
-              ))}
+                    <span className="market-info-chip-flag" aria-hidden="true">{countryFlag(item.country)}</span>
+                    <span className="market-info-chip-label">{item.country || "Pending"}</span>
+                    {item.originalPlacedOnMarket ? <span className="market-info-chip-badge">Original</span> : null}
+                  </div>
+                ))
+              ) : (
+                <span className="market-info-empty-text">Add at least one country to build the draft.</span>
+              )}
             </div>
-            <div className="market-info-editor-actions">
-              <button className="ghost-button" type="button" onClick={onAddCountry}>
-                Add country
-              </button>
-            </div>
-            <ul className="patch-compare-list market-info-country-list market-info-draft-summary-list">
-              {draftMarketItems.map((item) => (
-                <li key={`draft-${item.id}`}>
-                  <strong>{item.country || "Pending"}</strong>
-                  <span>{renderMarketInfoItemLabel(item)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          </details>
         </div>
         <div className="workflow-note patch-readiness-note">
           <strong>{isReady ? "Draft readiness" : "Draft blocked"}</strong>

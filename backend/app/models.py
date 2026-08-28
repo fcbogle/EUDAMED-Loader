@@ -354,6 +354,8 @@ class TestingSubjectReadModelSummary(BaseModel):
     has_successful_device_post: bool = False
     has_successful_child_post_or_patch: bool = False
     latest_successful_version: str | None = None
+    latest_successful_market_info_version: str | None = None
+    latest_success_message_type: str | None = None
     latest_tested_at: str | None = None
     reviewed_post_at: str | None = None
     event_count: int = 0
@@ -377,6 +379,26 @@ class TestingEventSummary(BaseModel):
     unchanged_fields: list[Any] = Field(default_factory=list)
 
 
+class TestingEventReadModelEntry(BaseModel):
+    id: int
+    subject_id: int
+    product_family: str | None = None
+    product_variant: str | None = None
+    catalogue_number: str | None = None
+    primary_udi_di: str | None = None
+    basic_udi_di: str | None = None
+    message_type: str | None = None
+    status: str | None = None
+    version: str | None = None
+    scenario_id: str | None = None
+    scenario_label: str | None = None
+    tested_at: str | None = None
+    transaction_id: str | None = None
+    submission_id: str | None = None
+    correlation_id: str | None = None
+    message_id: str | None = None
+
+
 class TestingSubjectHistory(BaseModel):
     subject: TestingSubjectReadModelSummary
     events: list[TestingEventSummary] = Field(default_factory=list)
@@ -384,8 +406,8 @@ class TestingSubjectHistory(BaseModel):
 
 class SuccessXmlUploadResult(BaseModel):
     summary_message: str
-    message_type: Literal["DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH"]
-    operation_label: Literal["Basic UDI-DI POST", "Device UDI-DI POST", "Device UDI-DI PATCH"]
+    message_type: Literal["DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH", "MARKET_INFO.PUT"]
+    operation_label: Literal["Basic UDI-DI POST", "Device UDI-DI POST", "Device UDI-DI PATCH", "Market Info PUT"]
     entity_code: str
     product_family: str | None = None
     product_variant: str | None = None

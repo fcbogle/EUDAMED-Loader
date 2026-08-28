@@ -1,9 +1,9 @@
 import { useRef, useState, type ChangeEvent } from "react";
 
 import { api } from "./api";
-import type { OperationAssessment, TestingSubjectReadModelSummary } from "./types";
+import type { OperationAssessment, SuccessXmlUploadResult, TestingSubjectReadModelSummary } from "./types";
 
-type UploadMode = "post" | "patch" | "bulkPost" | "bulkUdidiPost" | "bulkPatch";
+type UploadMode = "post" | "patch" | "marketInfo" | "bulkPost" | "bulkUdidiPost" | "bulkPatch";
 
 type UploadScope = {
   productFamily: string;
@@ -20,6 +20,7 @@ type UseSuccessXmlUploadArgs = {
   setXmlOperationAssessment: (assessment: OperationAssessment | null) => void;
   setXmlOperationAssessmentError: (message: string | null) => void;
   clearPreviewState: () => void;
+  onUploadRecorded?: (result: SuccessXmlUploadResult) => void;
 };
 
 export function useSuccessXmlUpload({
@@ -30,6 +31,7 @@ export function useSuccessXmlUpload({
   setXmlOperationAssessment,
   setXmlOperationAssessmentError,
   clearPreviewState,
+  onUploadRecorded,
 }: UseSuccessXmlUploadArgs) {
   const [isUploadingSuccessXml, setIsUploadingSuccessXml] = useState<boolean>(false);
   const successXmlInputRef = useRef<HTMLInputElement | null>(null);
@@ -51,34 +53,42 @@ export function useSuccessXmlUpload({
           ? api.assessSinglePatch(scope.productFamily, scope.productVariant)
           : scope.mode === "post"
             ? api.assessSinglePost(scope.productFamily, scope.productVariant)
+            : scope.mode === "marketInfo"
+              ? null
             : scope.mode === "bulkPatch"
               ? api.assessBulkPatch(scope.productFamily, scope.productVariant, scope.basicUdiDi ?? undefined)
               : api.assessBulkPost(scope.productFamily, scope.productVariant);
+      const updatedSummariesPromise = api.testingSubjectSummaries({
+        product_family: scope.productFamily,
+        product_variant: scope.productVariant,
+        limit: 10000,
+      });
       const [updatedSummaries, updatedAssessment] = await Promise.all([
-        api.testingSubjectSummaries({
-          product_family: scope.productFamily,
-          product_variant: scope.productVariant,
-          limit: 10000,
-        }),
-        assessmentRequest,
+        updatedSummariesPromise,
+        assessmentRequest ?? Promise.resolve<OperationAssessment | null>(null),
       ]);
 
       setTestingSubjectSummaries(updatedSummaries);
-      setXmlOperationAssessment(updatedAssessment);
-      setXmlOperationAssessmentError(null);
+      if (assessmentRequest) {
+        setXmlOperationAssessment(updatedAssessment);
+        setXmlOperationAssessmentError(null);
+      }
+      onUploadRecorded?.(result);
       clearPreviewState();
       const operationLabel =
         scope.mode === "patch"
           ? "PATCH"
           : scope.mode === "post"
             ? "POST"
+            : scope.mode === "marketInfo"
+              ? "Market Info"
             : scope.mode === "bulkPatch"
               ? "Bulk PATCH"
               : "Bulk POST";
       setXmlActionMessage(
         result.duplicate_event
-          ? `${result.summary_message} This success XML was already recorded and the ${operationLabel} assessment was refreshed.`
-          : `${result.summary_message} The tracked testing state and ${operationLabel} assessment were refreshed.`,
+          ? `${result.summary_message} This success XML was already recorded and the ${operationLabel} workspace was refreshed.`
+          : `${result.summary_message} The tracked testing state and ${operationLabel} workspace were refreshed.`,
       );
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Failed to upload success XML.";

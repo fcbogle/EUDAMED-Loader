@@ -946,53 +946,160 @@ select {
   overflow-wrap: anywhere;
 }
 
-.market-info-editor-list {
-  display: grid;
-  gap: 10px;
-}
-
-.market-info-editor-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 10px;
-  align-items: end;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.72);
-}
-
 .market-info-field {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
 
-.market-info-field input.patch-select {
+.market-info-field input.patch-select,
+.market-info-field select.patch-select {
   width: 100%;
   box-sizing: border-box;
 }
 
-.market-info-toggle {
+.market-info-editor-card {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(0, 68, 90, 0.12);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(244, 249, 250, 0.92), rgba(255, 255, 255, 0.94));
+}
+
+.market-info-editor-summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.market-info-editor-controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.market-info-stat-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.market-info-stat-tile {
+  margin: 0;
+}
+
+.market-info-current-details {
+  display: grid;
+  gap: 10px;
+}
+
+.market-info-current-details summary {
+  cursor: pointer;
+  color: #005d7a;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.market-info-current-details[open] summary {
+  margin-bottom: 2px;
+}
+
+.market-info-draft-block {
+  display: grid;
+  gap: 10px;
+}
+
+.market-info-draft-block strong {
+  color: #002a3a;
+  font-size: 0.9rem;
+}
+
+.market-info-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.market-info-chip {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(0, 68, 90, 0.12);
+  color: #003547;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.market-info-chip-original {
+  border-color: rgba(11, 139, 165, 0.35);
+  color: #005d7a;
+  font-weight: 700;
+}
+
+.market-info-chip-list-draft {
+  display: grid;
   gap: 8px;
-  min-height: 38px;
-  color: #355864;
-  font-size: 0.82rem;
-  font-weight: 600;
 }
 
-.market-info-editor-actions {
+.market-info-chip-list-draft-inline {
   display: flex;
-  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.market-info-remove-button {
-  min-height: 38px;
+.market-info-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(0, 68, 90, 0.12);
 }
 
-.market-info-draft-summary-list {
-  margin-top: 8px;
+.market-info-chip-row-original {
+  border-color: rgba(11, 139, 165, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(11, 139, 165, 0.06);
+}
+
+.market-info-chip-label {
+  color: #002a3a;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.market-info-chip-flag {
+  font-size: 0.84rem;
+  line-height: 1;
+}
+
+.market-info-chip-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(11, 139, 165, 0.12);
+  color: #005d7a;
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.market-info-empty-text {
+  color: #4c6f7a;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 1100px) {
+  .market-info-editor-summary-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .patch-change-summary-list {
@@ -2348,6 +2455,13 @@ a.ghost-button:visited {
   margin-bottom: 10px;
 }
 
+.validation-review-tabs .xml-mode-button {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 0.7rem;
+  line-height: 1.15;
+}
+
 .validation-full-width-stack {
   grid-column: 1 / -1;
   display: grid;
@@ -2702,6 +2816,20 @@ a.ghost-button:visited {
 
 .patch-focus-layout .xml-sidebar-surface {
   order: -1;
+}
+
+.market-info-focus-layout {
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.market-info-focus-layout .xml-preview-surface {
+  gap: 0;
+}
+
+.market-info-focus-layout .xml-sidebar-surface {
+  display: none;
 }
 
 .xml-equal-panel {

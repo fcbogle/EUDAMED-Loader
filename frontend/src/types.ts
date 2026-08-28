@@ -567,6 +567,7 @@ export type MarketInfoPutPreview = {
   product_variant: string | null;
   catalogue_number: string;
   primary_udi_di: string;
+  market_info_version: string;
   registered_device_anchor: RegisteredDeviceAnchor;
   file_name: string;
   xml: string;
@@ -820,6 +821,26 @@ export type TestingWorkspaceSummary = {
   latest_tested_at: string | null;
 };
 
+export type TestingEventReadModelEntry = {
+  id: number;
+  subject_id: number;
+  product_family: string | null;
+  product_variant: string | null;
+  catalogue_number: string | null;
+  primary_udi_di: string | null;
+  basic_udi_di: string | null;
+  message_type: string | null;
+  status: string | null;
+  version: string | null;
+  scenario_id: string | null;
+  scenario_label: string | null;
+  tested_at: string | null;
+  transaction_id: string | null;
+  submission_id: string | null;
+  correlation_id: string | null;
+  message_id: string | null;
+};
+
 export type TestingSubjectReadModelSummary = {
   id: number;
   device_subject_id: number | null;
@@ -833,6 +854,8 @@ export type TestingSubjectReadModelSummary = {
   has_successful_device_post: boolean;
   has_successful_child_post_or_patch: boolean;
   latest_successful_version: string | null;
+  latest_successful_market_info_version: string | null;
+  latest_success_message_type: string | null;
   latest_tested_at: string | null;
   reviewed_post_at: string | null;
   event_count: number;
@@ -840,8 +863,8 @@ export type TestingSubjectReadModelSummary = {
 
 export type SuccessXmlUploadResult = {
   summary_message: string;
-  message_type: "DEVICE.POST" | "UDI_DI.POST";
-  operation_label: "Basic UDI-DI POST" | "Device UDI-DI POST";
+  message_type: "DEVICE.POST" | "UDI_DI.POST" | "UDI_DI.PATCH" | "MARKET_INFO.PUT";
+  operation_label: "Basic UDI-DI POST" | "Device UDI-DI POST" | "Device UDI-DI PATCH" | "Market Info PUT";
   entity_code: string;
   product_family: string | null;
   product_variant: string | null;
@@ -856,4 +879,8 @@ export type SuccessXmlUploadResult = {
   created_subject: boolean;
   recorded_event: boolean;
   duplicate_event: boolean;
+  entity_count?: number;
+  recorded_event_count?: number;
+  duplicate_event_count?: number;
+  created_subject_count?: number;
 };

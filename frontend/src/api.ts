@@ -30,6 +30,7 @@ import type {
   SourceRowDetail,
   SourceRowSummary,
   TestingSubjectReadModelSummary,
+  TestingEventReadModelEntry,
   TestingWorkspaceSummary,
   WorkbookImportDiffSummary,
   WorkbookImportRunResponse,
@@ -232,12 +233,14 @@ export const api = {
     productFamily: string,
     productVariant: string,
     catalogueNumber: string,
+    marketInfoVersion: string,
     marketCountries?: Array<{ country: string; original_placed_on_market: boolean }>,
   ) =>
     sendJson<MarketInfoPutPreview>("/xml/preview-market-info-put", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
+      market_info_version: marketInfoVersion,
       market_countries: marketCountries,
     }),
   previewGeneratedPatchScenario: (
@@ -322,6 +325,16 @@ export const api = {
       product_variant: params?.product_variant,
       limit: params?.limit ?? 200,
     }),
+  testingEvents: (params?: {
+    product_family?: string;
+    product_variant?: string;
+    limit?: number;
+  }) =>
+    sendJson<TestingEventReadModelEntry[]>("/xml/testing-events", "POST", {
+      product_family: params?.product_family,
+      product_variant: params?.product_variant,
+      limit: params?.limit ?? 500,
+    }),
   assessSinglePost: (productFamily: string, productVariant: string, catalogueNumber?: string | null) =>
     sendJson<OperationAssessment>("/xml/assess-single-post", "POST", {
       product_family: productFamily,
@@ -366,12 +379,14 @@ export const api = {
     productFamily: string,
     productVariant: string,
     catalogueNumber: string,
+    marketInfoVersion: string,
     marketCountries?: Array<{ country: string; original_placed_on_market: boolean }>,
   ) =>
     sendDownload("/xml/download-market-info-put", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
+      market_info_version: marketInfoVersion,
       market_countries: marketCountries,
     }),
   downloadGeneratedPatchScenario: (

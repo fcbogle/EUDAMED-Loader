@@ -8,7 +8,7 @@ This draft restates the architecture around the application as it exists now, no
 
 This is a working architecture draft based on the codebase, current UI workspaces, current SQLite persistence, and the documented direction in [session-handoff.md](/Users/frankbogle/PycharmProjects/Eudamed/EudamedUploader/docs/session-handoff.md).
 
-It reflects the state of the application as of August 24, 2026.
+It reflects the state of the application as of August 28, 2026.
 
 ## Scope
 
@@ -132,6 +132,7 @@ Implemented business capability now includes:
 - distinction between parent-seeding and child-only `POST` candidates
 - generation of single-device `POST` XML
 - generation of single-device scenario-based `PATCH` XML
+- generation of single-device scenario-driven `MARKET_INFO.PUT` XML
 - generation of bulk Basic UDI-DI parent registration XML
 - generation of bulk Device UDI-DI child registration XML
 - generation of bulk PATCH XML
@@ -233,6 +234,7 @@ The operational SQLite layer currently stores and supports:
 - testing subjects
 - registration success state
 - latest successful version per device
+- latest successful Market Info version per device lineage
 - per-device accepted-state lineage
 - success XML upload outcomes
 - counts and read models used by UI panels
@@ -283,9 +285,13 @@ Current architecture assumption:
 
 - publicly accessible EUDAMED and MDCG guidance does not currently give a clear verified rule for whether `MARKET-INFO.PUT` increments the accepted device version, leaves it unchanged, or uses a distinct market-information version concept
 - the implemented and planned architecture should therefore treat Market Info version handling as evidence-led
-- `MARKET-INFO.PUT` should use the current accepted device version as input context when needed by the XML shape
+- `MARKET-INFO.PUT` should use the current accepted Market Info/device version as input context when needed by the XML shape
+- successful `MARKET-INFO.PUT` should be persisted in Market Info-specific lineage state
 - successful `MARKET-INFO.PUT` should not, by default, advance the core tracked device/PATCH version lineage
-- Market Info success state should instead be persisted separately until Playground or restricted EUDAMED documentation proves that version advancement is required
+- the active implementation now records Market Info success separately in:
+  - `testing_events`
+  - `testing_subjects.latest_successful_market_info_version`
+- the active implementation now promotes the accepted Market Info country set back into the UI after successful XML upload so the next scenario starts from the new accepted baseline
 
 ### `Bulk Basic UDI-DI POST`
 
@@ -313,6 +319,7 @@ The current success-XML endpoint accepts success XML for:
 - `DEVICE.POST`
 - `UDI_DI.POST`
 - `UDI_DI.PATCH`
+- `MARKET_INFO.PUT`
 
 The parser also supports multi-entity acknowledgements for bulk operations.
 
@@ -321,6 +328,7 @@ Current persistence behavior includes:
 - stamping successful `POST` records at version `1`
 - incrementing `PATCH` lineage using the accepted returned state
 - recording scenario information for successful PATCH updates where available
+- recording successful Market Info updates as separate Market Info events and Market Info version state
 - updating the state that drives next-operation availability and remaining counts
 
 The current success-capture architecture does not yet treat `MARKET-INFO.PUT` as part of the same version lineage as `PATCH`. That separation is intentional until operational evidence proves otherwise.
@@ -340,6 +348,14 @@ The current UI direction is to keep all operation workspaces aligned around the 
 
 This pattern has already been applied substantially to single `POST` and single `PATCH`, and is being extended to bulk operations.
 
+It now also applies to single `Market Info`, which uses:
+
+- an assessment card
+- a scenario/edit card
+- a preview card
+- upload-success handling
+- the same compact metadata and preview language as the other single-device workspaces
+
 The architecture implication is that the frontend is moving from one large mixed workspace toward operation-specific components with shared UI language and shared orchestration patterns.
 
 ## Current Persistence And State Architecture
@@ -350,6 +366,7 @@ The present persistence model is operational rather than archival. Its job is to
 - what the latest accepted version is for a device
 - whether a new `POST` is parent-seeding or child-only
 - whether a `PATCH` can be built safely
+- what the latest accepted Market Info version is for a device lineage
 - how many eligible operations remain in a selected scope
 
 The current model is therefore not just passive storage. It is part of the workflow engine.
@@ -373,6 +390,7 @@ The main current architecture risks are:
 - some workflows still rely on fallback or transitional UI structures
 - operational counts can become misleading if they are not tied precisely to the selected mode
 - bulk PATCH preview generation may become slow for larger selections because current derivation work is done per device before package assembly
+- Market Info version semantics are now operationally tracked, but the exact EUDAMED contract meaning still depends on continued Playground evidence because public guidance remains incomplete
 - success capture is stronger than before, but broader audit and replay tooling is still limited
 
 ## Transition Architecture And Roadmap
@@ -384,7 +402,8 @@ The current transition path is:
 3. strengthen SQLite-backed identity and accepted-state linkage
 4. expand documentation so it matches implemented behavior
 5. improve bulk performance and operator feedback
-6. only then consider later transport integration
+6. continue controlled `MARKET_INFO.PUT` testing and confirm the long-term versioning rule from operational evidence
+7. only then consider later transport integration
 
 ## Production Cutover Planning
 
@@ -442,8 +461,8 @@ Production cutover should keep Market Info version handling separate from PATCH 
 
 The current intended rule is:
 
-1. use the current accepted device version as context if the Market Info XML/service contract requires it
-2. record successful Market Info outcomes in separate Market Info state fields or events
+1. use the current accepted Market Info/device version as context if the Market Info XML/service contract requires it
+2. record successful Market Info outcomes in separate Market Info state fields and events
 3. do not increment the core accepted device version solely because a `MARKET-INFO.PUT` succeeded unless EUDAMED acknowledgement evidence or restricted technical guidance proves that this is required
 
 This prevents the architecture from incorrectly advancing PATCH lineage on the basis of an assumption that is not yet verified from public EUDAMED guidance.
@@ -467,6 +486,7 @@ Open questions that still need deliberate architecture decisions include:
 - how far the SQLite model should go before a more formal relational identity cleanup
 - how scenario change capture for PATCH should evolve beyond the current first-pass recording
 - how bulk PATCH generation should scale toward larger selections
+- whether Market Info version semantics should remain completely separate at Production cutover or be reconciled with a broader accepted-state model
 - how Production cutover should switch from testing-lineage gating to assumed-registered `PATCH` gating
 - how Production `PATCH` version state should be sourced from EUDAMED, trusted source version markers, or explicit operator confirmation
 - what the final submission-history and audit model should be

@@ -312,12 +312,13 @@ class EudamedMessageRenderer:
                 namespace=MARKET_INFO_NS,
             )
         )
-        payload.append(self._market_infos_wrapper_element(record.market_countries))
+        payload.append(self._market_infos_wrapper_element(record.market_countries, record.market_info_version))
         return payload
 
-    def _market_infos_wrapper_element(self, items: list[tuple[str, bool]]) -> XmlElement:
+    def _market_infos_wrapper_element(self, items: list[tuple[str, bool]], version: str) -> XmlElement:
         market_infos = etree.Element(self._q(MARKET_INFO_NS, "marketInfos"))
         self._append_text(market_infos, ENTITY_NS, "state", "REGISTERED")
+        self._append_text(market_infos, ENTITY_NS, "version", version)
         for country_code, original in items:
             market_info = etree.SubElement(market_infos, self._q(MARKET_INFO_NS, "marketInfo"))
             self._append_text(market_info, MARKET_INFO_NS, "country", country_code)

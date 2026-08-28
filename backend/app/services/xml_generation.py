@@ -1480,6 +1480,7 @@ class XmlGenerationService:
         product_variant: str,
         catalogue_number: str,
         market_countries: list[tuple[str, bool]] | None = None,
+        market_info_version: str | None = None,
     ) -> MarketInfoPutPreview:
         record = self.selector.find_xml_ready_record(
             product_family=product_family,
@@ -1487,12 +1488,17 @@ class XmlGenerationService:
             catalogue_number=catalogue_number,
         )
         market_info_record = self.projection_builder.build_market_info_record(record)
+        normalized_market_info_version = self._validate_market_info_version(market_info_version)
         if market_countries is not None:
             normalized_market_countries = self._normalized_market_info_countries(market_countries)
             market_info_record = replace(
                 market_info_record,
                 market_countries=normalized_market_countries,
             )
+        market_info_record = replace(
+            market_info_record,
+            market_info_version=normalized_market_info_version,
+        )
         xml_bytes = self.renderer.render_market_info_message(market_info_record)
         validation = self.xml_validation_service.validate_message(xml_bytes)
         return MarketInfoPutPreview(
@@ -1500,6 +1506,7 @@ class XmlGenerationService:
             product_variant=record.product_variant,
             catalogue_number=market_info_record.catalogue_number,
             primary_udi_di=market_info_record.primary_udi_di,
+            market_info_version=market_info_record.market_info_version,
             registered_device_anchor=RegisteredDeviceAnchor(
                 product_family=record.product_family,
                 product_variant=record.product_variant,
@@ -1537,14 +1544,35 @@ class XmlGenerationService:
         product_variant: str,
         catalogue_number: str,
         market_countries: list[tuple[str, bool]] | None = None,
+        market_info_version: str | None = None,
     ) -> tuple[str, bytes]:
         preview = self.preview_market_info_put(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
             market_countries=market_countries,
+            market_info_version=market_info_version,
         )
-        return preview.file_name, preview.xml.encode("utf-8")
+        package_file_name = self.package_builder.operation_package_file_name(
+            product_family=product_family,
+            product_variant=product_variant,
+            operation="market-info-put",
+            catalogue_number=catalogue_number,
+        )
+        manifest = {
+            "mode": preview.mode,
+            "product_family": preview.product_family,
+            "product_variant": preview.product_variant,
+            "catalogue_number": preview.catalogue_number,
+            "primary_udi_di": preview.primary_udi_di,
+            "file_name": preview.file_name,
+            "validation": preview.validation.model_dump(mode="json"),
+        }
+        return self.package_builder.build_archive(
+            package_file_name=package_file_name,
+            members=[(preview.file_name, preview.xml.encode("utf-8"))],
+            manifest=manifest,
+        )
 
     @staticmethod
     def _normalized_market_info_countries(
@@ -1553,7 +1581,7 @@ class XmlGenerationService:
         normalized_items: list[tuple[str, bool]] = []
         seen_countries: set[str] = set()
         for country_code, original in market_countries:
-            normalized_country_code = country_code.strip().upper()
+            normalized_country_code = DeviceXmlProjectionBuilder._country_code(country_code)
             if not normalized_country_code:
                 continue
             if normalized_country_code in seen_countries:
@@ -1563,6 +1591,19 @@ class XmlGenerationService:
         if not normalized_items:
             raise ValueError("At least one market country is required for MARKET_INFO.PUT generation.")
         return normalized_items
+
+    @staticmethod
+    def _validate_market_info_version(market_info_version: str | None) -> str:
+        normalized = str(market_info_version or "").strip()
+        if not normalized:
+            raise ValueError("market_info_version is required for MARKET_INFO.PUT generation.")
+        try:
+            parsed = int(normalized)
+        except ValueError as exc:
+            raise ValueError("market_info_version must be a positive integer.") from exc
+        if parsed < 1:
+            raise ValueError("market_info_version must be a positive integer.")
+        return str(parsed)
 
     def _registered_device_anchor(
         self,

@@ -66,6 +66,7 @@ import type {
   SheetSummary,
   SingleRecordXmlPreview,
   TestingSubjectReadModelSummary,
+  TestingEventReadModelEntry,
   TestingWorkspaceSummary,
   WorkbookImportDuplicateGroup,
   WorkbookImportSnapshotSummary,
@@ -142,6 +143,111 @@ type XmlStructureSection = {
   lineStart: number;
   lineEnd: number;
 };
+
+function normalizeFamilyValue(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function familyLabelVariants(value: string | null | undefined): string[] {
+  const raw = value ?? "";
+  const parts = raw
+    .split("/")
+    .map((part) => normalizeFamilyValue(part))
+    .filter(Boolean);
+  const variants = new Set<string>();
+  const full = normalizeFamilyValue(raw);
+  if (full) {
+    variants.add(full);
+  }
+  parts.forEach((part) => variants.add(part));
+  return Array.from(variants);
+}
+
+function familyLabelsOverlap(left: string | null | undefined, right: string | null | undefined): boolean {
+  const leftVariants = familyLabelVariants(left);
+  const rightVariants = familyLabelVariants(right);
+  return leftVariants.some((variant) => rightVariants.includes(variant));
+}
+
+function resolveTestingSummaryLatestOperationLabel(subjects: TestingSubjectReadModelSummary[]): string {
+  const latestSubject = subjects.reduce<TestingSubjectReadModelSummary | null>((currentLatest, candidate) => {
+    if (!currentLatest) {
+      return candidate;
+    }
+    const currentTimestamp = currentLatest.latest_tested_at ?? "";
+    const candidateTimestamp = candidate.latest_tested_at ?? "";
+    if (candidateTimestamp > currentTimestamp) {
+      return candidate;
+    }
+    if (candidateTimestamp < currentTimestamp) {
+      return currentLatest;
+    }
+    return Number(candidate.id) > Number(currentLatest.id) ? candidate : currentLatest;
+  }, null);
+  if (!latestSubject) {
+    return "No success";
+  }
+  if (latestSubject.latest_success_message_type === "MARKET_INFO.PUT") {
+    return latestSubject.latest_successful_market_info_version
+      ? `Market Info · market v${latestSubject.latest_successful_market_info_version}`
+      : "Market Info";
+  }
+  if (latestSubject.latest_success_message_type === "UDI_DI.PATCH") {
+    return latestSubject.latest_successful_version ? `PATCH · v${latestSubject.latest_successful_version}` : "PATCH";
+  }
+  if (latestSubject.latest_success_message_type === "DEVICE.POST") {
+    return "Parent POST · v1";
+  }
+  if (latestSubject.latest_success_message_type === "UDI_DI.POST") {
+    return "Child POST · v1";
+  }
+  if (latestSubject.latest_successful_version) {
+    return `v${latestSubject.latest_successful_version}`;
+  }
+  return "Recorded";
+}
+
+function resolveTestingSummaryLatestPatchLabel(subjects: TestingSubjectReadModelSummary[]): string {
+  const latestPatchVersion = subjects.reduce((max, subject) => {
+    const versionNumber = Number(subject.latest_successful_version ?? "0");
+    return Number.isFinite(versionNumber) && versionNumber > max ? versionNumber : max;
+  }, 0);
+  return latestPatchVersion > 0 ? `v${latestPatchVersion}` : "v-";
+}
+
+function resolveTestingSummaryLatestMarketInfoLabel(subjects: TestingSubjectReadModelSummary[]): string {
+  const latestMarketInfoVersion = subjects.reduce((max, subject) => {
+    const versionNumber = Number(subject.latest_successful_market_info_version ?? "0");
+    return Number.isFinite(versionNumber) && versionNumber > max ? versionNumber : max;
+  }, 0);
+  if (latestMarketInfoVersion > 0) {
+    return `market v${latestMarketInfoVersion}`;
+  }
+  return subjects.some((subject) => subject.latest_success_message_type === "MARKET_INFO.PUT") ? "Recorded" : "v-";
+}
+
+function resolveTestingEventOperationLabel(event: TestingEventReadModelEntry): string {
+  if (event.message_type === "DEVICE.POST") {
+    return "Basic UDI-DI POST";
+  }
+  if (event.message_type === "UDI_DI.POST") {
+    return "Device UDI-DI POST";
+  }
+  if (event.message_type === "UDI_DI.PATCH") {
+    return "PATCH";
+  }
+  if (event.message_type === "MARKET_INFO.PUT") {
+    return "Market Info";
+  }
+  return event.message_type ?? "Recorded";
+}
+
+function resolveTestingEventVersionLabel(event: TestingEventReadModelEntry): string {
+  if (event.message_type === "MARKET_INFO.PUT") {
+    return event.version ? `market v${event.version}` : "Recorded";
+  }
+  return event.version ? `v${event.version}` : "v1";
+}
 
 const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
   {
@@ -1153,6 +1259,7 @@ export function App() {
   const workbookImportMonitoringRequestRef = useRef<number>(0);
   const [workbookImportSummaryError, setWorkbookImportSummaryError] = useState<string | null>(null);
   const [hasWorkbookImportSnapshot, setHasWorkbookImportSnapshot] = useState<boolean>(false);
+  const [isLoadingWorkbookImportMonitoring, setIsLoadingWorkbookImportMonitoring] = useState<boolean>(true);
   const [isRunningWorkbookImport, setIsRunningWorkbookImport] = useState<boolean>(false);
   const [workbookImportActionMessage, setWorkbookImportActionMessage] = useState<string | null>(null);
   const [sheets, setSheets] = useState<SheetSummary[]>([]);
@@ -1167,7 +1274,7 @@ export function App() {
   const [selectedValidationRecordKey, setSelectedValidationRecordKey] = useState<string | null>(null);
   const [selectedValidationFamily, setSelectedValidationFamily] = useState<string>("");
   const [selectedValidationVariant, setSelectedValidationVariant] = useState<string>("");
-  const [selectedValidationReviewTab, setSelectedValidationReviewTab] = useState<ValidationReviewTab>("canonicalMapping");
+  const [selectedValidationReviewTab, setSelectedValidationReviewTab] = useState<ValidationReviewTab>("sourceSheetBasicUdi");
   const [selectedDeviceSubjectFamily, setSelectedDeviceSubjectFamily] = useState<string>("");
   const [selectedDeviceSubjectVariant, setSelectedDeviceSubjectVariant] = useState<string>("");
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
@@ -1185,6 +1292,7 @@ export function App() {
   const [testingSubjectSummaries, setTestingSubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
   const [testingSummaryWorkspaceSummary, setTestingSummaryWorkspaceSummary] = useState<TestingWorkspaceSummary | null>(null);
   const [testingSummarySubjectSummaries, setTestingSummarySubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
+  const [testingSummaryEvents, setTestingSummaryEvents] = useState<TestingEventReadModelEntry[]>([]);
   const [isLoadingTestingSummary, setIsLoadingTestingSummary] = useState<boolean>(false);
   const [testingSummaryError, setTestingSummaryError] = useState<string | null>(null);
   const [patchScenarioStatuses, setPatchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
@@ -1223,6 +1331,8 @@ export function App() {
   const [selectedPostXmlSectionId, setSelectedPostXmlSectionId] = useState<string | null>(null);
   const [selectedMarketInfoXmlSectionId, setSelectedMarketInfoXmlSectionId] = useState<string | null>(null);
   const [selectedPatchXmlSectionId, setSelectedPatchXmlSectionId] = useState<string | null>(null);
+  const [marketInfoVersionInput, setMarketInfoVersionInput] = useState<string>("1");
+  const [acceptedMarketInfoItems, setAcceptedMarketInfoItems] = useState<MarketInfoScenarioItem[] | null>(null);
   const [marketInfoScenarioItems, setMarketInfoScenarioItems] = useState<MarketInfoScenarioItem[]>([
     { id: createMarketInfoScenarioId(), country: "", originalPlacedOnMarket: false },
   ]);
@@ -1404,6 +1514,7 @@ export function App() {
   async function loadWorkbookImportMonitoring(): Promise<void> {
     const requestId = workbookImportMonitoringRequestRef.current + 1;
     workbookImportMonitoringRequestRef.current = requestId;
+    setIsLoadingWorkbookImportMonitoring(true);
     const workbookImportSummaryResult = await api
       .latestWorkbookImportSummary()
       .then((data) => ({ data, error: null as string | null, hasSnapshot: true }))
@@ -1460,6 +1571,7 @@ export function App() {
       deviceSubjectsResult.error,
     ].filter(Boolean);
     setWorkbookImportSummaryError(monitoringErrors.length ? monitoringErrors.join(" ") : null);
+    setIsLoadingWorkbookImportMonitoring(false);
   }
 
   async function runWorkbookImportFromUi(): Promise<void> {
@@ -2014,20 +2126,26 @@ export function App() {
             className: "danger",
             detail: `Workbook import exists for batch #${latestImportBatch.import_batch_id}, but the canonical projection is not currently available in SQLite.`,
           }
-    : {
-        label: hasWorkbookImportSnapshot
-          ? "Snapshot pending"
-          : workbookImportSummaryError
-            ? "Snapshot unavailable"
-            : "Import required",
-        className: latestImportBatch ? "ok" : "warn",
-        detail:
-          !hasWorkbookImportSnapshot && !workbookImportSummaryError
-            ? "No workbook import snapshot exists yet. Run the initial import to populate the SQLite-backed submission view."
+    : isLoadingWorkbookImportMonitoring
+      ? {
+          label: "Loading snapshot",
+          className: "warn",
+          detail: "Checking the current SQLite-backed submission snapshot.",
+        }
+      : {
+          label: hasWorkbookImportSnapshot
+            ? "Snapshot pending"
             : workbookImportSummaryError
-              ? workbookImportSummaryError
-              : "Submission Data requires a workbook import before SQLite-backed monitoring and read-model panels can load.",
-      };
+              ? "Snapshot unavailable"
+              : "Import required",
+          className: latestImportBatch ? "ok" : "warn",
+          detail:
+            !hasWorkbookImportSnapshot && !workbookImportSummaryError
+              ? "No workbook import snapshot exists yet. Run the initial import to populate the SQLite-backed submission view."
+              : workbookImportSummaryError
+                ? workbookImportSummaryError
+                : "Submission Data requires a workbook import before SQLite-backed monitoring and read-model panels can load.",
+        };
   const canonicalProjectionUiStatus =
     canonicalValidation?.projection_status === "rebuilt"
       ? {
@@ -2261,7 +2379,7 @@ export function App() {
     if ((record.submission_operation ?? "").toUpperCase() !== "POST") {
       return false;
     }
-    if (selectedTestingSummaryFamily && record.product_family !== selectedTestingSummaryFamily) {
+    if (selectedTestingSummaryFamily && !familyLabelsOverlap(record.product_family, selectedTestingSummaryFamily)) {
       return false;
     }
     if (selectedTestingSummaryVariant && record.product_variant !== selectedTestingSummaryVariant) {
@@ -2304,12 +2422,12 @@ export function App() {
     .map((summary) => {
       const matchingRecords = xmlReadyRecords.filter(
         (record) =>
-          record.product_family === summary.product_family &&
+          familyLabelsOverlap(record.product_family, summary.product_family) &&
           record.product_variant === summary.product_variant &&
           (record.submission_operation ?? "").toUpperCase() === "POST",
       );
       const matchingSubjects = testingSummarySubjectSummaries.filter(
-        (subject) => subject.product_family === summary.product_family && subject.product_variant === summary.product_variant,
+        (subject) => familyLabelsOverlap(subject.product_family, summary.product_family) && subject.product_variant === summary.product_variant,
       );
       const rowSuccessfulPrimaryUdiSet = new Set(
         matchingSubjects
@@ -2345,16 +2463,21 @@ export function App() {
           (subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch),
       ).length;
       const patchCompletedCount = matchingSubjects.filter((subject) => Number(subject.latest_successful_version ?? "0") > 1).length;
-      const latestVersionNumber = matchingSubjects.reduce((max, subject) => {
-        const versionNumber = Number(subject.latest_successful_version ?? "0");
-        return Number.isFinite(versionNumber) && versionNumber > max ? versionNumber : max;
-      }, 0);
       const availablePostCount = matchingRecords.filter((record) => {
         const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
         return primaryUdiDi ? !rowSuccessfulPrimaryUdiSet.has(primaryUdiDi) : true;
       }).length;
       const parentRegisteredCount = rowRegisteredBasicUdiSet.size;
       const successfulChildPostCount = matchingSubjects.filter((subject) => subject.has_successful_child_post_or_patch).length;
+      const marketInfoReadyCount = matchingSubjects.filter(
+        (subject) =>
+          Boolean(subject.reviewed_post_at) &&
+          (subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch),
+      ).length;
+      const marketInfoCompletedCount = matchingSubjects.filter(
+        (subject) =>
+          Boolean(subject.latest_successful_market_info_version) || subject.latest_success_message_type === "MARKET_INFO.PUT",
+      ).length;
       const statusLabel =
         patchReadyCount > 0
           ? "PATCH ready"
@@ -2385,7 +2508,10 @@ export function App() {
         availableChildPostCount,
         patchReadyCount,
         patchCompletedCount,
-        latestVersionLabel: latestVersionNumber > 0 ? `v${latestVersionNumber}` : "v-",
+        marketInfoReadyCount,
+        marketInfoCompletedCount,
+        latestPatchLabel: resolveTestingSummaryLatestPatchLabel(matchingSubjects),
+        latestMarketInfoLabel: resolveTestingSummaryLatestMarketInfoLabel(matchingSubjects),
         statusLabel,
         statusClassName,
       };
@@ -2433,6 +2559,17 @@ export function App() {
     .filter((summary) => Boolean(summary.latest_tested_at))
     .sort((left, right) => (right.latest_tested_at ?? "").localeCompare(left.latest_tested_at ?? ""))
     .slice(0, 5);
+  const testingSummaryEventRows = testingSummaryEvents.map((event) => ({
+    key: `${event.id}`,
+    testedAt: event.tested_at ?? "Not recorded",
+    productFamily: event.product_family ?? "Not resolved",
+    productVariant: event.product_variant ?? "Not resolved",
+    catalogueNumber: event.catalogue_number ?? event.primary_udi_di ?? "Not resolved",
+    operationLabel: resolveTestingEventOperationLabel(event),
+    versionLabel: resolveTestingEventVersionLabel(event),
+    scenarioLabel: event.scenario_label ?? event.scenario_id ?? "Standard",
+    resultLabel: event.status ?? "SUCCESS",
+  }));
   const effectiveBulkPatchCatalogueNumbers =
     bulkPatchScopeMode === "all_posted"
       ? (bulkPatchPostedCatalogueNumbers.length > 0 ? bulkPatchPostedCatalogueNumbers : selectedBulkPatchFallbackCatalogueNumbers)
@@ -2558,11 +2695,13 @@ export function App() {
     selectedXmlPairRecord,
   );
   const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
-  const selectedCurrentMarketInfoItems = (selectedXmlMarketInfoRecord?.market_availability_items ?? []).map((item, index) => ({
-    id: `current-market-${index}-${item.country}`,
-    country: item.country,
-    originalPlacedOnMarket: item.original_placed_on_market,
-  }));
+  const selectedCurrentMarketInfoItems =
+    acceptedMarketInfoItems ??
+    (selectedXmlMarketInfoRecord?.market_availability_items ?? []).map((item, index) => ({
+      id: `current-market-${index}-${item.country}`,
+      country: item.country,
+      originalPlacedOnMarket: item.original_placed_on_market,
+    }));
   const selectedPairRequestArgs = resolvePatchRequestArgs(selectedPatchWorkspaceRecord, {
     assessedCatalogueNumber: assessedPatchCandidateCatalogueNumber,
     assessedPrimaryUdiDi: assessedPatchCandidatePrimaryUdiDi,
@@ -2665,13 +2804,19 @@ export function App() {
         product_variant: selectedTestingSummaryVariant || undefined,
         limit: 10000,
       }),
+      api.testingEvents({
+        product_family: selectedTestingSummaryFamily || undefined,
+        product_variant: selectedTestingSummaryVariant || undefined,
+        limit: 10000,
+      }),
     ])
-      .then(([summary, subjectSummaries]) => {
+      .then(([summary, subjectSummaries, events]) => {
         if (cancelled) {
           return;
         }
         setTestingSummaryWorkspaceSummary(summary);
         setTestingSummarySubjectSummaries(subjectSummaries);
+        setTestingSummaryEvents(events);
       })
       .catch((requestError: Error) => {
         if (cancelled) {
@@ -2679,6 +2824,7 @@ export function App() {
         }
         setTestingSummaryWorkspaceSummary(null);
         setTestingSummarySubjectSummaries([]);
+        setTestingSummaryEvents([]);
         setTestingSummaryError(requestError.message);
       })
       .finally(() => {
@@ -2865,11 +3011,17 @@ export function App() {
     setXmlBulkPatchPreview(null);
   }, [selectedXmlFamily, selectedXmlVariant]);
   useEffect(() => {
+    setAcceptedMarketInfoItems(null);
     setMarketInfoScenarioItems(
       buildMarketInfoScenarioItems(selectedXmlMarketInfoRecord?.market_availability_items ?? []),
     );
+    setMarketInfoVersionInput("1");
     setXmlMarketInfoPreview(null);
-  }, [selectedXmlMarketInfoRecord?.catalogue_number, selectedXmlMarketInfoRecord?.product_family, selectedXmlMarketInfoRecord?.product_variant]);
+  }, [
+    selectedXmlMarketInfoRecord?.catalogue_number,
+    selectedXmlMarketInfoRecord?.product_family,
+    selectedXmlMarketInfoRecord?.product_variant,
+  ]);
   useEffect(() => {
     setXmlMarketInfoPreview(null);
   }, [marketInfoScenarioItems]);
@@ -2910,6 +3062,25 @@ export function App() {
   const selectedMarketInfoAnchor =
     xmlMarketInfoPreview?.registered_device_anchor ??
     (selectedMarketInfoRequestArgs ? buildSelectionAnchor(selectedMarketInfoRequestArgs) : null);
+  const selectedMarketInfoTrackedVersion =
+    testingSubjectSummaries.find(
+      (summary) =>
+        (selectedMarketInfoAnchor?.catalogue_number && summary.catalogue_number === selectedMarketInfoAnchor.catalogue_number) ||
+        (selectedMarketInfoAnchor?.primary_udi_di && summary.primary_udi_di === selectedMarketInfoAnchor.primary_udi_di),
+    )?.latest_successful_market_info_version ?? null;
+  useEffect(() => {
+    if (!selectedXmlMarketInfoRecord?.catalogue_number && !selectedMarketInfoAnchor?.catalogue_number) {
+      return;
+    }
+    if (!selectedMarketInfoTrackedVersion?.trim()) {
+      return;
+    }
+    setMarketInfoVersionInput(selectedMarketInfoTrackedVersion.trim());
+  }, [
+    selectedXmlMarketInfoRecord?.catalogue_number,
+    selectedMarketInfoAnchor?.catalogue_number,
+    selectedMarketInfoTrackedVersion,
+  ]);
   const selectedTestingAnchor =
     xmlMode === "marketInfo"
         ? selectedMarketInfoAnchor
@@ -2920,9 +3091,15 @@ export function App() {
       original_placed_on_market: item.originalPlacedOnMarket,
     }))
     .filter((item, index, items) => item.country && items.findIndex((candidate) => candidate.country === item.country) === index);
-  const isMarketInfoScenarioReady = Boolean(selectedTestingAnchor) && normalizedMarketInfoScenarioItems.length > 0;
+  const normalizedMarketInfoVersion = marketInfoVersionInput.trim();
+  const isMarketInfoVersionReady = /^\d+$/.test(normalizedMarketInfoVersion) && Number(normalizedMarketInfoVersion) >= 1;
+  const isMarketInfoScenarioReady = Boolean(selectedTestingAnchor) && normalizedMarketInfoScenarioItems.length > 0 && isMarketInfoVersionReady;
   const marketInfoReadinessMessage = !selectedTestingAnchor
     ? "No registered device anchor is currently available for MARKET_INFO.PUT generation."
+    : !normalizedMarketInfoVersion
+      ? "Enter the Market Info version to test before generating the update."
+      : !isMarketInfoVersionReady
+        ? "Market Info version must be a positive integer."
     : normalizedMarketInfoScenarioItems.length < 1
       ? "Add at least one country to generate a standalone market information update."
       : `Ready to generate a standalone market information update with ${normalizedMarketInfoScenarioItems.length} countr${
@@ -2936,7 +3113,8 @@ export function App() {
   const successXmlUploadScope =
     selectedXmlFamilySummary &&
     selectedXmlVariantSummary &&
-    (xmlMode === "post" ||
+      (xmlMode === "post" ||
+      xmlMode === "marketInfo" ||
       xmlMode === "patch" ||
       xmlMode === "bulkPost" ||
       xmlMode === "bulkUdidiPost" ||
@@ -2960,13 +3138,26 @@ export function App() {
     setTestingSubjectSummaries,
     setXmlOperationAssessment,
     setXmlOperationAssessmentError,
+    onUploadRecorded: (result) => {
+      if (xmlMode !== "marketInfo" || result.message_type !== "MARKET_INFO.PUT") {
+        return;
+      }
+      const acceptedItems = marketInfoScenarioItems.map((item, index) => ({
+        ...item,
+        id: `accepted-market-${index}-${item.country}`,
+      }));
+      setAcceptedMarketInfoItems(acceptedItems);
+      setMarketInfoScenarioItems(acceptedItems.map((item) => ({ ...item })));
+    },
     clearPreviewState: () => {
       setXmlBulkPostPreview(null);
       setXmlBulkUdidiPostPreview(null);
       setXmlBulkPatchPreview(null);
       setXmlPairPreview(null);
+      setXmlMarketInfoPreview(null);
       setXmlPatchPreview(null);
       setSelectedPostXmlSectionId(null);
+      setSelectedMarketInfoXmlSectionId(null);
       setSelectedPatchXmlSectionId(null);
     },
   });
@@ -3533,6 +3724,7 @@ export function App() {
           selectedMarketInfoRequestArgs.product_family,
           selectedMarketInfoRequestArgs.product_variant,
           selectedMarketInfoRequestArgs.catalogue_number,
+          normalizedMarketInfoVersion,
           currentMarketInfoScenarioInputs(),
         );
         setXmlMarketInfoPreview(preview);
@@ -3640,6 +3832,7 @@ export function App() {
               selectedMarketInfoRequestArgs.product_family,
               selectedMarketInfoRequestArgs.product_variant,
               selectedMarketInfoRequestArgs.catalogue_number,
+              normalizedMarketInfoVersion,
               currentMarketInfoScenarioInputs(),
             )
           : xmlMode === "patch"
@@ -3922,7 +4115,7 @@ export function App() {
       {error ? <div className="panel error-banner">{error}</div> : null}
       {activeTab === "workbooks" ? (
         <>
-          {!hasWorkbookImportSnapshot && !workbookImportSummaryError ? (
+          {!isLoadingWorkbookImportMonitoring && !hasWorkbookImportSnapshot && !workbookImportSummaryError ? (
             <div className="panel">
               <div className="section-heading">
                 <div>
@@ -5264,6 +5457,8 @@ export function App() {
               className={
                 xmlMode === "patch"
                   ? "xml-focus-layout patch-focus-layout"
+                  : xmlMode === "marketInfo"
+                    ? "xml-focus-layout market-info-focus-layout"
                   : xmlMode === "bulkPatch" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost"
                     ? "xml-focus-layout bulk-patch-focus-layout"
                     : "xml-focus-layout"
@@ -5298,28 +5493,86 @@ export function App() {
                     patchXmlPreviewContainerRef={patchXmlPreviewContainerRef}
                   />
                 ) : xmlMode === "marketInfo" ? (
-                  <MarketInfoPreviewPanel
-                    canGenerateCurrentXml={canGenerateCurrentXml}
-                    canDownloadCurrentXml={canDownloadCurrentXml}
-                    isGeneratingXml={isGeneratingXml}
-                    isDownloadingXml={isDownloadingXml}
-                    onGeneratePreview={() => void generateXmlPreview()}
-                    onDownload={() => void downloadXmlRecord()}
-                    xmlActionMessage={xmlActionMessage}
-                    isRefreshing={isLoadingXmlOperationAssessment}
-                    previewStatusMessage={marketInfoPreviewStatusMessage}
-                    activePreviewLabel={activePreviewLabel}
-                    selectedBatchValidation={selectedBatchValidation}
-                    validationStatusLabel={validationStatusLabel}
-                    selectedSchemaLabel={selectedSchemaLabel}
-                    activePreviewFileName={activePreviewFileName}
-                    marketInfoXmlStructureSections={marketInfoXmlStructureSections}
-                    selectedMarketInfoXmlSection={selectedMarketInfoXmlSection}
-                    onSelectSection={setSelectedMarketInfoXmlSectionId}
-                    xmlPreviewLines={xmlPreviewLines}
-                    marketInfoXmlPreviewLineRefs={marketInfoXmlPreviewLineRefs}
-                    marketInfoXmlPreviewContainerRef={marketInfoXmlPreviewContainerRef}
-                  />
+                  <>
+                    <MarketInfoScenarioCard
+                      catalogueNumber={selectedTestingAnchor?.catalogue_number ?? null}
+                      primaryUdiDi={selectedTestingAnchor?.primary_udi_di ?? null}
+                      productFamily={selectedTestingAnchor?.product_family ?? selectedXmlFamilyLabel}
+                      productVariant={selectedTestingAnchor?.product_variant ?? selectedXmlVariantLabel}
+                      marketInfoVersion={marketInfoVersionInput}
+                      onMarketInfoVersionChange={setMarketInfoVersionInput}
+                      currentMarketItems={selectedCurrentMarketInfoItems}
+                      draftMarketItems={marketInfoScenarioItems}
+                      onAddCountry={(country) =>
+                        setMarketInfoScenarioItems((current) => {
+                          const normalizedCountry = country.trim();
+                          if (!normalizedCountry || current.some((item) => item.country === normalizedCountry)) {
+                            return current;
+                          }
+                          return [
+                            ...current,
+                            {
+                              id: createMarketInfoScenarioId(),
+                              country: normalizedCountry,
+                              originalPlacedOnMarket: current.length === 0,
+                            },
+                          ];
+                        })
+                      }
+                      onSetOriginalCountry={(country) =>
+                        setMarketInfoScenarioItems((current) =>
+                          current.map((item) => ({
+                            ...item,
+                            originalPlacedOnMarket: item.country === country,
+                          })),
+                        )
+                      }
+                      onRemoveCountry={(country) =>
+                        setMarketInfoScenarioItems((current) => {
+                          if (current.length <= 1) {
+                            return current;
+                          }
+                          const removedItem = current.find((item) => item.country === country);
+                          const remainingItems = current.filter((item) => item.country !== country);
+                          if (removedItem?.originalPlacedOnMarket && remainingItems.length > 0) {
+                            return remainingItems.map((item, index) => ({
+                              ...item,
+                              originalPlacedOnMarket: index === 0,
+                            }));
+                          }
+                          return remainingItems;
+                        })
+                      }
+                      readinessMessage={marketInfoReadinessMessage}
+                      isReady={isMarketInfoScenarioReady}
+                    />
+                    <MarketInfoPreviewPanel
+                      successXmlInputRef={postSuccessXmlInputRef}
+                      handleSuccessXmlSelected={handlePostSuccessXmlSelected}
+                      canGenerateCurrentXml={canGenerateCurrentXml}
+                      canDownloadCurrentXml={canDownloadCurrentXml}
+                      isGeneratingXml={isGeneratingXml}
+                      isDownloadingXml={isDownloadingXml}
+                      isUploadingSuccessXml={isUploadingSuccessXml}
+                      onGeneratePreview={() => void generateXmlPreview()}
+                      onDownload={() => void downloadXmlRecord()}
+                      onUploadClick={handleUploadSuccessXmlClick}
+                      xmlActionMessage={xmlActionMessage}
+                      isRefreshing={isLoadingXmlOperationAssessment}
+                      previewStatusMessage={marketInfoPreviewStatusMessage}
+                      activePreviewLabel={activePreviewLabel}
+                      selectedBatchValidation={selectedBatchValidation}
+                      validationStatusLabel={validationStatusLabel}
+                      selectedSchemaLabel={selectedSchemaLabel}
+                      activePreviewFileName={activePreviewFileName}
+                      marketInfoXmlStructureSections={marketInfoXmlStructureSections}
+                      selectedMarketInfoXmlSection={selectedMarketInfoXmlSection}
+                      onSelectSection={setSelectedMarketInfoXmlSectionId}
+                      xmlPreviewLines={xmlPreviewLines}
+                      marketInfoXmlPreviewLineRefs={marketInfoXmlPreviewLineRefs}
+                      marketInfoXmlPreviewContainerRef={marketInfoXmlPreviewContainerRef}
+                    />
+                  </>
                 ) : xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? (
                   <BulkXmlPreviewPanel
                     successXmlInputRef={postSuccessXmlInputRef}
@@ -5459,42 +5712,6 @@ export function App() {
                   ) : (
                     <p className="panel-copy">No XML-ready sample row is currently available for the selected family and variant.</p>
                   )
-                ) : xmlMode === "marketInfo" ? (
-                  <MarketInfoScenarioCard
-                    catalogueNumber={selectedTestingAnchor?.catalogue_number ?? null}
-                    primaryUdiDi={selectedTestingAnchor?.primary_udi_di ?? null}
-                    productFamily={selectedTestingAnchor?.product_family ?? selectedXmlFamilyLabel}
-                    productVariant={selectedTestingAnchor?.product_variant ?? selectedXmlVariantLabel}
-                    currentMarketItems={selectedCurrentMarketInfoItems}
-                    draftMarketItems={marketInfoScenarioItems}
-                    onCountryChange={(id, value) =>
-                      setMarketInfoScenarioItems((current) =>
-                        current.map((item) =>
-                          item.id === id ? { ...item, country: value.toUpperCase().slice(0, 2) } : item,
-                        ),
-                      )
-                    }
-                    onOriginalPlacedOnMarketChange={(id, value) =>
-                      setMarketInfoScenarioItems((current) =>
-                        current.map((item) =>
-                          item.id === id ? { ...item, originalPlacedOnMarket: value } : item,
-                        ),
-                      )
-                    }
-                    onAddCountry={() =>
-                      setMarketInfoScenarioItems((current) => [
-                        ...current,
-                        { id: createMarketInfoScenarioId(), country: "", originalPlacedOnMarket: false },
-                      ])
-                    }
-                    onRemoveCountry={(id) =>
-                      setMarketInfoScenarioItems((current) =>
-                        current.length > 1 ? current.filter((item) => item.id !== id) : current,
-                      )
-                    }
-                    readinessMessage={marketInfoReadinessMessage}
-                    isReady={isMarketInfoScenarioReady}
-                  />
                 ) : xmlMode === "patch" ? (
                   selectedPatchWorkspaceRecord ? (
                     <PatchScenarioCard
@@ -5710,6 +5927,7 @@ export function App() {
             workspaceSummary={testingSummaryWorkspaceSummary}
             metrics={testingSummaryMetrics}
             rows={testingSummaryRows}
+            eventRows={testingSummaryEventRows}
             recentSubjects={testingSummaryRecentSubjects}
           />
         )

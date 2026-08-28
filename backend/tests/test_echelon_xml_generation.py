@@ -292,6 +292,7 @@ def test_market_info_put_preview_generates_schema_valid_xml() -> None:
         product_family="Echelon",
         product_variant="Echelon",
         catalogue_number="EC22L1S",
+        market_info_version="1",
     )
 
     assert preview.file_name == "echelon-echelon-market-info-put-EC22L1S.xml"
@@ -299,13 +300,69 @@ def test_market_info_put_preview_generates_schema_valid_xml() -> None:
     assert preview.product_variant == "Echelon"
     assert preview.catalogue_number == "EC22L1S"
     assert preview.primary_udi_di == "05050649030109"
+    assert preview.market_info_version == "1"
     assert preview.validation.valid is True
     assert preview.registered_device_anchor.catalogue_number == "EC22L1S"
     assert preview.registered_device_anchor.primary_udi_di == "05050649030109"
     assert "<mktinfo:DTXMarketInfo>" in preview.xml
     assert "<s:serviceID>MARKET_INFO</s:serviceID>" in preview.xml
     assert "<s:serviceOperation>PUT</s:serviceOperation>" in preview.xml
+    assert "<e:version>1</e:version>" in preview.xml
     assert "<marketinfo:uDIDIIdentifier>" in preview.xml
+
+
+def test_market_info_put_preview_accepts_override_countries_and_normalizes_them() -> None:
+    preview = XmlGenerationService().preview_market_info_put(
+        product_family="Echelon",
+        product_variant="Echelon",
+        catalogue_number="EC22L1S",
+        market_info_version="3",
+        market_countries=[
+            ("France", False),
+            (" germany ", True),
+            ("FR", True),
+            ("", False),
+        ],
+    )
+
+    assert preview.validation.valid is True
+    assert preview.market_info_version == "3"
+    assert "<e:version>3</e:version>" in preview.xml
+    assert "<marketinfo:country>FR</marketinfo:country>" in preview.xml
+    assert "<marketinfo:country>DE</marketinfo:country>" in preview.xml
+    assert preview.xml.count("<marketinfo:country>FR</marketinfo:country>") == 1
+    assert preview.xml.count("<marketinfo:country>DE</marketinfo:country>") == 1
+    assert "<marketinfo:originalPlacedOnTheMarket>false</marketinfo:originalPlacedOnTheMarket>" in preview.xml
+    assert "<marketinfo:originalPlacedOnTheMarket>true</marketinfo:originalPlacedOnTheMarket>" in preview.xml
+
+
+def test_market_info_put_preview_rejects_empty_override_country_set() -> None:
+    with pytest.raises(
+        ValueError,
+        match="At least one market country is required for MARKET_INFO.PUT generation.",
+    ):
+        XmlGenerationService().preview_market_info_put(
+            product_family="Echelon",
+            product_variant="Echelon",
+            catalogue_number="EC22L1S",
+            market_info_version="1",
+            market_countries=[
+                ("", False),
+                ("   ", False),
+            ],
+        )
+
+
+def test_market_info_put_preview_requires_version() -> None:
+    with pytest.raises(
+        ValueError,
+        match="market_info_version is required for MARKET_INFO.PUT generation.",
+    ):
+        XmlGenerationService().preview_market_info_put(
+            product_family="Echelon",
+            product_variant="Echelon",
+            catalogue_number="EC22L1S",
+        )
 
 
 def test_market_info_put_routes_return_payloads(route_xml_service_without_import: None) -> None:
@@ -314,10 +371,12 @@ def test_market_info_put_routes_return_payloads(route_xml_service_without_import
             "product_family": "Echelon",
             "product_variant": "Echelon",
             "catalogue_number": "EC22L1S",
+            "market_info_version": "1",
         }
     )
 
     assert payload["mode"] == "market_info_put"
+    assert payload["market_info_version"] == "1"
     assert payload["validation"]["valid"] is True
     assert payload["registered_device_anchor"]["catalogue_number"] == "EC22L1S"
 
@@ -326,12 +385,71 @@ def test_market_info_put_routes_return_payloads(route_xml_service_without_import
             "product_family": "Echelon",
             "product_variant": "Echelon",
             "catalogue_number": "EC22L1S",
+            "market_info_version": "1",
         }
     )
 
-    assert response.media_type == "application/xml"
-    assert 'filename="echelon-echelon-market-info-put-EC22L1S.xml"' in response.headers["Content-Disposition"]
-    assert b"<mktinfo:DTXMarketInfo>" in response.body
+    assert response.media_type == "application/zip"
+    assert 'filename="echelon-echelon-market-info-put-EC22L1S.zip"' in response.headers["Content-Disposition"]
+    with ZipFile(BytesIO(response.body)) as archive:
+        assert "echelon-echelon-market-info-put-EC22L1S.xml" in archive.namelist()
+        assert "manifest.json" in archive.namelist()
+        assert b"<mktinfo:DTXMarketInfo>" in archive.read("echelon-echelon-market-info-put-EC22L1S.xml")
+
+
+def test_market_info_put_routes_accept_override_countries(route_xml_service_without_import: None) -> None:
+    payload = preview_xml_market_info_put(
+        {
+            "product_family": "Echelon",
+            "product_variant": "Echelon",
+            "catalogue_number": "EC22L1S",
+            "market_info_version": "2",
+            "market_countries": [
+                {"country": "France", "original_placed_on_market": False},
+                {"country": "Germany", "original_placed_on_market": True},
+                {"country": "FR", "original_placed_on_market": True},
+            ],
+        }
+    )
+
+    assert payload["validation"]["valid"] is True
+    assert "<marketinfo:country>FR</marketinfo:country>" in payload["xml"]
+    assert "<marketinfo:country>DE</marketinfo:country>" in payload["xml"]
+    assert payload["xml"].count("<marketinfo:country>FR</marketinfo:country>") == 1
+
+    response = download_xml_market_info_put(
+        {
+            "product_family": "Echelon",
+            "product_variant": "Echelon",
+            "catalogue_number": "EC22L1S",
+            "market_info_version": "2",
+            "market_countries": [
+                {"country": "France", "original_placed_on_market": False},
+                {"country": "Germany", "original_placed_on_market": True},
+            ],
+        }
+    )
+
+    assert response.media_type == "application/zip"
+    with ZipFile(BytesIO(response.body)) as archive:
+        xml_member = archive.read("echelon-echelon-market-info-put-EC22L1S.xml")
+        assert b"<marketinfo:country>FR</marketinfo:country>" in xml_member
+        assert b"<marketinfo:country>DE</marketinfo:country>" in xml_member
+
+
+def test_market_info_put_route_rejects_invalid_market_country_payload(route_xml_service_without_import: None) -> None:
+    with pytest.raises(HTTPException, match="market_countries\\[1\\]\\.country is required\\."):
+        preview_xml_market_info_put(
+            {
+                "product_family": "Echelon",
+                "product_variant": "Echelon",
+                "catalogue_number": "EC22L1S",
+                "market_info_version": "1",
+                "market_countries": [
+                    {"country": ""},
+                ],
+            }
+        )
 
 
 def test_generic_download_route_returns_xml_file(route_xml_service_without_import: None) -> None:

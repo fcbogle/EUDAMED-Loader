@@ -252,6 +252,7 @@ def _insert_testing_subject(
     post_success: int = 0,
     baseline_patch_success: int = 0,
     latest_successful_version: str | None = None,
+    latest_successful_market_info_version: str | None = None,
     latest_successful_state_json: str | None = None,
 ) -> int:
     normalized_product_family = "".join(product_family.casefold().split())
@@ -278,8 +279,9 @@ def _insert_testing_subject(
                 post_success,
                 baseline_patch_success,
                 latest_successful_version,
+                latest_successful_market_info_version,
                 latest_successful_state_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 f"{normalized_product_family}|{normalized_product_variant}|{normalized_catalogue_number}",
@@ -296,6 +298,7 @@ def _insert_testing_subject(
                 post_success,
                 baseline_patch_success,
                 latest_successful_version,
+                latest_successful_market_info_version,
                 latest_successful_state_json,
             ),
         )
@@ -493,6 +496,96 @@ def test_success_xml_upload_records_bulk_udidi_post_acknowledgements(
       ]
     finally:
       connection.close()
+
+
+def test_success_xml_upload_records_market_info_put_without_advancing_patch_version(
+    isolated_workbook_import_db: Path,
+) -> None:
+    PlaygroundStateStore()
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L1S",
+        primary_udi_di="05050649058189",
+        basic_udi_di="5050649ESPRITVZ",
+        post_success=1,
+        latest_successful_version="3",
+    )
+
+    xml_payload = """<?xml version='1.0' encoding='utf-8'?>
+<m:PullAck xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1">
+  <m:correlationID>market-info-success-correlation</m:correlationID>
+  <m:creationDateTime>2026-08-28T10:45:00+00:00</m:creationDateTime>
+  <m:messageID>market-info-success-message</m:messageID>
+  <m:sender>
+    <m:node>
+      <s:nodeActorCode>EUDAMED</s:nodeActorCode>
+    </m:node>
+    <m:service>
+      <s:serviceID>MARKET_INFO</s:serviceID>
+      <s:serviceOperation>PUT</s:serviceOperation>
+    </m:service>
+  </m:sender>
+  <m:responseEntity>
+    <m:responseCode>SUCCESS</m:responseCode>
+    <m:entityCode>05050649058189</m:entityCode>
+    <m:entityVersion>2</m:entityVersion>
+  </m:responseEntity>
+</m:PullAck>
+"""
+
+    result = TestingSuccessXmlService().record_success_xml(
+        xml_bytes=xml_payload.encode("utf-8"),
+        source_file_name="market-info-success.xml",
+    )
+
+    assert result.message_type == "MARKET_INFO.PUT"
+    assert result.operation_label == "Market Info PUT"
+    assert result.entity_count == 1
+    assert result.recorded_event_count == 1
+    assert result.duplicate_event_count == 0
+    assert result.created_subject_count == 0
+    assert result.duplicate_event is False
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        row = connection.execute(
+            """
+            SELECT id, catalogue_number, post_success, latest_successful_version, latest_successful_market_info_version
+            FROM testing_subjects
+            WHERE id = ?
+            """,
+            (subject_id,),
+        ).fetchone()
+        assert row is not None
+        assert dict(row) == {
+            "id": subject_id,
+            "catalogue_number": "ESP22L1S",
+            "post_success": 1,
+            "latest_successful_version": "3",
+            "latest_successful_market_info_version": "2",
+        }
+        event_row = connection.execute(
+            """
+            SELECT subject_id, event_index, message_type, status, version
+            FROM testing_events
+            WHERE subject_id = ?
+            ORDER BY event_index
+            """,
+            (subject_id,),
+        ).fetchone()
+        assert event_row is not None
+        assert dict(event_row) == {
+            "subject_id": subject_id,
+            "event_index": 0,
+            "message_type": "MARKET_INFO.PUT",
+            "status": "SUCCESS",
+            "version": "2",
+        }
+    finally:
+        connection.close()
 
 
 def test_workbook_import_service_persists_import_batch_and_subjects(

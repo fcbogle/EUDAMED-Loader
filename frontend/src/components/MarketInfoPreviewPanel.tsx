@@ -1,4 +1,4 @@
-import type { MutableRefObject } from "react";
+import type { ChangeEvent, MutableRefObject } from "react";
 
 import type { XmlValidationResult } from "../types";
 
@@ -11,12 +11,16 @@ type XmlStructureSection = {
 };
 
 type MarketInfoPreviewPanelProps = {
+  successXmlInputRef: MutableRefObject<HTMLInputElement | null>;
+  handleSuccessXmlSelected: (event: ChangeEvent<HTMLInputElement>) => void;
   canGenerateCurrentXml: boolean;
   canDownloadCurrentXml: boolean;
   isGeneratingXml: boolean;
   isDownloadingXml: boolean;
+  isUploadingSuccessXml: boolean;
   onGeneratePreview: () => void;
   onDownload: () => void;
+  onUploadClick: () => void;
   xmlActionMessage: string | null;
   isRefreshing: boolean;
   previewStatusMessage: string;
@@ -34,12 +38,16 @@ type MarketInfoPreviewPanelProps = {
 };
 
 export function MarketInfoPreviewPanel({
+  successXmlInputRef,
+  handleSuccessXmlSelected,
   canGenerateCurrentXml,
   canDownloadCurrentXml,
   isGeneratingXml,
   isDownloadingXml,
+  isUploadingSuccessXml,
   onGeneratePreview,
   onDownload,
+  onUploadClick,
   xmlActionMessage,
   isRefreshing,
   previewStatusMessage,
@@ -63,11 +71,18 @@ export function MarketInfoPreviewPanel({
             <h2>Market Info Preview</h2>
           </div>
           <div className="draft-actions-bar xml-actions-bar post-actions-bar">
+            <input
+              ref={successXmlInputRef}
+              type="file"
+              accept=".xml,text/xml,application/xml"
+              className="visually-hidden"
+              onChange={handleSuccessXmlSelected}
+            />
             <button
               className="action-button"
               type="button"
               onClick={onGeneratePreview}
-              disabled={!canGenerateCurrentXml || isGeneratingXml || isDownloadingXml}
+              disabled={!canGenerateCurrentXml || isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
             >
               {isGeneratingXml ? "Generating..." : "Generate Market Info"}
             </button>
@@ -75,7 +90,7 @@ export function MarketInfoPreviewPanel({
               className="ghost-button post-secondary-action"
               type="button"
               onClick={onGeneratePreview}
-              disabled={!canGenerateCurrentXml || isGeneratingXml || isDownloadingXml}
+              disabled={!canGenerateCurrentXml || isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
             >
               Validate Against XSD
             </button>
@@ -83,9 +98,17 @@ export function MarketInfoPreviewPanel({
               className="ghost-button post-tertiary-action"
               type="button"
               onClick={onDownload}
-              disabled={!canDownloadCurrentXml || isGeneratingXml || isDownloadingXml}
+              disabled={!canDownloadCurrentXml || isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
             >
               {isDownloadingXml ? "Preparing ZIP..." : "Download Market Info ZIP"}
+            </button>
+            <button
+              className="ghost-button post-tertiary-action"
+              type="button"
+              onClick={onUploadClick}
+              disabled={isGeneratingXml || isDownloadingXml || isUploadingSuccessXml}
+            >
+              {isUploadingSuccessXml ? "Uploading Success XML..." : "Upload Success XML"}
             </button>
           </div>
         </div>

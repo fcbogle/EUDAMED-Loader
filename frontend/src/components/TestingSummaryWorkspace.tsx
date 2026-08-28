@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from "react";
+
 import type { TestingSubjectReadModelSummary, TestingWorkspaceSummary } from "../types";
 
 type TestingSummaryRow = {
@@ -11,7 +13,10 @@ type TestingSummaryRow = {
   availableChildPostCount: number;
   patchReadyCount: number;
   patchCompletedCount: number;
-  latestVersionLabel: string;
+  marketInfoReadyCount: number;
+  marketInfoCompletedCount: number;
+  latestPatchLabel: string;
+  latestMarketInfoLabel: string;
   statusLabel: string;
   statusClassName: string;
 };
@@ -21,6 +26,18 @@ type TestingMetric = {
   value: string;
   detail: string;
   className?: string;
+};
+
+type TestingEventRow = {
+  key: string;
+  testedAt: string;
+  productFamily: string;
+  productVariant: string;
+  catalogueNumber: string;
+  operationLabel: string;
+  versionLabel: string;
+  scenarioLabel: string;
+  resultLabel: string;
 };
 
 type TestingSummaryWorkspaceProps = {
@@ -36,10 +53,23 @@ type TestingSummaryWorkspaceProps = {
   workspaceSummary: TestingWorkspaceSummary | null;
   metrics: TestingMetric[];
   rows: TestingSummaryRow[];
+  eventRows: TestingEventRow[];
   recentSubjects: TestingSubjectReadModelSummary[];
 };
 
 function recentActivityLabel(summary: TestingSubjectReadModelSummary): string {
+  if (summary.latest_success_message_type === "MARKET_INFO.PUT") {
+    return "Market Info";
+  }
+  if (summary.latest_success_message_type === "UDI_DI.PATCH") {
+    return "PATCH";
+  }
+  if (summary.latest_success_message_type === "DEVICE.POST") {
+    return "Parent POST";
+  }
+  if (summary.latest_success_message_type === "UDI_DI.POST") {
+    return "Child POST";
+  }
   if (summary.latest_successful_version && Number(summary.latest_successful_version) > 1) {
     return "PATCH";
   }
@@ -65,8 +95,23 @@ export function TestingSummaryWorkspace({
   workspaceSummary,
   metrics,
   rows,
+  eventRows,
   recentSubjects,
 }: TestingSummaryWorkspaceProps) {
+  const [eventPage, setEventPage] = useState(1);
+  const [eventPageSize, setEventPageSize] = useState(25);
+  useEffect(() => {
+    setEventPage(1);
+  }, [selectedFamily, selectedVariant]);
+  const totalEventPages = Math.max(1, Math.ceil(eventRows.length / eventPageSize));
+  const currentEventPage = Math.min(eventPage, totalEventPages);
+  const pagedEventRows = useMemo(() => {
+    const startIndex = (currentEventPage - 1) * eventPageSize;
+    return eventRows.slice(startIndex, startIndex + eventPageSize);
+  }, [currentEventPage, eventPageSize, eventRows]);
+  const showingFrom = eventRows.length ? (currentEventPage - 1) * eventPageSize + 1 : 0;
+  const showingTo = eventRows.length ? Math.min(currentEventPage * eventPageSize, eventRows.length) : 0;
+
   return (
     <section className="tab-stack">
       <section className="panel testing-summary-panel">
@@ -154,7 +199,9 @@ export function TestingSummaryWorkspace({
                 <th>Parent</th>
                 <th>Child POST</th>
                 <th>PATCH</th>
-                <th>Latest</th>
+                <th>Market Info</th>
+                <th>Patch Latest</th>
+                <th>Market Info Latest</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -176,7 +223,9 @@ export function TestingSummaryWorkspace({
                     </td>
                     <td>{`${row.successfulChildPostCount} done · ${row.availableChildPostCount} open`}</td>
                     <td>{`${row.patchCompletedCount} done · ${row.patchReadyCount} ready`}</td>
-                    <td>{row.latestVersionLabel}</td>
+                    <td>{`${row.marketInfoCompletedCount} done · ${row.marketInfoReadyCount} ready`}</td>
+                    <td>{row.latestPatchLabel}</td>
+                    <td>{row.latestMarketInfoLabel}</td>
                     <td>
                       <span className={row.statusClassName}>{row.statusLabel}</span>
                     </td>
@@ -184,7 +233,7 @@ export function TestingSummaryWorkspace({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="testing-summary-empty-cell">
+                  <td colSpan={10} className="testing-summary-empty-cell">
                     No testing summary rows match the current filter.
                   </td>
                 </tr>
@@ -200,12 +249,124 @@ export function TestingSummaryWorkspace({
               recentSubjects.map((summary) => (
                 <span className="testing-summary-activity-chip" key={summary.id}>
                   {recentActivityLabel(summary)} · {summary.catalogue_number ?? summary.primary_udi_di ?? "Unknown"} ·{" "}
-                  {summary.latest_successful_version ? `v${summary.latest_successful_version}` : "v1"}
+                  {summary.latest_success_message_type === "MARKET_INFO.PUT"
+                    ? summary.latest_successful_market_info_version
+                      ? `market v${summary.latest_successful_market_info_version}`
+                      : "market version recorded"
+                    : summary.latest_successful_version
+                      ? `v${summary.latest_successful_version}`
+                      : "v1"}
                 </span>
               ))
             ) : (
               <span className="testing-summary-activity-chip">No successful testing recorded in this scope.</span>
             )}
+          </div>
+        </div>
+
+        <div className="testing-summary-table-shell">
+          <div className="section-heading">
+            <h3>Testing Events</h3>
+          </div>
+          <div className="testing-events-pagination-bar">
+            <span className="testing-summary-latest">{`Showing ${showingFrom}-${showingTo} of ${eventRows.length} events`}</span>
+            <div className="testing-events-pagination-controls">
+              <label className="read-model-filter-control testing-summary-filter-control testing-events-page-size" htmlFor="testing-events-page-size">
+                <span>Rows</span>
+                <select
+                  id="testing-events-page-size"
+                  className="rule-select"
+                  value={String(eventPageSize)}
+                  onChange={(event) => {
+                    setEventPageSize(Number(event.target.value));
+                    setEventPage(1);
+                  }}
+                >
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </label>
+              <button
+                className="ghost-button testing-summary-clear-button"
+                type="button"
+                onClick={() => setEventPage((page) => Math.max(1, page - 1))}
+                disabled={currentEventPage <= 1}
+              >
+                Previous
+              </button>
+              <span className="status-pill ok compact">{`Page ${currentEventPage} of ${totalEventPages}`}</span>
+              <button
+                className="ghost-button testing-summary-clear-button"
+                type="button"
+                onClick={() => setEventPage((page) => Math.min(totalEventPages, page + 1))}
+                disabled={currentEventPage >= totalEventPages}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+          <table className="workbook-files-table testing-summary-table">
+            <thead>
+              <tr>
+                <th>Tested at</th>
+                <th>Family</th>
+                <th>Variant</th>
+                <th>Catalogue</th>
+                <th>Operation</th>
+                <th>Version</th>
+                <th>Scenario</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagedEventRows.length ? (
+                pagedEventRows.map((row) => (
+                  <tr key={row.key}>
+                    <td>{row.testedAt}</td>
+                    <td>{row.productFamily}</td>
+                    <td>{row.productVariant}</td>
+                    <td>
+                      <code className="testing-summary-code">{row.catalogueNumber}</code>
+                    </td>
+                    <td>{row.operationLabel}</td>
+                    <td>{row.versionLabel}</td>
+                    <td>{row.scenarioLabel}</td>
+                    <td>
+                      <span className="status-pill ok compact">{row.resultLabel}</span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} className="testing-summary-empty-cell">
+                    No successful testing events match the current filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+          <div className="testing-events-pagination-bar testing-events-pagination-bar-bottom">
+            <span className="testing-summary-latest">{`Showing ${showingFrom}-${showingTo} of ${eventRows.length} events`}</span>
+            <div className="testing-events-pagination-controls">
+              <button
+                className="ghost-button testing-summary-clear-button"
+                type="button"
+                onClick={() => setEventPage((page) => Math.max(1, page - 1))}
+                disabled={currentEventPage <= 1}
+              >
+                Previous
+              </button>
+              <span className="status-pill ok compact">{`Page ${currentEventPage} of ${totalEventPages}`}</span>
+              <button
+                className="ghost-button testing-summary-clear-button"
+                type="button"
+                onClick={() => setEventPage((page) => Math.min(totalEventPages, page + 1))}
+                disabled={currentEventPage >= totalEventPages}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </section>

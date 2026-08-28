@@ -36,15 +36,71 @@ with the current implementation focus now being:
 
 ## Latest Confirmed Decisions
 
+- Latest implemented and verified direction on Friday, August 28, 2026:
+  - `Testing Summary` now has two distinct layers:
+    - a family/variant summary table for operational readiness
+    - a `Testing Events` table with one row per recorded successful test event
+  - the `Testing Events` table is filtered by the same family/variant selectors as the summary table
+  - the `Testing Events` table is now paginated client-side with:
+    - default page size `25`
+    - page-size options `25`, `50`, `100`
+    - page reset to `1` when the family or variant filter changes
+  - the summary table now exposes separate Market Info status and latest-state fields rather than hiding all activity in a single generic latest column
+  - family alias matching in `Testing Summary` was corrected so `Epirus` and `Epirus / Esprit` aggregate into the same logical scope where appropriate
+  - `MARKET_INFO.PUT` success capture is now part of the active workflow:
+    - success XML upload is exposed in the single-device Market Info preview
+    - successful Market Info acknowledgements are persisted in `testing_events`
+    - Market Info success is surfaced in `Testing Summary` recent activity and event history
+  - current Market Info versioning direction is now:
+    - use the current accepted Market Info/device version as the input context for the next `MARKET_INFO.PUT`
+    - persist successful Market Info outcomes in `latest_successful_market_info_version`
+    - do not treat successful Market Info as advancing `latest_successful_version` for PATCH lineage
+  - current Market Info UI direction is now:
+    - keep the same visual system as single `POST` and single `PATCH`
+    - keep the simplified selector-driven editor:
+      - `Add country`
+      - `Remove country`
+      - `Original market`
+    - show current and proposed countries as compact chips with small flag markers
+    - refresh current/proposed Market Info state after successful XML upload so the accepted state becomes the new visible baseline
+  - `Market Info` is no longer a placeholder workspace
+  - the single-device `Market Info` workspace now uses the same broad full-width card language as single `POST` and single `PATCH`
+  - the `Market Info Edit` card now sits above `Market Info Preview` and uses the full available container width
+  - the Market Info editor was simplified from a row-per-country form into a selector-driven interaction using:
+    - `Add country`
+    - `Remove country`
+    - `Original market`
+  - current and draft Market Info state now initialize from the same selected record source, so the draft should match the current market-country set when the UI first loads for a resolved record
+  - draft market countries are now shown as compact chips with small flag markers and an `Original` badge rather than a tall list
+  - `Source Sheet to Basic UDI` is now the default Canonical Validation detail view
+  - the Canonical Validation detail-view toggle buttons were reduced in size so they read as compact mode toggles rather than primary action buttons
+  - backend automated coverage was extended for the new Market Info override path:
+    - preview generation with override countries
+    - override normalization and deduping
+    - rejection of an empty effective override set
+    - router payload parsing and validation for `market_countries`
+  - current verified repo status on Friday, August 28, 2026:
+    - backend `pytest`: `96 passed`
+    - frontend production build: `npm run build` passed
+  - current known limitation:
+    - no frontend automated test runner is configured yet, so Market Info UI behavior is currently verified by build plus manual inspection rather than browser automation
+  - current risk note:
+    - `MARKET-INFO.PUT` remains less proven than `POST` and `PATCH`
+    - first Playground testing should use a minimal single-device change on a clearly registered device and should preserve the current original market on the first test unless there is a specific reason to test that field
+  - current minor warning only:
+    - pytest emits a non-blocking collection warning because `TestingSuccessXmlService` looks like a test class name to pytest
+    - this does not fail the suite
+
 - Latest confirmed Market Info direction on Thursday, August 27, 2026:
   - public EUDAMED pages and publicly accessible MDCG guidance do not currently give a clear verified rule for whether `MARKET-INFO.PUT` increments the accepted device version, leaves it unchanged, or uses a separate market-information version concept
   - the current application design should therefore treat Market Info version handling as evidence-led rather than fully specified by public guidance
   - current working rule:
     - successful `DEVICE.POST` and `UDI_DI.POST` establish tracked version `1`
     - successful `UDI_DI.PATCH` advances the tracked accepted device version
-    - `MARKET-INFO.PUT` should target the current accepted device identity and current accepted device version as input context when the XML shape requires version context
+    - `MARKET-INFO.PUT` should target the current accepted device identity and current accepted Market Info/device version as input context when the XML shape requires version context
+    - successful `MARKET-INFO.PUT` should be persisted separately in `latest_successful_market_info_version`
     - `MARKET-INFO.PUT` should not, by default, advance `latest_successful_version`
-  - until Playground or restricted EUDAMED documentation proves otherwise, Market Info success should be persisted separately from core device-version lineage
+  - until Playground or restricted EUDAMED documentation proves otherwise, Market Info success should remain separate from core device-version lineage even when a Market Info-specific version field is updated
   - production-cutover implication:
     - keep Market Info success tracking separate from PATCH lineage
     - capture enough acknowledgement evidence from future successful Market Info tests to determine whether EUDAMED mutates device version, returns a distinct market-state version, or leaves version unchanged
@@ -370,13 +426,16 @@ Current directional design intent:
   - child `POST`
   - single-device `PATCH`
   - `Bulk PATCH`
+- The backend also now supports a dedicated Market Info XML preview/download path with user-edited market-country overrides, but this is not yet represented by a separate operation-assessment contract.
 - Current active assessment coverage is represented by:
   - `single_post`
   - `single_patch`
   - `bulk_post`
   - `bulk_patch`
-- `Market Info` remains present as an XML workspace, but its operational assessment is still deferred and is not yet driven by the newer backend assessment contract.
-- `Market Info` assessment remains deferred.
+- `Market Info` remains distinct from the current readiness-assessment contract:
+  - it currently anchors to the selected resolved registered device context rather than a dedicated backend operation-assessment response
+  - XML generation and local validation are implemented
+  - Playground success capture for Market Info is not yet implemented
 - Those assessments are SQLite-backed and should describe:
   - eligible record counts
   - required identity scope such as `Basic UDI-DI` or child `UDI-DI`
@@ -663,12 +722,24 @@ Important limitation:
 ### Market Info
 
 - Uses the selected XML-ready record / shared testing anchor
+- Current UI now includes:
+  - a full-width `Market Info Edit` card above the preview card
+  - three selector controls:
+    - `Add country`
+    - `Remove country`
+    - `Original market`
+  - compact current/draft market summary tiles
+  - compact country chips with original-market emphasis
 - Generates one standalone `MARKET_INFO.PUT` message
 - Validates locally and supports download
 - Current version-handling assumption:
   - use the current accepted device version as input context only
   - do not automatically advance tracked PATCH/device version after successful `MARKET-INFO.PUT`
   - record Market Info success state separately so the rule can be revised safely later if Production evidence shows version coupling
+- Current testing status:
+  - backend automated tests now cover the override-country preview/download path
+  - frontend has no automated UI test runner configured yet
+  - successful Market Info Playground XML upload and persistence are not yet implemented or proven
 
 ### Bulk XML
 
@@ -1248,3 +1319,8 @@ Focus next on consolidating the remaining testing architecture onto SQLite and e
 6. only after those relationships are stable, introduce migration tooling if needed for controlled SQLite schema evolution
 7. document and later implement a Production cutover mode where workbook/reference `PATCH` rows can proceed without locally generated `POST` lineage
 8. decide whether Production `PATCH` version state will come from live EUDAMED lookup, controlled source-version assumptions, or explicit operator confirmation
+9. decide and implement the first Market Info success-capture model:
+   - upload support
+   - SQLite persistence fields/events
+   - whether any returned version information should be stored separately from PATCH lineage
+10. decide whether to add a frontend test runner before broader Market Info and bulk Market Info UI work

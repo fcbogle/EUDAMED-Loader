@@ -104,6 +104,7 @@ class MarketInfoXmlRecord:
     product_variant: str
     catalogue_number: str
     primary_udi_di: str
+    market_info_version: str
     manufacturer_srn: str
     device_identifier_code: str
     device_identifier_issuing_entity: str
@@ -393,6 +394,7 @@ class DeviceXmlProjectionBuilder:
             product_variant=record.product_variant,
             catalogue_number=self._required(field_map, "device_record.catalogue_number"),
             primary_udi_di=self._required(field_map, "device_record.primary_udi_di"),
+            market_info_version="1",
             manufacturer_srn=manufacturer_srn,
             device_identifier_code=device_identifier_code,
             device_identifier_issuing_entity=device_identifier_issuing_entity,

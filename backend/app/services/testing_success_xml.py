@@ -18,8 +18,8 @@ NAMESPACES: dict[str, str] = {
 }
 
 
-SuccessMessageType = Literal["DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH"]
-SuccessOperationLabel = Literal["Basic UDI-DI POST", "Device UDI-DI POST", "Device UDI-DI PATCH"]
+SuccessMessageType = Literal["DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH", "MARKET_INFO.PUT"]
+SuccessOperationLabel = Literal["Basic UDI-DI POST", "Device UDI-DI POST", "Device UDI-DI PATCH", "Market Info PUT"]
 
 
 @dataclass(frozen=True)
@@ -80,6 +80,18 @@ class TestingSuccessXmlService:
                             resolution.subject_id,
                         ),
                     )
+                elif acknowledgement.message_type == "MARKET_INFO.PUT":
+                    connection.execute(
+                        """
+                        UPDATE testing_subjects
+                        SET latest_successful_market_info_version = COALESCE(?, latest_successful_market_info_version)
+                        WHERE id = ?
+                        """,
+                        (
+                            acknowledgement.entity_version,
+                            resolution.subject_id,
+                        ),
+                    )
         if first_resolution is None:
             raise ValueError("Success XML did not resolve any testing subjects.")
         if len(acknowledgements) == 1:
@@ -129,16 +141,18 @@ class TestingSuccessXmlService:
             raise ValueError("Success XML must contain at least one response entity.")
 
         service_id, service_operation = self._resolve_service_identity(root)
-        if service_operation not in {"POST", "PATCH"}:
+        if (service_id, service_operation) == ("MARKET_INFO", "PUT"):
+            message_type = "MARKET_INFO.PUT"
+            operation_label = "Market Info PUT"
+        elif service_operation not in {"POST", "PATCH"}:
             raise ValueError(
-                f"Only POST and PATCH acknowledgements are supported. Received {service_id or 'UNKNOWN'}.{service_operation or 'UNKNOWN'}."
+                f"Only POST, PATCH, and MARKET_INFO.PUT acknowledgements are supported. Received {service_id or 'UNKNOWN'}.{service_operation or 'UNKNOWN'}."
             )
-        if service_id not in {"DEVICE", "UDI_DI"}:
+        elif service_id not in {"DEVICE", "UDI_DI"}:
             raise ValueError(
-                f"Only DEVICE.POST, UDI_DI.POST, and UDI_DI.PATCH acknowledgements are supported. Received {service_id or 'UNKNOWN'}.{service_operation or 'UNKNOWN'}."
+                f"Only DEVICE.POST, UDI_DI.POST, UDI_DI.PATCH, and MARKET_INFO.PUT acknowledgements are supported. Received {service_id or 'UNKNOWN'}.{service_operation or 'UNKNOWN'}."
             )
-
-        if service_id == "DEVICE" and service_operation == "POST":
+        elif service_id == "DEVICE" and service_operation == "POST":
             message_type: SuccessMessageType = "DEVICE.POST"
             operation_label: SuccessOperationLabel = "Basic UDI-DI POST"
         elif service_id == "UDI_DI" and service_operation == "POST":
@@ -240,7 +254,7 @@ class TestingSuccessXmlService:
                 self.store._normalize_identity(acknowledgement.entity_code),
             ),
         ).fetchall()
-        if acknowledgement.message_type in {"UDI_DI.POST", "UDI_DI.PATCH"}:
+        if acknowledgement.message_type in {"UDI_DI.POST", "UDI_DI.PATCH", "MARKET_INFO.PUT"}:
             for row in rows:
                 if self.store._matches_identity(row["primary_udi_di"], acknowledgement.entity_code):
                     return row
@@ -275,7 +289,7 @@ class TestingSuccessXmlService:
             ORDER BY ds.id
             """
         ).fetchall()
-        if acknowledgement.message_type in {"UDI_DI.POST", "UDI_DI.PATCH"}:
+        if acknowledgement.message_type in {"UDI_DI.POST", "UDI_DI.PATCH", "MARKET_INFO.PUT"}:
             for row in rows:
                 if self.store._matches_identity(row["primary_udi_di"], acknowledgement.entity_code):
                     return row
@@ -309,8 +323,9 @@ class TestingSuccessXmlService:
                 exclude_from_post_wave,
                 exclude_from_baseline_patch_wave,
                 latest_successful_version,
+                latest_successful_market_info_version,
                 latest_successful_state_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, 0, NULL, NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, 0, NULL, NULL, NULL)
             """,
             (
                 self.store._optional_string(device_row["subject_key"]),
@@ -367,7 +382,11 @@ class TestingSuccessXmlService:
             (subject_id,),
         ).fetchone()
         next_index = int(next_index_row[0]) if next_index_row is not None else 0
-        version: str | None = acknowledgement.entity_version if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"} else None
+        version: str | None = (
+            acknowledgement.entity_version
+            if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST", "MARKET_INFO.PUT"}
+            else None
+        )
         scenario_id: str | None = None
         scenario_label: str | None = None
         changed_fields_json: str | None = None
@@ -431,6 +450,18 @@ class TestingSuccessXmlService:
                                     subject_id,
                                 ),
                             )
+        elif acknowledgement.message_type == "MARKET_INFO.PUT":
+            connection.execute(
+                """
+                UPDATE testing_subjects
+                SET latest_successful_market_info_version = COALESCE(?, latest_successful_market_info_version)
+                WHERE id = ?
+                """,
+                (
+                    version,
+                    subject_id,
+                ),
+            )
         raw_event_json = json.dumps(raw_event_payload)
         connection.execute(
             """

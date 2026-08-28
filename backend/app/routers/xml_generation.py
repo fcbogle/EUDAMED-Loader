@@ -286,6 +286,11 @@ def preview_xml_market_info_put(payload: dict[str, object]) -> dict:
     product_family = _required_payload_string(payload, "product_family")
     product_variant = _required_payload_string(payload, "product_variant")
     catalogue_number = _required_payload_string(payload, "catalogue_number")
+    market_info_version = _required_string_with_detail(
+        payload,
+        "market_info_version",
+        "product_family, product_variant, catalogue_number, and market_info_version are required.",
+    )
     market_countries = _parse_market_info_countries(payload)
     try:
         preview = _xml_service().preview_market_info_put(
@@ -293,6 +298,7 @@ def preview_xml_market_info_put(payload: dict[str, object]) -> dict:
             product_variant=product_variant,
             catalogue_number=catalogue_number,
             market_countries=market_countries,
+            market_info_version=market_info_version,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -304,18 +310,24 @@ def download_xml_market_info_put(payload: dict[str, object]) -> Response:
     product_family = _required_payload_string(payload, "product_family")
     product_variant = _required_payload_string(payload, "product_variant")
     catalogue_number = _required_payload_string(payload, "catalogue_number")
+    market_info_version = _required_string_with_detail(
+        payload,
+        "market_info_version",
+        "product_family, product_variant, catalogue_number, and market_info_version are required.",
+    )
     market_countries = _parse_market_info_countries(payload)
     try:
-        file_name, xml_bytes = _xml_service().download_market_info_put(
+        file_name, zip_bytes = _xml_service().download_market_info_put(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
             market_countries=market_countries,
+            market_info_version=market_info_version,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
-    return Response(content=xml_bytes, media_type="application/xml", headers=headers)
+    return Response(content=zip_bytes, media_type="application/zip", headers=headers)
 
 
 @router.post("/xml/preview-generated-patch-scenario")
@@ -626,6 +638,20 @@ def testing_subject_summaries(payload: dict | None = None) -> list[dict]:
         limit=limit,
     )
     return [summary.model_dump(mode="json") for summary in summaries]
+
+
+@router.post("/xml/testing-events")
+def testing_events(payload: dict | None = None) -> list[dict]:
+    data = cast(dict[str, object], payload or {})
+    limit = int(data.get("limit", 500))
+    if limit < 1 or limit > 10000:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 10000.")
+    events = _testing_read_model().list_events(
+        product_family=str(data["product_family"]) if data.get("product_family") else None,
+        product_variant=str(data["product_variant"]) if data.get("product_variant") else None,
+        limit=limit,
+    )
+    return [event.model_dump(mode="json") for event in events]
 
 
 @router.get("/xml/testing-subjects/{subject_id}/history")

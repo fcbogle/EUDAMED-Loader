@@ -76,7 +76,7 @@ class TestingStateStore:
         with self._connect() as connection:
             rows = connection.execute(
                 f"""
-                SELECT catalogue_number, primary_udi_di, basic_udi_di, latest_successful_version, baseline_patch_success
+                SELECT catalogue_number, primary_udi_di, basic_udi_di, latest_successful_version, latest_successful_market_info_version, baseline_patch_success
                 FROM testing_subjects
                 WHERE {family_clause}
                   AND normalized_product_variant = ?
@@ -103,6 +103,7 @@ class TestingStateStore:
                 "primary_udi_di": self._optional_string(row["primary_udi_di"]),
                 "basic_udi_di": self._optional_string(row["basic_udi_di"]),
                 "latest_version": self._optional_string(row["latest_successful_version"]),
+                "latest_market_info_version": self._optional_string(row["latest_successful_market_info_version"]),
                 "baseline_patch_success": bool(row["baseline_patch_success"]),
             }
             for row in rows
@@ -467,6 +468,7 @@ class TestingStateStore:
                     exclude_from_post_wave INTEGER NOT NULL DEFAULT 0,
                     exclude_from_baseline_patch_wave INTEGER NOT NULL DEFAULT 0,
                     latest_successful_version TEXT,
+                    latest_successful_market_info_version TEXT,
                     latest_successful_state_json TEXT,
                     FOREIGN KEY(device_subject_id) REFERENCES device_subject(id) ON DELETE SET NULL
                 )
@@ -514,6 +516,12 @@ class TestingStateStore:
                     UNIQUE(normalized_product_family, normalized_product_variant, normalized_catalogue_number)
                 )
                 """
+            )
+            self._ensure_column(
+                connection,
+                table_name="testing_subjects",
+                column_name="latest_successful_market_info_version",
+                column_definition="TEXT",
             )
             self._ensure_column(
                 connection,
@@ -651,8 +659,9 @@ class TestingStateStore:
                 exclude_from_post_wave,
                 exclude_from_baseline_patch_wave,
                 latest_successful_version,
+                latest_successful_market_info_version,
                 latest_successful_state_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, 0, 0, 0, NULL, NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, 0, 0, 0, NULL, NULL, NULL)
             """,
             (
                 subject_key,

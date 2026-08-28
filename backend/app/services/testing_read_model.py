@@ -5,6 +5,7 @@ import sqlite3
 
 from app.config import get_settings
 from app.models import (
+    TestingEventReadModelEntry,
     TestingEventSummary,
     TestingSubjectHistory,
     TestingSubjectReadModelSummary,
@@ -134,6 +135,15 @@ class TestingReadModelService:
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type = 'DEVICE.POST' THEN 1 ELSE 0 END) AS has_successful_device_post,
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH') THEN 1 ELSE 0 END) AS has_successful_child_post_or_patch,
                     ts.latest_successful_version,
+                    ts.latest_successful_market_info_version,
+                    (
+                        SELECT latest_event.message_type
+                        FROM testing_events latest_event
+                        WHERE latest_event.subject_id = ts.id
+                          AND latest_event.status = 'SUCCESS'
+                        ORDER BY COALESCE(latest_event.tested_at, '') DESC, latest_event.event_index DESC
+                        LIMIT 1
+                    ) AS latest_success_message_type,
                     MAX(event.tested_at) AS latest_tested_at,
                     COUNT(event.id) AS event_count,
                     MAX(rb.reviewed_at) AS reviewed_post_at
@@ -169,6 +179,15 @@ class TestingReadModelService:
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type = 'DEVICE.POST' THEN 1 ELSE 0 END) AS has_successful_device_post,
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH') THEN 1 ELSE 0 END) AS has_successful_child_post_or_patch,
                     ts.latest_successful_version,
+                    ts.latest_successful_market_info_version,
+                    (
+                        SELECT latest_event.message_type
+                        FROM testing_events latest_event
+                        WHERE latest_event.subject_id = ts.id
+                          AND latest_event.status = 'SUCCESS'
+                        ORDER BY COALESCE(latest_event.tested_at, '') DESC, latest_event.event_index DESC
+                        LIMIT 1
+                    ) AS latest_success_message_type,
                     MAX(event.tested_at) AS latest_tested_at,
                     COUNT(event.id) AS event_count,
                     MAX(rb.reviewed_at) AS reviewed_post_at
@@ -213,6 +232,46 @@ class TestingReadModelService:
             subject=self._subject_summary_from_row(subject_row),
             events=[self._event_summary_from_row(row) for row in event_rows],
         )
+
+    def list_events(
+        self,
+        *,
+        product_family: str | None = None,
+        product_variant: str | None = None,
+        limit: int = 500,
+    ) -> list[TestingEventReadModelEntry]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    event.id,
+                    event.subject_id,
+                    ts.product_family,
+                    ts.product_variant,
+                    ts.catalogue_number,
+                    ts.primary_udi_di,
+                    ts.basic_udi_di,
+                    event.message_type,
+                    event.status,
+                    event.version,
+                    event.scenario_id,
+                    event.scenario_label,
+                    event.tested_at,
+                    event.transaction_id,
+                    event.submission_id,
+                    event.correlation_id,
+                    event.message_id
+                FROM testing_events event
+                JOIN testing_subjects ts ON ts.id = event.subject_id
+                WHERE event.status = 'SUCCESS'
+                  {f"AND {self._family_filter_clause('ts.normalized_product_family', product_family)[0]}" if product_family else ""}
+                  {"AND ts.normalized_product_variant = ?" if product_variant else ""}
+                ORDER BY COALESCE(event.tested_at, '') DESC, event.id DESC
+                LIMIT ?
+                """,
+                (*self._subject_filter_params(product_family=product_family, product_variant=product_variant), limit),
+            ).fetchall()
+        return [self._event_read_model_from_row(row) for row in rows]
 
     def _event_count(
         self,
@@ -356,6 +415,8 @@ class TestingReadModelService:
             has_successful_device_post=bool(row["has_successful_device_post"]),
             has_successful_child_post_or_patch=bool(row["has_successful_child_post_or_patch"]),
             latest_successful_version=cls._optional_string(row["latest_successful_version"]),
+            latest_successful_market_info_version=cls._optional_string(row["latest_successful_market_info_version"]),
+            latest_success_message_type=cls._optional_string(row["latest_success_message_type"]),
             latest_tested_at=cls._optional_string(row["latest_tested_at"]),
             reviewed_post_at=cls._optional_string(row["reviewed_post_at"]),
             event_count=int(row["event_count"]),
@@ -379,6 +440,28 @@ class TestingReadModelService:
             changed_fields=cls._json_list(row["changed_fields_json"]),
             retained_fields=cls._json_list(row["retained_fields_json"]),
             unchanged_fields=cls._json_list(row["unchanged_fields_json"]),
+        )
+
+    @classmethod
+    def _event_read_model_from_row(cls, row: sqlite3.Row) -> TestingEventReadModelEntry:
+        return TestingEventReadModelEntry(
+            id=int(row["id"]),
+            subject_id=int(row["subject_id"]),
+            product_family=cls._optional_string(row["product_family"]),
+            product_variant=cls._optional_string(row["product_variant"]),
+            catalogue_number=cls._optional_string(row["catalogue_number"]),
+            primary_udi_di=cls._optional_string(row["primary_udi_di"]),
+            basic_udi_di=cls._optional_string(row["basic_udi_di"]),
+            message_type=cls._optional_string(row["message_type"]),
+            status=cls._optional_string(row["status"]),
+            version=cls._optional_string(row["version"]),
+            scenario_id=cls._optional_string(row["scenario_id"]),
+            scenario_label=cls._optional_string(row["scenario_label"]),
+            tested_at=cls._optional_string(row["tested_at"]),
+            transaction_id=cls._optional_string(row["transaction_id"]),
+            submission_id=cls._optional_string(row["submission_id"]),
+            correlation_id=cls._optional_string(row["correlation_id"]),
+            message_id=cls._optional_string(row["message_id"]),
         )
 
     @staticmethod

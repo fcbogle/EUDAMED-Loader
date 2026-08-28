@@ -74,6 +74,7 @@ class MarketInfoPutPreview(BaseModel):
     product_variant: str | None = None
     catalogue_number: str
     primary_udi_di: str
+    market_info_version: str
     registered_device_anchor: RegisteredDeviceAnchor
     file_name: str
     xml: str
