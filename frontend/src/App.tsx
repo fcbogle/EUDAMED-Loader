@@ -25,6 +25,7 @@ import testingScenariosDocumentation from "./content/docs/testing-scenarios.md?r
 import workbooksDocumentation from "./content/docs/workbooks.md?raw";
 import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import xmlSampleComparisonDocumentation from "./content/docs/xml-sample-comparison.md?raw";
+import { resolveMarketCountryCode } from "./marketCountryReference";
 import { usePatchScenarioState } from "./usePatchScenarioState";
 import { useXmlOperationAssessment } from "./useXmlOperationAssessment";
 import { useSuccessXmlUpload } from "./useSuccessXmlUpload";
@@ -56,6 +57,7 @@ import type {
   GeneratedPatchScenarioPreview,
   ImportedWorkbookSummary,
   MarketInfoPutPreview,
+  MarketCountryReferenceEntry,
   NormalizationRuleFile,
   OperationAssessment,
   PostRegistrationPreview,
@@ -1305,6 +1307,7 @@ export function App() {
   const [testingSummaryWorkspaceSummary, setTestingSummaryWorkspaceSummary] = useState<TestingWorkspaceSummary | null>(null);
   const [testingSummarySubjectSummaries, setTestingSummarySubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
   const [testingSummaryEvents, setTestingSummaryEvents] = useState<TestingEventReadModelEntry[]>([]);
+  const [marketCountryReference, setMarketCountryReference] = useState<MarketCountryReferenceEntry[]>([]);
   const [isLoadingTestingSummary, setIsLoadingTestingSummary] = useState<boolean>(false);
   const [testingSummaryError, setTestingSummaryError] = useState<string | null>(null);
   const [patchScenarioStatuses, setPatchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
@@ -1617,6 +1620,7 @@ export function App() {
       api.normalizationRules(),
       api.distinctValues(selectedColumn),
       api.criticalWarningCodes(),
+      api.marketCountryReference(),
     ])
       .then(([
         workbookData,
@@ -1626,6 +1630,7 @@ export function App() {
         ruleData,
         distinctData,
         criticalWarningCodes,
+        marketCountryReferenceData,
       ]) => {
         setWorkbooks(workbookData);
         setReferenceWorkbooks(referenceWorkbookData);
@@ -1633,6 +1638,7 @@ export function App() {
         setRules(ruleData);
         setDistinctValues(distinctData);
         setCriticalWarningCodeOptions(criticalWarningCodes);
+        setMarketCountryReference(marketCountryReferenceData);
         const firstVisibleWorkbook = workbookData.find((workbook) => workbook.in_scope_for_variant_mapping);
         const firstVisibleSheet =
           sheetData.find((sheet) => sheet.workbook === firstVisibleWorkbook?.workbook) ?? sheetData[0] ?? null;
@@ -3126,7 +3132,7 @@ export function App() {
         : xmlPatchPreview?.registered_device_anchor ?? selectedPairAnchor;
   const normalizedMarketInfoScenarioItems = marketInfoScenarioItems
     .map((item) => ({
-      country: item.country.trim().toUpperCase(),
+      country: resolveMarketCountryCode(marketCountryReference, item.country),
       original_placed_on_market: item.originalPlacedOnMarket,
     }))
     .filter((item, index, items) => item.country && items.findIndex((candidate) => candidate.country === item.country) === index);
@@ -5534,6 +5540,7 @@ export function App() {
                 ) : xmlMode === "marketInfo" ? (
                   <>
                     <MarketInfoScenarioCard
+                      countryReference={marketCountryReference}
                       catalogueNumber={selectedTestingAnchor?.catalogue_number ?? null}
                       primaryUdiDi={selectedTestingAnchor?.primary_udi_di ?? null}
                       productFamily={selectedTestingAnchor?.product_family ?? selectedXmlFamilyLabel}

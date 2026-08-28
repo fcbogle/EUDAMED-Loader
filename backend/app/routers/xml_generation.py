@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from app.models import SuccessXmlUploadRequest, SuccessXmlUploadResult
+from app.services.country_reference import market_country_reference_payload
 from app.services.operation_assessment import OperationAssessmentService
 from app.services.testing_read_model import TestingReadModelService
 from app.services.testing_success_xml import TestingSuccessXmlService
@@ -181,6 +182,11 @@ def xml_generation_scope() -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return scope.model_dump(mode="json")
+
+
+@router.get("/xml/market-country-reference")
+def market_country_reference() -> list[dict[str, object]]:
+    return market_country_reference_payload()
 
 
 @router.post("/xml/preview-record")

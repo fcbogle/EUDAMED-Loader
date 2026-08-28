@@ -78,6 +78,12 @@ export type ApplyNormalizationRulesResponse = {
   file_path: string;
 };
 
+export type MarketCountryReferenceEntry = {
+  name: string;
+  code: string;
+  aliases: string[];
+};
+
 export type SchemaFileSummary = {
   relative_path: string;
   category: string;

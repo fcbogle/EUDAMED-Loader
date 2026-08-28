@@ -1,4 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+
+import {
+  resolveMarketCountryCode,
+  resolveMarketCountryFlag,
+  resolveMarketCountryName,
+} from "../marketCountryReference";
+import type { MarketCountryReferenceEntry } from "../types";
 
 type MarketInfoScenarioItem = {
   id: string;
@@ -7,6 +14,7 @@ type MarketInfoScenarioItem = {
 };
 
 type MarketInfoScenarioCardProps = {
+  countryReference: MarketCountryReferenceEntry[];
   catalogueNumber: string | null;
   primaryUdiDi: string | null;
   productFamily: string | null;
@@ -22,115 +30,8 @@ type MarketInfoScenarioCardProps = {
   isReady: boolean;
 };
 
-const MARKET_COUNTRY_OPTIONS = [
-  "Austria",
-  "Belgium",
-  "Bulgaria",
-  "Croatia",
-  "Cyprus",
-  "Czechia",
-  "Denmark",
-  "Estonia",
-  "Finland",
-  "France",
-  "Germany",
-  "Greece",
-  "Hungary",
-  "Ireland",
-  "Italy",
-  "Latvia",
-  "Lithuania",
-  "Luxembourg",
-  "Malta",
-  "Netherlands",
-  "Norway",
-  "Poland",
-  "Portugal",
-  "Romania",
-  "Slovakia",
-  "Slovenia",
-  "Spain",
-  "Sweden",
-] as const;
-
-const COUNTRY_FLAG_BY_NAME: Record<(typeof MARKET_COUNTRY_OPTIONS)[number], string> = {
-  Austria: "🇦🇹",
-  Belgium: "🇧🇪",
-  Bulgaria: "🇧🇬",
-  Croatia: "🇭🇷",
-  Cyprus: "🇨🇾",
-  Czechia: "🇨🇿",
-  Denmark: "🇩🇰",
-  Estonia: "🇪🇪",
-  Finland: "🇫🇮",
-  France: "🇫🇷",
-  Germany: "🇩🇪",
-  Greece: "🇬🇷",
-  Hungary: "🇭🇺",
-  Ireland: "🇮🇪",
-  Italy: "🇮🇹",
-  Latvia: "🇱🇻",
-  Lithuania: "🇱🇹",
-  Luxembourg: "🇱🇺",
-  Malta: "🇲🇹",
-  Netherlands: "🇳🇱",
-  Norway: "🇳🇴",
-  Poland: "🇵🇱",
-  Portugal: "🇵🇹",
-  Romania: "🇷🇴",
-  Slovakia: "🇸🇰",
-  Slovenia: "🇸🇮",
-  Spain: "🇪🇸",
-  Sweden: "🇸🇪",
-};
-
-const COUNTRY_CODE_BY_NAME: Record<(typeof MARKET_COUNTRY_OPTIONS)[number], string> = {
-  Austria: "AT",
-  Belgium: "BE",
-  Bulgaria: "BG",
-  Croatia: "HR",
-  Cyprus: "CY",
-  Czechia: "CZ",
-  Denmark: "DK",
-  Estonia: "EE",
-  Finland: "FI",
-  France: "FR",
-  Germany: "DE",
-  Greece: "EL",
-  Hungary: "HU",
-  Ireland: "IE",
-  Italy: "IT",
-  Latvia: "LV",
-  Lithuania: "LT",
-  Luxembourg: "LU",
-  Malta: "MT",
-  Netherlands: "NL",
-  Norway: "NO",
-  Poland: "PL",
-  Portugal: "PT",
-  Romania: "RO",
-  Slovakia: "SK",
-  Slovenia: "SI",
-  Spain: "ES",
-  Sweden: "SE",
-};
-
-const COUNTRY_NAME_BY_CODE = Object.fromEntries(
-  Object.entries(COUNTRY_CODE_BY_NAME).map(([name, code]) => [code, name]),
-) as Record<string, (typeof MARKET_COUNTRY_OPTIONS)[number]>;
-COUNTRY_NAME_BY_CODE.GR = "Greece";
-
-function resolveCountryName(country: string): string {
-  const normalized = country.trim().toUpperCase();
-  return COUNTRY_NAME_BY_CODE[normalized] ?? country;
-}
-
-function countryFlag(country: string): string {
-  const countryName = resolveCountryName(country);
-  return COUNTRY_FLAG_BY_NAME[countryName as keyof typeof COUNTRY_FLAG_BY_NAME] ?? "🏳️";
-}
-
 export function MarketInfoScenarioCard({
+  countryReference,
   catalogueNumber,
   primaryUdiDi,
   productFamily,
@@ -149,8 +50,17 @@ export function MarketInfoScenarioCard({
   const [removeCountryValue, setRemoveCountryValue] = useState("");
   const currentOriginalMarket = currentMarketItems.find((item) => item.originalPlacedOnMarket)?.country ?? null;
   const draftOriginalMarket = draftMarketItems.find((item) => item.originalPlacedOnMarket)?.country ?? "";
-  const draftCountryNames = draftMarketItems.map((item) => resolveCountryName(item.country)).filter(Boolean);
-  const availableCountryOptions = MARKET_COUNTRY_OPTIONS.filter((country) => !draftCountryNames.includes(country));
+  const draftCountryCodes = useMemo(
+    () =>
+      draftMarketItems
+        .map((item) => resolveMarketCountryCode(countryReference, item.country))
+        .filter(Boolean),
+    [countryReference, draftMarketItems],
+  );
+  const availableCountryOptions = useMemo(
+    () => countryReference.filter((country) => !draftCountryCodes.includes(country.code)),
+    [countryReference, draftCountryCodes],
+  );
 
   return (
     <div className="draft-list xml-record-stack">
@@ -176,7 +86,7 @@ export function MarketInfoScenarioCard({
               <span>Current countries</span>
             </div>
             <div className="workflow-note patch-readiness-note market-info-stat-tile">
-              <strong>{currentOriginalMarket ?? "Not set"}</strong>
+              <strong>{resolveMarketCountryName(countryReference, currentOriginalMarket) || "Not set"}</strong>
               <span>Current original market</span>
             </div>
             <div className="workflow-note patch-readiness-note market-info-stat-tile">
@@ -184,7 +94,7 @@ export function MarketInfoScenarioCard({
               <span>Proposed countries</span>
             </div>
             <div className="workflow-note patch-readiness-note market-info-stat-tile">
-              <strong>{draftOriginalMarket || "Not set"}</strong>
+              <strong>{resolveMarketCountryName(countryReference, draftOriginalMarket) || "Not set"}</strong>
               <span>Proposed original market</span>
             </div>
           </div>
@@ -216,8 +126,8 @@ export function MarketInfoScenarioCard({
               >
                 <option value="">Select country</option>
                 {availableCountryOptions.map((country) => (
-                  <option key={country} value={country}>
-                    {country}
+                  <option key={country.code} value={country.code}>
+                    {country.name}
                   </option>
                 ))}
               </select>
@@ -240,7 +150,7 @@ export function MarketInfoScenarioCard({
                 <option value="">Select country</option>
                 {draftMarketItems.map((item) => (
                   <option key={`remove-${item.id}`} value={item.country}>
-                    {resolveCountryName(item.country) || "Pending"}
+                    {resolveMarketCountryName(countryReference, item.country) || "Pending"}
                   </option>
                 ))}
               </select>
@@ -256,7 +166,7 @@ export function MarketInfoScenarioCard({
                 <option value="">Select original market</option>
                 {draftMarketItems.map((item) => (
                   <option key={`original-${item.id}`} value={item.country}>
-                    {resolveCountryName(item.country) || "Pending"}
+                    {resolveMarketCountryName(countryReference, item.country) || "Pending"}
                   </option>
                 ))}
               </select>
@@ -271,8 +181,8 @@ export function MarketInfoScenarioCard({
                     key={`current-${item.id}`}
                     className={item.originalPlacedOnMarket ? "market-info-chip market-info-chip-original" : "market-info-chip"}
                   >
-                    <span className="market-info-chip-flag" aria-hidden="true">{countryFlag(item.country)}</span>
-                    <span>{resolveCountryName(item.country)}</span>
+                    <span className="market-info-chip-flag" aria-hidden="true">{resolveMarketCountryFlag(countryReference, item.country)}</span>
+                    <span>{resolveMarketCountryName(countryReference, item.country)}</span>
                   </span>
                 ))
               ) : (
@@ -289,8 +199,8 @@ export function MarketInfoScenarioCard({
                     key={`draft-${item.id}`}
                     className={item.originalPlacedOnMarket ? "market-info-chip-row market-info-chip-row-original" : "market-info-chip-row"}
                   >
-                    <span className="market-info-chip-flag" aria-hidden="true">{countryFlag(item.country)}</span>
-                    <span className="market-info-chip-label">{resolveCountryName(item.country) || "Pending"}</span>
+                    <span className="market-info-chip-flag" aria-hidden="true">{resolveMarketCountryFlag(countryReference, item.country)}</span>
+                    <span className="market-info-chip-label">{resolveMarketCountryName(countryReference, item.country) || "Pending"}</span>
                     {item.originalPlacedOnMarket ? <span className="market-info-chip-badge">Original</span> : null}
                   </div>
                 ))

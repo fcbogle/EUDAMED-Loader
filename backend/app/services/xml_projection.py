@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from app.config import get_settings
+from app.services.country_reference import normalize_market_country_code
 from app.validation_models import CanonicalValidationRecord
 from app.xml_models import CriticalWarningXmlItem, PatchStateSnapshot, StorageConditionXmlItem
 
@@ -15,38 +16,6 @@ LANGUAGE_CODE_MAP = {
     "italian": "IT",
     "portuguese": "PT",
 }
-
-EU_COUNTRY_CODE_MAP = {
-    "austria": "AT",
-    "belgium": "BE",
-    "bulgaria": "BG",
-    "croatia": "HR",
-    "cyprus": "CY",
-    "czech republic": "CZ",
-    "czechia": "CZ",
-    "denmark": "DK",
-    "estonia": "EE",
-    "finland": "FI",
-    "france": "FR",
-    "germany": "DE",
-    "greece": "EL",
-    "hungary": "HU",
-    "ireland": "IE",
-    "italy": "IT",
-    "latvia": "LV",
-    "lithuania": "LT",
-    "luxembourg": "LU",
-    "malta": "MT",
-    "netherlands": "NL",
-    "poland": "PL",
-    "portugal": "PT",
-    "romania": "RO",
-    "slovakia": "SK",
-    "slovenia": "SI",
-    "spain": "ES",
-    "sweden": "SE",
-}
-
 
 @dataclass(frozen=True)
 class DeviceXmlRecord:
@@ -480,20 +449,7 @@ class DeviceXmlProjectionBuilder:
 
     @staticmethod
     def _country_code(value: str | None) -> str | None:
-        if value in (None, ""):
-            return None
-        token = value.strip().lower()
-        extended_map = {
-            **EU_COUNTRY_CODE_MAP,
-            "gr": "EL",
-            "el": "EL",
-            "norway": "NO",
-            "iceland": "IS",
-            "liechtenstein": "LI",
-            "turkey": "TR",
-            "northern ireland": "XI",
-        }
-        return extended_map.get(token, value.strip().upper())
+        return normalize_market_country_code(value)
 
     @staticmethod
     def _risk_class(value: str) -> str:

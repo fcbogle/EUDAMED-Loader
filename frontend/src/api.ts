@@ -18,6 +18,7 @@ import type {
   DistinctValueProfile,
   GeneratedPatchScenarioPreview,
   MarketInfoPutPreview,
+  MarketCountryReferenceEntry,
   NormalizationRuleFile,
   OperationAssessment,
   PostRegistrationPreview,
@@ -212,6 +213,7 @@ export const api = {
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
   canonicalValidation: () => getJson<CanonicalValidationBundle>("/canonical-validation"),
   xmlGenerationScope: () => getJson<XmlGenerationScopeBundle>("/xml/scope"),
+  marketCountryReference: () => getJson<MarketCountryReferenceEntry[]>("/xml/market-country-reference"),
   previewXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendJson<SingleRecordXmlPreview>("/xml/preview-record", "POST", {
       product_family: productFamily,

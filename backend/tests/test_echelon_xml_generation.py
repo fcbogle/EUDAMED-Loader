@@ -17,6 +17,7 @@ from app.routers.xml_generation import (
     download_xml_market_info_put,
     download_xml_batch,
     download_xml_record,
+    market_country_reference,
     preview_generated_patch_scenario,
     preview_xml_next_post_registration,
     preview_xml_bulk_patch,
@@ -414,6 +415,14 @@ def test_market_info_put_routes_return_payloads(route_xml_service_without_import
         assert "echelon-echelon-market-info-put-EC22L1S.xml" in archive.namelist()
         assert "manifest.json" in archive.namelist()
         assert b"<mktinfo:DTXMarketInfo>" in archive.read("echelon-echelon-market-info-put-EC22L1S.xml")
+
+
+def test_market_country_reference_route_returns_canonical_greece_code() -> None:
+    payload = market_country_reference()
+
+    greece = next(entry for entry in payload if entry["name"] == "Greece")
+    assert greece["code"] == "EL"
+    assert "GR" in greece["aliases"]
 
 
 def test_market_info_put_routes_accept_override_countries(route_xml_service_without_import: None) -> None:
