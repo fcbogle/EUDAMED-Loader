@@ -757,6 +757,117 @@ def test_duplicate_market_info_success_upload_repairs_tracked_state_from_generat
         connection.close()
 
 
+def test_market_info_success_delta_uses_latest_accepted_subject_state_when_generated_baseline_is_stale(
+    isolated_workbook_import_db: Path,
+) -> None:
+    store = PlaygroundStateStore()
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L1S",
+        primary_udi_di="05050649058189",
+        basic_udi_di="5050649ESPRITVZ",
+        post_success=1,
+        latest_successful_version="3",
+        latest_successful_market_info_version="2",
+    )
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        connection.execute(
+            """
+            UPDATE testing_subjects
+            SET latest_successful_market_info_state_json = ?
+            WHERE id = ?
+            """,
+            (
+                json.dumps(
+                    {
+                        "version": "2",
+                        "market_countries": [
+                            {"country": "DE", "original_placed_on_market": True},
+                        ],
+                    }
+                ),
+                subject_id,
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    store.record_generated_market_info_context(
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L1S",
+        primary_udi_di="05050649058189",
+        basic_udi_di="5050649ESPRITVZ",
+        market_info_version="3",
+        baseline_market_countries=[
+            {"country": "AT", "original_placed_on_market": False},
+            {"country": "DE", "original_placed_on_market": True},
+        ],
+        market_countries=[
+            {"country": "DE", "original_placed_on_market": True},
+            {"country": "AT", "original_placed_on_market": False},
+        ],
+    )
+
+    xml_payload = """<?xml version='1.0' encoding='utf-8'?>
+<m:PullAck xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1">
+  <m:correlationID>market-info-success-correlation-2</m:correlationID>
+  <m:creationDateTime>2026-08-28T18:01:07.900+02:00</m:creationDateTime>
+  <m:messageID>market-info-success-message-2</m:messageID>
+  <m:sender>
+    <m:node>
+      <s:nodeActorCode>EUDAMED</s:nodeActorCode>
+    </m:node>
+    <m:service>
+      <s:serviceID>MARKET_INFO</s:serviceID>
+      <s:serviceOperation>PUT</s:serviceOperation>
+    </m:service>
+  </m:sender>
+  <m:responseEntity>
+    <m:responseCode>SUCCESS</m:responseCode>
+    <m:entityCode>05050649058189</m:entityCode>
+  </m:responseEntity>
+</m:PullAck>
+"""
+
+    result = TestingSuccessXmlService().record_success_xml(
+        xml_bytes=xml_payload.encode("utf-8"),
+        source_file_name="market-info-success-2.xml",
+    )
+
+    assert result.message_type == "MARKET_INFO.PUT"
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        event_row = connection.execute(
+            """
+            SELECT version, raw_event_json
+            FROM testing_events
+            WHERE subject_id = ?
+              AND status = 'SUCCESS'
+            ORDER BY event_index DESC
+            LIMIT 1
+            """,
+            (subject_id,),
+        ).fetchone()
+        assert event_row is not None
+        assert event_row["version"] == "3"
+        event_payload = json.loads(str(event_row["raw_event_json"]))
+        assert event_payload["market_info_delta"] == {
+            "added_countries": ["AT"],
+            "removed_countries": [],
+            "original_market_before": "DE",
+            "original_market_after": "DE",
+        }
+    finally:
+        connection.close()
+
+
 def test_workbook_import_service_persists_import_batch_and_subjects(
     isolated_workbook_import_env: tuple[Path, Path],
     monkeypatch: pytest.MonkeyPatch,

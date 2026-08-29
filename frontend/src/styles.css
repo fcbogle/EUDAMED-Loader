@@ -980,6 +980,18 @@ select {
   align-items: end;
 }
 
+.bulk-market-info-editor-controls {
+  grid-template-columns: minmax(260px, 1.8fr) repeat(4, minmax(132px, 0.8fr));
+}
+
+.market-info-field-wide {
+  min-width: 0;
+}
+
+.market-info-field-compact {
+  min-width: 0;
+}
+
 .market-info-stat-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

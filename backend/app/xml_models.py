@@ -263,3 +263,25 @@ class BulkPatchPreview(BaseModel):
     included_records: list[BulkXmlRecordSummary] = Field(default_factory=list)
     excluded_records: list[BulkXmlExcludedRecord] = Field(default_factory=list)
     chunks: list[BatchXmlChunkSummary] = Field(default_factory=list)
+
+
+class BulkMarketInfoPreview(BaseModel):
+    mode: Literal["bulk_market_info"] = "bulk_market_info"
+    product_family: str
+    product_variant: str
+    selected_basic_udi_di: str
+    requested_record_count: int
+    eligible_child_records: int
+    package_file_name: str
+    max_records_per_file: int
+    chunk_count: int
+    selected_chunk_sequence: int
+    selected_chunk_file_name: str
+    selected_chunk_record_count: int
+    selected_chunk_xml: str
+    selected_chunk_validation: XmlValidationResult
+    included_record_count: int
+    excluded_record_count: int
+    included_records: list[BulkXmlRecordSummary] = Field(default_factory=list)
+    excluded_records: list[BulkXmlExcludedRecord] = Field(default_factory=list)
+    chunks: list[BatchXmlChunkSummary] = Field(default_factory=list)

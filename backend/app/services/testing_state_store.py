@@ -85,6 +85,22 @@ class TestingStateStore:
             return None
         return latest_state if isinstance(latest_state, dict) else None
 
+    def latest_successful_market_info_version(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> str | None:
+        row = self._subject_row(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        if row is None:
+            return None
+        return self._optional_string(row["latest_successful_market_info_version"])
+
     def posted_entries(
         self,
         *,

@@ -530,6 +530,71 @@ def download_xml_bulk_patch(payload: dict | None = None) -> Response:
     return Response(content=zip_bytes, media_type="application/zip", headers=headers)
 
 
+@router.post("/xml/preview-bulk-market-info")
+def preview_xml_bulk_market_info(payload: dict | None = None) -> dict:
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(
+        data, "product_family", "product_family, product_variant, basic_udi_di, and market_countries are required."
+    )
+    product_variant = _required_string_with_detail(
+        data, "product_variant", "product_family, product_variant, basic_udi_di, and market_countries are required."
+    )
+    basic_udi_di = _required_string_with_detail(
+        data, "basic_udi_di", "product_family, product_variant, basic_udi_di, and market_countries are required."
+    )
+    market_countries = _parse_market_info_countries(data)
+    record_count = int(data.get("record_count", 1))
+    chunk_sequence = int(data.get("chunk_sequence", 1))
+    selected_catalogue_numbers = data.get("selected_catalogue_numbers") or []
+    try:
+        preview = _xml_service().preview_bulk_market_info(
+            product_family=product_family,
+            product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
+            record_count=record_count,
+            market_countries=market_countries,
+            selected_catalogue_numbers=[
+                str(value) for value in selected_catalogue_numbers if isinstance(value, str) and value.strip()
+            ],
+            chunk_sequence=chunk_sequence,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return preview.model_dump(mode="json")
+
+
+@router.post("/xml/download-bulk-market-info")
+def download_xml_bulk_market_info(payload: dict | None = None) -> Response:
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(
+        data, "product_family", "product_family, product_variant, basic_udi_di, and market_countries are required."
+    )
+    product_variant = _required_string_with_detail(
+        data, "product_variant", "product_family, product_variant, basic_udi_di, and market_countries are required."
+    )
+    basic_udi_di = _required_string_with_detail(
+        data, "basic_udi_di", "product_family, product_variant, basic_udi_di, and market_countries are required."
+    )
+    market_countries = _parse_market_info_countries(data)
+    record_count = int(data.get("record_count", 1))
+    selected_catalogue_numbers = data.get("selected_catalogue_numbers") or []
+    try:
+        file_name, zip_bytes = _xml_service().download_bulk_market_info(
+            product_family=product_family,
+            product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
+            record_count=record_count,
+            market_countries=market_countries,
+            selected_catalogue_numbers=[
+                str(value) for value in selected_catalogue_numbers if isinstance(value, str) and value.strip()
+            ],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
+    return Response(content=zip_bytes, media_type="application/zip", headers=headers)
+
+
 @router.post("/xml/bulk-patch-posted-entries")
 def bulk_patch_posted_entries(payload: dict | None = None) -> dict:
     data = cast(dict[str, object], payload or {})

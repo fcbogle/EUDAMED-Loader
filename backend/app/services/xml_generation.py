@@ -13,7 +13,7 @@ from app.services.canonical_projection import (
 )
 from app.services.canonical_validation import CanonicalValidationService
 from app.services.xml_packaging import XmlPackageBuilder
-from app.services.xml_projection import DeviceXmlProjectionBuilder, DeviceXmlRecord
+from app.services.xml_projection import DeviceXmlProjectionBuilder, DeviceXmlRecord, MarketInfoXmlRecord
 from app.services.xml_rendering import EudamedMessageRenderer
 from app.services.xml_selection import ValidationRecordSelector
 from app.services.testing_state_store import TestingStateStore
@@ -22,6 +22,7 @@ from app.validation_models import CanonicalValidationRecord
 from app.xml_models import (
     BatchXmlChunkSummary,
     BatchXmlPreview,
+    BulkMarketInfoPreview,
     BulkPatchPreview,
     BulkPostPreview,
     BulkUdidiPostPreview,
@@ -482,6 +483,7 @@ class XmlGenerationService:
         basic_udi_di: str,
         record_count: int,
         selected_catalogue_numbers: list[str] | None = None,
+        operation_label: str = "bulk PATCH",
     ) -> tuple[list[CanonicalValidationRecord], int, list[str]]:
         variant_records = self._variant_xml_ready_records(
             product_family=product_family,
@@ -504,7 +506,9 @@ class XmlGenerationService:
         ]
         eligible_child_records = len(posted_catalogues)
         if not posted_catalogues:
-            raise ValueError(f"Basic UDI-DI {basic_udi_di} does not currently have any posted child devices for bulk PATCH.")
+            raise ValueError(
+                f"Basic UDI-DI {basic_udi_di} does not currently have any posted child devices for {operation_label}."
+            )
 
         selected_catalogues = [
             catalogue_number.strip()
@@ -512,12 +516,14 @@ class XmlGenerationService:
             if isinstance(catalogue_number, str) and catalogue_number.strip()
         ]
         if not selected_catalogues:
-            raise ValueError(f"No selected child devices remain under Basic UDI-DI {basic_udi_di} for bulk PATCH.")
+            raise ValueError(
+                f"No selected child devices remain under Basic UDI-DI {basic_udi_di} for {operation_label}."
+            )
 
         unknown_catalogues = sorted(set(selected_catalogues).difference(posted_catalogues))
         if unknown_catalogues:
             raise ValueError(
-                "Selected bulk PATCH devices do not belong to the chosen Basic UDI-DI parent: "
+                f"Selected {operation_label} devices do not belong to the chosen Basic UDI-DI parent: "
                 + ", ".join(unknown_catalogues)
             )
 
@@ -528,6 +534,63 @@ class XmlGenerationService:
             if catalogue in record_lookup
         ][:record_count]
         return selected_records, eligible_child_records, missing_variant_records
+
+    def _market_info_record_with_latest_state(
+        self,
+        *,
+        record: CanonicalValidationRecord,
+    ) -> tuple[MarketInfoXmlRecord, list[tuple[str, bool]], str]:
+        market_info_record = self.projection_builder.build_market_info_record(record)
+        baseline_market_countries = list(market_info_record.market_countries)
+        latest_market_info_state = self.testing_state_store.latest_successful_market_info_state(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            catalogue_number=record.catalogue_number or "",
+        )
+        if not isinstance(latest_market_info_state, dict):
+            return market_info_record, baseline_market_countries, "1"
+
+        accepted_market_countries = latest_market_info_state.get("market_countries")
+        normalized_market_countries = baseline_market_countries
+        if isinstance(accepted_market_countries, list):
+            candidate_items = [
+                (
+                    str(item.get("country") or "").strip(),
+                    bool(item.get("original_placed_on_market")),
+                )
+                for item in accepted_market_countries
+                if isinstance(item, dict) and str(item.get("country") or "").strip()
+            ]
+            normalized_market_countries = self._normalized_market_info_countries(candidate_items) if candidate_items else baseline_market_countries
+        current_version = self._validate_market_info_version(
+            self._optional_string(latest_market_info_state.get("version"))
+            or self.testing_state_store.latest_successful_market_info_version(
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                catalogue_number=record.catalogue_number or "",
+            )
+            or "1"
+        )
+        return replace(
+            market_info_record,
+            market_countries=normalized_market_countries,
+            market_info_version=current_version,
+        ), baseline_market_countries, current_version
+
+    @staticmethod
+    def _market_country_signature(items: list[tuple[str, bool]]) -> tuple[tuple[str, bool], ...]:
+        return tuple(sorted((country, bool(original)) for country, original in items))
+
+    @staticmethod
+    def _next_incremental_version(version: str | None) -> str:
+        normalized = str(version or "").strip()
+        if not normalized:
+            return "1"
+        try:
+            parsed = int(normalized)
+        except ValueError:
+            return "1"
+        return str(max(parsed, 0) + 1)
 
     def _next_valid_post_record(
         self,
@@ -921,6 +984,7 @@ class XmlGenerationService:
             basic_udi_di=basic_udi_di,
             record_count=normalized_count,
             selected_catalogue_numbers=selected_catalogue_numbers,
+            operation_label="bulk PATCH",
         )
         scenario_data = scenario_inputs or {}
         included_summaries: list[BulkXmlRecordSummary] = []
@@ -1077,6 +1141,233 @@ class XmlGenerationService:
             included_records=included_summaries,
             excluded_records=excluded_records,
             chunks=chunk_summaries,
+        )
+
+    def preview_bulk_market_info(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        basic_udi_di: str,
+        record_count: int,
+        market_countries: list[tuple[str, bool]],
+        selected_catalogue_numbers: list[str] | None = None,
+        chunk_sequence: int = 1,
+    ) -> BulkMarketInfoPreview:
+        normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
+        normalized_market_countries = self._normalized_market_info_countries(market_countries)
+        candidate_records, eligible_child_records, missing_variant_records = self._bulk_patch_selected_records(
+            product_family=product_family,
+            product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
+            record_count=normalized_count,
+            selected_catalogue_numbers=selected_catalogue_numbers,
+            operation_label="bulk Market Info",
+        )
+        excluded_records: list[BulkXmlExcludedRecord] = []
+        for catalogue_number in missing_variant_records:
+            excluded_records.append(
+                BulkXmlExcludedRecord(
+                    catalogue_number=catalogue_number,
+                    primary_udi_di=None,
+                    reason_code="not_xml_ready",
+                    reason_message="Posted device is not currently XML-ready in canonical validation.",
+                )
+            )
+
+        included_summaries: list[BulkXmlRecordSummary] = []
+        included_payloads: list[tuple[BulkXmlRecordSummary, str]] = []
+        baseline_signature: tuple[tuple[str, bool], ...] | None = None
+        for record in candidate_records:
+            market_info_record, baseline_market_countries, current_version = self._market_info_record_with_latest_state(record=record)
+            record_signature = self._market_country_signature(market_info_record.market_countries)
+            if baseline_signature is None:
+                baseline_signature = record_signature
+            elif record_signature != baseline_signature:
+                excluded_records.append(
+                    BulkXmlExcludedRecord(
+                        catalogue_number=record.catalogue_number,
+                        primary_udi_di=record.primary_udi_di,
+                        reason_code="market_info_state_mismatch",
+                        reason_message="Accepted market-country state differs from the bulk scenario baseline for this cohort.",
+                    )
+                )
+                continue
+
+            next_version = self._next_incremental_version(current_version)
+            generated_record = replace(
+                market_info_record,
+                market_countries=normalized_market_countries,
+                market_info_version=next_version,
+            )
+            self.testing_state_store.record_generated_market_info_context(
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                catalogue_number=generated_record.catalogue_number,
+                primary_udi_di=generated_record.primary_udi_di,
+                basic_udi_di=self._record_basic_udi_di(record),
+                market_info_version=generated_record.market_info_version,
+                baseline_market_countries=[
+                    {
+                        "country": country_code,
+                        "original_placed_on_market": original_placed_on_market,
+                    }
+                    for country_code, original_placed_on_market in market_info_record.market_countries
+                ],
+                market_countries=[
+                    {
+                        "country": country_code,
+                        "original_placed_on_market": original_placed_on_market,
+                    }
+                    for country_code, original_placed_on_market in generated_record.market_countries
+                ],
+            )
+            xml_string = self.renderer.render_market_info_message(generated_record).decode("utf-8")
+            included_summary = self._bulk_record_summary(record)
+            included_summary.base_version = current_version
+            included_summary.derived_version = generated_record.market_info_version
+            included_summary.accepted_state_source = (
+                "sqlite_latest_successful_market_info"
+                if baseline_market_countries != market_info_record.market_countries
+                else "canonical_market_info_projection"
+            )
+            included_summaries.append(included_summary)
+            included_payloads.append((included_summary, xml_string))
+
+        if not included_payloads:
+            if missing_variant_records:
+                raise ValueError(
+                    "Selected posted devices are not currently XML-ready in canonical validation: "
+                    + ", ".join(missing_variant_records)
+                )
+            raise ValueError(
+                f"No eligible records are currently available for bulk MARKET_INFO.PUT generation for {product_family} / {product_variant}."
+            )
+
+        payload_chunks = [
+            included_payloads[index : index + self.settings.eudamed_max_batch_records]
+            for index in range(0, len(included_payloads), self.settings.eudamed_max_batch_records)
+        ]
+        total_chunks = len(payload_chunks)
+        chunk_summaries: list[BatchXmlChunkSummary] = []
+        rendered_chunks: list[tuple[int, list[BulkXmlRecordSummary], bytes, XmlValidationResult, str]] = []
+        for sequence, chunk_payloads in enumerate(payload_chunks, start=1):
+            xml_bytes = self.renderer.render_batch_from_strings([payload for _, payload in chunk_payloads])
+            validation = self.xml_validation_service.validate_message(xml_bytes)
+            file_name = self.package_builder.bulk_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+                flow="market-info-put",
+                sequence=sequence,
+                total_chunks=total_chunks,
+            )
+            chunk_records = [summary for summary, _ in chunk_payloads]
+            rendered_chunks.append((sequence, chunk_records, xml_bytes, validation, file_name))
+            chunk_summaries.append(
+                BatchXmlChunkSummary(
+                    sequence=sequence,
+                    file_name=file_name,
+                    record_count=len(chunk_records),
+                    first_catalogue_number=chunk_records[0].catalogue_number if chunk_records else None,
+                    last_catalogue_number=chunk_records[-1].catalogue_number if chunk_records else None,
+                    validation=validation,
+                )
+            )
+        if chunk_sequence < 1 or chunk_sequence > total_chunks:
+            raise ValueError(
+                f"Bulk MARKET_INFO.PUT chunk {chunk_sequence} is out of range. Valid chunks are 1 to {total_chunks}."
+            )
+        selected_sequence, selected_records, selected_xml_bytes, selected_validation, selected_file_name = rendered_chunks[
+            chunk_sequence - 1
+        ]
+        return BulkMarketInfoPreview(
+            product_family=product_family,
+            product_variant=product_variant,
+            selected_basic_udi_di=basic_udi_di,
+            requested_record_count=len(included_summaries),
+            eligible_child_records=eligible_child_records,
+            package_file_name=self.package_builder.bulk_package_file_name(
+                product_family=product_family,
+                product_variant=product_variant,
+                flow="market-info-put",
+            ),
+            max_records_per_file=self.settings.eudamed_max_batch_records,
+            chunk_count=total_chunks,
+            selected_chunk_sequence=selected_sequence,
+            selected_chunk_file_name=selected_file_name,
+            selected_chunk_record_count=len(selected_records),
+            selected_chunk_xml=selected_xml_bytes.decode("utf-8"),
+            selected_chunk_validation=selected_validation,
+            included_record_count=len(included_summaries),
+            excluded_record_count=len(excluded_records),
+            included_records=included_summaries,
+            excluded_records=excluded_records,
+            chunks=chunk_summaries,
+        )
+
+    def download_bulk_market_info(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        basic_udi_di: str,
+        record_count: int,
+        market_countries: list[tuple[str, bool]],
+        selected_catalogue_numbers: list[str] | None = None,
+    ) -> tuple[str, bytes]:
+        preview = self.preview_bulk_market_info(
+            product_family=product_family,
+            product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
+            record_count=record_count,
+            market_countries=market_countries,
+            selected_catalogue_numbers=selected_catalogue_numbers,
+        )
+        members: list[tuple[str, bytes]] = []
+        manifest_chunks = []
+        for chunk in preview.chunks:
+            selected_chunk_preview = self.preview_bulk_market_info(
+                product_family=product_family,
+                product_variant=product_variant,
+                basic_udi_di=basic_udi_di,
+                record_count=record_count,
+                market_countries=market_countries,
+                selected_catalogue_numbers=selected_catalogue_numbers,
+                chunk_sequence=chunk.sequence,
+            )
+            members.append((chunk.file_name, selected_chunk_preview.selected_chunk_xml.encode("utf-8")))
+            manifest_chunks.append(
+                {
+                    "sequence": chunk.sequence,
+                    "file_name": chunk.file_name,
+                    "record_count": chunk.record_count,
+                    "valid": chunk.validation.valid,
+                }
+            )
+        manifest = {
+            "mode": "bulk_market_info",
+            "product_family": product_family,
+            "product_variant": product_variant,
+            "basic_udi_di": basic_udi_di,
+            "requested_record_count": preview.requested_record_count,
+            "included_record_count": preview.included_record_count,
+            "excluded_record_count": preview.excluded_record_count,
+            "records": [record.model_dump(mode="json") for record in preview.included_records],
+            "excluded_records": [record.model_dump(mode="json") for record in preview.excluded_records],
+            "chunks": manifest_chunks,
+        }
+        members.append(
+            (
+                "excluded-records.json",
+                json.dumps([record.model_dump(mode="json") for record in preview.excluded_records], indent=2).encode(
+                    "utf-8"
+                ),
+            )
+        )
+        return self.package_builder.build_archive(
+            package_file_name=preview.package_file_name,
+            members=members,
+            manifest=manifest,
         )
 
     def download_bulk_patch(

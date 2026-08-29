@@ -10,7 +10,8 @@ export type XmlMode =
   | "bulkPost"
   | "bulkUdidiPost"
   | "patch"
-  | "bulkPatch";
+  | "bulkPatch"
+  | "bulkMarketInfo";
 
 type UseXmlOperationAssessmentArgs = {
   activeTab: string;
@@ -41,7 +42,7 @@ export function useXmlOperationAssessment({
       setIsLoadingXmlOperationAssessment(false);
       return;
     }
-    if (xmlMode === "single" || xmlMode === "marketInfo") {
+    if (xmlMode === "single" || xmlMode === "marketInfo" || xmlMode === "bulkMarketInfo") {
       setXmlOperationAssessment(null);
       setXmlOperationAssessmentError(null);
       setIsLoadingXmlOperationAssessment(false);

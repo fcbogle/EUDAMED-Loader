@@ -786,11 +786,34 @@ export type BulkPatchPreview = {
   chunks: BatchXmlChunkSummary[];
 };
 
+export type BulkMarketInfoPreview = {
+  mode: "bulk_market_info";
+  product_family: string;
+  product_variant: string;
+  selected_basic_udi_di: string;
+  requested_record_count: number;
+  eligible_child_records: number;
+  package_file_name: string;
+  max_records_per_file: number;
+  chunk_count: number;
+  selected_chunk_sequence: number;
+  selected_chunk_file_name: string;
+  selected_chunk_record_count: number;
+  selected_chunk_xml: string;
+  selected_chunk_validation: XmlValidationResult;
+  included_record_count: number;
+  excluded_record_count: number;
+  included_records: BulkXmlRecordSummary[];
+  excluded_records: BulkXmlExcludedRecord[];
+  chunks: BatchXmlChunkSummary[];
+};
+
 export type BulkPatchPostedEntry = {
   catalogue_number: string | null;
   primary_udi_di: string | null;
   basic_udi_di: string | null;
   latest_version: string | null;
+  latest_market_info_version?: string | null;
   baseline_patch_success: boolean;
 };
 

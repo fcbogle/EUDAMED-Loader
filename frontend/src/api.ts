@@ -3,6 +3,7 @@ import type {
   BatchXmlPreview,
   BulkPatchPreview,
   BulkPatchPostedEntriesResponse,
+  BulkMarketInfoPreview,
   BulkPatchPostedParentsResponse,
   BulkPostPreview,
   BulkUdidiPostPreview,
@@ -301,6 +302,24 @@ export const api = {
       selected_catalogue_numbers: selectedCatalogueNumbers,
       chunk_sequence: chunkSequence,
     }),
+  previewBulkMarketInfo: (
+    productFamily: string,
+    productVariant: string,
+    basicUdiDi: string,
+    recordCount: number,
+    marketCountries: Array<{ country: string; original_placed_on_market: boolean }>,
+    selectedCatalogueNumbers: string[],
+    chunkSequence = 1,
+  ) =>
+    sendJson<BulkMarketInfoPreview>("/xml/preview-bulk-market-info", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      basic_udi_di: basicUdiDi,
+      record_count: recordCount,
+      market_countries: marketCountries,
+      selected_catalogue_numbers: selectedCatalogueNumbers,
+      chunk_sequence: chunkSequence,
+    }),
   bulkPatchPostedEntries: (productFamily: string, productVariant: string, basicUdiDi: string) =>
     sendJson<BulkPatchPostedEntriesResponse>("/xml/bulk-patch-posted-entries", "POST", {
       product_family: productFamily,
@@ -440,6 +459,22 @@ export const api = {
       record_count: recordCount,
       scenario_id: scenarioId,
       scenario_inputs: scenarioInputs,
+      selected_catalogue_numbers: selectedCatalogueNumbers,
+    }),
+  downloadBulkMarketInfo: (
+    productFamily: string,
+    productVariant: string,
+    basicUdiDi: string,
+    recordCount: number,
+    marketCountries: Array<{ country: string; original_placed_on_market: boolean }>,
+    selectedCatalogueNumbers: string[],
+  ) =>
+    sendDownload("/xml/download-bulk-market-info", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      basic_udi_di: basicUdiDi,
+      record_count: recordCount,
+      market_countries: marketCountries,
       selected_catalogue_numbers: selectedCatalogueNumbers,
     }),
   schemas: () => getJson<SchemaInventory>("/schemas"),

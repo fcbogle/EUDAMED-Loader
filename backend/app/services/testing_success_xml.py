@@ -490,6 +490,17 @@ class TestingSuccessXmlService:
                                 ),
                             )
         elif acknowledgement.message_type == "MARKET_INFO.PUT":
+            subject_row = connection.execute(
+                """
+                SELECT latest_successful_market_info_state_json
+                FROM testing_subjects
+                WHERE id = ?
+                """,
+                (subject_id,),
+            ).fetchone()
+            subject_before_state = self._json_dict(
+                subject_row["latest_successful_market_info_state_json"] if subject_row is not None else None
+            )
             generated_row = connection.execute(
                 """
                 SELECT version, raw_event_json
@@ -516,7 +527,12 @@ class TestingSuccessXmlService:
                         raw_event_payload["generated_market_info_context"] = generated_payload
                         baseline_market_info_state = generated_payload.get("baseline_market_info_state")
                         latest_market_info_state = generated_payload.get("latest_successful_market_info_state")
-                        if isinstance(baseline_market_info_state, dict) and isinstance(latest_market_info_state, dict):
+                        if isinstance(subject_before_state, dict) and isinstance(latest_market_info_state, dict):
+                            market_info_delta = self._market_info_delta(
+                                before_state=subject_before_state,
+                                after_state=latest_market_info_state,
+                            )
+                        elif isinstance(baseline_market_info_state, dict) and isinstance(latest_market_info_state, dict):
                             market_info_delta = self._market_info_delta(
                                 before_state=baseline_market_info_state,
                                 after_state=latest_market_info_state,
@@ -609,6 +625,16 @@ class TestingSuccessXmlService:
             if bool(item.get("original_placed_on_market")):
                 return self.store._optional_string(item.get("country"))
         return None
+
+    @staticmethod
+    def _json_dict(value: object) -> dict[str, Any] | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        return payload if isinstance(payload, dict) else None
 
     @staticmethod
     def _node_text(node: Any) -> str | None:

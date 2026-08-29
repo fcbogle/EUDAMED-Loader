@@ -3,7 +3,7 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { api } from "./api";
 import type { OperationAssessment, SuccessXmlUploadResult, TestingSubjectReadModelSummary } from "./types";
 
-type UploadMode = "post" | "patch" | "marketInfo" | "bulkPost" | "bulkUdidiPost" | "bulkPatch";
+type UploadMode = "post" | "patch" | "marketInfo" | "bulkPost" | "bulkUdidiPost" | "bulkPatch" | "bulkMarketInfo";
 
 type UploadScope = {
   productFamily: string;
@@ -55,6 +55,8 @@ export function useSuccessXmlUpload({
             ? api.assessSinglePost(scope.productFamily, scope.productVariant)
             : scope.mode === "marketInfo"
               ? null
+            : scope.mode === "bulkMarketInfo"
+              ? null
             : scope.mode === "bulkPatch"
               ? api.assessBulkPatch(scope.productFamily, scope.productVariant, scope.basicUdiDi ?? undefined)
               : api.assessBulkPost(scope.productFamily, scope.productVariant);
@@ -82,6 +84,8 @@ export function useSuccessXmlUpload({
             ? "POST"
             : scope.mode === "marketInfo"
               ? "Market Info"
+            : scope.mode === "bulkMarketInfo"
+              ? "Bulk Market Info"
             : scope.mode === "bulkPatch"
               ? "Bulk PATCH"
               : "Bulk POST";

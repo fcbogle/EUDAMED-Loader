@@ -1,6 +1,7 @@
 import type { MarketCountryReferenceEntry } from "./types";
 
 const SPECIAL_FLAG_BY_CODE: Record<string, string> = {
+  EL: "🇬🇷",
   XI: "🇬🇧",
 };
 

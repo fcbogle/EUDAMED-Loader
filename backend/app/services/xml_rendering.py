@@ -116,6 +116,7 @@ class EudamedMessageRenderer:
         roots = [etree.fromstring(message.encode("utf-8")) for message in messages]
         payload_children = [self._single_payload_child(root) for root in roots]
         first_operation = self._message_operation(roots[0])
+        first_service_id = self._message_service_id(roots[0])
         sender_code = self._message_sender_code(roots[0])
 
         root = etree.Element(self._q(MESSAGE_NS, "Push"), nsmap=NSMAP)
@@ -129,7 +130,7 @@ class EudamedMessageRenderer:
                 tag_name="recipient",
                 node_actor_code="EUDAMED",
                 service_operation=first_operation,
-                service_id=self._service_id_for_operation(first_operation),
+                service_id=first_service_id,
             )
         )
 
@@ -142,7 +143,7 @@ class EudamedMessageRenderer:
                 tag_name="sender",
                 node_actor_code=sender_code,
                 service_operation=first_operation,
-                service_id=self._service_id_for_operation(first_operation),
+                service_id=first_service_id,
             )
         )
 
@@ -399,6 +400,20 @@ class EudamedMessageRenderer:
         if not node_actor_code:
             raise ValueError("XML message is missing sender node actor code.")
         return node_actor_code
+
+    @staticmethod
+    def _message_service_id(root: XmlElement) -> str:
+        for path in (f"{{{MESSAGE_NS}}}sender", f"{{{MESSAGE_NS}}}recipient"):
+            endpoint = root.find(path)
+            if endpoint is None:
+                continue
+            service = endpoint.find(f"{{{MESSAGE_NS}}}service")
+            if service is None:
+                continue
+            service_id = service.findtext(f"{{{SERVICE_NS}}}serviceID")
+            if service_id:
+                return service_id
+        raise ValueError("XML message is missing service ID metadata.")
 
     def _language_optional_texts(self, text: str, *, language: str) -> XmlElement:
         comments = etree.Element(self._q(COMMON_DEVICE_NS, "comments"))

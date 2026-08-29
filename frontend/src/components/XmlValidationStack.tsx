@@ -1,4 +1,4 @@
-import type { BulkPatchPreview, BulkPostPreview, BulkUdidiPostPreview, XmlValidationResult } from "../types";
+import type { BulkMarketInfoPreview, BulkPatchPreview, BulkPostPreview, BulkUdidiPostPreview, XmlValidationResult } from "../types";
 
 type BulkExclusionSummary = {
   key: string;
@@ -8,11 +8,11 @@ type BulkExclusionSummary = {
 
 type XmlValidationStackProps = {
   showGenericValidationCards: boolean;
-  xmlModeLabel: "single" | "marketInfo" | "patch" | "bulkPost" | "bulkUdidiPost" | "bulkPatch";
+  xmlModeLabel: "single" | "marketInfo" | "patch" | "bulkPost" | "bulkUdidiPost" | "bulkPatch" | "bulkMarketInfo";
   selectedBatchValidation: XmlValidationResult | null;
   xmlPatchValidationSchemaPath: string | null;
   xmlPatchValidationValid: boolean | null;
-  selectedBulkPreview: BulkPostPreview | BulkUdidiPostPreview | BulkPatchPreview | null;
+  selectedBulkPreview: BulkPostPreview | BulkUdidiPostPreview | BulkPatchPreview | BulkMarketInfoPreview | null;
   bulkChunkSummaryTitle: string;
   selectedBulkExclusionSummaries: BulkExclusionSummary[];
 };
@@ -30,7 +30,7 @@ export function XmlValidationStack({
   return (
     <div
       className={
-        xmlModeLabel === "bulkPatch" || xmlModeLabel === "bulkPost" || xmlModeLabel === "bulkUdidiPost"
+        xmlModeLabel === "bulkPatch" || xmlModeLabel === "bulkPost" || xmlModeLabel === "bulkUdidiPost" || xmlModeLabel === "bulkMarketInfo"
           ? "draft-list xml-validation-stack bulk-patch-validation-stack"
           : "draft-list xml-validation-stack"
       }
@@ -75,6 +75,8 @@ export function XmlValidationStack({
                         ? "The generated MARKET_INFO.PUT Push message validates cleanly."
                         : xmlModeLabel === "bulkUdidiPost"
                           ? "The generated bulk UDI-DI POST Push message validates cleanly."
+                          : xmlModeLabel === "bulkMarketInfo"
+                            ? "The generated bulk MARKET_INFO.PUT Push message validates cleanly."
                           : "The generated bulk PATCH Push message validates cleanly."}
                   </p>
                 )}
@@ -87,6 +89,8 @@ export function XmlValidationStack({
                     ? "Generate a MARKET_INFO.PUT preview to inspect the schema validation outcome."
                     : xmlModeLabel === "bulkUdidiPost"
                       ? "Generate a bulk UDI-DI POST preview to inspect the schema validation outcome."
+                      : xmlModeLabel === "bulkMarketInfo"
+                        ? "Generate a bulk MARKET_INFO.PUT preview to inspect the schema validation outcome."
                       : "Generate a bulk PATCH preview to inspect the schema validation outcome."}
               </p>
             )}
@@ -104,7 +108,7 @@ export function XmlValidationStack({
           <p className="panel-copy">{xmlPatchValidationSchemaPath}</p>
         </div>
       ) : null}
-      {(xmlModeLabel === "bulkPost" || xmlModeLabel === "bulkUdidiPost" || xmlModeLabel === "bulkPatch") && selectedBulkPreview ? (
+      {(xmlModeLabel === "bulkPost" || xmlModeLabel === "bulkUdidiPost" || xmlModeLabel === "bulkPatch" || xmlModeLabel === "bulkMarketInfo") && selectedBulkPreview ? (
         <div className="draft-card">
           <div className="draft-card-head">
             <strong>{bulkChunkSummaryTitle}</strong>

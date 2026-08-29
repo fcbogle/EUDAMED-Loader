@@ -13,12 +13,14 @@ from app.routers import xml_generation as xml_generation_router
 from app.services.canonical_validation import CanonicalValidationService
 from app.routers.xml_generation import (
     download_generated_patch_scenario,
+    download_xml_bulk_market_info,
     download_xml_bulk_patch,
     download_xml_market_info_put,
     download_xml_batch,
     download_xml_record,
     market_country_reference,
     preview_generated_patch_scenario,
+    preview_xml_bulk_market_info,
     preview_xml_next_post_registration,
     preview_xml_bulk_patch,
     preview_xml_market_info_put,
@@ -26,6 +28,7 @@ from app.routers.xml_generation import (
     preview_xml_record,
 )
 from app.services.xml_generation import XmlGenerationService
+from app.services.xml_rendering import EudamedMessageRenderer
 from app.services.xml_selection import ValidationRecordSelector
 from app.validation_models import CanonicalValidationBundle, CanonicalValidationRecord
 
@@ -176,6 +179,176 @@ def test_single_post_preview_switches_to_child_udidi_post_when_parent_is_already
     assert "<s:serviceID>UDI_DI</s:serviceID>" in preview.post_xml
     assert "<device:MDRBasicUDI>" not in preview.post_xml
     assert "<device:UDIDIData" in preview.post_xml
+
+
+def test_render_batch_from_strings_preserves_market_info_service_id() -> None:
+    service = XmlGenerationService()
+    record = cast(
+        CanonicalValidationRecord,
+        service.selector.find_post_record(
+            product_family="Elite",
+            product_variant="Elite VT",
+            catalogue_number="EVT22L11S",
+        ),
+    )
+    market_info_record = service.projection_builder.build_market_info_record(record)
+    xml_message = service.renderer.render_market_info_message(market_info_record).decode("utf-8")
+
+    batch_xml = EudamedMessageRenderer(get_settings()).render_batch_from_strings([xml_message]).decode("utf-8")
+
+    assert "<s:serviceID>MARKET_INFO</s:serviceID>" in batch_xml
+    assert "<s:serviceOperation>PUT</s:serviceOperation>" in batch_xml
+
+
+def test_bulk_market_info_preview_generates_wrapped_put_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = XmlGenerationService()
+    record = cast(
+        CanonicalValidationRecord,
+        service.selector.find_post_record(
+            product_family="Elite",
+            product_variant="Elite VT",
+            catalogue_number="EVT22L11S",
+        ),
+    )
+    basic_udi_di = basicUdiDiForRecordForTest(record)
+    market_info_record = service.projection_builder.build_market_info_record(record)
+
+    monkeypatch.setattr(
+        service,
+        "_bulk_patch_selected_records",
+        lambda **kwargs: ([record], 1, []),
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "latest_successful_market_info_state",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "latest_successful_market_info_version",
+        lambda **kwargs: None,
+    )
+    generated_contexts: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "record_generated_market_info_context",
+        lambda **kwargs: generated_contexts.append(kwargs),
+    )
+
+    preview = service.preview_bulk_market_info(
+        product_family="Elite",
+        product_variant="Elite VT",
+        basic_udi_di=basic_udi_di,
+        record_count=1,
+        market_countries=market_info_record.market_countries,
+    )
+
+    assert preview.selected_basic_udi_di == basic_udi_di
+    assert preview.selected_chunk_record_count == 1
+    assert preview.selected_chunk_validation.valid is True
+    assert "<s:serviceID>MARKET_INFO</s:serviceID>" in preview.selected_chunk_xml
+    assert "<s:serviceOperation>PUT</s:serviceOperation>" in preview.selected_chunk_xml
+    assert generated_contexts[0]["market_info_version"] == "2"
+
+
+def test_bulk_market_info_routes_return_preview_and_zip(
+    route_xml_service_without_import: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = XmlGenerationService(require_import=False)
+    record = cast(
+        CanonicalValidationRecord,
+        service.selector.find_post_record(
+            product_family="Elite",
+            product_variant="Elite VT",
+            catalogue_number="EVT22L11S",
+        ),
+    )
+    basic_udi_di = basicUdiDiForRecordForTest(record)
+    market_info_record = service.projection_builder.build_market_info_record(record)
+    monkeypatch.setattr(
+        service,
+        "_bulk_patch_selected_records",
+        lambda **kwargs: ([record], 1, []),
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "latest_successful_market_info_state",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "latest_successful_market_info_version",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "record_generated_market_info_context",
+        lambda **kwargs: None,
+    )
+    preview = service.preview_bulk_market_info(
+        product_family="Elite",
+        product_variant="Elite VT",
+        basic_udi_di=basic_udi_di,
+        record_count=1,
+        market_countries=market_info_record.market_countries,
+        selected_catalogue_numbers=[record.catalogue_number or ""],
+    )
+    zip_name, zip_bytes = service.download_bulk_market_info(
+        product_family="Elite",
+        product_variant="Elite VT",
+        basic_udi_di=basic_udi_di,
+        record_count=1,
+        market_countries=market_info_record.market_countries,
+        selected_catalogue_numbers=[record.catalogue_number or ""],
+    )
+    original_xml_service = xml_generation_router._xml_service
+    xml_generation_router._xml_service = lambda: SimpleNamespace(
+        preview_bulk_market_info=lambda **kwargs: preview,
+        download_bulk_market_info=lambda **kwargs: (zip_name, zip_bytes),
+    )
+    try:
+        preview_payload = preview_xml_bulk_market_info(
+            {
+                "product_family": "Elite",
+                "product_variant": "Elite VT",
+                "basic_udi_di": basic_udi_di,
+                "record_count": 1,
+                "chunk_sequence": 1,
+                "selected_catalogue_numbers": ["EVT22L11S"],
+                "market_countries": [
+                    {
+                        "country": country_code,
+                        "original_placed_on_market": original,
+                    }
+                    for country_code, original in market_info_record.market_countries
+                ],
+            }
+        )
+
+        assert preview_payload["mode"] == "bulk_market_info"
+        assert preview_payload["selected_basic_udi_di"] == basic_udi_di
+
+        response = download_xml_bulk_market_info(
+            {
+                "product_family": "Elite",
+                "product_variant": "Elite VT",
+                "basic_udi_di": basic_udi_di,
+                "record_count": 1,
+                "selected_catalogue_numbers": ["EVT22L11S"],
+                "market_countries": [
+                    {
+                        "country": country_code,
+                        "original_placed_on_market": original,
+                    }
+                    for country_code, original in market_info_record.market_countries
+                ],
+            }
+        )
+    finally:
+        xml_generation_router._xml_service = original_xml_service
+
+    assert response.media_type == "application/zip"
 
 
 def test_next_valid_post_record_skips_known_posted_parent_and_child(monkeypatch) -> None:
