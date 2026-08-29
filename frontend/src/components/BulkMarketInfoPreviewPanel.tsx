@@ -1,6 +1,7 @@
 import type { ChangeEvent, MutableRefObject } from "react";
 
 import type { XmlValidationResult } from "../types";
+import { PanelRefreshShell } from "./PanelRefreshShell";
 
 type XmlStructureSection = {
   id: string;
@@ -65,7 +66,11 @@ export function BulkMarketInfoPreviewPanel({
 }: BulkMarketInfoPreviewPanelProps) {
   return (
     <div className="post-preview-card market-info-preview-card bulk-market-info-preview-card">
-      <div className="post-preview-layout">
+      <PanelRefreshShell
+        isRefreshing={isRefreshing}
+        className="post-preview-layout"
+        message="Updating the Bulk Market Info preview context for the selected family and variant."
+      >
         <div className="post-preview-topbar">
           <div className="post-preview-title-block">
             <h2>Bulk Market Info Preview</h2>
@@ -113,40 +118,29 @@ export function BulkMarketInfoPreviewPanel({
           </div>
         </div>
         {xmlActionMessage ? <div className="save-message post-preview-action-message">{xmlActionMessage}</div> : null}
-        {isRefreshing ? (
-          <div className="xml-refresh-indicator post-preview-refresh-indicator" aria-live="polite">
-            <strong>Refreshing...</strong>
-            <span>Updating the Bulk Market Info preview context for the selected family and variant.</span>
-          </div>
-        ) : null}
         <div className="post-preview-summary-row">
           <div className="workflow-note post-preview-status">
             <strong>Preview status</strong>
             <span>{previewStatusMessage}</span>
-            {isRefreshing ? <span className="xml-refresh-inline">Refreshing...</span> : null}
           </div>
           <div className="xml-preview-meta post-preview-meta">
             <div className="xml-preview-meta-block">
               <span className="summary-label">Active view</span>
               <strong>{activePreviewLabel}</strong>
-              {isRefreshing ? <span className="xml-refresh-inline">Refreshing...</span> : null}
             </div>
             <div className="xml-preview-meta-block">
               <span className="summary-label">Validation</span>
               <span className={selectedBatchValidation?.valid ? "status-pill ok compact" : "status-pill warn compact"}>
                 {validationStatusLabel}
               </span>
-              {isRefreshing ? <span className="xml-refresh-inline">Refreshing...</span> : null}
             </div>
             <div className="xml-preview-meta-block">
               <span className="summary-label">Schema</span>
               <strong>{selectedSchemaLabel ?? "Message.xsd pending"}</strong>
-              {isRefreshing ? <span className="xml-refresh-inline">Refreshing...</span> : null}
             </div>
             <div className="xml-preview-meta-block">
               <span className="summary-label">File</span>
               <strong>{activePreviewFileName ?? "Not generated yet"}</strong>
-              {isRefreshing ? <span className="xml-refresh-inline">Refreshing...</span> : null}
             </div>
           </div>
         </div>
@@ -206,7 +200,7 @@ export function BulkMarketInfoPreviewPanel({
             </pre>
           </div>
         </div>
-      </div>
+      </PanelRefreshShell>
     </div>
   );
 }

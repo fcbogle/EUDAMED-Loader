@@ -14,6 +14,7 @@ import canonicalValidationDocumentation from "./content/docs/canonical-validatio
 import { PatchPreviewPanel } from "./components/PatchPreviewPanel";
 import { PatchScenarioCard } from "./components/PatchScenarioCard";
 import { PostPreviewPanel } from "./components/PostPreviewPanel";
+import { RegistrationStateWorkspace } from "./components/RegistrationStateWorkspace";
 import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
 import { XmlValidationStack } from "./components/XmlValidationStack";
@@ -90,7 +91,7 @@ const focusColumns = [
   "Select the language e.g English",
 ];
 
-type MainTab = "workbooks" | "canonicalValidation" | "xml" | "testingSummary" | "documentation";
+type MainTab = "workbooks" | "canonicalValidation" | "xml" | "registrationState" | "testingSummary" | "documentation";
 type ScopeMode = "all" | "sheet";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
 type BulkPatchScopeMode = "all_posted" | "next_10" | "next_25" | "selected_catalogue_numbers" | "import_catalogue_list";
@@ -1328,6 +1329,11 @@ export function App() {
   const [selectedDeviceSubjectVariant, setSelectedDeviceSubjectVariant] = useState<string>("");
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
   const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
+  const [selectedRegistrationStateFamily, setSelectedRegistrationStateFamily] = useState<string>("");
+  const [selectedRegistrationStateVariant, setSelectedRegistrationStateVariant] = useState<string>("");
+  const [selectedRegistrationStateStatus, setSelectedRegistrationStateStatus] = useState<string>("");
+  const [registrationStateSearch, setRegistrationStateSearch] = useState<string>("");
+  const [registrationStateActionableOnly, setRegistrationStateActionableOnly] = useState<boolean>(false);
   const [selectedTestingSummaryFamily, setSelectedTestingSummaryFamily] = useState<string>("");
   const [selectedTestingSummaryVariant, setSelectedTestingSummaryVariant] = useState<string>("");
   const [selectedXmlRecordKey, setSelectedXmlRecordKey] = useState<string | null>(null);
@@ -1348,6 +1354,8 @@ export function App() {
   const [testingSummarySubjectSummaries, setTestingSummarySubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
   const [testingSummaryEvents, setTestingSummaryEvents] = useState<TestingEventReadModelEntry[]>([]);
   const [marketCountryReference, setMarketCountryReference] = useState<MarketCountryReferenceEntry[]>([]);
+  const [isLoadingTestingSubjectSummaries, setIsLoadingTestingSubjectSummaries] = useState<boolean>(false);
+  const [showMarketInfoRefreshState, setShowMarketInfoRefreshState] = useState<boolean>(false);
   const [isLoadingTestingSummary, setIsLoadingTestingSummary] = useState<boolean>(false);
   const [testingSummaryError, setTestingSummaryError] = useState<string | null>(null);
   const [patchScenarioStatuses, setPatchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
@@ -1386,6 +1394,7 @@ export function App() {
   const [xmlBulkMarketInfoPreview, setXmlBulkMarketInfoPreview] = useState<BulkMarketInfoPreview | null>(null);
   const [selectedPostXmlSectionId, setSelectedPostXmlSectionId] = useState<string | null>(null);
   const [selectedMarketInfoXmlSectionId, setSelectedMarketInfoXmlSectionId] = useState<string | null>(null);
+  const [selectedBulkXmlSectionId, setSelectedBulkXmlSectionId] = useState<string | null>(null);
   const [selectedBulkMarketInfoXmlSectionId, setSelectedBulkMarketInfoXmlSectionId] = useState<string | null>(null);
   const [selectedPatchXmlSectionId, setSelectedPatchXmlSectionId] = useState<string | null>(null);
   const [marketInfoVersionInput, setMarketInfoVersionInput] = useState<string>("1");
@@ -1703,6 +1712,7 @@ export function App() {
     if (
       (activeTab === "canonicalValidation" ||
         activeTab === "xml" ||
+        activeTab === "registrationState" ||
         activeTab === "testingSummary") &&
       !canonicalValidation
     ) {
@@ -1715,6 +1725,7 @@ export function App() {
     if (
       (activeTab === "canonicalValidation" ||
         activeTab === "xml" ||
+        activeTab === "registrationState" ||
         activeTab === "testingSummary") &&
       latestImportBatchId !== undefined &&
       canonicalValidation &&
@@ -1909,6 +1920,37 @@ export function App() {
     }
     setSelectedTestingSummaryVariant("");
   }, [canonicalValidation, selectedTestingSummaryFamily, selectedTestingSummaryVariant]);
+  useEffect(() => {
+    if (!canonicalValidation?.family_summaries.length) {
+      if (selectedRegistrationStateFamily) {
+        setSelectedRegistrationStateFamily("");
+      }
+      return;
+    }
+    if (!selectedRegistrationStateFamily) {
+      return;
+    }
+    if (canonicalValidation.family_summaries.some((summary) => summary.product_family === selectedRegistrationStateFamily)) {
+      return;
+    }
+    setSelectedRegistrationStateFamily("");
+  }, [canonicalValidation, selectedRegistrationStateFamily]);
+  useEffect(() => {
+    const availableVariants = Array.from(
+      new Set(
+        (canonicalValidation?.variant_summaries ?? [])
+          .filter((summary) => (selectedRegistrationStateFamily ? summary.product_family === selectedRegistrationStateFamily : false))
+          .map((summary) => summary.product_variant),
+      ),
+    );
+    if (!selectedRegistrationStateVariant) {
+      return;
+    }
+    if (availableVariants.includes(selectedRegistrationStateVariant)) {
+      return;
+    }
+    setSelectedRegistrationStateVariant("");
+  }, [canonicalValidation, selectedRegistrationStateFamily, selectedRegistrationStateVariant]);
 
   const selectedRuleFile = rules.find((item) => item.column === selectedColumn);
   const acceptedValues = Array.from(new Set(selectedRuleFile?.rules.map((rule) => rule.normalized) ?? []));
@@ -2462,6 +2504,24 @@ export function App() {
   const bulkMarketInfoImportedNotFoundCatalogueNumbers = bulkMarketInfoImportedCatalogueNumbers.filter(
     (catalogueNumber) => !bulkMarketInfoPostedCatalogueSet.has(catalogueNumber),
   );
+  const registrationStateFamilyOptions = canonicalValidation?.family_summaries.map((summary) => summary.product_family) ?? [];
+  const registrationStateVariantOptions = Array.from(
+    new Set(
+      (canonicalValidation?.variant_summaries ?? [])
+        .filter((summary) =>
+          selectedRegistrationStateFamily ? summary.product_family === selectedRegistrationStateFamily : false,
+        )
+        .map((summary) => summary.product_variant),
+    ),
+  );
+  const registrationStateStatusOptions = [
+    "POST ready",
+    "Child POST ready",
+    "PATCH ready",
+    "Market Info ready",
+    "Mixed",
+    "Blocked",
+  ];
   const testingSummaryFamilyOptions = canonicalValidation?.family_summaries.map((summary) => summary.product_family) ?? [];
   const testingSummaryVariantOptions = Array.from(
     new Set(
@@ -2615,6 +2675,207 @@ export function App() {
       const familyCompare = left.productFamily.localeCompare(right.productFamily);
       return familyCompare !== 0 ? familyCompare : left.productVariant.localeCompare(right.productVariant);
     });
+  const registrationStateRows = Array.from(
+    ((): Map<
+      string,
+      {
+        productFamily: string;
+        productVariant: string;
+        basicUdiDi: string;
+        records: typeof xmlReadyRecords;
+        subjects: TestingSubjectReadModelSummary[];
+      }
+    > => {
+      const grouped = new Map<
+        string,
+        {
+          productFamily: string;
+          productVariant: string;
+          basicUdiDi: string;
+          records: typeof xmlReadyRecords;
+          subjects: TestingSubjectReadModelSummary[];
+        }
+      >();
+      const includeFamily = (family: string | null | undefined) =>
+        !selectedRegistrationStateFamily || familyLabelsOverlap(family, selectedRegistrationStateFamily);
+      const includeVariant = (variant: string | null | undefined) =>
+        !selectedRegistrationStateVariant || variant === selectedRegistrationStateVariant;
+      for (const record of xmlReadyRecords) {
+        if ((record.submission_operation ?? "").toUpperCase() !== "POST") {
+          continue;
+        }
+        if (!includeFamily(record.product_family) || !includeVariant(record.product_variant)) {
+          continue;
+        }
+        const basicUdiDi = basicUdiDiForRecord(record);
+        if (!basicUdiDi) {
+          continue;
+        }
+        const key = `${record.product_family}::${record.product_variant}::${basicUdiDi}`;
+        const group = grouped.get(key) ?? {
+          productFamily: record.product_family,
+          productVariant: record.product_variant,
+          basicUdiDi,
+          records: [],
+          subjects: [],
+        };
+        group.records.push(record);
+        grouped.set(key, group);
+      }
+      for (const subject of testingSummarySubjectSummaries) {
+        if (!includeFamily(subject.product_family) || !includeVariant(subject.product_variant)) {
+          continue;
+        }
+        const basicUdiDi = (subject.basic_udi_di ?? "").trim();
+        if (!basicUdiDi) {
+          continue;
+        }
+        const key = `${subject.product_family}::${subject.product_variant}::${basicUdiDi}`;
+        const group = grouped.get(key) ?? {
+          productFamily: subject.product_family ?? "Not resolved",
+          productVariant: subject.product_variant ?? "Not resolved",
+          basicUdiDi,
+          records: [],
+          subjects: [],
+        };
+        group.subjects.push(subject);
+        grouped.set(key, group);
+      }
+      return grouped;
+    })().values(),
+  )
+    .map((group) => {
+      const successfulPrimarySet = new Set(
+        group.subjects
+          .filter((subject) => subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch)
+          .map((subject) => (subject.primary_udi_di ?? "").trim().toLowerCase())
+          .filter((value): value is string => Boolean(value)),
+      );
+      const availableRecords = group.records.filter((record) => {
+        const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
+        return primaryUdiDi ? !successfulPrimarySet.has(primaryUdiDi) : true;
+      });
+      const parentRegistered = group.subjects.some((subject) => subject.post_success);
+      const patchReadyCount = group.subjects.filter(
+        (subject) =>
+          Boolean(subject.reviewed_post_at) &&
+          (subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch),
+      ).length;
+      const marketInfoReadyCount = group.subjects.filter(
+        (subject) =>
+          Boolean(subject.reviewed_post_at) &&
+          (subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch),
+      ).length;
+      const seedPostCount = parentRegistered ? 0 : availableRecords.length > 0 ? 1 : 0;
+      const childPostCount = parentRegistered ? availableRecords.length : 0;
+      const actionableModeCount = [seedPostCount > 0, childPostCount > 0, patchReadyCount > 0, marketInfoReadyCount > 0].filter(Boolean).length;
+      let statusLabel = "Blocked";
+      let statusClassName = "status-pill danger compact";
+      if (actionableModeCount > 1) {
+        statusLabel = "Mixed";
+        statusClassName = "status-pill warn compact";
+      } else if (seedPostCount > 0) {
+        statusLabel = "POST ready";
+        statusClassName = "status-pill ok compact";
+      } else if (childPostCount > 0) {
+        statusLabel = "Child POST ready";
+        statusClassName = "status-pill ok compact";
+      } else if (patchReadyCount > 0) {
+        statusLabel = "PATCH ready";
+        statusClassName = "status-pill ok compact";
+      } else if (marketInfoReadyCount > 0) {
+        statusLabel = "Market Info ready";
+        statusClassName = "status-pill ok compact";
+      }
+      const latestLabel = resolveTestingSummaryLatestOperationLabel(group.subjects);
+      const nextActionLabel =
+        seedPostCount > 0
+          ? "Register Basic UDI-DI"
+          : childPostCount > 0
+            ? "Run child POST"
+            : patchReadyCount > 0
+              ? "Run PATCH"
+              : marketInfoReadyCount > 0
+                ? "Run Market Info"
+                : "No action";
+      return {
+        key: `${group.productFamily}::${group.productVariant}::${group.basicUdiDi}`,
+        productFamily: group.productFamily,
+        productVariant: group.productVariant,
+        basicUdiDiLabel: group.basicUdiDi,
+        parentStatusLabel: parentRegistered ? "Registered" : "Not registered",
+        parentStatusClassName: parentRegistered ? "status-pill ok compact" : "status-pill warn compact",
+        seedPostCount,
+        childPostCount,
+        patchCount: patchReadyCount,
+        marketInfoCount: marketInfoReadyCount,
+        latestLabel,
+        nextActionLabel,
+        statusLabel,
+        statusClassName,
+        actionableCount: seedPostCount + childPostCount + patchReadyCount + marketInfoReadyCount,
+      };
+    })
+    .filter((row) => (selectedRegistrationStateStatus ? row.statusLabel === selectedRegistrationStateStatus : true))
+    .filter((row) => (registrationStateActionableOnly ? row.actionableCount > 0 : true))
+    .filter((row) => {
+      const query = registrationStateSearch.trim().toLowerCase();
+      if (!query) {
+        return true;
+      }
+      return (
+        row.productFamily.toLowerCase().includes(query) ||
+        row.productVariant.toLowerCase().includes(query) ||
+        row.basicUdiDiLabel.toLowerCase().includes(query) ||
+        row.nextActionLabel.toLowerCase().includes(query)
+      );
+    })
+    .sort((left, right) => {
+      const familyCompare = left.productFamily.localeCompare(right.productFamily);
+      if (familyCompare !== 0) {
+        return familyCompare;
+      }
+      const variantCompare = left.productVariant.localeCompare(right.productVariant);
+      if (variantCompare !== 0) {
+        return variantCompare;
+      }
+      return left.basicUdiDiLabel.localeCompare(right.basicUdiDiLabel);
+    });
+  const registrationStateMetrics = [
+    {
+      label: "Parent groups",
+      value: `${registrationStateRows.length}`,
+      detail: "in scope",
+    },
+    {
+      label: "Seed POST",
+      value: `${registrationStateRows.reduce((total, row) => total + row.seedPostCount, 0)}`,
+      detail: "next parent actions",
+      className: "summary-card-kpi-post",
+    },
+    {
+      label: "Child POST",
+      value: `${registrationStateRows.reduce((total, row) => total + row.childPostCount, 0)}`,
+      detail: "available",
+      className: "summary-card-kpi-post",
+    },
+    {
+      label: "PATCH",
+      value: `${registrationStateRows.reduce((total, row) => total + row.patchCount, 0)}`,
+      detail: "ready",
+      className: "summary-card-kpi-patch",
+    },
+    {
+      label: "Market Info",
+      value: `${registrationStateRows.reduce((total, row) => total + row.marketInfoCount, 0)}`,
+      detail: "ready",
+    },
+    {
+      label: "Parents registered",
+      value: `${registrationStateRows.filter((row) => row.parentStatusLabel === "Registered").length}`,
+      detail: "tracked",
+    },
+  ];
   const testingSummaryMetrics = [
     {
       label: "Parent POST",
@@ -2830,6 +3091,13 @@ export function App() {
     selectedProductVariant: selectedXmlVariantSummary?.product_variant,
     selectedBulkPatchBasicUdiDi,
   });
+  const isMarketInfoContextRefreshing =
+    activeTab === "xml" &&
+    (xmlMode === "marketInfo" || xmlMode === "bulkMarketInfo") &&
+    (isLoadingTestingSubjectSummaries || isLoadingCanonicalValidation);
+  const visibleMarketInfoRefreshState =
+    (xmlMode === "marketInfo" || xmlMode === "bulkMarketInfo") &&
+    (showMarketInfoRefreshState || isMarketInfoContextRefreshing);
   const bulkPatchPreviewExcludedRecords = xmlBulkPatchPreview?.excluded_records ?? [];
   const bulkPatchPrePreviewExclusions =
     xmlMode === "bulkPatch" && bulkPatchScopeMode === "import_catalogue_list"
@@ -2955,9 +3223,11 @@ export function App() {
   useEffect(() => {
     if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) {
       setTestingSubjectSummaries([]);
+      setIsLoadingTestingSubjectSummaries(false);
       return;
     }
     let cancelled = false;
+    setIsLoadingTestingSubjectSummaries(true);
     void api
       .testingSubjectSummaries({
         product_family: selectedXmlFamilySummary.product_family,
@@ -2973,33 +3243,81 @@ export function App() {
         if (!cancelled) {
           setTestingSubjectSummaries([]);
         }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingTestingSubjectSummaries(false);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [selectedXmlFamilySummary?.product_family, selectedXmlVariantSummary?.product_variant]);
   useEffect(() => {
-    if (activeTab !== "testingSummary") {
+    if (!(xmlMode === "marketInfo" || xmlMode === "bulkMarketInfo")) {
+      setShowMarketInfoRefreshState(false);
       return;
     }
+    if (isMarketInfoContextRefreshing) {
+      setShowMarketInfoRefreshState(true);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setShowMarketInfoRefreshState(false);
+    }, 450);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [xmlMode, isMarketInfoContextRefreshing]);
+  useEffect(() => {
+    if (
+      activeTab !== "xml" ||
+      (xmlMode !== "marketInfo" && xmlMode !== "bulkMarketInfo") ||
+      !selectedXmlFamilySummary ||
+      !selectedXmlVariantSummary
+    ) {
+      return;
+    }
+    setShowMarketInfoRefreshState(true);
+    const timeoutId = window.setTimeout(() => {
+      setShowMarketInfoRefreshState(false);
+    }, 900);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    activeTab,
+    xmlMode,
+    selectedXmlFamilySummary?.product_family,
+    selectedXmlVariantSummary?.product_variant,
+    selectedBulkMarketInfoBasicUdiDi,
+  ]);
+  useEffect(() => {
+    if (activeTab !== "testingSummary" && activeTab !== "registrationState") {
+      return;
+    }
+    const scopedFamily = activeTab === "registrationState" ? selectedRegistrationStateFamily : selectedTestingSummaryFamily;
+    const scopedVariant = activeTab === "registrationState" ? selectedRegistrationStateVariant : selectedTestingSummaryVariant;
     let cancelled = false;
     setIsLoadingTestingSummary(true);
     setTestingSummaryError(null);
     void Promise.all([
       api.testingWorkspaceSummary({
-        product_family: selectedTestingSummaryFamily || undefined,
-        product_variant: selectedTestingSummaryVariant || undefined,
+        product_family: scopedFamily || undefined,
+        product_variant: scopedVariant || undefined,
       }),
       api.testingSubjectSummaries({
-        product_family: selectedTestingSummaryFamily || undefined,
-        product_variant: selectedTestingSummaryVariant || undefined,
+        product_family: scopedFamily || undefined,
+        product_variant: scopedVariant || undefined,
         limit: 10000,
       }),
-      api.testingEvents({
-        product_family: selectedTestingSummaryFamily || undefined,
-        product_variant: selectedTestingSummaryVariant || undefined,
-        limit: 10000,
-      }),
+      activeTab === "testingSummary"
+        ? api.testingEvents({
+            product_family: scopedFamily || undefined,
+            product_variant: scopedVariant || undefined,
+            limit: 10000,
+          })
+        : Promise.resolve([]),
     ])
       .then(([summary, subjectSummaries, events]) => {
         if (cancelled) {
@@ -3026,7 +3344,13 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, selectedTestingSummaryFamily, selectedTestingSummaryVariant]);
+  }, [
+    activeTab,
+    selectedRegistrationStateFamily,
+    selectedRegistrationStateVariant,
+    selectedTestingSummaryFamily,
+    selectedTestingSummaryVariant,
+  ]);
   useEffect(() => {
     if (!selectedBulkPatchParentGroup) {
       setSelectedBulkPatchCatalogueNumbers([]);
@@ -3490,6 +3814,14 @@ export function App() {
       : null;
   const bulkMarketInfoXmlPreviewLineRefs = useRef<Record<number, HTMLSpanElement | null>>({});
   const bulkMarketInfoXmlPreviewContainerRef = useRef<HTMLPreElement | null>(null);
+  const bulkXmlStructureSections =
+    xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? extractXmlStructureSections(xmlPreviewLines) : [];
+  const selectedBulkXmlSection =
+    xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch"
+      ? bulkXmlStructureSections.find((section) => section.id === selectedBulkXmlSectionId) ?? bulkXmlStructureSections[0] ?? null
+      : null;
+  const bulkXmlPreviewLineRefs = useRef<Record<number, HTMLSpanElement | null>>({});
+  const bulkXmlPreviewContainerRef = useRef<HTMLPreElement | null>(null);
   const patchXmlStructureSections = xmlMode === "patch" ? extractXmlStructureSections(xmlPreviewLines) : [];
   const selectedPatchXmlSection =
     xmlMode === "patch"
@@ -3545,6 +3877,16 @@ export function App() {
     : selectedBulkMarketInfoParentGroup
       ? `Awaiting preview for ${selectedBulkMarketInfoSelectedCount} selected device${selectedBulkMarketInfoSelectedCount === 1 ? "" : "s"} under ${selectedBulkMarketInfoParentGroup.basic_udi_di}.`
       : "No registered Basic UDI-DI parent is currently available for bulk MARKET_INFO.PUT generation.";
+  const bulkPreviewStructureTitle =
+    xmlMode === "bulkPatch"
+      ? "Bulk PATCH structure"
+      : xmlMode === "bulkPost"
+        ? "Bulk BASIC UDI-DI POST structure"
+        : "Bulk DEVICE UDI-DI POST structure";
+  const bulkPreviewStructureSubtitle =
+    xmlMode === "bulkPatch"
+      ? "Navigate the main batch PATCH message sections."
+      : "Navigate the main batch POST message sections.";
   const xmlModeUi = resolveXmlModeUi(xmlMode);
   const xmlModeLabel = xmlModeUi.label;
   const xmlModeDescription = xmlModeUi.description;
@@ -3712,6 +4054,34 @@ export function App() {
     const nextScrollTop = container.scrollTop + (targetTop - containerTop) - 12;
     container.scrollTo({ top: Math.max(nextScrollTop, 0), behavior: "auto" });
   }, [xmlMode, selectedBulkMarketInfoXmlSection?.id, selectedBulkMarketInfoXmlSection?.lineStart]);
+
+  useEffect(() => {
+    if (xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" && xmlMode !== "bulkPatch") {
+      return;
+    }
+    if (bulkXmlStructureSections.length < 1) {
+      setSelectedBulkXmlSectionId(null);
+      return;
+    }
+    if (!selectedBulkXmlSectionId || !bulkXmlStructureSections.some((section) => section.id === selectedBulkXmlSectionId)) {
+      setSelectedBulkXmlSectionId(bulkXmlStructureSections[0].id);
+    }
+  }, [xmlMode, bulkXmlStructureSections, selectedBulkXmlSectionId]);
+
+  useEffect(() => {
+    if ((xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" && xmlMode !== "bulkPatch") || !selectedBulkXmlSection) {
+      return;
+    }
+    const container = bulkXmlPreviewContainerRef.current;
+    const targetLine = bulkXmlPreviewLineRefs.current[selectedBulkXmlSection.lineStart];
+    if (!container || !targetLine) {
+      return;
+    }
+    const containerTop = container.getBoundingClientRect().top;
+    const targetTop = targetLine.getBoundingClientRect().top;
+    const nextScrollTop = container.scrollTop + (targetTop - containerTop) - 12;
+    container.scrollTo({ top: Math.max(nextScrollTop, 0), behavior: "auto" });
+  }, [xmlMode, selectedBulkXmlSection?.id, selectedBulkXmlSection?.lineStart]);
 
   useEffect(() => {
     if (xmlMode !== "patch") {
@@ -4317,42 +4687,64 @@ export function App() {
             </span>
           </div>
         </div>
-        <div className="nav-links">
-          <button
-            className={activeTab === "workbooks" ? "nav-link active" : "nav-link"}
-            type="button"
-            onClick={() => setActiveTab("workbooks")}
-          >
-            Submission Data
-          </button>
-          <button
-            className={activeTab === "canonicalValidation" ? "nav-link active" : "nav-link"}
-            type="button"
-            onClick={() => setActiveTab("canonicalValidation")}
-          >
-            Canonical Validation
-          </button>
-          <button
-            className={activeTab === "xml" ? "nav-link active" : "nav-link"}
-            type="button"
-            onClick={() => setActiveTab("xml")}
-          >
-            EUDAMED Testing
-          </button>
-          <button
-            className={activeTab === "testingSummary" ? "nav-link active" : "nav-link"}
-            type="button"
-            onClick={() => setActiveTab("testingSummary")}
-          >
-            Testing Summary
-          </button>
-          <button
-            className={activeTab === "documentation" ? "nav-link active" : "nav-link"}
-            type="button"
-            onClick={() => setActiveTab("documentation")}
-          >
-            Documentation
-          </button>
+        <div className="nav-links nav-links-grouped">
+          <div className="nav-group">
+            <span className="nav-group-label">Data Views</span>
+            <div className="nav-group-buttons">
+              <button
+                className={activeTab === "workbooks" ? "nav-link active" : "nav-link"}
+                type="button"
+                onClick={() => setActiveTab("workbooks")}
+              >
+                Submission Data
+              </button>
+              <button
+                className={activeTab === "canonicalValidation" ? "nav-link active" : "nav-link"}
+                type="button"
+                onClick={() => setActiveTab("canonicalValidation")}
+              >
+                Canonical Validation
+              </button>
+              <button
+                className={activeTab === "registrationState" ? "nav-link active" : "nav-link"}
+                type="button"
+                onClick={() => setActiveTab("registrationState")}
+              >
+                Registration State
+              </button>
+            </div>
+          </div>
+          <div className="nav-group">
+            <span className="nav-group-label">Testing Workspaces</span>
+            <div className="nav-group-buttons">
+              <button
+                className={activeTab === "xml" ? "nav-link active nav-link-primary" : "nav-link nav-link-primary"}
+                type="button"
+                onClick={() => setActiveTab("xml")}
+              >
+                EUDAMED Testing
+              </button>
+              <button
+                className={activeTab === "testingSummary" ? "nav-link active" : "nav-link"}
+                type="button"
+                onClick={() => setActiveTab("testingSummary")}
+              >
+                Testing Summary
+              </button>
+            </div>
+          </div>
+          <div className="nav-group nav-group-reference">
+            <span className="nav-group-label">Documentation</span>
+            <div className="nav-group-buttons">
+              <button
+                className={activeTab === "documentation" ? "nav-link active nav-link-reference" : "nav-link nav-link-reference"}
+                type="button"
+                onClick={() => setActiveTab("documentation")}
+              >
+                Documentation
+              </button>
+            </div>
+          </div>
         </div>
       </nav>
 
@@ -4391,6 +4783,15 @@ export function App() {
               <h1>EUDAMED Testing Snapshot</h1>
               <p className="hero-copy">
                 Review recorded testing outcomes, Basic UDI-DI registration status, and the next available POST and PATCH actions.
+              </p>
+            </>
+          ) : null}
+          {activeTab === "registrationState" ? (
+            <>
+              <p className="eyebrow">Registration State</p>
+              <h1>Registration State</h1>
+              <p className="hero-copy">
+                Review family and variant registration status, Basic UDI-DI coverage, and the next available POST, PATCH, and Market Info actions.
               </p>
             </>
           ) : null}
@@ -4476,6 +4877,16 @@ export function App() {
                 {testingSummaryWorkspaceSummary
                   ? `${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count} successful testing event${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count === 1 ? "" : "s"} recorded in the current scope.`
                   : "Testing summary loads the current SQLite-backed Playground state."}
+              </p>
+            </>
+          ) : null}
+          {activeTab === "registrationState" ? (
+            <>
+              <span className="status-label">Registration state</span>
+              <span className="status-pill ok">SQLite live</span>
+              <p className="status-detail">
+                <span className="status-detail-emphasis">{registrationStateRows.length}</span> parent group
+                {registrationStateRows.length === 1 ? "" : "s"} tracked in the current scope.
               </p>
             </>
           ) : null}
@@ -5958,6 +6369,7 @@ export function App() {
                       }
                       readinessMessage={marketInfoReadinessMessage}
                       isReady={isMarketInfoScenarioReady}
+                      isRefreshing={visibleMarketInfoRefreshState}
                     />
                     <MarketInfoPreviewPanel
                       successXmlInputRef={postSuccessXmlInputRef}
@@ -5971,7 +6383,7 @@ export function App() {
                       onDownload={() => void downloadXmlRecord()}
                       onUploadClick={handleUploadSuccessXmlClick}
                       xmlActionMessage={xmlActionMessage}
-                      isRefreshing={isLoadingXmlOperationAssessment}
+                      isRefreshing={visibleMarketInfoRefreshState}
                       previewStatusMessage={marketInfoPreviewStatusMessage}
                       activePreviewLabel={activePreviewLabel}
                       selectedBatchValidation={selectedBatchValidation}
@@ -5999,7 +6411,7 @@ export function App() {
                     onDownload={() => void downloadXmlRecord()}
                     onUploadClick={handleUploadSuccessXmlClick}
                     xmlActionMessage={xmlActionMessage}
-                    isRefreshing={isLoadingXmlOperationAssessment}
+                    isRefreshing={visibleMarketInfoRefreshState}
                     previewStatusMessage={bulkMarketInfoPreviewStatusMessage}
                     activePreviewLabel={activePreviewLabel}
                     selectedBatchValidation={selectedBatchValidation}
@@ -6053,6 +6465,13 @@ export function App() {
                     activePreviewFileName={activePreviewFileName}
                     previewStatusMessage={genericPreviewStatusMessage}
                     xmlPreviewLines={xmlPreviewLines}
+                    structureTitle={bulkPreviewStructureTitle}
+                    structureSubtitle={bulkPreviewStructureSubtitle}
+                    xmlStructureSections={bulkXmlStructureSections}
+                    selectedXmlSection={selectedBulkXmlSection}
+                    onSelectSection={setSelectedBulkXmlSectionId}
+                    xmlPreviewLineRefs={bulkXmlPreviewLineRefs}
+                    xmlPreviewContainerRef={bulkXmlPreviewContainerRef}
                   />
                 ) : (
                   <>
@@ -6266,7 +6685,7 @@ export function App() {
                       selectedBatchValidation={selectedBatchValidation}
                     />
                   ) : xmlMode === "bulkMarketInfo" ? (
-                    <BulkMarketInfoWorkspace
+                  <BulkMarketInfoWorkspace
                       familyVariantLabel={`${selectedXmlFamilyLabel} / ${selectedXmlVariantLabel}`}
                       isRefreshing={false}
                       displayedBulkMarketInfoParentOptions={displayedBulkMarketInfoParentOptions}
@@ -6347,7 +6766,7 @@ export function App() {
                   <BulkPostWorkspace
                     familyVariantLabel={`${selectedXmlFamilyLabel} / ${selectedXmlVariantLabel}`}
                     title={xmlMode === "bulkPost" ? "Bulk BASIC UDI-DI POST" : "Bulk DEVICE UDI-DI POST"}
-                    isRefreshing={isLoadingXmlOperationAssessment}
+                      isRefreshing={visibleMarketInfoRefreshState}
                     stepOneTitle={xmlMode === "bulkPost" ? "Parent registration scope" : "Child registration scope"}
                     stepOneCount={xmlMode === "bulkPost" ? selectedBulkUnpostedBasicUdiCount : selectedBulkEligibleUdidiPostCount}
                     stepOneLabel={xmlMode === "bulkPost" ? "unposted parent" : "eligible device"}
@@ -6451,6 +6870,45 @@ export function App() {
             rows={testingSummaryRows}
             eventRows={testingSummaryEventRows}
             recentSubjects={testingSummaryRecentSubjects}
+          />
+        )
+      ) : null}
+
+      {activeTab === "registrationState" ? (
+        isLoadingCanonicalValidation && !canonicalValidation ? (
+          renderLoadingPanel(
+            "Loading registration state",
+            "Preparing the current parent registration footprint and next available actions.",
+          )
+        ) : (
+          <RegistrationStateWorkspace
+            isLoading={isLoadingTestingSummary}
+            error={testingSummaryError}
+            selectedFamily={selectedRegistrationStateFamily}
+            selectedVariant={selectedRegistrationStateVariant}
+            selectedStatus={selectedRegistrationStateStatus}
+            searchText={registrationStateSearch}
+            actionableOnly={registrationStateActionableOnly}
+            familyOptions={registrationStateFamilyOptions}
+            variantOptions={registrationStateVariantOptions}
+            statusOptions={registrationStateStatusOptions}
+            metrics={registrationStateMetrics}
+            rows={registrationStateRows}
+            onFamilyChange={(value) => {
+              setSelectedRegistrationStateFamily(value);
+              setSelectedRegistrationStateVariant("");
+            }}
+            onVariantChange={setSelectedRegistrationStateVariant}
+            onStatusChange={setSelectedRegistrationStateStatus}
+            onSearchChange={setRegistrationStateSearch}
+            onActionableOnlyChange={setRegistrationStateActionableOnly}
+            onReset={() => {
+              setSelectedRegistrationStateFamily("");
+              setSelectedRegistrationStateVariant("");
+              setSelectedRegistrationStateStatus("");
+              setRegistrationStateSearch("");
+              setRegistrationStateActionableOnly(false);
+            }}
           />
         )
       ) : null}

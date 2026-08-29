@@ -2,6 +2,14 @@ import type { ChangeEvent, MutableRefObject } from "react";
 
 import type { XmlValidationResult } from "../types";
 
+type XmlStructureSection = {
+  id: string;
+  label: string;
+  detail: string;
+  lineStart: number;
+  lineEnd: number;
+};
+
 type BulkXmlPreviewPanelProps = {
   successXmlInputRef: MutableRefObject<HTMLInputElement | null>;
   handleSuccessXmlSelected: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -25,6 +33,13 @@ type BulkXmlPreviewPanelProps = {
   activePreviewFileName: string | null;
   previewStatusMessage: string;
   xmlPreviewLines: string;
+  structureTitle: string;
+  structureSubtitle: string;
+  xmlStructureSections: XmlStructureSection[];
+  selectedXmlSection: XmlStructureSection | null;
+  onSelectSection: (id: string) => void;
+  xmlPreviewLineRefs: MutableRefObject<Record<number, HTMLSpanElement | null>>;
+  xmlPreviewContainerRef: MutableRefObject<HTMLPreElement | null>;
 };
 
 export function BulkXmlPreviewPanel({
@@ -50,6 +65,13 @@ export function BulkXmlPreviewPanel({
   activePreviewFileName,
   previewStatusMessage,
   xmlPreviewLines,
+  structureTitle,
+  structureSubtitle,
+  xmlStructureSections,
+  selectedXmlSection,
+  onSelectSection,
+  xmlPreviewLineRefs,
+  xmlPreviewContainerRef,
 }: BulkXmlPreviewPanelProps) {
   return (
     <div className="post-preview-card bulk-preview-card">
@@ -138,14 +160,61 @@ export function BulkXmlPreviewPanel({
             </div>
           </div>
         </div>
-        <div className="post-preview-xml-panel bulk-preview-xml-panel">
-          <div className="post-preview-subhead">
-            <strong>Raw XML preview</strong>
-            <span>Inspect the generated XML package for the current chunk before validation or download.</span>
+        <div className="post-preview-content-grid">
+          <div className="post-preview-structure-panel">
+            <div className="post-preview-subhead">
+              <strong>{structureTitle}</strong>
+              <span>{structureSubtitle}</span>
+            </div>
+            <div className="post-preview-structure-list">
+              {xmlStructureSections.map((section) => (
+                <button
+                  key={section.id}
+                  className={selectedXmlSection?.id === section.id ? "post-structure-item active" : "post-structure-item"}
+                  type="button"
+                  onClick={() => onSelectSection(section.id)}
+                >
+                  <span className="post-structure-line-range">
+                    Lines {section.lineStart + 1}-{section.lineEnd + 1}
+                  </span>
+                  <strong>{section.label}</strong>
+                  <span>{section.detail}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <pre className="xml-preview-block post-preview-block">
-            <code>{xmlPreviewLines}</code>
-          </pre>
+          <div className="post-preview-xml-panel bulk-preview-xml-panel">
+            <div className="post-preview-subhead">
+              <strong>Raw XML preview</strong>
+              <span>
+                {selectedXmlSection
+                  ? `Focused on ${selectedXmlSection.label.toLowerCase()}.`
+                  : "Inspect the generated XML package for the current chunk before validation or download."}
+              </span>
+            </div>
+            <pre ref={xmlPreviewContainerRef} className="xml-preview-block post-preview-block">
+              <code>
+                {xmlPreviewLines.split("\n").map((line, index) => {
+                  const isInSelectedSection =
+                    selectedXmlSection !== null &&
+                    index >= selectedXmlSection.lineStart &&
+                    index <= selectedXmlSection.lineEnd;
+                  return (
+                    <span
+                      key={`bulk-xml-line-${index}`}
+                      ref={(element) => {
+                        xmlPreviewLineRefs.current[index] = element;
+                      }}
+                      className={isInSelectedSection ? "xml-preview-line xml-preview-line-highlight" : "xml-preview-line"}
+                    >
+                      <span className="xml-preview-line-number">{index + 1}</span>
+                      <span className="xml-preview-line-text">{line}</span>
+                    </span>
+                  );
+                })}
+              </code>
+            </pre>
+          </div>
         </div>
       </div>
     </div>
