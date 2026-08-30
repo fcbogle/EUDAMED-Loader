@@ -650,7 +650,13 @@ export type XmlGenerationScopeBundle = {
   families: XmlGenerationSelectionSummary[];
 };
 
-export type OperationAssessmentType = "single_post" | "single_patch" | "bulk_post" | "bulk_patch";
+export type OperationAssessmentType =
+  | "single_post"
+  | "single_patch"
+  | "single_market_info"
+  | "bulk_post"
+  | "bulk_patch"
+  | "bulk_market_info";
 export type OperationAssessmentStatus = "available" | "blocked" | "attention";
 
 export type OperationAssessmentIdentityScope = {

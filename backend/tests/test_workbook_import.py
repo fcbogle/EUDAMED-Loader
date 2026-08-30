@@ -4,6 +4,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -27,8 +28,10 @@ from app.routers.profiling import (
     workbook_import_schema_summary,
 )
 from app.routers.xml_generation import (
+    assess_bulk_market_info,
     assess_bulk_patch,
     assess_bulk_post,
+    assess_single_market_info,
     assess_single_patch,
     assess_single_post,
     testing_subject_history as xml_testing_subject_history,
@@ -254,6 +257,7 @@ def _insert_testing_subject(
     latest_successful_version: str | None = None,
     latest_successful_market_info_version: str | None = None,
     latest_successful_state_json: str | None = None,
+    latest_successful_market_info_state_json: str | None = None,
 ) -> int:
     normalized_product_family = "".join(product_family.casefold().split())
     normalized_product_variant = "".join(product_variant.casefold().split())
@@ -280,8 +284,9 @@ def _insert_testing_subject(
                 baseline_patch_success,
                 latest_successful_version,
                 latest_successful_market_info_version,
-                latest_successful_state_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                latest_successful_state_json,
+                latest_successful_market_info_state_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 f"{normalized_product_family}|{normalized_product_variant}|{normalized_catalogue_number}",
@@ -300,6 +305,7 @@ def _insert_testing_subject(
                 latest_successful_version,
                 latest_successful_market_info_version,
                 latest_successful_state_json,
+                latest_successful_market_info_state_json,
             ),
         )
         connection.commit()
@@ -1605,6 +1611,24 @@ def test_operation_assessment_accepts_grouped_family_labels_for_registered_post_
         "_validation_bundle",
         lambda self: _synthetic_validation_bundle_from_promotions(promotions),
     )
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_market_info_record_with_latest_state",
+        lambda self, *, record: (
+            SimpleNamespace(market_countries=[("GB", True), ("IE", False)]),
+            [("GB", True)],
+            "2",
+        ),
+    )
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_market_info_record_with_latest_state",
+        lambda self, *, record: (
+            SimpleNamespace(market_countries=[("GB", True), ("IE", False)]),
+            [("GB", True)],
+            "2",
+        ),
+    )
     subject_id = _insert_testing_subject(
         isolated_workbook_import_db,
         product_family="Epirus",
@@ -1665,6 +1689,15 @@ def test_operation_assessment_routes_report_single_patch_availability_from_sqlit
         "_validation_bundle",
         lambda self: _synthetic_validation_bundle_from_promotions(promotions),
     )
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_market_info_record_with_latest_state",
+        lambda self, *, record: (
+            SimpleNamespace(market_countries=[("GB", True), ("IE", False)]),
+            [("GB", True)],
+            "2",
+        ),
+    )
     subject_id = _insert_testing_subject(
         isolated_workbook_import_db,
         product_family="Family A",
@@ -1704,6 +1737,117 @@ def test_operation_assessment_routes_report_single_patch_availability_from_sqlit
     assert payload["evidence"]["reviewed_post_baseline_present"] is True
     assert payload["evidence"]["tracked_registration_known"] is True
     assert payload["evidence"]["latest_accepted_version"] == "1"
+
+
+def test_operation_assessment_routes_report_single_market_info_availability_from_sqlite_state(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    promotions = {
+        ("synthetic.xlsx", "Variant A", 2): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+            "primary_udi_di": "111111",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        }
+    }
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_validation_bundle",
+        lambda self: _synthetic_validation_bundle_from_promotions(promotions),
+    )
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_market_info_record_with_latest_state",
+        lambda self, *, record: (
+            SimpleNamespace(market_countries=[("GB", True), ("IE", False)]),
+            [("GB", True)],
+            "2",
+        ),
+    )
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-001",
+        primary_udi_di="111111",
+        basic_udi_di="BASIC-1",
+        post_success=1,
+        latest_successful_version="1",
+        latest_successful_market_info_version="2",
+        latest_successful_market_info_state_json=json.dumps(
+            {
+                "version": "2",
+                "market_countries": [
+                    {"country": "GB", "original_placed_on_market": True},
+                    {"country": "IE", "original_placed_on_market": False},
+                ],
+            }
+        ),
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=subject_id,
+        event_index=0,
+        message_type="UDI_DI.POST",
+        status="SUCCESS",
+        version="1",
+    )
+
+    payload = assess_single_market_info(
+        {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+        }
+    )
+
+    assert payload["operation_type"] == "single_market_info"
+    assert payload["status"] == "available"
+    assert payload["eligible_record_count"] == 1
+    assert payload["evidence"]["tracked_registration_known"] is True
+    assert payload["evidence"]["current_market_info_version"] == "2"
+    assert payload["evidence"]["current_market_country_count"] == 2
+    assert payload["evidence"]["accepted_state_source"] == "sqlite_latest_successful_market_info"
+
+
+def test_operation_assessment_routes_report_single_market_info_blocked_without_tracked_registration(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    promotions = {
+        ("synthetic.xlsx", "Variant A", 2): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+            "primary_udi_di": "111111",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        }
+    }
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_validation_bundle",
+        lambda self: _synthetic_validation_bundle_from_promotions(promotions),
+    )
+
+    payload = assess_single_market_info(
+        {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+        }
+    )
+
+    assert payload["operation_type"] == "single_market_info"
+    assert payload["status"] == "blocked"
+    assert payload["evidence"]["tracked_registration_known"] is False
 
 
 def test_single_patch_prefers_unpatched_available_device_before_higher_patch_version(
@@ -1999,6 +2143,124 @@ def test_operation_assessment_routes_report_bulk_patch_parent_selection_and_avai
     assert selected_payload["eligible_record_count"] == 1
     assert selected_payload["evidence"]["selected_basic_udi_di"] == "BASIC-1"
     assert selected_payload["evidence"]["latest_version_summary"] == ["2"]
+
+
+def test_operation_assessment_routes_report_bulk_market_info_parent_selection_and_partial_availability(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    base_bundle = _synthetic_validation_bundle_from_promotions(
+        {
+            ("synthetic.xlsx", "Variant A", 2): {
+                "product_family": "Family A",
+                "product_variant": "Variant A",
+                "catalogue_number": "CAT-001",
+                "primary_udi_di": "111111",
+                "submission_operation": "POST",
+                "basic_udi_di": "BASIC-1",
+                "canonical_status": "xml_ready",
+            }
+        }
+    )
+    first_record = base_bundle.records[0]
+    second_record = first_record.model_copy(
+        update={
+            "catalogue_number": "CAT-002",
+            "primary_udi_di": "222222",
+        }
+    )
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_bulk_patch_selected_records",
+        lambda self, **kwargs: ([first_record, second_record], 2, []),
+    )
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_market_info_record_with_latest_state",
+        lambda self, *, record: (
+            SimpleNamespace(
+                market_countries=[("GB", True)] if record.catalogue_number == "CAT-001" else [("DE", True)]
+            ),
+            [("GB", True)],
+            "1" if record.catalogue_number == "CAT-001" else "2",
+        ),
+    )
+
+    first_subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-001",
+        primary_udi_di="111111",
+        basic_udi_di="BASIC-1",
+        post_success=1,
+        latest_successful_version="1",
+        latest_successful_market_info_version="1",
+        latest_successful_market_info_state_json=json.dumps(
+            {
+                "version": "1",
+                "market_countries": [
+                    {"country": "GB", "original_placed_on_market": True},
+                ],
+            }
+        ),
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=first_subject_id,
+        event_index=0,
+        message_type="UDI_DI.POST",
+        status="SUCCESS",
+        version="1",
+    )
+
+    second_subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-002",
+        primary_udi_di="222222",
+        basic_udi_di="BASIC-1",
+        post_success=1,
+        latest_successful_version="1",
+        latest_successful_market_info_version="2",
+        latest_successful_market_info_state_json=json.dumps(
+            {
+                "version": "2",
+                "market_countries": [
+                    {"country": "DE", "original_placed_on_market": True},
+                ],
+            }
+        ),
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=second_subject_id,
+        event_index=0,
+        message_type="UDI_DI.POST",
+        status="SUCCESS",
+        version="1",
+    )
+
+    parent_selection_payload = assess_bulk_market_info({"product_family": "Family A", "product_variant": "Variant A"})
+    selected_payload = assess_bulk_market_info(
+        {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "basic_udi_di": "BASIC-1",
+        }
+    )
+
+    assert parent_selection_payload["operation_type"] == "bulk_market_info"
+    assert parent_selection_payload["status"] == "attention"
+    assert parent_selection_payload["evidence"]["eligible_parent_group_count"] == 1
+    assert selected_payload["operation_type"] == "bulk_market_info"
+    assert selected_payload["status"] == "attention"
+    assert selected_payload["eligible_record_count"] == 1
+    assert selected_payload["evidence"]["selected_basic_udi_di"] == "BASIC-1"
+    assert selected_payload["evidence"]["market_info_state_mismatch_count"] == 1
+    assert selected_payload["evidence"]["current_market_info_version_summary"] == ["1"]
 
 
 def test_sqlite_canonical_validation_route_rebuilds_stale_snapshot(

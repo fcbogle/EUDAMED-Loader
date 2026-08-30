@@ -68,16 +68,34 @@ export function resolvePatchRequestArgs(
 
 export function resolveMarketInfoRequestArgs(
   record: CanonicalValidationRecord | null,
+  fallback?: {
+    assessedCatalogueNumber: string | null | undefined;
+    assessedPrimaryUdiDi: string | null | undefined;
+    selectedProductFamily: string | null | undefined;
+    selectedProductVariant: string | null | undefined;
+  },
 ): XmlSelectionRequestArgs | null {
-  if (!record?.catalogue_number) {
-    return null;
+  if (record?.catalogue_number) {
+    return {
+      product_family: record.product_family,
+      product_variant: record.product_variant,
+      catalogue_number: record.catalogue_number,
+      primary_udi_di: record.primary_udi_di,
+    };
   }
-  return {
-    product_family: record.product_family,
-    product_variant: record.product_variant,
-    catalogue_number: record.catalogue_number,
-    primary_udi_di: record.primary_udi_di,
-  };
+  if (
+    fallback?.assessedCatalogueNumber &&
+    fallback.selectedProductFamily &&
+    fallback.selectedProductVariant
+  ) {
+    return {
+      product_family: fallback.selectedProductFamily,
+      product_variant: fallback.selectedProductVariant,
+      catalogue_number: fallback.assessedCatalogueNumber,
+      primary_udi_di: fallback.assessedPrimaryUdiDi ?? null,
+    };
+  }
+  return null;
 }
 
 export function resolvePostWorkspaceRecord(

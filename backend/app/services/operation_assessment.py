@@ -163,6 +163,71 @@ class OperationAssessmentService:
             },
         )
 
+    def assess_single_market_info(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str | None = None,
+    ) -> OperationAssessment:
+        candidate_records, _, _ = self.xml_service._variant_post_records_with_exclusions(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=None,
+        )
+        if catalogue_number:
+            target_record = self._find_record(candidate_records, catalogue_number)
+            if target_record is None:
+                return self._blocked_assessment(
+                    operation_type="single_market_info",
+                    product_family=product_family,
+                    product_variant=product_variant,
+                    catalogue_number=catalogue_number,
+                    summary_message="Market Info is not currently available for the selected device.",
+                    blocking_reasons=[
+                        "The selected catalogue number is not currently an XML-ready record for this family and variant."
+                    ],
+                    evidence={
+                        "catalogue_number": catalogue_number,
+                        "primary_udi_di": None,
+                        "tracked_registration_known": False,
+                        "current_market_info_version": None,
+                        "current_market_country_count": 0,
+                        "accepted_state_source": None,
+                    },
+                )
+            return self._assess_single_market_info_record(target_record)
+
+        blocked_reasons: list[str] = []
+        fallback_record: CanonicalValidationRecord | None = None
+        for record in candidate_records:
+            assessment = self._assess_single_market_info_record(record)
+            if assessment.status == "available":
+                return assessment
+            blocked_reasons.extend(assessment.blocking_reasons)
+            if fallback_record is None:
+                fallback_record = record
+
+        blocking_reasons = self._deduplicated_reasons(blocked_reasons)
+        if not candidate_records:
+            blocking_reasons = ["No XML-ready POST rows are currently available for this family and variant."]
+        return self._blocked_assessment(
+            operation_type="single_market_info",
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=fallback_record.catalogue_number if fallback_record is not None else None,
+            summary_message="Market Info is not currently available for the selected family and variant.",
+            blocking_reasons=blocking_reasons,
+            evidence={
+                "catalogue_number": fallback_record.catalogue_number if fallback_record is not None else None,
+                "primary_udi_di": fallback_record.primary_udi_di if fallback_record is not None else None,
+                "tracked_registration_known": False,
+                "current_market_info_version": None,
+                "current_market_country_count": 0,
+                "accepted_state_source": None,
+            },
+        )
+
     def assess_bulk_post(
         self,
         *,
@@ -374,6 +439,187 @@ class OperationAssessmentService:
             },
         )
 
+    def assess_bulk_market_info(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        basic_udi_di: str | None = None,
+    ) -> OperationAssessment:
+        parent_groups = self.testing_state_store.posted_parent_groups(
+            product_family=product_family,
+            product_variant=product_variant,
+        )
+        if not parent_groups:
+            return self._blocked_assessment(
+                operation_type="bulk_market_info",
+                product_family=product_family,
+                product_variant=product_variant,
+                summary_message="Bulk Market Info is not currently available for the selected family and variant.",
+                blocking_reasons=[
+                    "No Basic UDI-DI parent group currently has tracked posted child devices available for Market Info."
+                ],
+                evidence={
+                    "eligible_parent_group_count": 0,
+                    "selected_basic_udi_di": None,
+                    "eligible_child_record_count": 0,
+                    "market_info_ready_record_count": 0,
+                    "current_market_info_version_summary": [],
+                    "market_info_state_mismatch_count": 0,
+                    "missing_variant_record_count": 0,
+                    "available_parent_groups": [],
+                },
+            )
+
+        if not basic_udi_di:
+            return OperationAssessment(
+                operation_type="bulk_market_info",
+                status="attention",
+                summary_message=(
+                    f"Bulk Market Info can proceed, but you must select one of the {len(parent_groups)} available "
+                    "Basic UDI-DI parent groups first."
+                ),
+                blocking_reasons=["Select a Basic UDI-DI parent group before generating Bulk Market Info XML."],
+                recommended_next_action="Choose a Basic UDI-DI parent group, then review the shared market-country scenario.",
+                eligible_record_count=0,
+                identity_scope=OperationAssessmentIdentityScope(
+                    product_family=product_family,
+                    product_variant=product_variant,
+                ),
+                evidence={
+                    "eligible_parent_group_count": len(parent_groups),
+                    "selected_basic_udi_di": None,
+                    "eligible_child_record_count": 0,
+                    "market_info_ready_record_count": 0,
+                    "current_market_info_version_summary": [],
+                    "market_info_state_mismatch_count": 0,
+                    "missing_variant_record_count": 0,
+                    "available_parent_groups": parent_groups,
+                },
+            )
+
+        posted_entries = self.testing_state_store.posted_entries(
+            product_family=product_family,
+            product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
+        )
+        try:
+            selected_records, eligible_child_records, missing_variant_records = self.xml_service._bulk_patch_selected_records(
+                product_family=product_family,
+                product_variant=product_variant,
+                basic_udi_di=basic_udi_di,
+                record_count=max(len(posted_entries), 1),
+                operation_label="bulk Market Info",
+            )
+        except ValueError as exc:
+            return self._blocked_assessment(
+                operation_type="bulk_market_info",
+                product_family=product_family,
+                product_variant=product_variant,
+                basic_udi_di=basic_udi_di,
+                summary_message="Bulk Market Info is not currently available for the selected Basic UDI-DI parent.",
+                blocking_reasons=[str(exc)],
+                evidence={
+                    "eligible_parent_group_count": len(parent_groups),
+                    "selected_basic_udi_di": basic_udi_di,
+                    "eligible_child_record_count": len(posted_entries),
+                    "market_info_ready_record_count": 0,
+                    "current_market_info_version_summary": [],
+                    "market_info_state_mismatch_count": 0,
+                    "missing_variant_record_count": 0,
+                    "available_parent_groups": parent_groups,
+                },
+            )
+
+        mismatch_count = 0
+        ready_record_count = 0
+        current_versions: set[str] = set()
+        baseline_signature: tuple[tuple[str, bool], ...] | None = None
+        accepted_state_sources: set[str] = set()
+        blocking_reasons: list[str] = []
+        for record in selected_records:
+            market_info_record, baseline_market_countries, current_version = self.xml_service._market_info_record_with_latest_state(
+                record=record
+            )
+            record_signature = self.xml_service._market_country_signature(market_info_record.market_countries)
+            if baseline_signature is None:
+                baseline_signature = record_signature
+            elif record_signature != baseline_signature:
+                mismatch_count += 1
+                continue
+            ready_record_count += 1
+            current_versions.add(current_version)
+            accepted_state_sources.add(
+                "sqlite_latest_successful_market_info"
+                if baseline_market_countries != market_info_record.market_countries
+                else "canonical_market_info_projection"
+            )
+
+        status = "available"
+        if ready_record_count < 1:
+            status = "blocked"
+            if mismatch_count > 0:
+                blocking_reasons.append(
+                    "Accepted market-country state differs across the selected cohort, so one shared Bulk Market Info scenario cannot be generated."
+                )
+            if missing_variant_records:
+                blocking_reasons.append(
+                    f"{len(missing_variant_records)} tracked posted device(s) are not currently XML-ready and cannot be included."
+                )
+        elif mismatch_count > 0 or missing_variant_records:
+            status = "attention"
+            if mismatch_count > 0:
+                blocking_reasons.append(
+                    f"{mismatch_count} selected device(s) would be excluded because their accepted market-country state differs from the cohort baseline."
+                )
+            if missing_variant_records:
+                blocking_reasons.append(
+                    f"{len(missing_variant_records)} tracked posted device(s) are not currently XML-ready and would be excluded from Bulk Market Info."
+                )
+
+        version_summary = self._sorted_versions(current_versions)
+        if status == "available":
+            summary_message = (
+                f"Bulk Market Info is available for Basic UDI-DI {basic_udi_di}. "
+                f"{ready_record_count} device record(s) are currently ready for one shared market-information update."
+            )
+        elif ready_record_count > 0:
+            summary_message = (
+                f"Bulk Market Info is partially available for Basic UDI-DI {basic_udi_di}. "
+                f"{ready_record_count} device record(s) can be generated, but some selected devices would be excluded."
+            )
+        else:
+            summary_message = "Bulk Market Info is not currently available for the selected Basic UDI-DI parent."
+
+        return OperationAssessment(
+            operation_type="bulk_market_info",
+            status=status,
+            summary_message=summary_message,
+            blocking_reasons=blocking_reasons,
+            recommended_next_action=(
+                "Review the selected parent scope and generate the shared Bulk Market Info package."
+                if status == "available"
+                else "Align the selected cohort to one accepted market-country baseline before generating Bulk Market Info."
+            ),
+            eligible_record_count=ready_record_count,
+            identity_scope=OperationAssessmentIdentityScope(
+                product_family=product_family,
+                product_variant=product_variant,
+                basic_udi_di=basic_udi_di,
+            ),
+            evidence={
+                "eligible_parent_group_count": len(parent_groups),
+                "selected_basic_udi_di": basic_udi_di,
+                "eligible_child_record_count": eligible_child_records,
+                "market_info_ready_record_count": ready_record_count,
+                "current_market_info_version_summary": version_summary,
+                "market_info_state_mismatch_count": mismatch_count,
+                "missing_variant_record_count": len(missing_variant_records),
+                "accepted_state_sources": sorted(accepted_state_sources),
+                "available_parent_groups": parent_groups,
+            },
+        )
+
     def _assess_single_post_record(self, record: CanonicalValidationRecord) -> OperationAssessment:
         basic_udi_di = self.xml_service._bulk_record_summary(record).basic_udi_di
         parent_registration_known = bool(
@@ -518,6 +764,73 @@ class OperationAssessmentService:
             evidence=evidence,
         )
 
+    def _assess_single_market_info_record(self, record: CanonicalValidationRecord) -> OperationAssessment:
+        tracked_registration_known = bool(
+            record.primary_udi_di
+            and self.testing_state_store.has_successful_primary_udi_post(
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                primary_udi_di=record.primary_udi_di,
+            )
+        )
+        evidence = {
+            "catalogue_number": record.catalogue_number,
+            "primary_udi_di": record.primary_udi_di,
+            "tracked_registration_known": tracked_registration_known,
+            "current_market_info_version": None,
+            "current_market_country_count": 0,
+            "current_market_countries": [],
+            "accepted_state_source": None,
+        }
+        if not tracked_registration_known:
+            return self._blocked_assessment(
+                operation_type="single_market_info",
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                catalogue_number=record.catalogue_number,
+                summary_message="Market Info is not currently available for the selected device.",
+                blocking_reasons=[
+                    "The selected device does not yet have a tracked successful Device UDI-DI registration available for Market Info."
+                ],
+                evidence=evidence,
+            )
+
+        market_info_record, baseline_market_countries, current_version = self.xml_service._market_info_record_with_latest_state(
+            record=record
+        )
+        evidence["current_market_info_version"] = current_version
+        evidence["current_market_country_count"] = len(market_info_record.market_countries)
+        evidence["current_market_countries"] = [
+            {
+                "country": country_code,
+                "original_placed_on_market": original_placed_on_market,
+            }
+            for country_code, original_placed_on_market in market_info_record.market_countries
+        ]
+        evidence["accepted_state_source"] = (
+            "sqlite_latest_successful_market_info"
+            if baseline_market_countries != market_info_record.market_countries
+            else "canonical_market_info_projection"
+        )
+
+        return OperationAssessment(
+            operation_type="single_market_info",
+            status="available",
+            summary_message=(
+                f"Market Info is available for {record.catalogue_number}. "
+                "This registered device can receive a standalone market-information update."
+            ),
+            blocking_reasons=[],
+            recommended_next_action="Review the current market-country baseline, then generate the standalone Market Info update.",
+            eligible_record_count=1,
+            identity_scope=OperationAssessmentIdentityScope(
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                catalogue_number=record.catalogue_number,
+            ),
+            evidence=evidence,
+        )
+
     @staticmethod
     def _single_patch_priority_key(assessment: OperationAssessment) -> tuple[int, int, str]:
         version_text = assessment.evidence.get("latest_accepted_version")
@@ -564,7 +877,11 @@ class OperationAssessmentService:
             for entry in entries
             if str(entry.get("latest_version") or "").strip()
         }
-        return sorted(versions, key=lambda value: int(value) if value.isdigit() else value)
+        return OperationAssessmentService._sorted_versions(versions)
+
+    @staticmethod
+    def _sorted_versions(versions: set[str] | list[str]) -> list[str]:
+        return sorted({str(version).strip() for version in versions if str(version).strip()}, key=lambda value: int(value) if value.isdigit() else value)
 
     @staticmethod
     def _blocked_assessment(

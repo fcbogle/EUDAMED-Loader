@@ -360,6 +360,8 @@ export function resolveXmlModeUi(xmlMode: XmlMode): {
     assessmentTitle:
       xmlMode === "post"
         ? "POST Assessment"
+        : xmlMode === "marketInfo"
+          ? "Market Info assessment"
         : xmlMode === "patch"
           ? "PATCH assessment"
           : xmlMode === "bulkPost"
@@ -378,8 +380,10 @@ export function resolveXmlAssessmentSummaryRows(args: {
   assessedPatchLatestAcceptedVersion: string | null;
   assessedPatchReviewedBaseline: boolean | null;
   assessedPatchTrackedRegistration: boolean | null;
+  assessedMarketInfoCurrentVersion: string | null;
   assessedSelectedBasicUdiDi: string | null;
   assessedLatestVersionSummary: string[];
+  assessedCurrentMarketInfoVersionSummary: string[];
   assessedBulkParentGroupCount: number | null;
   assessedBulkChildRecordCount: number | null;
   assessedUnpostedParentGroupCount: number | null;
@@ -393,8 +397,10 @@ export function resolveXmlAssessmentSummaryRows(args: {
     assessedPatchLatestAcceptedVersion,
     assessedPatchReviewedBaseline,
     assessedPatchTrackedRegistration,
+    assessedMarketInfoCurrentVersion,
     assessedSelectedBasicUdiDi,
     assessedLatestVersionSummary,
+    assessedCurrentMarketInfoVersionSummary,
     assessedBulkParentGroupCount,
     assessedBulkChildRecordCount,
     assessedUnpostedParentGroupCount,
@@ -451,6 +457,30 @@ export function resolveXmlAssessmentSummaryRows(args: {
             value: assessedPatchTrackedRegistration === null ? "Unknown" : assessedPatchTrackedRegistration ? "Present" : "Missing",
           },
         ]
+      : xmlMode === "marketInfo"
+        ? [
+            {
+              label: "Candidate catalogue",
+              value: assessmentEvidenceString(xmlOperationAssessment, "catalogue_number") ?? "Not resolved",
+            },
+            {
+              label: "Device UDI-DI",
+              value: assessmentEvidenceString(xmlOperationAssessment, "primary_udi_di") ?? "Not resolved",
+            },
+            {
+              label: "Current market version",
+              value: assessedMarketInfoCurrentVersion ?? "Not tracked",
+            },
+            {
+              label: "Tracked registration",
+              value:
+                assessmentEvidenceBoolean(xmlOperationAssessment, "tracked_registration_known") === null
+                  ? "Unknown"
+                  : assessmentEvidenceBoolean(xmlOperationAssessment, "tracked_registration_known")
+                    ? "Present"
+                    : "Missing",
+            },
+          ]
       : xmlMode === "bulkPatch"
         ? [
             {
@@ -470,6 +500,28 @@ export function resolveXmlAssessmentSummaryRows(args: {
               value: assessedLatestVersionSummary.length > 0 ? assessedLatestVersionSummary.join(", ") : "Not tracked",
             },
           ]
+        : xmlMode === "bulkMarketInfo"
+          ? [
+              {
+                label: "Available parent groups",
+                value: String(assessmentEvidenceNumber(xmlOperationAssessment, "eligible_parent_group_count") ?? 0),
+              },
+              {
+                label: "Selected Basic UDI-DI",
+                value: assessedSelectedBasicUdiDi ?? "Select a parent",
+              },
+              {
+                label: "Ready devices",
+                value: String(assessmentEvidenceNumber(xmlOperationAssessment, "market_info_ready_record_count") ?? 0),
+              },
+              {
+                label: "Current versions",
+                value:
+                  assessedCurrentMarketInfoVersionSummary.length > 0
+                    ? assessedCurrentMarketInfoVersionSummary.join(", ")
+                    : "Not tracked",
+              },
+            ]
         : [
             {
               label: "Eligible parent groups",

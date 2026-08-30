@@ -19,6 +19,7 @@ type UseXmlOperationAssessmentArgs = {
   selectedProductFamily: string | null | undefined;
   selectedProductVariant: string | null | undefined;
   selectedBulkPatchBasicUdiDi: string;
+  selectedBulkMarketInfoBasicUdiDi: string;
 };
 
 export function useXmlOperationAssessment({
@@ -27,6 +28,7 @@ export function useXmlOperationAssessment({
   selectedProductFamily,
   selectedProductVariant,
   selectedBulkPatchBasicUdiDi,
+  selectedBulkMarketInfoBasicUdiDi,
 }: UseXmlOperationAssessmentArgs) {
   const [xmlOperationAssessment, setXmlOperationAssessment] = useState<OperationAssessment | null>(null);
   const [xmlOperationAssessmentError, setXmlOperationAssessmentError] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export function useXmlOperationAssessment({
       setIsLoadingXmlOperationAssessment(false);
       return;
     }
-    if (xmlMode === "single" || xmlMode === "marketInfo" || xmlMode === "bulkMarketInfo") {
+    if (xmlMode === "single") {
       setXmlOperationAssessment(null);
       setXmlOperationAssessmentError(null);
       setIsLoadingXmlOperationAssessment(false);
@@ -61,12 +63,20 @@ export function useXmlOperationAssessment({
             ? await api.assessSinglePost(selectedProductFamily, selectedProductVariant)
             : xmlMode === "patch"
               ? await api.assessSinglePatch(selectedProductFamily, selectedProductVariant)
+              : xmlMode === "marketInfo"
+                ? await api.assessSingleMarketInfo(selectedProductFamily, selectedProductVariant)
               : xmlMode === "bulkPatch"
                 ? await api.assessBulkPatch(
                     selectedProductFamily,
                     selectedProductVariant,
                     selectedBulkPatchBasicUdiDi || undefined,
                   )
+                : xmlMode === "bulkMarketInfo"
+                  ? await api.assessBulkMarketInfo(
+                      selectedProductFamily,
+                      selectedProductVariant,
+                      selectedBulkMarketInfoBasicUdiDi || undefined,
+                    )
                 : await api.assessBulkPost(selectedProductFamily, selectedProductVariant);
         if (!cancelled) {
           setXmlOperationAssessment(assessment);
@@ -94,6 +104,7 @@ export function useXmlOperationAssessment({
     selectedProductFamily,
     selectedProductVariant,
     selectedBulkPatchBasicUdiDi,
+    selectedBulkMarketInfoBasicUdiDi,
   ]);
 
   return {

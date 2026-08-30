@@ -10,15 +10,17 @@ Continue refining the XML workspaces so the UI and backend now clearly separate:
 - `Bulk Basic UDI POST`
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
-- `EUDAMED Generation`
+- `Bulk Market Info`
 
 with the current implementation focus now being:
 
 - preserve the clean split between parent-only and child-only bulk registration flows
 - keep `Patch XML` as the controlled single-device PATCH workspace
 - keep `Bulk PATCH` aligned to latest successful per-device accepted state
+- keep `Market Info` and `Bulk Market Info` aligned with the same visual and state-model rules as `POST` and `PATCH`
 - make the bulk UI simpler and more operationally accurate
 - stabilize the SQLite-backed application persistence layer
+- prepare the next phase of workflow-event logging so XML generation, validation, download, and success capture can be audited more explicitly
 
 ## Reading Guide
 
@@ -35,6 +37,46 @@ with the current implementation focus now being:
 - `catalogue_number` remains a workbook and operator selection identifier; it is not the EUDAMED record identifier.
 
 ## Latest Confirmed Decisions
+
+- Latest implemented and verified direction on Sunday, August 30, 2026:
+  - the top-level workspace navigation is now grouped as:
+    - `Data Views`
+    - `Testing Workspaces`
+    - `Documentation`
+  - the data-facing workspaces now include:
+    - `Submission Data`
+    - `Registration State`
+    - `Testing Summary`
+  - `Registration State` is now the concise family/variant readiness view for:
+    - registered vs unregistered `Basic UDI-DI`
+    - available seed `POST`
+    - available child `POST`
+    - available `PATCH`
+    - current latest tracked state
+  - the workspace titles were simplified to be more operator-facing:
+    - `EUDAMED Testing Workspace`
+    - `EUDAMED Testing Snapshot`
+    - simpler status-card wording with a brief statement and bold last-import timestamp
+  - refresh behavior is now more visible across the XML workspaces:
+    - a shared refresh strip is shown while family/variant-driven panels are reloading
+    - the intended refresh styling is positive/green rather than blue
+    - `Market Info` and `Bulk Market Info` must follow the same refresh language as `POST`, `PATCH`, `Bulk POST`, and `Bulk PATCH`
+  - `Bulk Market Info` is now part of the active first-iteration testing surface:
+    - selector-driven market-country editing mirrors the single-device Market Info workspace
+    - XML preview should follow the same structure-first presentation style as the other bulk workspaces
+    - successful Playground testing and success-XML upload are now part of the intended operator workflow
+  - market-country normalization is now a shared backend concern:
+    - country names and aliases should resolve through one common normalization/reference path
+    - all operations should use the same country-code interpretation rules rather than each flow maintaining its own country mapping behavior
+  - Market Info success capture direction was tightened:
+    - persist Market Info version separately from PATCH lineage
+    - retain enough context to report added countries, removed countries, and original-market movement in `Testing Summary`
+    - accepted Market Info state should become the visible baseline after successful upload
+  - the next major implementation theme after the current UI pass is database-backed workflow-event logging rather than another large UI restructure
+  - current branch context:
+    - `feature/workflow-event-logging` is the active branch for the next persistence/audit expansion
+  - current known non-app note:
+    - Azure Container Apps used for other work were scaled to `minReplicas = 0` on Sunday, August 30, 2026 to reduce spend while not in active use
 
 - Latest implemented and verified direction on Friday, August 28, 2026:
   - `Testing Summary` now has two distinct layers:
@@ -388,6 +430,7 @@ Current pill order:
 - `Bulk Basic UDI POST`
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
+- `Bulk Market Info`
 
 Shared-device testing group:
 
@@ -400,15 +443,33 @@ General XML tools:
 - `Bulk Basic UDI POST`
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
+- `Bulk Market Info`
+
+Current top-level workspace grouping:
+
+- `Data Views`
+  - `Submission Data`
+  - `Registration State`
+  - `Testing Summary`
+- `Testing Workspaces`
+  - `Canonical Validation`
+  - `EUDAMED Testing`
+- `Documentation`
 
 Current visual direction:
 
 - single `POST` and single `PATCH` should use the same card language and theme
-- `Bulk Basic UDI-DI POST`, `Bulk DEVICE UDI-DI POST`, and `Bulk PATCH` should now continue converging toward that same card language rather than keeping an older sidebar-style preview/actions layout
+- single `Market Info` should use that same card language rather than a bespoke editor layout
+- `Bulk Basic UDI-DI POST`, `Bulk DEVICE UDI-DI POST`, `Bulk PATCH`, and `Bulk Market Info` should continue converging toward that same card language rather than keeping older sidebar-style preview/actions layouts
 - action-heavy XML workspaces should prefer:
   - one primary preview card
   - compact status/meta strips
   - fewer duplicated review/validation panels
+- raw XML preview should follow the same general interaction model across single and bulk workspaces:
+  - structure-aware preview area
+  - compact metadata strip
+  - preview and validation status surfaced without redundant lower-page cards
+- family/variant-driven panels should show a visible refreshing state while reassessment is in progress
 - future refactoring should extract these shared UI primitives rather than duplicating more mode-specific JSX inside `frontend/src/App.tsx`
 
 Current directional design intent:
@@ -426,16 +487,17 @@ Current directional design intent:
   - child `POST`
   - single-device `PATCH`
   - `Bulk PATCH`
-- The backend also now supports a dedicated Market Info XML preview/download path with user-edited market-country overrides, but this is not yet represented by a separate operation-assessment contract.
+- The backend also now supports dedicated single-device and bulk Market Info preview/download paths with user-edited market-country overrides and success-XML capture, but this is not yet represented by a separate operation-assessment contract.
 - Current active assessment coverage is represented by:
   - `single_post`
   - `single_patch`
   - `bulk_post`
   - `bulk_patch`
-- `Market Info` remains distinct from the current readiness-assessment contract:
-  - it currently anchors to the selected resolved registered device context rather than a dedicated backend operation-assessment response
+- `Market Info` and `Bulk Market Info` remain distinct from the current readiness-assessment contract:
+  - they currently anchor to the selected resolved registered device or posted-parent context rather than a dedicated backend operation-assessment response
   - XML generation and local validation are implemented
-  - Playground success capture for Market Info is not yet implemented
+  - Playground success capture and SQLite persistence are implemented
+  - a dedicated readiness/assessment contract remains a later cleanup item
 - Those assessments are SQLite-backed and should describe:
   - eligible record counts
   - required identity scope such as `Basic UDI-DI` or child `UDI-DI`

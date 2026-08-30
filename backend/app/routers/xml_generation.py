@@ -672,6 +672,19 @@ def assess_single_patch(payload: dict | None = None) -> dict:
     return assessment.model_dump(mode="json")
 
 
+@router.post("/xml/assess-single-market-info")
+def assess_single_market_info(payload: dict | None = None) -> dict:
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
+    assessment = _operation_assessment().assess_single_market_info(
+        product_family=product_family,
+        product_variant=product_variant,
+        catalogue_number=str(data["catalogue_number"]) if data.get("catalogue_number") else None,
+    )
+    return assessment.model_dump(mode="json")
+
+
 @router.post("/xml/assess-bulk-post")
 def assess_bulk_post(payload: dict | None = None) -> dict:
     data = cast(dict[str, object], payload or {})
@@ -680,6 +693,19 @@ def assess_bulk_post(payload: dict | None = None) -> dict:
     assessment = _operation_assessment().assess_bulk_post(
         product_family=product_family,
         product_variant=product_variant,
+    )
+    return assessment.model_dump(mode="json")
+
+
+@router.post("/xml/assess-bulk-market-info")
+def assess_bulk_market_info(payload: dict | None = None) -> dict:
+    data = cast(dict[str, object], payload or {})
+    product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
+    product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
+    assessment = _operation_assessment().assess_bulk_market_info(
+        product_family=product_family,
+        product_variant=product_variant,
+        basic_udi_di=str(data["basic_udi_di"]) if data.get("basic_udi_di") else None,
     )
     return assessment.model_dump(mode="json")
 

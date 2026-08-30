@@ -54,9 +54,9 @@ export function useSuccessXmlUpload({
           : scope.mode === "post"
             ? api.assessSinglePost(scope.productFamily, scope.productVariant)
             : scope.mode === "marketInfo"
-              ? null
+              ? api.assessSingleMarketInfo(scope.productFamily, scope.productVariant)
             : scope.mode === "bulkMarketInfo"
-              ? null
+              ? api.assessBulkMarketInfo(scope.productFamily, scope.productVariant, scope.basicUdiDi ?? undefined)
             : scope.mode === "bulkPatch"
               ? api.assessBulkPatch(scope.productFamily, scope.productVariant, scope.basicUdiDi ?? undefined)
               : api.assessBulkPost(scope.productFamily, scope.productVariant);
@@ -67,14 +67,12 @@ export function useSuccessXmlUpload({
       });
       const [updatedSummaries, updatedAssessment] = await Promise.all([
         updatedSummariesPromise,
-        assessmentRequest ?? Promise.resolve<OperationAssessment | null>(null),
+        assessmentRequest,
       ]);
 
       setTestingSubjectSummaries(updatedSummaries);
-      if (assessmentRequest) {
-        setXmlOperationAssessment(updatedAssessment);
-        setXmlOperationAssessmentError(null);
-      }
+      setXmlOperationAssessment(updatedAssessment);
+      setXmlOperationAssessmentError(null);
       onUploadRecorded?.(result);
       clearPreviewState();
       const operationLabel =

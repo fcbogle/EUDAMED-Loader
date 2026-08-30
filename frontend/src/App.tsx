@@ -3090,6 +3090,7 @@ export function App() {
     selectedProductFamily: selectedXmlFamilySummary?.product_family,
     selectedProductVariant: selectedXmlVariantSummary?.product_variant,
     selectedBulkPatchBasicUdiDi,
+    selectedBulkMarketInfoBasicUdiDi,
   });
   const isMarketInfoContextRefreshing =
     activeTab === "xml" &&
@@ -3097,7 +3098,7 @@ export function App() {
     (isLoadingTestingSubjectSummaries || isLoadingCanonicalValidation);
   const visibleMarketInfoRefreshState =
     (xmlMode === "marketInfo" || xmlMode === "bulkMarketInfo") &&
-    (showMarketInfoRefreshState || isMarketInfoContextRefreshing);
+    (showMarketInfoRefreshState || isMarketInfoContextRefreshing || isLoadingXmlOperationAssessment);
   const bulkPatchPreviewExcludedRecords = xmlBulkPatchPreview?.excluded_records ?? [];
   const bulkPatchPrePreviewExclusions =
     xmlMode === "bulkPatch" && bulkPatchScopeMode === "import_catalogue_list"
@@ -3124,11 +3125,15 @@ export function App() {
   const assessedUnpostedParentGroupCount = assessmentEvidenceNumber(xmlOperationAssessment, "unposted_parent_group_count");
   const assessedSelectedBasicUdiDi = assessmentEvidenceString(xmlOperationAssessment, "selected_basic_udi_di");
   const assessedLatestVersionSummary = assessmentEvidenceStringArray(xmlOperationAssessment, "latest_version_summary");
+  const assessedCurrentMarketInfoVersionSummary = assessmentEvidenceStringArray(xmlOperationAssessment, "current_market_info_version_summary");
   const assessedPatchLatestAcceptedVersion = assessmentEvidenceString(xmlOperationAssessment, "latest_accepted_version");
   const assessedPatchReviewedBaseline = assessmentEvidenceBoolean(xmlOperationAssessment, "reviewed_post_baseline_present");
   const assessedPatchTrackedRegistration = assessmentEvidenceBoolean(xmlOperationAssessment, "tracked_registration_known");
   const assessedPatchCandidateCatalogueNumber = assessmentEvidenceString(xmlOperationAssessment, "catalogue_number");
   const assessedPatchCandidatePrimaryUdiDi = assessmentEvidenceString(xmlOperationAssessment, "primary_udi_di");
+  const assessedMarketInfoCurrentVersion = assessmentEvidenceString(xmlOperationAssessment, "current_market_info_version");
+  const assessedMarketInfoCandidateCatalogueNumber = assessmentEvidenceString(xmlOperationAssessment, "catalogue_number");
+  const assessedMarketInfoCandidatePrimaryUdiDi = assessmentEvidenceString(xmlOperationAssessment, "primary_udi_di");
   const assessedPostParentRegistrationKnown = assessmentEvidenceBoolean(xmlOperationAssessment, "parent_registration_known");
   const assessedPostCandidateCatalogueNumber = assessmentEvidenceString(xmlOperationAssessment, "candidate_catalogue_number");
   const assessedPostCandidatePrimaryUdiDi = assessmentEvidenceString(xmlOperationAssessment, "candidate_primary_udi_di");
@@ -3147,13 +3152,22 @@ export function App() {
     selectedXmlPairRecord,
   );
   const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
+  const selectedMarketInfoWorkspaceRecord = findRecordByCatalogueNumber(
+    selectedXmlVariantRecords,
+    assessedMarketInfoCandidateCatalogueNumber,
+  ) ?? selectedXmlMarketInfoRecord;
   const selectedPairRequestArgs = resolvePatchRequestArgs(selectedPatchWorkspaceRecord, {
     assessedCatalogueNumber: assessedPatchCandidateCatalogueNumber,
     assessedPrimaryUdiDi: assessedPatchCandidatePrimaryUdiDi,
     selectedProductFamily: selectedXmlFamilySummary?.product_family,
     selectedProductVariant: selectedXmlVariantSummary?.product_variant,
   });
-  const selectedMarketInfoRequestArgs = resolveMarketInfoRequestArgs(selectedXmlMarketInfoRecord);
+  const selectedMarketInfoRequestArgs = resolveMarketInfoRequestArgs(selectedMarketInfoWorkspaceRecord, {
+    assessedCatalogueNumber: assessedMarketInfoCandidateCatalogueNumber,
+    assessedPrimaryUdiDi: assessedMarketInfoCandidatePrimaryUdiDi,
+    selectedProductFamily: selectedXmlFamilySummary?.product_family,
+    selectedProductVariant: selectedXmlVariantSummary?.product_variant,
+  });
   const hasSelectedPatchBaselinePost = Boolean(selectedPatchWorkspaceRecord);
   const hasReviewedPatchBaselinePost = Boolean(
     selectedPairRequestArgs &&
@@ -3667,8 +3681,9 @@ export function App() {
     .filter((item, index, items) => item.country && items.findIndex((candidate) => candidate.country === item.country) === index);
   const normalizedMarketInfoVersion = marketInfoVersionInput.trim();
   const isMarketInfoVersionReady = /^\d+$/.test(normalizedMarketInfoVersion) && Number(normalizedMarketInfoVersion) >= 1;
-  const isMarketInfoScenarioReady = Boolean(selectedTestingAnchor) && normalizedMarketInfoScenarioItems.length > 0 && isMarketInfoVersionReady;
-  const marketInfoReadinessMessage = !selectedTestingAnchor
+  const canRunMarketInfoFromAssessment = Boolean(selectedMarketInfoRequestArgs) && xmlOperationAssessment?.status === "available";
+  const isMarketInfoScenarioReady = canRunMarketInfoFromAssessment && normalizedMarketInfoScenarioItems.length > 0 && isMarketInfoVersionReady;
+  const marketInfoReadinessMessage = !canRunMarketInfoFromAssessment
     ? "No registered device anchor is currently available for MARKET_INFO.PUT generation."
     : !normalizedMarketInfoVersion
       ? "Enter the Market Info version to test before generating the update."
@@ -3698,7 +3713,12 @@ export function App() {
           productFamily: selectedXmlFamilySummary.product_family,
           productVariant: selectedXmlVariantSummary.product_variant,
           mode: xmlMode,
-          basicUdiDi: xmlMode === "bulkPatch" ? selectedBulkPatchBasicUdiDi || null : null,
+          basicUdiDi:
+            xmlMode === "bulkPatch"
+              ? selectedBulkPatchBasicUdiDi || null
+              : xmlMode === "bulkMarketInfo"
+                ? selectedBulkMarketInfoBasicUdiDi || null
+                : null,
         }
       : null;
   const {
@@ -3739,10 +3759,12 @@ export function App() {
   });
   const isOperationAssessmentMode =
     xmlMode === "post" ||
+    xmlMode === "marketInfo" ||
     xmlMode === "patch" ||
     xmlMode === "bulkPost" ||
     xmlMode === "bulkUdidiPost" ||
-    xmlMode === "bulkPatch";
+    xmlMode === "bulkPatch" ||
+    xmlMode === "bulkMarketInfo";
   const isPostWorkspaceReady = Boolean(selectedXmlFamilySummary && selectedXmlVariantSummary);
   const isPairWorkspaceReady = Boolean(selectedPairRequestArgs);
   const canRunPostFromAssessment =
@@ -3758,7 +3780,12 @@ export function App() {
     (xmlOperationAssessment?.status === "available" || xmlOperationAssessment?.status === "attention") &&
     (xmlOperationAssessment?.eligible_record_count ?? 0) > 0 &&
     canRunBulkPatch;
-  const canRunBulkMarketInfoFromAssessment = canRunBulkMarketInfo && isBulkMarketInfoScenarioReady;
+  const canRunBulkMarketInfoFromAssessment =
+    Boolean(selectedBulkMarketInfoParentGroup) &&
+    (xmlOperationAssessment?.status === "available" || xmlOperationAssessment?.status === "attention") &&
+    (xmlOperationAssessment?.eligible_record_count ?? 0) > 0 &&
+    canRunBulkMarketInfo &&
+    isBulkMarketInfoScenarioReady;
   const acceptedXmlModes = [
     {
       id: "post",
@@ -3898,8 +3925,10 @@ export function App() {
     assessedPatchLatestAcceptedVersion,
     assessedPatchReviewedBaseline,
     assessedPatchTrackedRegistration,
+    assessedMarketInfoCurrentVersion,
     assessedSelectedBasicUdiDi,
     assessedLatestVersionSummary,
+    assessedCurrentMarketInfoVersionSummary,
     assessedBulkParentGroupCount,
     assessedBulkChildRecordCount,
     assessedUnpostedParentGroupCount,
@@ -3955,7 +3984,7 @@ export function App() {
       : xmlMode === "single"
         ? Boolean(selectedXmlRecord)
         : xmlMode === "marketInfo"
-          ? Boolean(selectedTestingAnchor && xmlMarketInfoPreview)
+          ? Boolean(canRunMarketInfoFromAssessment && xmlMarketInfoPreview)
           : xmlMode === "patch"
             ? Boolean(hasReviewedPatchBaselinePost && hasReviewedGeneratedPatchPreview)
             : xmlMode === "bulkPost"
@@ -6206,46 +6235,6 @@ export function App() {
                 selectedXmlVariantBlockedRecords={selectedXmlVariantSummary?.xml_blocked_records ?? 0}
                 selectedXmlVariantTotalRecords={selectedXmlVariantSummary?.total_records ?? 0}
               />
-            ) : xmlMode === "marketInfo" ? (
-              <div className="draft-card bulk-patch-summary-bar market-info-summary-bar">
-                <div className="draft-card-head">
-                  <strong>Market Info Assessment</strong>
-                  <span className={selectedTestingAnchor ? "status-pill ok compact" : "status-pill warn compact"}>
-                    {selectedTestingAnchor ? "Available" : "Blocked"}
-                  </span>
-                </div>
-                {isLoadingXmlOperationAssessment ? (
-                  <div className="xml-refresh-indicator" aria-live="polite">
-                    <strong>Refreshing...</strong>
-                    <span>Updating the Market Info scope for the selected family and variant.</span>
-                  </div>
-                ) : null}
-                <div className="bulk-patch-summary-row">
-                  <div className="bulk-patch-summary-metrics">
-                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
-                      <strong>Candidate catalogue</strong>
-                      <span>{selectedTestingAnchor?.catalogue_number ?? "Not resolved"}</span>
-                    </div>
-                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
-                      <strong>Device UDI-DI</strong>
-                      <span>{selectedTestingAnchor?.primary_udi_di ?? "Not resolved"}</span>
-                    </div>
-                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
-                      <strong>Current countries</strong>
-                      <span>{selectedCurrentMarketInfoItems.length}</span>
-                    </div>
-                    <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
-                      <strong>Draft countries</strong>
-                      <span>{normalizedMarketInfoScenarioItems.length}</span>
-                    </div>
-                  </div>
-                </div>
-                <p className="panel-copy bulk-patch-summary-status">
-                  {selectedTestingAnchor
-                    ? `Market Info is available for ${selectedTestingAnchor.catalogue_number}. This registered device can receive a standalone market information update.`
-                    : "Market Info is blocked because no registered device anchor is currently available for this family and variant."}
-                </p>
-              </div>
             ) : null}
             {xmlMode === "post" ? (
               <PostPreviewPanel

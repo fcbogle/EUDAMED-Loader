@@ -6,7 +6,7 @@ type AssessmentSummaryRow = {
 };
 
 type XmlOperationAssessmentPanelProps = {
-  xmlMode: "post" | "patch" | "bulkPost" | "bulkUdidiPost" | "bulkPatch";
+  xmlMode: "post" | "patch" | "marketInfo" | "bulkPost" | "bulkUdidiPost" | "bulkPatch" | "bulkMarketInfo";
   xmlAssessmentTitle: string;
   isLoadingXmlOperationAssessment: boolean;
   xmlOperationAssessment: OperationAssessment | null;

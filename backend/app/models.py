@@ -439,7 +439,14 @@ class SuccessXmlUploadRequest(BaseModel):
     xml_content: str
 
 
-OperationAssessmentType = Literal["single_post", "single_patch", "bulk_post", "bulk_patch"]
+OperationAssessmentType = Literal[
+    "single_post",
+    "single_patch",
+    "single_market_info",
+    "bulk_post",
+    "bulk_patch",
+    "bulk_market_info",
+]
 OperationAssessmentStatus = Literal["available", "blocked", "attention"]
 
 
@@ -456,11 +463,19 @@ class SinglePatchAssessmentRequest(OperationAssessmentRequest):
     catalogue_number: str | None = None
 
 
+class SingleMarketInfoAssessmentRequest(OperationAssessmentRequest):
+    catalogue_number: str | None = None
+
+
 class BulkPostAssessmentRequest(OperationAssessmentRequest):
     pass
 
 
 class BulkPatchAssessmentRequest(OperationAssessmentRequest):
+    basic_udi_di: str | None = None
+
+
+class BulkMarketInfoAssessmentRequest(OperationAssessmentRequest):
     basic_udi_di: str | None = None
 
 

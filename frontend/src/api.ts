@@ -368,10 +368,22 @@ export const api = {
       product_variant: productVariant,
       catalogue_number: catalogueNumber ?? undefined,
     }),
+  assessSingleMarketInfo: (productFamily: string, productVariant: string, catalogueNumber?: string | null) =>
+    sendJson<OperationAssessment>("/xml/assess-single-market-info", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      catalogue_number: catalogueNumber ?? undefined,
+    }),
   assessBulkPost: (productFamily: string, productVariant: string) =>
     sendJson<OperationAssessment>("/xml/assess-bulk-post", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
+    }),
+  assessBulkMarketInfo: (productFamily: string, productVariant: string, basicUdiDi?: string | null) =>
+    sendJson<OperationAssessment>("/xml/assess-bulk-market-info", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      basic_udi_di: basicUdiDi ?? undefined,
     }),
   assessBulkPatch: (productFamily: string, productVariant: string, basicUdiDi?: string | null) =>
     sendJson<OperationAssessment>("/xml/assess-bulk-patch", "POST", {
