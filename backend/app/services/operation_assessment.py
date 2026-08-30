@@ -726,10 +726,6 @@ class OperationAssessmentService:
             "reviewed_post_baseline_present": reviewed_post_baseline_present,
         }
         blocking_reasons: list[str] = []
-        if not reviewed_post_baseline_present:
-            blocking_reasons.append(
-                "Generate and review the baseline POST for this exact selected record before drafting a PATCH."
-            )
         if not tracked_registration_known:
             blocking_reasons.append(
                 "This device does not yet have a tracked successful Playground registration, so PATCH cannot be generated."

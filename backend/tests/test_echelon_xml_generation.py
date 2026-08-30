@@ -1036,22 +1036,21 @@ def test_generated_patch_scenario_download_route_returns_zip_package(route_xml_s
     assert b"<e:version>5</e:version>" in patch_xml
 
 
-def test_generated_patch_scenario_requires_reviewed_post_baseline() -> None:
-    try:
-        XmlGenerationService().preview_generated_patch_scenario(
-            product_family="Echelon",
-            product_variant="Echelon VAC",
-            catalogue_number="EVAC22L1S",
-            scenario_id="trade_name_edit",
-            patch_version="5",
-            scenario_inputs={
-                "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
-            },
-        )
-    except ValueError as exc:
-        assert str(exc) == "Generate and review the baseline POST for this exact selected record before drafting a PATCH."
-    else:
-        raise AssertionError("Expected reviewed POST baseline requirement to be enforced.")
+def test_generated_patch_scenario_allows_registered_device_without_reviewed_post_baseline() -> None:
+    preview = XmlGenerationService().preview_generated_patch_scenario(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+        scenario_id="trade_name_edit",
+        patch_version="5",
+        scenario_inputs={
+            "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
+        },
+    )
+
+    assert preview.context.base_message_type == "PATCH"
+    assert preview.context.base_version == "4"
+    assert preview.context.proposed_patch_version == "5"
 
 
 def test_generated_patch_scenario_requires_tracked_successful_post_for_version_2(monkeypatch) -> None:
@@ -1085,25 +1084,23 @@ def test_generated_patch_scenario_requires_tracked_successful_post_for_version_2
         raise AssertionError("Expected tracked successful POST requirement to be enforced for version 2 PATCH.")
 
 
-def test_generated_patch_scenario_route_requires_reviewed_post_baseline() -> None:
-    try:
-        preview_generated_patch_scenario(
-            {
-                "product_family": "Echelon",
-                "product_variant": "Echelon VAC",
-                "catalogue_number": "EVAC22L1S",
-                "scenario_id": "trade_name_edit",
-                "patch_version": 5,
-                "scenario_inputs": {
-                    "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
-                },
-            }
-        )
-    except HTTPException as exc:
-        assert exc.status_code == 404
-        assert exc.detail == "Generate and review the baseline POST for this exact selected record before drafting a PATCH."
-    else:
-        raise AssertionError("Expected HTTPException when baseline POST has not been reviewed.")
+def test_generated_patch_scenario_route_allows_registered_device_without_reviewed_post_baseline() -> None:
+    payload = preview_generated_patch_scenario(
+        {
+            "product_family": "Echelon",
+            "product_variant": "Echelon VAC",
+            "catalogue_number": "EVAC22L1S",
+            "scenario_id": "trade_name_edit",
+            "patch_version": 5,
+            "scenario_inputs": {
+                "new_trade_name": "ECH VAC 22L CAT1-EXT. FOOT PROSTHESIS UPDATED",
+            },
+        }
+    )
+
+    assert payload["context"]["base_message_type"] == "PATCH"
+    assert payload["context"]["base_version"] == "4"
+    assert payload["context"]["proposed_patch_version"] == "5"
 
 
 def test_generated_patch_scenario_route_requires_tracked_successful_post_for_version_2(monkeypatch) -> None:

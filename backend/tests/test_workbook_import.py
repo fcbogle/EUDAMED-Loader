@@ -1739,6 +1739,62 @@ def test_operation_assessment_routes_report_single_patch_availability_from_sqlit
     assert payload["evidence"]["latest_accepted_version"] == "1"
 
 
+def test_operation_assessment_routes_report_single_patch_availability_without_reviewed_baseline(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    promotions = {
+        ("synthetic.xlsx", "Variant A", 2): {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+            "primary_udi_di": "111111",
+            "submission_operation": "POST",
+            "basic_udi_di": "BASIC-1",
+            "canonical_status": "xml_ready",
+        }
+    }
+    monkeypatch.setattr(
+        XmlGenerationService,
+        "_validation_bundle",
+        lambda self: _synthetic_validation_bundle_from_promotions(promotions),
+    )
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Family A",
+        product_variant="Variant A",
+        catalogue_number="CAT-001",
+        primary_udi_di="111111",
+        basic_udi_di="BASIC-1",
+        post_success=1,
+        latest_successful_version="1",
+    )
+    _insert_testing_event(
+        isolated_workbook_import_db,
+        subject_id=subject_id,
+        event_index=1,
+        message_type="UDI_DI.POST",
+        status="SUCCESS",
+        version="1",
+    )
+
+    payload = assess_single_patch(
+        {
+            "product_family": "Family A",
+            "product_variant": "Variant A",
+            "catalogue_number": "CAT-001",
+        }
+    )
+
+    assert payload["operation_type"] == "single_patch"
+    assert payload["status"] == "available"
+    assert payload["eligible_record_count"] == 1
+    assert payload["evidence"]["reviewed_post_baseline_present"] is False
+    assert payload["evidence"]["tracked_registration_known"] is True
+    assert payload["evidence"]["latest_accepted_version"] == "1"
+
+
 def test_operation_assessment_routes_report_single_market_info_availability_from_sqlite_state(
     isolated_workbook_import_db: Path,
     monkeypatch: pytest.MonkeyPatch,

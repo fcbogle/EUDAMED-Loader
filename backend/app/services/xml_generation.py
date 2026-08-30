@@ -1484,7 +1484,7 @@ class XmlGenerationService:
         scenario_id: str,
         patch_version: str,
         scenario_inputs: dict[str, Any] | None = None,
-        require_reviewed_post_baseline: bool = True,
+        require_reviewed_post_baseline: bool = False,
     ) -> GeneratedPatchScenarioPreview:
         if require_reviewed_post_baseline:
             self._require_reviewed_post_baseline(

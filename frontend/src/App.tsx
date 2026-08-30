@@ -2387,10 +2387,7 @@ export function App() {
   }).length;
   const selectedPatchTrackedBaseCount = testingSubjectSummaries.filter(
     (summary) =>
-      Boolean(summary.reviewed_post_at) ||
-      summary.post_success ||
-      summary.has_successful_device_post ||
-      summary.has_successful_child_post_or_patch,
+      summary.post_success || summary.has_successful_device_post || summary.has_successful_child_post_or_patch,
   ).length;
   const selectedBulkEligibleBasicUdiSet = new Set(
     selectedBulkEligiblePostRecords
@@ -2567,9 +2564,7 @@ export function App() {
     );
   }).length;
   const testingSummaryPatchReadyCount = testingSummarySubjectSummaries.filter(
-    (summary) =>
-      Boolean(summary.reviewed_post_at) &&
-      (summary.post_success || summary.has_successful_device_post || summary.has_successful_child_post_or_patch),
+    (summary) => summary.post_success || summary.has_successful_device_post || summary.has_successful_child_post_or_patch,
   ).length;
   const testingSummaryRows = (canonicalValidation?.variant_summaries ?? [])
     .filter((summary) => (selectedTestingSummaryFamily ? summary.product_family === selectedTestingSummaryFamily : true))
@@ -2613,9 +2608,7 @@ export function App() {
         );
       }).length;
       const patchReadyCount = matchingSubjects.filter(
-        (subject) =>
-          Boolean(subject.reviewed_post_at) &&
-          (subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch),
+        (subject) => subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch,
       ).length;
       const patchCompletedCount = matchingSubjects.filter((subject) => Number(subject.latest_successful_version ?? "0") > 1).length;
       const availablePostCount = matchingRecords.filter((record) => {
@@ -2757,9 +2750,7 @@ export function App() {
       });
       const parentRegistered = group.subjects.some((subject) => subject.post_success);
       const patchReadyCount = group.subjects.filter(
-        (subject) =>
-          Boolean(subject.reviewed_post_at) &&
-          (subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch),
+        (subject) => subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch,
       ).length;
       const marketInfoReadyCount = group.subjects.filter(
         (subject) =>
