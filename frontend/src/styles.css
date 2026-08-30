@@ -2818,6 +2818,11 @@ a.ghost-button:visited {
   align-items: start;
 }
 
+.market-info-preview-card .post-preview-topbar,
+.bulk-market-info-preview-card .post-preview-topbar {
+  margin-bottom: 8px;
+}
+
 .post-preview-title-block {
   padding: 6px 0 2px;
 }
