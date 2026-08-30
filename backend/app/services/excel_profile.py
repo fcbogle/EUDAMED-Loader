@@ -95,7 +95,7 @@ class ExcelProfiler:
         ws = workbook[sheet_name]
         header_row_index, rows = self._extract_rows(ws)
         headers = self._build_headers(
-            rows[header_row_index - 1] if header_row_index else [],
+            rows[header_row_index - 1] if header_row_index else (),
             sheet_name=sheet_name,
         )
         data_rows = rows[header_row_index:] if header_row_index else []
@@ -162,7 +162,7 @@ class ExcelProfiler:
         for ws in workbook.worksheets:
             header_row, rows = self._extract_rows(ws)
             headers = self._build_headers(
-                rows[header_row - 1] if header_row else [],
+                rows[header_row - 1] if header_row else (),
                 sheet_name=ws.title,
             )
             data_rows = rows[header_row:] if header_row else []
