@@ -61,6 +61,34 @@ class XmlGenerationService:
     def project_root(self):
         return self.settings.schema_dir.parents[1]
 
+    def _build_and_record_package(
+        self,
+        *,
+        package_file_name: str,
+        members: list[tuple[str, bytes]],
+        manifest: dict[str, Any],
+        flow: str,
+        operation_scope: str,
+    ) -> tuple[str, bytes]:
+        file_name, zip_bytes = self.package_builder.build_archive(
+            package_file_name=package_file_name,
+            members=members,
+            manifest=manifest,
+        )
+        self.testing_state_store.record_generated_package(
+            package_file_name=file_name,
+            flow=flow,
+            operation_scope=operation_scope,
+            product_family=self._stringify_optional(manifest.get("product_family")),
+            product_variant=self._stringify_optional(manifest.get("product_variant")),
+            catalogue_number=self._stringify_optional(manifest.get("catalogue_number")),
+            basic_udi_di=self._stringify_optional(manifest.get("basic_udi_di")),
+            members=members,
+            manifest=manifest,
+            package_bytes=zip_bytes,
+        )
+        return file_name, zip_bytes
+
     @staticmethod
     def _patch_state_snapshot_payload(record: DeviceXmlRecord) -> dict[str, Any]:
         return {
@@ -860,10 +888,12 @@ class XmlGenerationService:
                 ),
             )
         )
-        return self.package_builder.build_archive(
+        return self._build_and_record_package(
             package_file_name=preview.package_file_name,
             members=members,
             manifest=manifest,
+            flow="bulk_basic_udi_post",
+            operation_scope="bulk",
         )
 
     def preview_bulk_udidi_post(
@@ -1058,10 +1088,12 @@ class XmlGenerationService:
                 ),
             )
         )
-        return self.package_builder.build_archive(
+        return self._build_and_record_package(
             package_file_name=preview.package_file_name,
             members=members,
             manifest=manifest,
+            flow="bulk_udidi_post",
+            operation_scope="bulk",
         )
 
     def preview_bulk_patch(
@@ -1497,10 +1529,12 @@ class XmlGenerationService:
                 ),
             )
         )
-        return self.package_builder.build_archive(
+        return self._build_and_record_package(
             package_file_name=preview.package_file_name,
             members=members,
             manifest=manifest,
+            flow="bulk_market_info",
+            operation_scope="bulk",
         )
 
     def download_bulk_patch(
@@ -1616,10 +1650,12 @@ class XmlGenerationService:
                 ),
             )
         )
-        return self.package_builder.build_archive(
+        return self._build_and_record_package(
             package_file_name=preview.package_file_name,
             members=members,
             manifest=manifest,
+            flow="bulk_patch",
+            operation_scope="bulk",
         )
 
     def _build_generated_patch_preview(
@@ -1831,10 +1867,12 @@ class XmlGenerationService:
             "proposed_patch_version": preview.context.proposed_patch_version,
             "valid": preview.derived_patch_validation.valid,
         }
-        return self.package_builder.build_archive(
+        return self._build_and_record_package(
             package_file_name=package_file_name,
             members=[(preview.derived_patch_file_name, preview.derived_patch_xml.encode("utf-8"))],
             manifest=manifest,
+            flow="generated_patch_scenario",
+            operation_scope="single",
         )
 
     def preview_single_record(
@@ -2101,10 +2139,12 @@ class XmlGenerationService:
             "file_name": preview.file_name,
             "validation": preview.validation.model_dump(mode="json"),
         }
-        return self.package_builder.build_archive(
+        return self._build_and_record_package(
             package_file_name=package_file_name,
             members=[(preview.file_name, preview.xml.encode("utf-8"))],
             manifest=manifest,
+            flow="market_info_put",
+            operation_scope="single",
         )
 
     @staticmethod
@@ -2548,10 +2588,12 @@ class XmlGenerationService:
             "file_name": preview.post_file_name,
             "valid": preview.post_validation.valid,
         }
-        return self.package_builder.build_archive(
+        return self._build_and_record_package(
             package_file_name=package_file_name,
             members=[(preview.post_file_name, preview.post_xml.encode("utf-8"))],
             manifest=manifest,
+            flow="post_registration",
+            operation_scope="single",
         )
 
     def preview_batch(
@@ -2703,10 +2745,12 @@ class XmlGenerationService:
             "chunk_count": len(record_chunks),
             "chunks": manifest_chunks,
         }
-        return self.package_builder.build_archive(
+        return self._build_and_record_package(
             package_file_name=package_file_name,
             members=members,
             manifest=manifest,
+            flow="batch",
+            operation_scope="batch",
         )
 
     @staticmethod

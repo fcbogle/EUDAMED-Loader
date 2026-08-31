@@ -11,12 +11,14 @@ The immediate objective is controlled XML generation and Playground-backed workf
 - `Bulk Basic UDI POST`
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
+- `Bulk Market Info`
 - `EUDAMED Generation`
 
 The current delivery goal is to:
 - preserve the clean split between parent-only and child-only bulk registration flows
 - keep `Patch XML` as the controlled single-device PATCH workspace
 - keep `Bulk PATCH` aligned to the latest successful per-device accepted state
+- keep `Market Info` and `Bulk Market Info` aligned with the same visual and state-model rules as `POST` and `PATCH`
 - make the bulk UI simpler and more operationally accurate
 - stabilize and extend the SQLite-backed application persistence layer
 
@@ -81,7 +83,7 @@ Prioritise:
 1. Maintaining the clean split between `Bulk Basic UDI POST`, `Bulk UDI-DI POST`, and `Bulk PATCH`
 2. Keeping `Patch XML` as the only single-device PATCH generation workspace
 3. Enforcing the current reviewed-baseline and accepted-state guardrails for PATCH generation
-4. Continuing controlled Playground testing for `Bulk UDI-DI POST`, `Bulk PATCH`, and `Market Info`
+4. Continuing controlled Playground testing for `Bulk UDI-DI POST`, `Bulk PATCH`, `Market Info`, and `Bulk Market Info`
 5. Stabilizing and extending the SQLite-backed testing/import/read-model layer
 6. Improving the `Submission Data` workspace so database-backed panels become a real read model
 7. Keeping documentation aligned with implemented XML/testing behavior
@@ -102,6 +104,7 @@ Refine and verify:
 - `Bulk Basic UDI POST`
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
+- `Bulk Market Info`
 - the current reviewed-baseline and accepted-state guardrails
 - current local XSD validation and preview/download behavior
 

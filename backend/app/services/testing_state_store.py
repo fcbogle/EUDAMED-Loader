@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import hashlib
 import json
 import sqlite3
 from typing import Any, cast
@@ -29,6 +30,62 @@ class TestingStateStore:
     def refresh_device_subject_links(self) -> None:
         with self._connect() as connection:
             self._backfill_device_subject_links(connection)
+
+    def record_generated_package(
+        self,
+        *,
+        package_file_name: str,
+        flow: str,
+        operation_scope: str,
+        product_family: str | None,
+        product_variant: str | None,
+        catalogue_number: str | None,
+        basic_udi_di: str | None,
+        members: list[tuple[str, bytes]],
+        manifest: dict[str, Any],
+        package_bytes: bytes,
+    ) -> None:
+        """Record ZIP creation metadata without duplicating the archive in SQLite."""
+        created_at = datetime.now(UTC).isoformat(timespec="milliseconds")
+        member_file_names = [file_name for file_name, _ in members]
+        xml_member_count = sum(file_name.lower().endswith(".xml") for file_name in member_file_names)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO generated_packages (
+                    created_at,
+                    flow,
+                    operation_scope,
+                    product_family,
+                    product_variant,
+                    catalogue_number,
+                    basic_udi_di,
+                    package_file_name,
+                    package_byte_count,
+                    member_count,
+                    xml_member_count,
+                    member_file_names_json,
+                    manifest_json,
+                    package_sha256
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    created_at,
+                    flow,
+                    operation_scope,
+                    self._optional_string(product_family),
+                    self._optional_string(product_variant),
+                    self._optional_string(catalogue_number),
+                    self._optional_string(basic_udi_di),
+                    package_file_name,
+                    len(package_bytes),
+                    len(member_file_names),
+                    xml_member_count,
+                    json.dumps(member_file_names),
+                    json.dumps(manifest, sort_keys=True),
+                    hashlib.sha256(package_bytes).hexdigest(),
+                ),
+            )
 
     def latest_successful_patch_state(
         self,
@@ -856,6 +913,27 @@ class TestingStateStore:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS generated_packages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at TEXT NOT NULL,
+                    flow TEXT NOT NULL,
+                    operation_scope TEXT NOT NULL,
+                    product_family TEXT,
+                    product_variant TEXT,
+                    catalogue_number TEXT,
+                    basic_udi_di TEXT,
+                    package_file_name TEXT NOT NULL,
+                    package_byte_count INTEGER NOT NULL,
+                    member_count INTEGER NOT NULL,
+                    xml_member_count INTEGER NOT NULL,
+                    member_file_names_json TEXT NOT NULL,
+                    manifest_json TEXT NOT NULL,
+                    package_sha256 TEXT NOT NULL
+                )
+                """
+            )
             self._ensure_column(
                 connection,
                 table_name="testing_subjects",
@@ -985,6 +1063,12 @@ class TestingStateStore:
             )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS ix_testing_events_correlation_message ON testing_events(correlation_id, message_id)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_generated_packages_created_at ON generated_packages(created_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_generated_packages_scope ON generated_packages(product_family, product_variant, flow)"
             )
             self._backfill_device_subject_links(connection)
 

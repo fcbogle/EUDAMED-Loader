@@ -350,22 +350,40 @@ class TestingSuccessXmlService:
         message_id: str | None,
         columns: str,
     ) -> sqlite3.Row | None:
-        exact_row = connection.execute(
-            f"""
-            SELECT {columns}
-            FROM testing_events
-            WHERE subject_id = ?
-              AND message_type = ?
-              AND status = 'GENERATED'
-              AND COALESCE(correlation_id, '') = COALESCE(?, '')
-              AND COALESCE(message_id, '') = COALESCE(?, '')
-            ORDER BY event_index DESC
-            LIMIT 1
-            """,
-            (subject_id, message_type, correlation_id, message_id),
-        ).fetchone()
-        if exact_row is not None:
-            return exact_row
+        if correlation_id:
+            exact_row = connection.execute(
+                f"""
+                SELECT {columns}
+                FROM testing_events
+                WHERE subject_id = ?
+                  AND message_type = ?
+                  AND status = 'GENERATED'
+                  AND correlation_id = ?
+                  AND COALESCE(message_id, '') = COALESCE(?, '')
+                ORDER BY event_index DESC
+                LIMIT 1
+                """,
+                (subject_id, message_type, correlation_id, message_id),
+            ).fetchone()
+            if exact_row is not None:
+                return exact_row
+
+            correlation_row = connection.execute(
+                f"""
+                SELECT {columns}
+                FROM testing_events
+                WHERE subject_id = ?
+                  AND message_type = ?
+                  AND status = 'GENERATED'
+                  AND correlation_id = ?
+                ORDER BY event_index DESC
+                LIMIT 1
+                """,
+                (subject_id, message_type, correlation_id),
+            ).fetchone()
+            if correlation_row is not None:
+                return correlation_row
+
         return connection.execute(
             f"""
             SELECT {columns}

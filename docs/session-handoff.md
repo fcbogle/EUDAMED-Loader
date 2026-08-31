@@ -38,6 +38,27 @@ with the current implementation focus now being:
 
 ## Latest Confirmed Decisions
 
+- Latest verification refresh on Monday, August 31, 2026:
+  - current branch remains:
+    - `feature/workflow-event-logging`
+  - current full verification from the present worktree:
+    - backend `python -m pytest -q`: `111 passed, 1 warning`
+    - frontend production build: `npm run build` passed
+  - current known warning remains:
+    - pytest emits a non-blocking collection warning because `TestingSuccessXmlService` looks like a test class name to pytest
+  - this verification supersedes older pass-count snapshots elsewhere in this document
+  - targeted follow-up verification from the present worktree:
+    - backend `python -m pytest -q backend/tests/test_workbook_import.py -k single_post_preview_records_generated_envelope_ids`: `1 passed`
+  - current documentation wiring update:
+    - the Documentation tab now reads the architecture draft directly from `docs/architecture-definition-draft.md`
+    - the old duplicated frontend copy was removed so the architecture draft is now single-source
+  - current Single `POST` envelope-id finding:
+    - current single `POST` generation correctly persists generated `correlation_id` and `message_id` values into `testing_events`
+    - this was confirmed both by a targeted regression test and by direct SQLite inspection of a newly generated single `UDI_DI.POST` preview row for `ESP23R4SD`
+  - current interpretation of older blank-id rows:
+    - older generated rows with missing `correlation_id` / `message_id` are most likely from an earlier backend process before the current branch code was loaded
+    - they do not reproduce on the current single `POST` preview path
+
 - Latest implemented and verified direction on Monday, August 31, 2026:
   - the first compatibility-safe slice of database-backed workflow-event logging is now implemented on `feature/workflow-event-logging`
   - current implemented logging rule:
@@ -571,17 +592,22 @@ Current directional design intent:
   - child `POST`
   - single-device `PATCH`
   - `Bulk PATCH`
-- The backend also now supports dedicated single-device and bulk Market Info preview/download paths with user-edited market-country overrides and success-XML capture, but this is not yet represented by a separate operation-assessment contract.
+- `Bulk Market Info` now also has a dedicated SQLite-backed assessment path for parent selection, cohort consistency, and shared market-country baseline checks.
+- The backend also supports dedicated single-device and bulk Market Info preview/download paths with user-edited market-country overrides and success-XML capture.
 - Current active assessment coverage is represented by:
   - `single_post`
   - `single_patch`
   - `bulk_post`
   - `bulk_patch`
-- `Market Info` and `Bulk Market Info` remain distinct from the current readiness-assessment contract:
-  - they currently anchor to the selected resolved registered device or posted-parent context rather than a dedicated backend operation-assessment response
+- `single Market Info` remains distinct from the current readiness-assessment contract:
+  - it currently anchors to the selected resolved registered device rather than a dedicated backend operation-assessment response
+- `Bulk Market Info` now sits between the older direct-preview model and the broader assessment model:
+  - it has a dedicated backend assessment for selected parent scope and accepted market-country alignment
+  - it still does not yet share one fully unified operation contract with `POST` and `PATCH`
+- Market Info capabilities currently in place:
   - XML generation and local validation are implemented
   - Playground success capture and SQLite persistence are implemented
-  - a dedicated readiness/assessment contract remains a later cleanup item
+  - a dedicated single-device readiness/assessment contract remains a later cleanup item
 - Those assessments are SQLite-backed and should describe:
   - eligible record counts
   - required identity scope such as `Basic UDI-DI` or child `UDI-DI`
@@ -597,9 +623,10 @@ Current first implementation contract for operation assessment:
   - `single_patch`
   - `bulk_post`
   - `bulk_patch`
+- current partial extension:
+  - `bulk_market_info`
 - deferred:
   - `single_market_info`
-  - `bulk_market_info`
 
 Recommended shared assessment payload:
 
@@ -688,15 +715,19 @@ Recommended implementation rule:
 - preview, generate, and download controls should then be enabled only when the assessment says the operation is currently possible
 - after successful XML upload, the currently selected operation workspace should refresh its assessment and visible counts automatically rather than leaving stale preview state on screen
 
-### Planned EUDAMED Testing Logging
+### Workflow Event Logging And Future Audit Direction
 
-- Target this work after the current SQLite persistence increments and Canonical Validation / testing UI tidy-up are complete.
-- The goal is targeted auditability for EUDAMED testing decisions and writes, not broad debug logging across the whole app.
-- Preferred implementation shape:
+- The first compatibility-safe slice of workflow-event logging is now implemented in SQLite:
+  - generated `POST`, `Patch XML`, and `Market Info` previews append rows to `testing_events`
+  - success uploads append `success_ack` rows to `testing_events`
+  - generated rows now persist the same `correlation_id` and `message_id` values written into the XML
+  - success capture first resolves exact generated context by envelope IDs and only then falls back to the older latest-generated heuristic
+- The goal for the next slice remains targeted auditability for EUDAMED testing decisions and writes, not broad debug logging across the whole app.
+- Preferred future extension shape:
   - structured application logs via `structlog`
   - optional SQLAlchemy query tracing behind a disabled-by-default flag
-  - durable SQLite audit tables for the business events that matter during Playground testing
-- Logging should be narrowly scoped to:
+  - additional durable SQLite audit tables only if `testing_events` and current projections stop being sufficient
+- Future logging should stay narrowly scoped to:
   - `has_successful_basic_udi_post`
   - `has_successful_primary_udi_post`
   - `posted_entries`
@@ -712,20 +743,25 @@ Recommended implementation rule:
   - full XML payload bodies
   - full Playground response bodies
   - routine Canonical / Canonical Validation read traffic
-- Proposed feature flags:
+- Proposed future feature flags:
   - `EUDAMED_TESTING_AUDIT=true`
   - `EUDAMED_TESTING_DEBUG_LOGS=false`
   - `EUDAMED_TESTING_SQL_TRACE=false`
-- Proposed SQLite audit tables:
+- Still-optional future SQLite audit tables:
   - `testing_query_audit`
   - `testing_xml_run`
   - `testing_xml_result`
   - `testing_state_transition`
-- Best first safe increment when this work starts:
+- Best next safe increment:
   - log the Basic UDI and Primary UDI existence checks
-  - log writes to `testing_events`
-  - log creation of `POST` / `PATCH` preview and download artifacts
-  - log recorded Playground outcomes and resulting state transitions
+  - log preview/download artifact creation at the application-log layer
+  - log recorded Playground outcomes and resulting state transitions beyond what `testing_events` already captures
+- Current targeted verification added in this session:
+  - backend regression coverage now explicitly verifies that single `POST` preview generation stores the same generated `correlation_id` and `message_id` values in:
+    - the rendered XML
+    - `testing_events.correlation_id`
+    - `testing_events.message_id`
+    - `testing_events.raw_event_json`
 - Likely implementation touchpoints:
   - `backend/app/services/testing_state_store.py`
   - `backend/app/services/xml_generation.py`
@@ -885,7 +921,8 @@ Important limitation:
 - Current testing status:
   - backend automated tests now cover the override-country preview/download path
   - frontend has no automated UI test runner configured yet
-  - successful Market Info Playground XML upload and persistence are not yet implemented or proven
+  - success-XML upload and SQLite persistence for `MARKET_INFO.PUT` are implemented
+  - broader Playground confirmation of the end-to-end `MARKET_INFO.PUT` workflow still remains limited relative to `POST` and `PATCH`
 
 ### Bulk XML
 
@@ -1184,8 +1221,8 @@ Implemented or partially implemented scenarios with caveats:
 
 - Historical verification snapshots recorded above should be treated as dated evidence only.
 - Re-run current verification from the present worktree before relying on pass counts.
-- Latest current verification on Friday, August 21, 2026:
-  - full backend suite: `85 passed`
+- Latest current verification on Monday, August 31, 2026:
+  - full backend suite: `111 passed, 1 warning`
   - frontend production build: `npm run build` passed
 - Recommended backend command from the current repo layout:
   - `cd backend`
@@ -1373,6 +1410,7 @@ The current docs now need to describe:
 Files refreshed in this pass:
 
 - `docs/session-handoff.md`
+- `docs/architecture-definition-draft.md`
 - `frontend/src/content/docs/xml-generation.md`
 - `frontend/src/content/docs/eudamed-testing-generation-ui.md`
 - `frontend/src/content/docs/eudamed-service-contract-findings.md`
@@ -1407,7 +1445,7 @@ Files refreshed in this pass:
 - broader SQLite persistence for accepted device state and submission / Playground testing history in the main application model
 - automatic promotion of accepted PATCH scenarios into `EUDAMED Generation`
 - hardening and test coverage for `Bulk PATCH`
-- real Playground confirmation for `MARKET_INFO.PUT`
+- broader Playground confirmation for `MARKET_INFO.PUT`
 - full manual feature-validation pass across all current workspaces against the current SQLite-backed design
 - broader scenario library beyond the current implemented PATCH scenarios
 - external confirmation that candidate scenarios are operationally accepted by EUDAMED
@@ -1477,6 +1515,7 @@ Focus next on consolidating the remaining testing architecture onto SQLite and e
    - repeated previews create multiple generated rows
    - bulk rows carry shared wrapper `correlation_id` / `message_id`
    - success rows keep `event_kind = success_ack`
+   - single `POST` generated rows persist the same envelope IDs visible in the preview XML
 6. Decide the next schema-cleanup slice before more UI work:
    - whether to standardize `status` casing now or later
    - whether to introduce `testing_batches` now or continue with only `batch_id`

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, api } from "./api";
+import architectureDefinitionDocumentation from "../../docs/architecture-definition-draft.md?raw";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
 import { BulkMarketInfoWorkspace } from "./components/BulkMarketInfoWorkspace";
 import { BulkMarketInfoPreviewPanel } from "./components/BulkMarketInfoPreviewPanel";
@@ -653,6 +654,7 @@ type ParsingIssue = {
 
 type DocumentationSection = {
   id:
+    | "architectureDefinition"
     | "architecturePosition"
     | "workbooks"
     | "canonical"
@@ -1418,6 +1420,11 @@ export function App() {
       markdown: projectStructureDocumentation,
     },
     {
+      id: "architectureDefinition",
+      title: "Architecture Definition Draft",
+      markdown: architectureDefinitionDocumentation,
+    },
+    {
       id: "architecturePosition",
       title: "Architecture Position",
       markdown: architecturePositionDocumentation,
@@ -1477,7 +1484,7 @@ export function App() {
     {
       id: "project",
       title: "Project",
-      sectionIds: ["projectStructure", "architecturePosition", "roadmap"],
+      sectionIds: ["projectStructure", "architectureDefinition", "architecturePosition", "roadmap"],
     },
     {
       id: "dataCanonical",

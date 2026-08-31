@@ -11,6 +11,7 @@ Define the next SQLite schema shape for operational workflow logging so the appl
 - traverse events by posted child cohort under one `Basic UDI-DI`
 - keep `testing_subjects` as the current-state projection
 - keep `testing_events` as the append-only workflow/event log
+- retain generated ZIP package metadata without treating a multi-device package as a device event
 
 ## Current Position
 
@@ -20,6 +21,7 @@ The current implementation already has:
 - `testing_events` as the per-subject event history
 - `reviewed_post_baselines` as a separate reviewed-baseline marker
 - accepted PATCH and Market Info snapshots stored on `testing_subjects`
+- `generated_packages` as a package-level ZIP creation audit log
 
 The main weaknesses are:
 
@@ -167,7 +169,33 @@ Notes:
 - `batch_id` links per-subject rows that came from the same bulk generation or bulk success XML upload.
 - `state_before_json`, `state_after_json`, and `delta_json` are the key lineage fields for audit and replay.
 
-### 3. `reviewed_post_baselines`
+### 3. `generated_packages`
+
+Purpose: immutable audit records for ZIP packages produced by download workflows. This avoids assigning a multi-device ZIP to an arbitrary device event.
+
+```sql
+CREATE TABLE generated_packages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    flow TEXT NOT NULL,
+    operation_scope TEXT NOT NULL,
+    product_family TEXT,
+    product_variant TEXT,
+    catalogue_number TEXT,
+    basic_udi_di TEXT,
+    package_file_name TEXT NOT NULL,
+    package_byte_count INTEGER NOT NULL,
+    member_count INTEGER NOT NULL,
+    xml_member_count INTEGER NOT NULL,
+    member_file_names_json TEXT NOT NULL,
+    manifest_json TEXT NOT NULL,
+    package_sha256 TEXT NOT NULL
+);
+```
+
+The ZIP binary is not stored in SQLite. The SHA-256 digest supports later evidence checks if the downloaded ZIP is retained externally.
+
+### 4. `reviewed_post_baselines`
 
 Keep this table for now.
 
@@ -191,7 +219,7 @@ Reason:
 - it still has operator-facing value as a separate review marker
 - it should not be the main lineage anchor for PATCH readiness anymore
 
-### 4. Optional `testing_batches`
+### 5. Optional `testing_batches`
 
 This is useful, but not required in the first schema slice.
 

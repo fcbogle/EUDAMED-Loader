@@ -516,6 +516,7 @@ class WorkbookImportService:
                     ("device_identity_issue", "Identity issues", latest_batch_identity_issue_count),
                     ("testing_subjects", "Tracked testing subjects", self._safe_row_count(connection, "testing_subjects")),
                     ("testing_events", "Tracked testing events", self._safe_row_count(connection, "testing_events")),
+                    ("generated_packages", "Generated ZIP packages", self._safe_row_count(connection, "generated_packages")),
                     ("reviewed_post_baselines", "Reviewed POST baselines", self._safe_row_count(connection, "reviewed_post_baselines")),
                 )
                 if table_name in available_tables
@@ -730,6 +731,7 @@ class WorkbookImportService:
                 "device_identity_issue",
                 "testing_subjects",
                 "testing_events",
+                "generated_packages",
                 "reviewed_post_baselines",
             }
             for table_name in sorted(expected_tables.difference(available_tables)):
@@ -873,6 +875,12 @@ class WorkbookImportService:
                         """,
                         "testing_events",
                     ),
+                    identity_gap_count=0,
+                ),
+                DatabaseTableHealthSummary(
+                    table_name="generated_packages",
+                    row_count=self._safe_row_count(connection, "generated_packages"),
+                    orphan_count=0,
                     identity_gap_count=0,
                 ),
                 DatabaseTableHealthSummary(

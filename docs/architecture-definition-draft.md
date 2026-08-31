@@ -8,7 +8,13 @@ This draft restates the architecture around the application as it exists now, no
 
 This is a working architecture draft based on the codebase, current UI workspaces, current SQLite persistence, and the documented direction in [session-handoff.md](/Users/frankbogle/PycharmProjects/Eudamed/EudamedUploader/docs/session-handoff.md).
 
-It reflects the state of the application as of August 28, 2026.
+It reflects the state of the application as of August 31, 2026.
+
+Current verification baseline for this draft:
+
+- backend `python -m pytest -q`: `111 passed, 1 warning`
+- frontend `npm run build`: passed
+- the frontend still has no configured automated UI test runner in the repo
 
 ## Scope
 
@@ -31,6 +37,7 @@ Current in-scope XML/testing capabilities are:
 - `Bulk Basic UDI-DI POST`
 - `Bulk Device UDI-DI POST`
 - `Bulk PATCH`
+- `Bulk Market Info`
 
 Current out-of-scope capabilities remain:
 
@@ -57,6 +64,16 @@ The immediate business objective is controlled XML generation and controlled rec
 - separating parent Basic UDI-DI registration from child Device UDI-DI registration
 - keeping PATCH generation anchored to the latest accepted per-device state
 - making bulk workflows operationally accurate rather than generic batch exports
+
+## Application Creator
+
+This application was created in response to demand for a EUDAMED registration solution for Blatchford manufactured products.
+
+Application creator:
+
+- Frank C Bogle
+- Head of Enterprise Solutions
+- Blatchford Mobility Ltd
 
 ## Architecture Vision Summary
 
@@ -136,6 +153,7 @@ Implemented business capability now includes:
 - generation of bulk Basic UDI-DI parent registration XML
 - generation of bulk Device UDI-DI child registration XML
 - generation of bulk PATCH XML
+- generation of bulk Market Info XML for a selected registered parent cohort
 - local XSD validation against the wrapped EUDAMED service message schema set
 - upload of EUDAMED success XML to record confirmed successful outcomes in SQLite
 
@@ -153,6 +171,8 @@ The application is a Python and React web application consisting of:
 The main user-facing workspaces are:
 
 - `Submission Data`
+- `Registration State`
+- `Testing Summary`
 - `Canonical Validation`
 - `EUDAMED Testing`
 
@@ -164,6 +184,7 @@ Within `EUDAMED Testing`, the active operation modes are:
 - `Bulk Basic UDI-DI POST`
 - `Bulk Device UDI-DI POST`
 - `Bulk PATCH`
+- `Bulk Market Info`
 
 The older `Post + Patch` and `Single XML` framing is obsolete and should not be treated as the current architecture.
 
@@ -193,6 +214,16 @@ This layer determines whether a selected scope has an eligible next operation. I
 - recommended next action
 - counts relevant to the selected operation
 
+Current implementation status:
+
+- dedicated assessment flows are implemented for:
+  - single `POST`
+  - single `PATCH`
+  - bulk parent/child `POST`
+  - `Bulk PATCH`
+  - `Bulk Market Info`
+- single-device `Market Info` still uses resolved registered-device context rather than a fully separate assessment contract
+
 ### 5. XML Generation Layer
 
 This layer generates operation-specific XML payloads for:
@@ -203,6 +234,7 @@ This layer generates operation-specific XML payloads for:
 - bulk parent `POST`
 - bulk child `POST`
 - bulk `PATCH`
+- bulk `Market Info`
 
 ### 6. Success Capture Layer
 
@@ -236,10 +268,11 @@ The operational SQLite layer currently stores and supports:
 - latest successful version per device
 - latest successful Market Info version per device lineage
 - per-device accepted-state lineage
+- append-only generated and success workflow events
 - success XML upload outcomes
 - counts and read models used by UI panels
 
-This layer now materially affects candidate selection for `POST`, `Patch XML`, `Bulk Device UDI-DI POST`, and `Bulk PATCH`.
+This layer now materially affects candidate selection for `POST`, `Patch XML`, `Bulk Device UDI-DI POST`, `Bulk PATCH`, and `Bulk Market Info`.
 
 ## Target Data Direction
 
@@ -310,6 +343,17 @@ This generates PATCH packages derived from tracked accepted device state. The cu
 - selected catalogue numbers
 - imported catalogue lists
 
+### `Bulk Market Info`
+
+This generates chunked `MARKET_INFO.PUT` packages for a selected posted-device cohort under one registered Basic UDI-DI parent.
+
+Current implementation behavior:
+
+- eligibility is assessed against the selected parent scope
+- the selected cohort must share one accepted market-country baseline before one shared scenario can be generated
+- user-edited market-country overrides drive one bulk Market Info scenario per chunk
+- local validation, ZIP download, success upload, and SQLite persistence are implemented
+
 ## Current Success XML Architecture
 
 The application now supports success-XML upload as a first-class operational workflow.
@@ -329,11 +373,41 @@ Current persistence behavior includes:
 - incrementing `PATCH` lineage using the accepted returned state
 - recording scenario information for successful PATCH updates where available
 - recording successful Market Info updates as separate Market Info events and Market Info version state
+- correlating successful acknowledgements back to generated preview context by `subject_id`, `message_type`, `correlation_id`, and `message_id`, with a latest-generated fallback retained for compatibility
+- preserving generated preview rows as append-only `testing_events` history rather than overwriting the latest preview
 - updating the state that drives next-operation availability and remaining counts
 
 The current success-capture architecture does not yet treat `MARKET-INFO.PUT` as part of the same version lineage as `PATCH`. That separation is intentional until operational evidence proves otherwise.
 
 This capability is a major part of the current architecture and should be treated as such.
+
+## Current Workflow Event Logging Architecture
+
+The first compatibility-safe slice of workflow-event logging is already implemented in the SQLite testing-state layer.
+
+Current behavior:
+
+- generated `POST`, `Patch XML`, and `Market Info` previews append `generated` rows to `testing_events`
+- success uploads append `success_ack` rows to `testing_events`
+- ZIP-producing downloads append one package-level audit row to `generated_packages`; this records the flow, filename, creation time, byte size, SHA-256 digest, contained filenames, and manifest metadata without storing a duplicate ZIP blob
+- event rows carry explicit workflow metadata in addition to `raw_event_json`, including:
+  - `event_kind`
+  - `operation_scope`
+  - `batch_id`
+  - `base_message_type`
+  - `base_version`
+  - `derived_version`
+  - `accepted_state_source`
+  - `state_before_json`
+  - `state_after_json`
+  - `delta_json`
+  - `correlation_id`
+  - `message_id`
+- legacy `testing_subjects` compatibility fields remain active while richer event data is phased in
+
+`testing_events` remains device-scoped. `generated_packages` is deliberately separate because one bulk ZIP can contain many devices and does not belong to a single device event.
+
+This is not yet the final submission-history architecture, but it is current architecture and it already affects correctness of accepted-state reconciliation.
 
 ## Current UI Architecture Direction
 
@@ -397,13 +471,14 @@ The main current architecture risks are:
 
 The current transition path is:
 
-1. finish aligning `POST`, `Patch XML`, `Bulk Device UDI-DI POST`, and `Bulk PATCH` around a consistent workspace design
+1. finish aligning `POST`, `Patch XML`, `Market Info`, `Bulk Device UDI-DI POST`, `Bulk PATCH`, and `Bulk Market Info` around a consistent workspace design
 2. continue extracting large operation-specific UI logic out of `App.tsx`
 3. strengthen SQLite-backed identity and accepted-state linkage
-4. expand documentation so it matches implemented behavior
-5. improve bulk performance and operator feedback
-6. continue controlled `MARKET_INFO.PUT` testing and confirm the long-term versioning rule from operational evidence
-7. only then consider later transport integration
+4. extend workflow-event logging carefully without breaking current compatibility fields
+5. expand documentation so it matches implemented behavior
+6. improve bulk performance and operator feedback
+7. continue controlled `MARKET_INFO.PUT` testing and confirm the long-term versioning rule from operational evidence
+8. only then consider later transport integration
 
 ## Production Cutover Planning
 
@@ -473,6 +548,7 @@ This draft reflects the following major architecture decisions already present i
 
 - SQLite is the active operational store
 - success-XML upload is part of the active workflow
+- workflow-event logging is part of the active SQLite testing-state design
 - parent and child `POST` flows remain separate in bulk mode
 - `Patch XML` is the single-device PATCH workspace
 - operation assessment precedes XML generation

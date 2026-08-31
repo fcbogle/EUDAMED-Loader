@@ -946,12 +946,11 @@ def test_patch_success_matches_exact_generated_preview_and_generated_rows_are_ap
         ]
     finally:
         connection.close()
-
     xml_payload = """<?xml version='1.0' encoding='utf-8'?>
 <m:PullAck xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1">
   <m:correlationID>patch-correlation-v2</m:correlationID>
   <m:creationDateTime>2026-08-31T11:00:00+00:00</m:creationDateTime>
-  <m:messageID>patch-message-v2</m:messageID>
+  <m:messageID>patch-ack-message-v2</m:messageID>
   <m:sender>
     <m:node>
       <s:nodeActorCode>EUDAMED</s:nodeActorCode>
@@ -993,6 +992,59 @@ def test_patch_success_matches_exact_generated_preview_and_generated_rows_are_ap
         }
     finally:
         connection.close()
+
+
+def test_generated_package_logging_records_metadata_without_archive_content(
+    isolated_workbook_import_db: Path,
+) -> None:
+    store = PlaygroundStateStore()
+    manifest = {
+        "mode": "bulk_udidi_post",
+        "product_family": "Epirus",
+        "product_variant": "Esprit",
+        "basic_udi_di": "5050649ESPRITVZ",
+    }
+    store.record_generated_package(
+        package_file_name="epirus-esprit-bulk-udidi-post-package.zip",
+        flow="bulk_udidi_post",
+        operation_scope="bulk",
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number=None,
+        basic_udi_di="5050649ESPRITVZ",
+        members=[("epirus-esprit-bulk-udidi-post-01-of-01.xml", b"<xml />"), ("excluded-records.json", b"[]")],
+        manifest=manifest,
+        package_bytes=b"zip-content",
+    )
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        row = connection.execute(
+            """
+            SELECT flow, operation_scope, package_file_name, package_byte_count,
+                   member_count, xml_member_count, member_file_names_json,
+                   manifest_json, package_sha256
+            FROM generated_packages
+            """
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert row is not None
+    assert dict(row) == {
+        "flow": "bulk_udidi_post",
+        "operation_scope": "bulk",
+        "package_file_name": "epirus-esprit-bulk-udidi-post-package.zip",
+        "package_byte_count": 11,
+        "member_count": 2,
+        "xml_member_count": 1,
+        "member_file_names_json": json.dumps(
+            ["epirus-esprit-bulk-udidi-post-01-of-01.xml", "excluded-records.json"]
+        ),
+        "manifest_json": json.dumps(manifest, sort_keys=True),
+        "package_sha256": "daf4e16539491123bf4112eb538caad1692406c99e79aed45789f25452c22108",
+    }
 
 
 def test_patch_success_without_generated_context_still_advances_tracked_version(
@@ -1111,6 +1163,54 @@ def test_workbook_import_service_persists_import_batch_and_subjects(
     assert subject_row[3] == "111111"
     assert canonical_row == ("complete", "complete", 1)
     assert field_count == 2
+
+
+def test_single_post_preview_records_generated_envelope_ids(
+    isolated_workbook_import_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    PlaygroundStateStore()
+    service = XmlGenerationService()
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "has_successful_basic_udi_post",
+        lambda **kwargs: True,
+    )
+
+    preview = service.preview_post_registration(
+        product_family="Elan",
+        product_variant="Elan IC",
+        catalogue_number="ELANIC22L1S",
+    )
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        generated_row = connection.execute(
+            """
+            SELECT correlation_id, message_id, raw_event_json
+            FROM testing_events
+            WHERE catalogue_number = 'ELANIC22L1S'
+              AND message_type = 'UDI_DI.POST'
+              AND status = 'GENERATED'
+            ORDER BY event_index DESC
+            LIMIT 1
+            """
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert generated_row is not None
+    correlation_id = str(generated_row["correlation_id"])
+    message_id = str(generated_row["message_id"])
+    assert correlation_id
+    assert message_id
+    assert f"<m:correlationID>{correlation_id}</m:correlationID>" in preview.post_xml
+    assert f"<m:messageID>{message_id}</m:messageID>" in preview.post_xml
+
+    event_payload = json.loads(str(generated_row["raw_event_json"]))
+    assert event_payload["correlation_id"] == correlation_id
+    assert event_payload["message_id"] == message_id
 
 
 def test_workbook_import_routes_return_latest_batch_and_imported_workbooks(
