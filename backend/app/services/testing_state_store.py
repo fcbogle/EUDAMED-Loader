@@ -42,9 +42,10 @@ class TestingStateStore:
             product_variant=product_variant,
             catalogue_number=catalogue_number,
         )
-        if row is None or not row["latest_successful_state_json"]:
+        patch_state_json = row["latest_successful_patch_state_json"] or row["latest_successful_state_json"] if row is not None else None
+        if row is None or not patch_state_json:
             return None
-        latest_state = json.loads(str(row["latest_successful_state_json"]))
+        latest_state = json.loads(str(patch_state_json))
         if not isinstance(latest_state, dict):
             return None
         version = str(latest_state.get("version") or "").strip()
@@ -363,8 +364,15 @@ class TestingStateStore:
         patch_version: str,
         scenario_id: str,
         scenario_label: str,
+        base_message_type: str,
+        base_version: str,
+        accepted_state_source: str,
         changed_fields: list[dict[str, Any]],
+        state_before: dict[str, Any],
         latest_successful_state: dict[str, Any],
+        correlation_id: str | None = None,
+        message_id: str | None = None,
+        operation_scope: str = "single",
     ) -> None:
         with self._connect() as connection:
             subject_id = self._ensure_testing_subject(
@@ -375,55 +383,33 @@ class TestingStateStore:
                 primary_udi_di=primary_udi_di,
                 basic_udi_di=basic_udi_di,
             )
-            existing_row = connection.execute(
-                """
-                SELECT id
-                FROM testing_events
-                WHERE subject_id = ?
-                  AND message_type = 'UDI_DI.PATCH'
-                  AND status = 'GENERATED'
-                  AND version = ?
-                ORDER BY event_index DESC
-                LIMIT 1
-                """,
-                (subject_id, patch_version),
-            ).fetchone()
             payload_created_at = datetime.now(UTC).isoformat(timespec="milliseconds")
             raw_event_json = json.dumps(
                 {
                     "message_type": "UDI_DI.PATCH",
                     "status": "GENERATED",
+                    "event_kind": "generated",
+                    "operation_scope": operation_scope,
                     "scenario_id": scenario_id,
                     "scenario_label": scenario_label,
                     "catalogue_number": catalogue_number,
                     "primary_udi_di": primary_udi_di,
                     "basic_udi_di": basic_udi_di,
                     "version": patch_version,
+                    "base_message_type": base_message_type,
+                    "base_version": base_version,
+                    "derived_version": patch_version,
+                    "accepted_state_source": accepted_state_source,
+                    "correlation_id": correlation_id,
+                    "message_id": message_id,
+                    "state_before": state_before,
                     "latest_successful_state": latest_successful_state,
                 }
             )
             changed_fields_json = json.dumps(changed_fields)
-            if existing_row is not None:
-                connection.execute(
-                    """
-                    UPDATE testing_events
-                    SET scenario_id = ?,
-                        scenario_label = ?,
-                        payload_created_at = ?,
-                        changed_fields_json = ?,
-                        raw_event_json = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        scenario_id,
-                        scenario_label,
-                        payload_created_at,
-                        changed_fields_json,
-                        raw_event_json,
-                        int(existing_row["id"]),
-                    ),
-                )
-                return
+            state_before_json = json.dumps(state_before)
+            state_after_json = json.dumps(latest_successful_state)
+            delta_json = json.dumps({"changed_fields": changed_fields})
 
             next_index_row = connection.execute(
                 "SELECT COALESCE(MAX(event_index), -1) + 1 FROM testing_events WHERE subject_id = ?",
@@ -436,31 +422,192 @@ class TestingStateStore:
                     subject_id,
                     event_index,
                     message_type,
+                    event_kind,
                     status,
+                    operation_scope,
+                    batch_id,
                     version,
+                    base_message_type,
+                    base_version,
+                    derived_version,
+                    accepted_state_source,
                     scenario_id,
                     scenario_label,
+                    product_family,
+                    product_variant,
+                    catalogue_number,
+                    primary_udi_di,
+                    basic_udi_di,
                     tested_at,
                     transaction_id,
                     submission_id,
                     payload_created_at,
                     correlation_id,
                     message_id,
+                    source_file_name,
+                    state_before_json,
+                    state_after_json,
+                    delta_json,
                     changed_fields_json,
                     retained_fields_json,
                     unchanged_fields_json,
-                    raw_event_json
-                ) VALUES (?, ?, 'UDI_DI.PATCH', 'GENERATED', ?, ?, ?, NULL, NULL, NULL, ?, NULL, NULL, ?, NULL, NULL, ?)
+                    raw_event_json,
+                    raw_xml
+                ) VALUES (?, ?, 'UDI_DI.PATCH', 'generated', 'GENERATED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     subject_id,
                     next_index,
+                    operation_scope,
+                    None,
                     patch_version,
+                    base_message_type,
+                    base_version,
+                    patch_version,
+                    accepted_state_source,
                     scenario_id,
                     scenario_label,
+                    self._optional_string(product_family),
+                    self._optional_string(product_variant),
+                    self._optional_string(catalogue_number),
+                    self._optional_string(primary_udi_di),
+                    self._optional_string(basic_udi_di),
+                    None,
+                    None,
+                    None,
                     payload_created_at,
+                    correlation_id,
+                    message_id,
+                    None,
+                    state_before_json,
+                    state_after_json,
+                    delta_json,
                     changed_fields_json,
+                    None,
+                    None,
                     raw_event_json,
+                    None,
+                ),
+            )
+
+    def record_generated_post_context(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+        primary_udi_di: str,
+        basic_udi_di: str | None,
+        message_type: str,
+        accepted_post_state: dict[str, Any],
+        correlation_id: str | None = None,
+        message_id: str | None = None,
+        operation_scope: str = "single",
+    ) -> None:
+        with self._connect() as connection:
+            subject_id = self._ensure_testing_subject(
+                connection,
+                product_family=product_family,
+                product_variant=product_variant,
+                catalogue_number=catalogue_number,
+                primary_udi_di=primary_udi_di,
+                basic_udi_di=basic_udi_di,
+            )
+            payload_created_at = datetime.now(UTC).isoformat(timespec="milliseconds")
+            accepted_post_state_json = json.dumps(accepted_post_state)
+            raw_event_json = json.dumps(
+                {
+                    "message_type": message_type,
+                    "status": "GENERATED",
+                    "event_kind": "generated",
+                    "operation_scope": operation_scope,
+                    "catalogue_number": catalogue_number,
+                    "primary_udi_di": primary_udi_di,
+                    "basic_udi_di": basic_udi_di,
+                    "correlation_id": correlation_id,
+                    "message_id": message_id,
+                    "version": accepted_post_state.get("version"),
+                    "state_after": accepted_post_state,
+                }
+            )
+
+            next_index_row = connection.execute(
+                "SELECT COALESCE(MAX(event_index), -1) + 1 FROM testing_events WHERE subject_id = ?",
+                (subject_id,),
+            ).fetchone()
+            next_index = int(next_index_row[0]) if next_index_row is not None else 0
+            connection.execute(
+                """
+                INSERT INTO testing_events (
+                    subject_id,
+                    event_index,
+                    message_type,
+                    event_kind,
+                    status,
+                    operation_scope,
+                    batch_id,
+                    version,
+                    base_message_type,
+                    base_version,
+                    derived_version,
+                    accepted_state_source,
+                    scenario_id,
+                    scenario_label,
+                    product_family,
+                    product_variant,
+                    catalogue_number,
+                    primary_udi_di,
+                    basic_udi_di,
+                    tested_at,
+                    transaction_id,
+                    submission_id,
+                    payload_created_at,
+                    correlation_id,
+                    message_id,
+                    source_file_name,
+                    state_before_json,
+                    state_after_json,
+                    delta_json,
+                    changed_fields_json,
+                    retained_fields_json,
+                    unchanged_fields_json,
+                    raw_event_json,
+                    raw_xml
+                ) VALUES (?, ?, ?, 'generated', 'GENERATED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    subject_id,
+                    next_index,
+                    message_type,
+                    operation_scope,
+                    None,
+                    self._optional_string(accepted_post_state.get("version")),
+                    None,
+                    None,
+                    self._optional_string(accepted_post_state.get("version")),
+                    "generated_post_preview",
+                    None,
+                    None,
+                    self._optional_string(product_family),
+                    self._optional_string(product_variant),
+                    self._optional_string(catalogue_number),
+                    self._optional_string(primary_udi_di),
+                    self._optional_string(basic_udi_di),
+                    None,
+                    None,
+                    None,
+                    payload_created_at,
+                    correlation_id,
+                    message_id,
+                    None,
+                    None,
+                    accepted_post_state_json,
+                    None,
+                    None,
+                    None,
+                    None,
+                    raw_event_json,
+                    None,
                 ),
             )
 
@@ -475,6 +622,9 @@ class TestingStateStore:
         market_info_version: str,
         baseline_market_countries: list[dict[str, Any]],
         market_countries: list[dict[str, Any]],
+        correlation_id: str | None = None,
+        message_id: str | None = None,
+        operation_scope: str = "single",
     ) -> None:
         with self._connect() as connection:
             subject_id = self._ensure_testing_subject(
@@ -485,26 +635,18 @@ class TestingStateStore:
                 primary_udi_di=primary_udi_di,
                 basic_udi_di=basic_udi_di,
             )
-            existing_row = connection.execute(
-                """
-                SELECT id
-                FROM testing_events
-                WHERE subject_id = ?
-                  AND message_type = 'MARKET_INFO.PUT'
-                  AND status = 'GENERATED'
-                ORDER BY event_index DESC
-                LIMIT 1
-                """,
-                (subject_id,),
-            ).fetchone()
             payload_created_at = datetime.now(UTC).isoformat(timespec="milliseconds")
             raw_event_json = json.dumps(
                 {
                     "message_type": "MARKET_INFO.PUT",
                     "status": "GENERATED",
+                    "event_kind": "generated",
+                    "operation_scope": operation_scope,
                     "catalogue_number": catalogue_number,
                     "primary_udi_di": primary_udi_di,
                     "basic_udi_di": basic_udi_di,
+                    "correlation_id": correlation_id,
+                    "message_id": message_id,
                     "market_info_version": market_info_version,
                     "baseline_market_info_state": {
                         "market_countries": baseline_market_countries,
@@ -515,23 +657,6 @@ class TestingStateStore:
                     },
                 }
             )
-            if existing_row is not None:
-                connection.execute(
-                    """
-                    UPDATE testing_events
-                    SET payload_created_at = ?,
-                        version = ?,
-                        raw_event_json = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        payload_created_at,
-                        market_info_version,
-                        raw_event_json,
-                        int(existing_row["id"]),
-                    ),
-                )
-                return
 
             next_index_row = connection.execute(
                 "SELECT COALESCE(MAX(event_index), -1) + 1 FROM testing_events WHERE subject_id = ?",
@@ -544,28 +669,71 @@ class TestingStateStore:
                     subject_id,
                     event_index,
                     message_type,
+                    event_kind,
                     status,
+                    operation_scope,
+                    batch_id,
                     version,
+                    base_message_type,
+                    base_version,
+                    derived_version,
+                    accepted_state_source,
                     scenario_id,
                     scenario_label,
+                    product_family,
+                    product_variant,
+                    catalogue_number,
+                    primary_udi_di,
+                    basic_udi_di,
                     tested_at,
                     transaction_id,
                     submission_id,
                     payload_created_at,
                     correlation_id,
                     message_id,
+                    source_file_name,
+                    state_before_json,
+                    state_after_json,
+                    delta_json,
                     changed_fields_json,
                     retained_fields_json,
                     unchanged_fields_json,
-                    raw_event_json
-                ) VALUES (?, ?, 'MARKET_INFO.PUT', 'GENERATED', ?, NULL, NULL, NULL, NULL, NULL, ?, NULL, NULL, NULL, NULL, NULL, ?)
+                    raw_event_json,
+                    raw_xml
+                ) VALUES (?, ?, 'MARKET_INFO.PUT', 'generated', 'GENERATED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     subject_id,
                     next_index,
+                    operation_scope,
+                    None,
                     market_info_version,
+                    None,
+                    self._previous_market_info_version(market_info_version),
+                    market_info_version,
+                    "market_info_generation",
+                    None,
+                    None,
+                    self._optional_string(product_family),
+                    self._optional_string(product_variant),
+                    self._optional_string(catalogue_number),
+                    self._optional_string(primary_udi_di),
+                    self._optional_string(basic_udi_di),
+                    None,
+                    None,
+                    None,
                     payload_created_at,
+                    correlation_id,
+                    message_id,
+                    None,
+                    json.dumps({"market_countries": baseline_market_countries}),
+                    json.dumps({"version": market_info_version, "market_countries": market_countries}),
+                    json.dumps(self._market_info_delta_payload(baseline_market_countries, market_countries)),
+                    None,
+                    None,
+                    None,
                     raw_event_json,
+                    None,
                 ),
             )
 
@@ -582,6 +750,37 @@ class TestingStateStore:
         finally:
             connection.close()
 
+    @classmethod
+    def _previous_market_info_version(cls, market_info_version: str) -> str | None:
+        try:
+            version_number = int(str(market_info_version).strip())
+        except (TypeError, ValueError):
+            return None
+        return str(version_number - 1) if version_number > 1 else None
+
+    @classmethod
+    def _market_info_delta_payload(
+        cls,
+        before_items: list[dict[str, Any]],
+        after_items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        before_codes = {
+            cls._optional_string(item.get("country"))
+            for item in before_items
+            if isinstance(item, dict)
+        }
+        after_codes = {
+            cls._optional_string(item.get("country"))
+            for item in after_items
+            if isinstance(item, dict)
+        }
+        before_codes = {code for code in before_codes if code}
+        after_codes = {code for code in after_codes if code}
+        return {
+            "added_countries": sorted(after_codes - before_codes),
+            "removed_countries": sorted(before_codes - after_codes),
+        }
+
     def _ensure_database(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
@@ -590,7 +789,6 @@ class TestingStateStore:
                 CREATE TABLE IF NOT EXISTS testing_subjects (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     subject_key TEXT NOT NULL UNIQUE,
-                    device_subject_id INTEGER,
                     normalized_product_family TEXT NOT NULL,
                     normalized_product_variant TEXT NOT NULL,
                     normalized_catalogue_number TEXT NOT NULL,
@@ -611,8 +809,7 @@ class TestingStateStore:
                     latest_successful_version TEXT,
                     latest_successful_market_info_version TEXT,
                     latest_successful_market_info_state_json TEXT,
-                    latest_successful_state_json TEXT,
-                    FOREIGN KEY(device_subject_id) REFERENCES device_subject(id) ON DELETE SET NULL
+                    latest_successful_state_json TEXT
                 )
                 """
             )
@@ -662,6 +859,36 @@ class TestingStateStore:
             self._ensure_column(
                 connection,
                 table_name="testing_subjects",
+                column_name="registration_status",
+                column_definition="TEXT NOT NULL DEFAULT 'unregistered'",
+            )
+            self._ensure_column(
+                connection,
+                table_name="testing_subjects",
+                column_name="latest_successful_post_version",
+                column_definition="TEXT",
+            )
+            self._ensure_column(
+                connection,
+                table_name="testing_subjects",
+                column_name="latest_successful_post_state_json",
+                column_definition="TEXT",
+            )
+            self._ensure_column(
+                connection,
+                table_name="testing_subjects",
+                column_name="latest_successful_patch_version",
+                column_definition="TEXT",
+            )
+            self._ensure_column(
+                connection,
+                table_name="testing_subjects",
+                column_name="latest_successful_patch_state_json",
+                column_definition="TEXT",
+            )
+            self._ensure_column(
+                connection,
+                table_name="testing_subjects",
                 column_name="latest_successful_market_info_version",
                 column_definition="TEXT",
             )
@@ -679,6 +906,49 @@ class TestingStateStore:
             )
             self._ensure_column(
                 connection,
+                table_name="testing_subjects",
+                column_name="latest_successful_message_type",
+                column_definition="TEXT",
+            )
+            self._ensure_column(
+                connection,
+                table_name="testing_subjects",
+                column_name="latest_successful_event_id",
+                column_definition="INTEGER",
+            )
+            self._ensure_column(
+                connection,
+                table_name="testing_subjects",
+                column_name="latest_tested_at",
+                column_definition="TEXT",
+            )
+            for column_name, column_definition in (
+                ("event_kind", "TEXT"),
+                ("operation_scope", "TEXT"),
+                ("batch_id", "TEXT"),
+                ("base_message_type", "TEXT"),
+                ("base_version", "TEXT"),
+                ("derived_version", "TEXT"),
+                ("accepted_state_source", "TEXT"),
+                ("product_family", "TEXT"),
+                ("product_variant", "TEXT"),
+                ("catalogue_number", "TEXT"),
+                ("primary_udi_di", "TEXT"),
+                ("basic_udi_di", "TEXT"),
+                ("source_file_name", "TEXT"),
+                ("state_before_json", "TEXT"),
+                ("state_after_json", "TEXT"),
+                ("delta_json", "TEXT"),
+                ("raw_xml", "TEXT"),
+            ):
+                self._ensure_column(
+                    connection,
+                    table_name="testing_events",
+                    column_name=column_name,
+                    column_definition=column_definition,
+                )
+            self._ensure_column(
+                connection,
                 table_name="reviewed_post_baselines",
                 column_name="device_subject_id",
                 column_definition="INTEGER REFERENCES device_subject(id) ON DELETE SET NULL",
@@ -687,7 +957,34 @@ class TestingStateStore:
                 "CREATE INDEX IF NOT EXISTS ix_testing_subjects_device_subject_id ON testing_subjects(device_subject_id)"
             )
             connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_testing_subjects_family_variant ON testing_subjects(normalized_product_family, normalized_product_variant)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_testing_subjects_catalogue ON testing_subjects(normalized_catalogue_number)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_testing_subjects_primary_udi ON testing_subjects(normalized_primary_udi_di)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_testing_subjects_basic_udi ON testing_subjects(normalized_basic_udi_di)"
+            )
+            connection.execute(
                 "CREATE INDEX IF NOT EXISTS ix_reviewed_post_baselines_device_subject_id ON reviewed_post_baselines(device_subject_id)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_testing_events_subject_event_index ON testing_events(subject_id, event_index)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_testing_events_subject_tested_at ON testing_events(subject_id, tested_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_testing_events_message_kind_status ON testing_events(message_type, event_kind, status)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_testing_events_batch_id ON testing_events(batch_id)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_testing_events_correlation_message ON testing_events(correlation_id, message_id)"
             )
             self._backfill_device_subject_links(connection)
 

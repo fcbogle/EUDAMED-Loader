@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from typing import Any
+from uuid import uuid4
 
 from app.config import get_settings
 from app.services.canonical_projection import (
@@ -79,6 +80,29 @@ class XmlGenerationService:
             ],
         }
 
+    @staticmethod
+    def _post_state_snapshot_payload(record: DeviceXmlRecord) -> dict[str, Any]:
+        return {
+            "version": "1",
+            "trade_name": record.trade_name,
+            "base_quantity": record.base_quantity,
+            "sterile": record.sterile,
+            "contains_latex": record.contains_latex,
+            "status_code": record.status_code,
+            "storage_conditions": [
+                {"code": item.code, "comment": item.comment}
+                for item in record.storage_conditions
+            ],
+            "critical_warnings": [
+                {"code": item.code, "comment": item.comment}
+                for item in record.critical_warnings
+            ],
+            "market_countries": [
+                {"country": country_code, "original_placed_on_market": original_placed_on_market}
+                for country_code, original_placed_on_market in record.market_countries
+            ],
+        }
+
     def _validation_bundle(self) -> CanonicalValidationBundle:
         try:
             return self.canonical_projection_service.latest_bundle(require_import=self.require_import)
@@ -125,6 +149,10 @@ class XmlGenerationService:
             return str(value)
         normalized = value.strip()
         return normalized or None
+
+    @staticmethod
+    def _message_envelope_ids() -> tuple[str, str]:
+        return str(uuid4()), str(uuid4())
 
     @classmethod
     def _normalize_identity(cls, value: object) -> str:
@@ -683,7 +711,25 @@ class XmlGenerationService:
         xml_chunks: list[tuple[int, list[CanonicalValidationRecord], bytes]] = []
         for sequence, chunk_records in enumerate(record_chunks, start=1):
             xml_records = [self.projection_builder.build_device_record(record) for record in chunk_records]
-            xml_bytes = self.renderer.render_message_records(xml_records)
+            correlation_id, message_id = self._message_envelope_ids()
+            xml_bytes = self.renderer.render_message_records(
+                xml_records,
+                correlation_id=correlation_id,
+                message_id=message_id,
+            )
+            for xml_record in xml_records:
+                self.testing_state_store.record_generated_post_context(
+                    product_family=xml_record.product_family,
+                    product_variant=xml_record.product_variant,
+                    catalogue_number=xml_record.catalogue_number,
+                    primary_udi_di=xml_record.primary_udi_di,
+                    basic_udi_di=xml_record.basic_identifier_code,
+                    message_type="DEVICE.POST",
+                    accepted_post_state=self._post_state_snapshot_payload(xml_record),
+                    correlation_id=correlation_id,
+                    message_id=message_id,
+                    operation_scope="bulk",
+                )
             validation = self.xml_validation_service.validate_message(xml_bytes)
             file_name = self.package_builder.bulk_file_name(
                 product_family=product_family,
@@ -766,7 +812,25 @@ class XmlGenerationService:
                 total_chunks=total_chunks,
             )
             xml_records = [self.projection_builder.build_device_record(record) for record in chunk_records]
-            xml_bytes = self.renderer.render_message_records(xml_records)
+            correlation_id, message_id = self._message_envelope_ids()
+            xml_bytes = self.renderer.render_message_records(
+                xml_records,
+                correlation_id=correlation_id,
+                message_id=message_id,
+            )
+            for xml_record in xml_records:
+                self.testing_state_store.record_generated_post_context(
+                    product_family=xml_record.product_family,
+                    product_variant=xml_record.product_variant,
+                    catalogue_number=xml_record.catalogue_number,
+                    primary_udi_di=xml_record.primary_udi_di,
+                    basic_udi_di=xml_record.basic_identifier_code,
+                    message_type="DEVICE.POST",
+                    accepted_post_state=self._post_state_snapshot_payload(xml_record),
+                    correlation_id=correlation_id,
+                    message_id=message_id,
+                    operation_scope="bulk",
+                )
             validation = self.xml_validation_service.validate_message(xml_bytes)
             members.append((file_name, xml_bytes))
             manifest_chunks.append(
@@ -837,7 +901,25 @@ class XmlGenerationService:
                 self.projection_builder.build_udidi_post_record(self.projection_builder.build_device_record(record))
                 for record in chunk_records
             ]
-            xml_bytes = self.renderer.render_message_records(xml_records)
+            correlation_id, message_id = self._message_envelope_ids()
+            xml_bytes = self.renderer.render_message_records(
+                xml_records,
+                correlation_id=correlation_id,
+                message_id=message_id,
+            )
+            for xml_record in xml_records:
+                self.testing_state_store.record_generated_post_context(
+                    product_family=xml_record.product_family,
+                    product_variant=xml_record.product_variant,
+                    catalogue_number=xml_record.catalogue_number,
+                    primary_udi_di=xml_record.primary_udi_di,
+                    basic_udi_di=xml_record.basic_identifier_code,
+                    message_type="UDI_DI.POST",
+                    accepted_post_state=self._post_state_snapshot_payload(xml_record),
+                    correlation_id=correlation_id,
+                    message_id=message_id,
+                    operation_scope="bulk",
+                )
             validation = self.xml_validation_service.validate_message(xml_bytes)
             file_name = self.package_builder.bulk_file_name(
                 product_family=product_family,
@@ -928,7 +1010,25 @@ class XmlGenerationService:
                 self.projection_builder.build_udidi_post_record(self.projection_builder.build_device_record(record))
                 for record in chunk_records
             ]
-            xml_bytes = self.renderer.render_message_records(xml_records)
+            correlation_id, message_id = self._message_envelope_ids()
+            xml_bytes = self.renderer.render_message_records(
+                xml_records,
+                correlation_id=correlation_id,
+                message_id=message_id,
+            )
+            for xml_record in xml_records:
+                self.testing_state_store.record_generated_post_context(
+                    product_family=xml_record.product_family,
+                    product_variant=xml_record.product_variant,
+                    catalogue_number=xml_record.catalogue_number,
+                    primary_udi_di=xml_record.primary_udi_di,
+                    basic_udi_di=xml_record.basic_identifier_code,
+                    message_type="UDI_DI.POST",
+                    accepted_post_state=self._post_state_snapshot_payload(xml_record),
+                    correlation_id=correlation_id,
+                    message_id=message_id,
+                    operation_scope="bulk",
+                )
             validation = self.xml_validation_service.validate_message(xml_bytes)
             members.append((file_name, xml_bytes))
             manifest_chunks.append(
@@ -988,7 +1088,7 @@ class XmlGenerationService:
         )
         scenario_data = scenario_inputs or {}
         included_summaries: list[BulkXmlRecordSummary] = []
-        included_payloads: list[tuple[BulkXmlRecordSummary, bytes]] = []
+        included_payloads: list[tuple[BulkXmlRecordSummary, GeneratedPatchScenarioPreview, dict[str, Any]]] = []
         scenario_label = next(
             (label for sid, label in {
                 "equivalent_first_patch": "Equivalent First Patch",
@@ -1046,7 +1146,7 @@ class XmlGenerationService:
             else:
                 derived_version = "2" if not patch_state_resolution else str(int(patch_state_resolution.state.version) + 1)
             try:
-                preview = self.preview_generated_patch_scenario(
+                preview, generated_context = self._build_generated_patch_preview(
                     product_family=record.product_family,
                     product_variant=record.product_variant,
                     catalogue_number=post_record.catalogue_number,
@@ -1072,7 +1172,7 @@ class XmlGenerationService:
             included_summary.accepted_state_source = preview.context.base_state_source
             included_summary.scenario_id = scenario_id
             included_summaries.append(included_summary)
-            included_payloads.append((included_summary, preview.derived_patch_xml.encode("utf-8")))
+            included_payloads.append((included_summary, preview, generated_context))
         if not included_payloads:
             if missing_variant_records:
                 raise ValueError(
@@ -1090,7 +1190,21 @@ class XmlGenerationService:
         chunk_summaries: list[BatchXmlChunkSummary] = []
         rendered_chunks: list[tuple[int, list[BulkXmlRecordSummary], bytes, XmlValidationResult, str]] = []
         for sequence, chunk_payloads in enumerate(payload_chunks, start=1):
-            xml_bytes = self.renderer.render_batch_from_strings([payload.decode("utf-8") for _, payload in chunk_payloads])
+            correlation_id, message_id = self._message_envelope_ids()
+            xml_bytes = self.renderer.render_batch_from_strings(
+                [preview.derived_patch_xml for _, preview, _ in chunk_payloads],
+                correlation_id=correlation_id,
+                message_id=message_id,
+            )
+            for _, _, generated_context in chunk_payloads:
+                self.testing_state_store.record_generated_patch_context(
+                    **{
+                        **generated_context,
+                        "correlation_id": correlation_id,
+                        "message_id": message_id,
+                        "operation_scope": "bulk",
+                    }
+                )
             validation = self.xml_validation_service.validate_message(xml_bytes)
             file_name = self.package_builder.bulk_file_name(
                 product_family=product_family,
@@ -1099,7 +1213,7 @@ class XmlGenerationService:
                 sequence=sequence,
                 total_chunks=total_chunks,
             )
-            chunk_records = [summary for summary, _ in chunk_payloads]
+            chunk_records = [summary for summary, _, _ in chunk_payloads]
             rendered_chunks.append((sequence, chunk_records, xml_bytes, validation, file_name))
             chunk_summaries.append(
                 BatchXmlChunkSummary(
@@ -1176,7 +1290,7 @@ class XmlGenerationService:
             )
 
         included_summaries: list[BulkXmlRecordSummary] = []
-        included_payloads: list[tuple[BulkXmlRecordSummary, str]] = []
+        included_payloads: list[tuple[BulkXmlRecordSummary, str, dict[str, Any]]] = []
         baseline_signature: tuple[tuple[str, bool], ...] | None = None
         for record in candidate_records:
             market_info_record, baseline_market_countries, current_version = self._market_info_record_with_latest_state(record=record)
@@ -1200,28 +1314,6 @@ class XmlGenerationService:
                 market_countries=normalized_market_countries,
                 market_info_version=next_version,
             )
-            self.testing_state_store.record_generated_market_info_context(
-                product_family=record.product_family,
-                product_variant=record.product_variant,
-                catalogue_number=generated_record.catalogue_number,
-                primary_udi_di=generated_record.primary_udi_di,
-                basic_udi_di=self._record_basic_udi_di(record),
-                market_info_version=generated_record.market_info_version,
-                baseline_market_countries=[
-                    {
-                        "country": country_code,
-                        "original_placed_on_market": original_placed_on_market,
-                    }
-                    for country_code, original_placed_on_market in market_info_record.market_countries
-                ],
-                market_countries=[
-                    {
-                        "country": country_code,
-                        "original_placed_on_market": original_placed_on_market,
-                    }
-                    for country_code, original_placed_on_market in generated_record.market_countries
-                ],
-            )
             xml_string = self.renderer.render_market_info_message(generated_record).decode("utf-8")
             included_summary = self._bulk_record_summary(record)
             included_summary.base_version = current_version
@@ -1232,7 +1324,34 @@ class XmlGenerationService:
                 else "canonical_market_info_projection"
             )
             included_summaries.append(included_summary)
-            included_payloads.append((included_summary, xml_string))
+            included_payloads.append(
+                (
+                    included_summary,
+                    xml_string,
+                    {
+                        "product_family": record.product_family,
+                        "product_variant": record.product_variant,
+                        "catalogue_number": generated_record.catalogue_number,
+                        "primary_udi_di": generated_record.primary_udi_di,
+                        "basic_udi_di": self._record_basic_udi_di(record),
+                        "market_info_version": generated_record.market_info_version,
+                        "baseline_market_countries": [
+                            {
+                                "country": country_code,
+                                "original_placed_on_market": original_placed_on_market,
+                            }
+                            for country_code, original_placed_on_market in baseline_market_countries
+                        ],
+                        "market_countries": [
+                            {
+                                "country": country_code,
+                                "original_placed_on_market": original_placed_on_market,
+                            }
+                            for country_code, original_placed_on_market in generated_record.market_countries
+                        ],
+                    },
+                )
+            )
 
         if not included_payloads:
             if missing_variant_records:
@@ -1252,7 +1371,21 @@ class XmlGenerationService:
         chunk_summaries: list[BatchXmlChunkSummary] = []
         rendered_chunks: list[tuple[int, list[BulkXmlRecordSummary], bytes, XmlValidationResult, str]] = []
         for sequence, chunk_payloads in enumerate(payload_chunks, start=1):
-            xml_bytes = self.renderer.render_batch_from_strings([payload for _, payload in chunk_payloads])
+            correlation_id, message_id = self._message_envelope_ids()
+            xml_bytes = self.renderer.render_batch_from_strings(
+                [payload for _, payload, _ in chunk_payloads],
+                correlation_id=correlation_id,
+                message_id=message_id,
+            )
+            for _, _, generated_context in chunk_payloads:
+                self.testing_state_store.record_generated_market_info_context(
+                    **{
+                        **generated_context,
+                        "correlation_id": correlation_id,
+                        "message_id": message_id,
+                        "operation_scope": "bulk",
+                    }
+                )
             validation = self.xml_validation_service.validate_message(xml_bytes)
             file_name = self.package_builder.bulk_file_name(
                 product_family=product_family,
@@ -1261,7 +1394,7 @@ class XmlGenerationService:
                 sequence=sequence,
                 total_chunks=total_chunks,
             )
-            chunk_records = [summary for summary, _ in chunk_payloads]
+            chunk_records = [summary for summary, _, _ in chunk_payloads]
             rendered_chunks.append((sequence, chunk_records, xml_bytes, validation, file_name))
             chunk_summaries.append(
                 BatchXmlChunkSummary(
@@ -1405,7 +1538,7 @@ class XmlGenerationService:
         members: list[tuple[str, bytes]] = []
         chunk_members = []
         successful_catalogues = {record.catalogue_number for record in preview.included_records}
-        included_payloads: list[tuple[BulkXmlRecordSummary, bytes]] = []
+        included_payloads: list[tuple[BulkXmlRecordSummary, GeneratedPatchScenarioPreview, dict[str, Any]]] = []
         scenario_data = scenario_inputs or {}
         for record in candidate_records:
             if record.catalogue_number not in successful_catalogues:
@@ -1419,7 +1552,7 @@ class XmlGenerationService:
                 derived_version = "2"
             else:
                 derived_version = "2" if not patch_state_resolution else str(int(patch_state_resolution.state.version) + 1)
-            scenario_preview = self.preview_generated_patch_scenario(
+            scenario_preview, generated_context = self._build_generated_patch_preview(
                 product_family=record.product_family,
                 product_variant=record.product_variant,
                 catalogue_number=record.catalogue_number or "",
@@ -1429,14 +1562,28 @@ class XmlGenerationService:
                 require_reviewed_post_baseline=False,
             )
             summary = next(item for item in preview.included_records if item.catalogue_number == record.catalogue_number)
-            included_payloads.append((summary, scenario_preview.derived_patch_xml.encode("utf-8")))
+            included_payloads.append((summary, scenario_preview, generated_context))
         payload_chunks = [
             included_payloads[index : index + self.settings.eudamed_max_batch_records]
             for index in range(0, len(included_payloads), self.settings.eudamed_max_batch_records)
         ]
         total_chunks = len(payload_chunks)
         for sequence, chunk_payloads in enumerate(payload_chunks, start=1):
-            xml_bytes = self.renderer.render_batch_from_strings([payload.decode("utf-8") for _, payload in chunk_payloads])
+            correlation_id, message_id = self._message_envelope_ids()
+            xml_bytes = self.renderer.render_batch_from_strings(
+                [preview_item.derived_patch_xml for _, preview_item, _ in chunk_payloads],
+                correlation_id=correlation_id,
+                message_id=message_id,
+            )
+            for _, _, generated_context in chunk_payloads:
+                self.testing_state_store.record_generated_patch_context(
+                    **{
+                        **generated_context,
+                        "correlation_id": correlation_id,
+                        "message_id": message_id,
+                        "operation_scope": "bulk",
+                    }
+                )
             file_name = self.package_builder.bulk_file_name(
                 product_family=product_family,
                 product_variant=product_variant,
@@ -1475,7 +1622,7 @@ class XmlGenerationService:
             manifest=manifest,
         )
 
-    def preview_generated_patch_scenario(
+    def _build_generated_patch_preview(
         self,
         *,
         product_family: str,
@@ -1485,7 +1632,9 @@ class XmlGenerationService:
         patch_version: str,
         scenario_inputs: dict[str, Any] | None = None,
         require_reviewed_post_baseline: bool = False,
-    ) -> GeneratedPatchScenarioPreview:
+        correlation_id: str | None = None,
+        message_id: str | None = None,
+    ) -> tuple[GeneratedPatchScenarioPreview, dict[str, Any]]:
         if require_reviewed_post_baseline:
             self._require_reviewed_post_baseline(
                 product_family=product_family,
@@ -1543,7 +1692,16 @@ class XmlGenerationService:
             patch_version=normalized_version,
             scenario_inputs=scenario_data,
         )
-        derived_patch_xml_bytes = self.renderer.render_message(derived_patch_record)
+        generated_correlation_id, generated_message_id = (
+            (correlation_id, message_id)
+            if correlation_id and message_id
+            else self._message_envelope_ids()
+        )
+        derived_patch_xml_bytes = self.renderer.render_message(
+            derived_patch_record,
+            correlation_id=generated_correlation_id,
+            message_id=generated_message_id,
+        )
         derived_patch_validation = self.xml_validation_service.validate_message(derived_patch_xml_bytes)
         derived_patch_file_name = self._scenario_patch_file_name(
             product_family=post_record.product_family,
@@ -1551,20 +1709,7 @@ class XmlGenerationService:
             catalogue_number=post_record.catalogue_number,
             scenario_id=scenario_id,
         )
-        self.testing_state_store.record_generated_patch_context(
-            product_family=post_record.product_family,
-            product_variant=post_record.product_variant,
-            catalogue_number=post_record.catalogue_number,
-            primary_udi_di=post_record.primary_udi_di,
-            basic_udi_di=post_record.basic_identifier_code,
-            patch_version=normalized_version,
-            scenario_id=scenario_id,
-            scenario_label=scenario_label,
-            changed_fields=[delta.model_dump(mode="json") for delta in field_deltas],
-            latest_successful_state=self._patch_state_snapshot_payload(derived_patch_record),
-        )
-
-        return GeneratedPatchScenarioPreview(
+        preview = GeneratedPatchScenarioPreview(
             scenario_id=scenario_id,
             scenario_label=scenario_label,
             product_family=post_record.product_family,
@@ -1598,6 +1743,53 @@ class XmlGenerationService:
             derived_patch_xml=derived_patch_xml_bytes.decode("utf-8"),
             derived_patch_validation=derived_patch_validation,
         )
+        return preview, {
+            "product_family": post_record.product_family,
+            "product_variant": post_record.product_variant,
+            "catalogue_number": post_record.catalogue_number,
+            "primary_udi_di": post_record.primary_udi_di,
+            "basic_udi_di": post_record.basic_identifier_code,
+            "patch_version": normalized_version,
+            "scenario_id": scenario_id,
+            "scenario_label": scenario_label,
+            "base_message_type": base_message_type,
+            "base_version": base_version,
+            "accepted_state_source": base_state_source,
+            "changed_fields": [delta.model_dump(mode="json") for delta in field_deltas],
+            "state_before": self._patch_state_snapshot_payload(scenario_base_record),
+            "latest_successful_state": self._patch_state_snapshot_payload(derived_patch_record),
+            "correlation_id": generated_correlation_id,
+            "message_id": generated_message_id,
+        }
+
+    def preview_generated_patch_scenario(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+        scenario_id: str,
+        patch_version: str,
+        scenario_inputs: dict[str, Any] | None = None,
+        require_reviewed_post_baseline: bool = False,
+        record_generated_context: bool = True,
+        correlation_id: str | None = None,
+        message_id: str | None = None,
+    ) -> GeneratedPatchScenarioPreview:
+        preview, generated_context = self._build_generated_patch_preview(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+            scenario_id=scenario_id,
+            patch_version=patch_version,
+            scenario_inputs=scenario_inputs,
+            require_reviewed_post_baseline=require_reviewed_post_baseline,
+            correlation_id=correlation_id,
+            message_id=message_id,
+        )
+        if record_generated_context:
+            self.testing_state_store.record_generated_patch_context(**generated_context)
+        return preview
 
     def download_generated_patch_scenario(
         self,
@@ -1725,12 +1917,28 @@ class XmlGenerationService:
             product_variant=record.product_variant,
             catalogue_number=post_record.catalogue_number,
         )
-        post_xml_bytes = self.renderer.render_message(xml_record)
+        correlation_id, message_id = self._message_envelope_ids()
+        post_xml_bytes = self.renderer.render_message(
+            xml_record,
+            correlation_id=correlation_id,
+            message_id=message_id,
+        )
         post_file_name = self.package_builder.operation_file_name(
             product_family=record.product_family,
             product_variant=record.product_variant,
             operation="UDIDI-POST" if parent_registered else "POST",
             catalogue_number=post_record.catalogue_number,
+        )
+        self.testing_state_store.record_generated_post_context(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            catalogue_number=post_record.catalogue_number,
+            primary_udi_di=post_record.primary_udi_di,
+            basic_udi_di=post_record.basic_identifier_code,
+            message_type=message_type,
+            accepted_post_state=self._post_state_snapshot_payload(xml_record),
+            correlation_id=correlation_id,
+            message_id=message_id,
         )
         self.testing_state_store.mark_reviewed_post(
             product_family=record.product_family,
@@ -1795,6 +2003,12 @@ class XmlGenerationService:
             market_info_record,
             market_info_version=normalized_market_info_version,
         )
+        correlation_id, message_id = self._message_envelope_ids()
+        xml_bytes = self.renderer.render_market_info_message(
+            market_info_record,
+            correlation_id=correlation_id,
+            message_id=message_id,
+        )
         self.testing_state_store.record_generated_market_info_context(
             product_family=record.product_family,
             product_variant=record.product_variant,
@@ -1816,8 +2030,9 @@ class XmlGenerationService:
                 }
                 for country_code, original_placed_on_market in market_info_record.market_countries
             ],
+            correlation_id=correlation_id,
+            message_id=message_id,
         )
-        xml_bytes = self.renderer.render_market_info_message(market_info_record)
         validation = self.xml_validation_service.validate_message(xml_bytes)
         return MarketInfoPutPreview(
             product_family=record.product_family,

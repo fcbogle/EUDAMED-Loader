@@ -54,6 +54,8 @@ class TestingSuccessXmlService:
     def record_success_xml(self, *, xml_bytes: bytes, source_file_name: str | None = None) -> SuccessXmlUploadResult:
         acknowledgements = self._parse_acknowledgements(xml_bytes=xml_bytes, source_file_name=source_file_name)
         first_acknowledgement = acknowledgements[0]
+        operation_scope = "bulk" if len(acknowledgements) > 1 else "single"
+        batch_id = self._batch_id(first_acknowledgement)
         first_resolution: SubjectResolution | None = None
         recorded_event_count = 0
         duplicate_event_count = 0
@@ -63,8 +65,19 @@ class TestingSuccessXmlService:
                 resolution = self._resolve_subject(connection, acknowledgement)
                 if first_resolution is None:
                     first_resolution = resolution
-                recorded_event, duplicate_event = self._record_event(connection, resolution.subject_id, acknowledgement)
-                self._reconcile_subject_success_state(connection, resolution.subject_id, acknowledgement)
+                recorded_event, duplicate_event, event_id = self._record_event(
+                    connection,
+                    resolution.subject_id,
+                    acknowledgement,
+                    operation_scope=operation_scope,
+                    batch_id=batch_id,
+                )
+                self._reconcile_subject_success_state(
+                    connection,
+                    resolution.subject_id,
+                    acknowledgement,
+                    event_id=event_id,
+                )
                 created_subject_count += 1 if resolution.created_subject else 0
                 recorded_event_count += 1 if recorded_event else 0
                 duplicate_event_count += 1 if duplicate_event else 0
@@ -111,17 +124,97 @@ class TestingSuccessXmlService:
         connection: sqlite3.Connection,
         subject_id: int,
         acknowledgement: AcknowledgementPayload,
+        *,
+        event_id: int | None,
     ) -> None:
         if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"}:
+            generated_row = self._generated_event_row(
+                connection,
+                subject_id=subject_id,
+                message_type=acknowledgement.message_type,
+                correlation_id=acknowledgement.correlation_id,
+                message_id=acknowledgement.message_id,
+                columns="version, state_after_json",
+            )
+            latest_post_state_json = (
+                self.store._optional_string(generated_row["state_after_json"])
+                if generated_row is not None
+                else None
+            )
+            latest_post_version = (
+                self.store._optional_string(generated_row["version"])
+                if generated_row is not None
+                else None
+            ) or acknowledgement.entity_version or "1"
+            registration_status = "parent_registered" if acknowledgement.message_type == "DEVICE.POST" else "child_registered"
             connection.execute(
                 """
                 UPDATE testing_subjects
                 SET post_success = 1,
-                    latest_successful_version = COALESCE(?, latest_successful_version, '1')
+                    registration_status = ?,
+                    latest_successful_post_version = ?,
+                    latest_successful_post_state_json = COALESCE(?, latest_successful_post_state_json),
+                    latest_successful_version = COALESCE(?, latest_successful_version, '1'),
+                    latest_successful_message_type = ?,
+                    latest_successful_event_id = COALESCE(?, latest_successful_event_id),
+                    latest_tested_at = COALESCE(?, latest_tested_at)
                 WHERE id = ?
                 """,
                 (
-                    acknowledgement.entity_version,
+                    registration_status,
+                    latest_post_version,
+                    latest_post_state_json,
+                    latest_post_version,
+                    acknowledgement.message_type,
+                    event_id,
+                    acknowledgement.tested_at,
+                    subject_id,
+                ),
+            )
+            return
+        if acknowledgement.message_type == "UDI_DI.PATCH":
+            generated_row = self._generated_event_row(
+                connection,
+                subject_id=subject_id,
+                message_type=acknowledgement.message_type,
+                correlation_id=acknowledgement.correlation_id,
+                message_id=acknowledgement.message_id,
+                columns="version, state_after_json",
+            )
+            patch_version = (
+                self.store._optional_string(generated_row["version"])
+                if generated_row is not None
+                else None
+            ) or acknowledgement.entity_version
+            patch_state_json = (
+                self.store._optional_string(generated_row["state_after_json"])
+                if generated_row is not None
+                else None
+            )
+            connection.execute(
+                """
+                UPDATE testing_subjects
+                SET post_success = 1,
+                    registration_status = 'child_registered',
+                    baseline_patch_success = CASE WHEN ? = '2' THEN 1 ELSE baseline_patch_success END,
+                    latest_successful_patch_version = COALESCE(?, latest_successful_patch_version),
+                    latest_successful_patch_state_json = COALESCE(?, latest_successful_patch_state_json),
+                    latest_successful_version = COALESCE(?, latest_successful_version),
+                    latest_successful_state_json = COALESCE(?, latest_successful_state_json),
+                    latest_successful_message_type = ?,
+                    latest_successful_event_id = COALESCE(?, latest_successful_event_id),
+                    latest_tested_at = COALESCE(?, latest_tested_at)
+                WHERE id = ?
+                """,
+                (
+                    patch_version,
+                    patch_version,
+                    patch_state_json,
+                    patch_version,
+                    patch_state_json,
+                    acknowledgement.message_type,
+                    event_id,
+                    acknowledgement.tested_at,
                     subject_id,
                 ),
             )
@@ -131,18 +224,14 @@ class TestingSuccessXmlService:
 
         version = acknowledgement.entity_version
         market_info_state_json: str | None = None
-        generated_row = connection.execute(
-            """
-            SELECT version, raw_event_json
-            FROM testing_events
-            WHERE subject_id = ?
-              AND message_type = 'MARKET_INFO.PUT'
-              AND status = 'GENERATED'
-            ORDER BY event_index DESC
-            LIMIT 1
-            """,
-            (subject_id,),
-        ).fetchone()
+        generated_row = self._generated_event_row(
+            connection,
+            subject_id=subject_id,
+            message_type="MARKET_INFO.PUT",
+            correlation_id=acknowledgement.correlation_id,
+            message_id=acknowledgement.message_id,
+            columns="version, raw_event_json",
+        )
         if generated_row is not None:
             version = self.store._optional_string(generated_row["version"]) or version
             generated_raw_json = self.store._optional_string(generated_row["raw_event_json"])
@@ -159,12 +248,18 @@ class TestingSuccessXmlService:
             """
             UPDATE testing_subjects
             SET latest_successful_market_info_version = COALESCE(?, latest_successful_market_info_version),
-                latest_successful_market_info_state_json = COALESCE(?, latest_successful_market_info_state_json)
+                latest_successful_market_info_state_json = COALESCE(?, latest_successful_market_info_state_json),
+                latest_successful_message_type = ?,
+                latest_successful_event_id = COALESCE(?, latest_successful_event_id),
+                latest_tested_at = COALESCE(?, latest_tested_at)
             WHERE id = ?
             """,
             (
                 version,
                 market_info_state_json,
+                acknowledgement.message_type,
+                event_id,
+                acknowledgement.tested_at,
                 subject_id,
             ),
         )
@@ -244,6 +339,45 @@ class TestingSuccessXmlService:
             if service_id and service_operation:
                 return service_id, service_operation
         return None, None
+
+    def _generated_event_row(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        subject_id: int,
+        message_type: str,
+        correlation_id: str | None,
+        message_id: str | None,
+        columns: str,
+    ) -> sqlite3.Row | None:
+        exact_row = connection.execute(
+            f"""
+            SELECT {columns}
+            FROM testing_events
+            WHERE subject_id = ?
+              AND message_type = ?
+              AND status = 'GENERATED'
+              AND COALESCE(correlation_id, '') = COALESCE(?, '')
+              AND COALESCE(message_id, '') = COALESCE(?, '')
+            ORDER BY event_index DESC
+            LIMIT 1
+            """,
+            (subject_id, message_type, correlation_id, message_id),
+        ).fetchone()
+        if exact_row is not None:
+            return exact_row
+        return connection.execute(
+            f"""
+            SELECT {columns}
+            FROM testing_events
+            WHERE subject_id = ?
+              AND message_type = ?
+              AND status = 'GENERATED'
+            ORDER BY event_index DESC
+            LIMIT 1
+            """,
+            (subject_id, message_type),
+        ).fetchone()
 
     def _resolve_subject(self, connection: sqlite3.Connection, acknowledgement: AcknowledgementPayload) -> SubjectResolution:
         existing_subject = self._find_existing_testing_subject(connection, acknowledgement)
@@ -394,7 +528,10 @@ class TestingSuccessXmlService:
         connection: sqlite3.Connection,
         subject_id: int,
         acknowledgement: AcknowledgementPayload,
-    ) -> tuple[bool, bool]:
+        *,
+        operation_scope: str,
+        batch_id: str | None,
+    ) -> tuple[bool, bool, int | None]:
         duplicate_row = connection.execute(
             """
             SELECT id
@@ -414,13 +551,21 @@ class TestingSuccessXmlService:
             ),
         ).fetchone()
         if duplicate_row is not None:
-            return False, True
+            return False, True, int(duplicate_row["id"])
 
         next_index_row = connection.execute(
             "SELECT COALESCE(MAX(event_index), -1) + 1 FROM testing_events WHERE subject_id = ?",
             (subject_id,),
         ).fetchone()
         next_index = int(next_index_row[0]) if next_index_row is not None else 0
+        subject_row = connection.execute(
+            """
+            SELECT product_family, product_variant, catalogue_number, primary_udi_di, basic_udi_di
+            FROM testing_subjects
+            WHERE id = ?
+            """,
+            (subject_id,),
+        ).fetchone()
         version: str | None = (
             acknowledgement.entity_version
             if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST", "MARKET_INFO.PUT"}
@@ -431,10 +576,20 @@ class TestingSuccessXmlService:
         changed_fields_json: str | None = None
         retained_fields_json: str | None = None
         unchanged_fields_json: str | None = None
+        base_message_type: str | None = None
+        base_version: str | None = None
+        derived_version: str | None = version
+        accepted_state_source: str | None = None
+        state_before_json: str | None = None
+        state_after_json: str | None = None
+        delta_json: str | None = None
         raw_event_payload: dict[str, Any] = {
             "source_file_name": acknowledgement.source_file_name,
             "message_type": acknowledgement.message_type,
             "operation_label": acknowledgement.operation_label,
+            "event_kind": "success_ack",
+            "operation_scope": operation_scope,
+            "batch_id": batch_id,
             "entity_code": acknowledgement.entity_code,
             "entity_version": acknowledgement.entity_version,
             "response_code": acknowledgement.response_code,
@@ -442,24 +597,36 @@ class TestingSuccessXmlService:
             "message_id": acknowledgement.message_id,
             "tested_at": acknowledgement.tested_at,
             "xml": acknowledgement.raw_xml,
+            "product_family": self.store._optional_string(subject_row["product_family"]) if subject_row is not None else None,
+            "product_variant": self.store._optional_string(subject_row["product_variant"]) if subject_row is not None else None,
+            "catalogue_number": self.store._optional_string(subject_row["catalogue_number"]) if subject_row is not None else None,
+            "primary_udi_di": self.store._optional_string(subject_row["primary_udi_di"]) if subject_row is not None else None,
+            "basic_udi_di": self.store._optional_string(subject_row["basic_udi_di"]) if subject_row is not None else None,
         }
         if acknowledgement.message_type == "UDI_DI.PATCH":
-            generated_row = connection.execute(
-                """
-                SELECT version, scenario_id, scenario_label, changed_fields_json, retained_fields_json, unchanged_fields_json, raw_event_json
-                FROM testing_events
-                WHERE subject_id = ?
-                  AND message_type = 'UDI_DI.PATCH'
-                  AND status = 'GENERATED'
-                ORDER BY event_index DESC
-                LIMIT 1
-                """,
-                (subject_id,),
-            ).fetchone()
+            generated_row = self._generated_event_row(
+                connection,
+                subject_id=subject_id,
+                message_type="UDI_DI.PATCH",
+                correlation_id=acknowledgement.correlation_id,
+                message_id=acknowledgement.message_id,
+                columns=(
+                    "version, base_message_type, base_version, derived_version, accepted_state_source, "
+                    "scenario_id, scenario_label, state_before_json, state_after_json, delta_json, "
+                    "changed_fields_json, retained_fields_json, unchanged_fields_json, raw_event_json"
+                ),
+            )
             if generated_row is not None:
                 version = self.store._optional_string(generated_row["version"])
+                base_message_type = self.store._optional_string(generated_row["base_message_type"])
+                base_version = self.store._optional_string(generated_row["base_version"])
+                derived_version = self.store._optional_string(generated_row["derived_version"]) or version
+                accepted_state_source = self.store._optional_string(generated_row["accepted_state_source"])
                 scenario_id = self.store._optional_string(generated_row["scenario_id"])
                 scenario_label = self.store._optional_string(generated_row["scenario_label"])
+                state_before_json = self.store._optional_string(generated_row["state_before_json"])
+                state_after_json = self.store._optional_string(generated_row["state_after_json"])
+                delta_json = self.store._optional_string(generated_row["delta_json"])
                 changed_fields_json = self.store._optional_string(generated_row["changed_fields_json"])
                 retained_fields_json = self.store._optional_string(generated_row["retained_fields_json"])
                 unchanged_fields_json = self.store._optional_string(generated_row["unchanged_fields_json"])
@@ -473,22 +640,7 @@ class TestingSuccessXmlService:
                         raw_event_payload["generated_patch_context"] = generated_payload
                         latest_state = generated_payload.get("latest_successful_state")
                         if isinstance(latest_state, dict):
-                            connection.execute(
-                                """
-                                UPDATE testing_subjects
-                                SET post_success = 1,
-                                    baseline_patch_success = CASE WHEN ? = '2' THEN 1 ELSE baseline_patch_success END,
-                                    latest_successful_version = ?,
-                                    latest_successful_state_json = ?
-                                WHERE id = ?
-                                """,
-                                (
-                                    version,
-                                    version,
-                                    json.dumps(latest_state),
-                                    subject_id,
-                                ),
-                            )
+                            raw_event_payload["accepted_patch_state"] = latest_state
         elif acknowledgement.message_type == "MARKET_INFO.PUT":
             subject_row = connection.execute(
                 """
@@ -501,22 +653,27 @@ class TestingSuccessXmlService:
             subject_before_state = self._json_dict(
                 subject_row["latest_successful_market_info_state_json"] if subject_row is not None else None
             )
-            generated_row = connection.execute(
-                """
-                SELECT version, raw_event_json
-                FROM testing_events
-                WHERE subject_id = ?
-                  AND message_type = 'MARKET_INFO.PUT'
-                  AND status = 'GENERATED'
-                ORDER BY event_index DESC
-                LIMIT 1
-                """,
-                (subject_id,),
-            ).fetchone()
+            generated_row = self._generated_event_row(
+                connection,
+                subject_id=subject_id,
+                message_type="MARKET_INFO.PUT",
+                correlation_id=acknowledgement.correlation_id,
+                message_id=acknowledgement.message_id,
+                columns=(
+                    "version, base_version, derived_version, accepted_state_source, "
+                    "state_before_json, state_after_json, delta_json, raw_event_json"
+                ),
+            )
             market_info_state_json: str | None = None
             market_info_delta: dict[str, Any] | None = None
             if generated_row is not None:
                 version = self.store._optional_string(generated_row["version"]) or version
+                base_version = self.store._optional_string(generated_row["base_version"])
+                derived_version = self.store._optional_string(generated_row["derived_version"]) or version
+                accepted_state_source = self.store._optional_string(generated_row["accepted_state_source"])
+                state_before_json = self.store._optional_string(generated_row["state_before_json"])
+                state_after_json = self.store._optional_string(generated_row["state_after_json"])
+                delta_json = self.store._optional_string(generated_row["delta_json"])
                 generated_raw_json = self.store._optional_string(generated_row["raw_event_json"])
                 if generated_raw_json:
                     try:
@@ -561,40 +718,83 @@ class TestingSuccessXmlService:
                 subject_id,
                 event_index,
                 message_type,
+                event_kind,
                 status,
+                operation_scope,
+                batch_id,
                 version,
+                base_message_type,
+                base_version,
+                derived_version,
+                accepted_state_source,
                 scenario_id,
                 scenario_label,
+                product_family,
+                product_variant,
+                catalogue_number,
+                primary_udi_di,
+                basic_udi_di,
                 tested_at,
                 transaction_id,
                 submission_id,
                 payload_created_at,
                 correlation_id,
                 message_id,
+                source_file_name,
+                state_before_json,
+                state_after_json,
+                delta_json,
                 changed_fields_json,
                 retained_fields_json,
                 unchanged_fields_json,
-                raw_event_json
-            ) VALUES (?, ?, ?, 'SUCCESS', ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
+                raw_event_json,
+                raw_xml
+            ) VALUES (?, ?, ?, 'success_ack', 'SUCCESS', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 subject_id,
                 next_index,
                 acknowledgement.message_type,
+                operation_scope,
+                batch_id,
                 version,
+                base_message_type,
+                base_version,
+                derived_version,
+                accepted_state_source,
                 scenario_id,
                 scenario_label,
+                self.store._optional_string(raw_event_payload.get("product_family")),
+                self.store._optional_string(raw_event_payload.get("product_variant")),
+                self.store._optional_string(raw_event_payload.get("catalogue_number")),
+                self.store._optional_string(raw_event_payload.get("primary_udi_di")),
+                self.store._optional_string(raw_event_payload.get("basic_udi_di")),
                 acknowledgement.tested_at,
+                None,
+                None,
                 acknowledgement.tested_at,
                 acknowledgement.correlation_id,
                 acknowledgement.message_id,
+                acknowledgement.source_file_name,
+                state_before_json,
+                state_after_json,
+                delta_json,
                 changed_fields_json,
                 retained_fields_json,
                 unchanged_fields_json,
                 raw_event_json,
+                acknowledgement.raw_xml,
             ),
         )
-        return True, False
+        inserted_row = connection.execute("SELECT last_insert_rowid()").fetchone()
+        event_id = int(inserted_row[0]) if inserted_row is not None else None
+        return True, False, event_id
+
+    @staticmethod
+    def _batch_id(acknowledgement: AcknowledgementPayload) -> str | None:
+        if acknowledgement.correlation_id and acknowledgement.message_id:
+            return f"{acknowledgement.correlation_id}:{acknowledgement.message_id}"
+        return acknowledgement.correlation_id or acknowledgement.message_id
 
     def _market_info_delta(self, *, before_state: dict[str, Any], after_state: dict[str, Any]) -> dict[str, Any]:
         before_items = before_state.get("market_countries")

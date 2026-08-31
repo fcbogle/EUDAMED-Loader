@@ -43,16 +43,32 @@ class EudamedMessageRenderer:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def render_message(self, record: DeviceXmlRecord) -> bytes:
-        return self.render_message_records([record])
+    def render_message(
+        self,
+        record: DeviceXmlRecord,
+        *,
+        correlation_id: str | None = None,
+        message_id: str | None = None,
+    ) -> bytes:
+        return self.render_message_records(
+            [record],
+            correlation_id=correlation_id,
+            message_id=message_id,
+        )
 
-    def render_market_info_message(self, record: MarketInfoXmlRecord) -> bytes:
+    def render_market_info_message(
+        self,
+        record: MarketInfoXmlRecord,
+        *,
+        correlation_id: str | None = None,
+        message_id: str | None = None,
+    ) -> bytes:
         root = etree.Element(self._q(MESSAGE_NS, "Push"), nsmap=NSMAP)
         root.set("version", self.settings.eudamed_message_schema_version)
 
-        self._append_text(root, MESSAGE_NS, "correlationID", str(uuid4()))
+        self._append_text(root, MESSAGE_NS, "correlationID", correlation_id or str(uuid4()))
         self._append_text(root, MESSAGE_NS, "creationDateTime", datetime.now(UTC).replace(microsecond=0).isoformat())
-        self._append_text(root, MESSAGE_NS, "messageID", str(uuid4()))
+        self._append_text(root, MESSAGE_NS, "messageID", message_id or str(uuid4()))
         root.append(
             self._endpoint_element(
                 tag_name="recipient",
@@ -76,13 +92,19 @@ class EudamedMessageRenderer:
 
         return etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True)
 
-    def render_message_records(self, records: list[DeviceXmlRecord]) -> bytes:
+    def render_message_records(
+        self,
+        records: list[DeviceXmlRecord],
+        *,
+        correlation_id: str | None = None,
+        message_id: str | None = None,
+    ) -> bytes:
         root = etree.Element(self._q(MESSAGE_NS, "Push"), nsmap=NSMAP)
         root.set("version", self.settings.eudamed_message_schema_version)
 
-        self._append_text(root, MESSAGE_NS, "correlationID", str(uuid4()))
+        self._append_text(root, MESSAGE_NS, "correlationID", correlation_id or str(uuid4()))
         self._append_text(root, MESSAGE_NS, "creationDateTime", datetime.now(UTC).replace(microsecond=0).isoformat())
-        self._append_text(root, MESSAGE_NS, "messageID", str(uuid4()))
+        self._append_text(root, MESSAGE_NS, "messageID", message_id or str(uuid4()))
         first_operation = self._normalized_operation(records[0].submission_operation)
         first_service_id = records[0].service_id_override or self._service_id_for_operation(first_operation)
         root.append(
@@ -109,7 +131,13 @@ class EudamedMessageRenderer:
 
         return etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True)
 
-    def render_batch_from_strings(self, messages: list[str]) -> bytes:
+    def render_batch_from_strings(
+        self,
+        messages: list[str],
+        *,
+        correlation_id: str | None = None,
+        message_id: str | None = None,
+    ) -> bytes:
         if not messages:
             raise ValueError("At least one XML message is required.")
 
@@ -122,9 +150,9 @@ class EudamedMessageRenderer:
         root = etree.Element(self._q(MESSAGE_NS, "Push"), nsmap=NSMAP)
         root.set("version", self.settings.eudamed_message_schema_version)
 
-        self._append_text(root, MESSAGE_NS, "correlationID", str(uuid4()))
+        self._append_text(root, MESSAGE_NS, "correlationID", correlation_id or str(uuid4()))
         self._append_text(root, MESSAGE_NS, "creationDateTime", datetime.now(UTC).replace(microsecond=0).isoformat())
-        self._append_text(root, MESSAGE_NS, "messageID", str(uuid4()))
+        self._append_text(root, MESSAGE_NS, "messageID", message_id or str(uuid4()))
         root.append(
             self._endpoint_element(
                 tag_name="recipient",

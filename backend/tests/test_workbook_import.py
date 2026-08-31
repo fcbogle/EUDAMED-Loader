@@ -874,6 +874,188 @@ def test_market_info_success_delta_uses_latest_accepted_subject_state_when_gener
         connection.close()
 
 
+def test_patch_success_matches_exact_generated_preview_and_generated_rows_are_append_only(
+    isolated_workbook_import_db: Path,
+) -> None:
+    store = PlaygroundStateStore()
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L1S",
+        primary_udi_di="05050649058189",
+        basic_udi_di="5050649ESPRITVZ",
+        post_success=1,
+        latest_successful_version="1",
+        latest_successful_state_json=json.dumps({"version": "1", "trade_name": "Baseline"}),
+    )
+    store.record_generated_patch_context(
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L1S",
+        primary_udi_di="05050649058189",
+        basic_udi_di="5050649ESPRITVZ",
+        patch_version="2",
+        scenario_id="trade_name_edit",
+        scenario_label="Trade Name Edit",
+        base_message_type="POST",
+        base_version="1",
+        accepted_state_source="accepted_post",
+        changed_fields=[{"field": "trade_name", "before": "Baseline", "after": "Version 2"}],
+        state_before={"version": "1", "trade_name": "Baseline"},
+        latest_successful_state={"version": "2", "trade_name": "Version 2"},
+        correlation_id="patch-correlation-v2",
+        message_id="patch-message-v2",
+    )
+    store.record_generated_patch_context(
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L1S",
+        primary_udi_di="05050649058189",
+        basic_udi_di="5050649ESPRITVZ",
+        patch_version="3",
+        scenario_id="trade_name_edit",
+        scenario_label="Trade Name Edit",
+        base_message_type="PATCH",
+        base_version="2",
+        accepted_state_source="sqlite_latest_successful_patch",
+        changed_fields=[{"field": "trade_name", "before": "Version 2", "after": "Version 3"}],
+        state_before={"version": "2", "trade_name": "Version 2"},
+        latest_successful_state={"version": "3", "trade_name": "Version 3"},
+        correlation_id="patch-correlation-v3",
+        message_id="patch-message-v3",
+    )
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        generated_rows = connection.execute(
+            """
+            SELECT event_index, version, correlation_id, message_id
+            FROM testing_events
+            WHERE subject_id = ?
+              AND message_type = 'UDI_DI.PATCH'
+              AND status = 'GENERATED'
+            ORDER BY event_index
+            """,
+            (subject_id,),
+        ).fetchall()
+        assert [(row["version"], row["correlation_id"], row["message_id"]) for row in generated_rows] == [
+            ("2", "patch-correlation-v2", "patch-message-v2"),
+            ("3", "patch-correlation-v3", "patch-message-v3"),
+        ]
+    finally:
+        connection.close()
+
+    xml_payload = """<?xml version='1.0' encoding='utf-8'?>
+<m:PullAck xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1">
+  <m:correlationID>patch-correlation-v2</m:correlationID>
+  <m:creationDateTime>2026-08-31T11:00:00+00:00</m:creationDateTime>
+  <m:messageID>patch-message-v2</m:messageID>
+  <m:sender>
+    <m:node>
+      <s:nodeActorCode>EUDAMED</s:nodeActorCode>
+    </m:node>
+    <m:service>
+      <s:serviceID>UDI_DI</s:serviceID>
+      <s:serviceOperation>PATCH</s:serviceOperation>
+    </m:service>
+  </m:sender>
+  <m:responseEntity>
+    <m:responseCode>SUCCESS</m:responseCode>
+    <m:entityCode>05050649058189</m:entityCode>
+  </m:responseEntity>
+</m:PullAck>
+"""
+
+    TestingSuccessXmlService().record_success_xml(
+        xml_bytes=xml_payload.encode("utf-8"),
+        source_file_name="APP-DTX-PATCH-V2.xml",
+    )
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        subject_row = connection.execute(
+            """
+            SELECT latest_successful_patch_version, latest_successful_patch_state_json, latest_successful_version
+            FROM testing_subjects
+            WHERE id = ?
+            """,
+            (subject_id,),
+        ).fetchone()
+        assert subject_row is not None
+        assert subject_row["latest_successful_patch_version"] == "2"
+        assert subject_row["latest_successful_version"] == "2"
+        assert json.loads(str(subject_row["latest_successful_patch_state_json"])) == {
+            "version": "2",
+            "trade_name": "Version 2",
+        }
+    finally:
+        connection.close()
+
+
+def test_patch_success_without_generated_context_still_advances_tracked_version(
+    isolated_workbook_import_db: Path,
+) -> None:
+    PlaygroundStateStore()
+    _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L1S",
+        primary_udi_di="05050649058189",
+        basic_udi_di="5050649ESPRITVZ",
+        post_success=1,
+        latest_successful_version="3",
+        latest_successful_state_json=json.dumps({"version": "3", "trade_name": "Version 3"}),
+    )
+
+    xml_payload = """<?xml version='1.0' encoding='utf-8'?>
+<m:PullAck xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1">
+  <m:correlationID>patch-correlation-v4</m:correlationID>
+  <m:creationDateTime>2026-08-31T12:00:00+00:00</m:creationDateTime>
+  <m:messageID>patch-message-v4</m:messageID>
+  <m:sender>
+    <m:node>
+      <s:nodeActorCode>EUDAMED</s:nodeActorCode>
+    </m:node>
+    <m:service>
+      <s:serviceID>UDI_DI</s:serviceID>
+      <s:serviceOperation>PATCH</s:serviceOperation>
+    </m:service>
+  </m:sender>
+  <m:responseEntity>
+    <m:responseCode>SUCCESS</m:responseCode>
+    <m:entityCode>05050649058189</m:entityCode>
+    <m:entityVersion>4</m:entityVersion>
+  </m:responseEntity>
+</m:PullAck>
+"""
+
+    TestingSuccessXmlService().record_success_xml(
+        xml_bytes=xml_payload.encode("utf-8"),
+        source_file_name="APP-DTX-PATCH-V4.xml",
+    )
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        subject_row = connection.execute(
+            """
+            SELECT latest_successful_patch_version, latest_successful_patch_state_json, latest_successful_version
+            FROM testing_subjects
+            WHERE normalized_primary_udi_di = '05050649058189'
+            """,
+        ).fetchone()
+        assert subject_row is not None
+        assert subject_row["latest_successful_patch_version"] == "4"
+        assert subject_row["latest_successful_version"] == "4"
+        assert subject_row["latest_successful_patch_state_json"] is None
+    finally:
+        connection.close()
+
+
 def test_workbook_import_service_persists_import_batch_and_subjects(
     isolated_workbook_import_env: tuple[Path, Path],
     monkeypatch: pytest.MonkeyPatch,

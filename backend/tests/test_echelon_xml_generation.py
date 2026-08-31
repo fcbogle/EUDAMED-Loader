@@ -1084,7 +1084,9 @@ def test_generated_patch_scenario_requires_tracked_successful_post_for_version_2
         raise AssertionError("Expected tracked successful POST requirement to be enforced for version 2 PATCH.")
 
 
-def test_generated_patch_scenario_route_allows_registered_device_without_reviewed_post_baseline() -> None:
+def test_generated_patch_scenario_route_allows_registered_device_without_reviewed_post_baseline(
+    route_xml_service_without_import: None,
+) -> None:
     payload = preview_generated_patch_scenario(
         {
             "product_family": "Echelon",

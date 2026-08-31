@@ -38,6 +38,41 @@ with the current implementation focus now being:
 
 ## Latest Confirmed Decisions
 
+- Latest implemented and verified direction on Monday, August 31, 2026:
+  - the first compatibility-safe slice of database-backed workflow-event logging is now implemented on `feature/workflow-event-logging`
+  - current implemented logging rule:
+    - generated `POST`, `Patch XML`, and `Market Info` events are now append-only rows in `testing_events`
+    - repeated previews no longer overwrite the previous generated row for the same subject
+  - current generated/success correlation rule:
+    - generated event rows now persist the same message-envelope `correlation_id` and `message_id` values that are written into the XML
+    - success XML upload now tries to resolve the exact generated event by:
+      - `subject_id`
+      - `message_type`
+      - `correlation_id`
+      - `message_id`
+    - if no exact generated row is found, success capture still falls back to the old latest-generated lookup so existing behavior is retained
+  - current PATCH accepted-state rule:
+    - successful `UDI_DI.PATCH` acknowledgements now advance tracked PATCH version state even when no matching generated preview row exists
+    - if no trustworthy generated preview context exists, the store advances the accepted version conservatively without inventing a new accepted PATCH snapshot
+  - current compatibility rule:
+    - legacy compatibility fields remain active on `testing_subjects`:
+      - `post_success`
+      - `latest_successful_version`
+      - `latest_successful_state_json`
+    - existing route/UI behavior is intentionally preserved while richer event metadata is added under the same SQLite layer
+  - current known design boundary:
+    - this slice fixes correctness inside the SQLite testing-state layer
+    - it does not yet complete the broader schema cleanup proposed in `docs/sqlite-event-logging-schema-proposal.md`
+    - status casing still remains transitional:
+      - generated rows continue using legacy `GENERATED`
+      - success rows continue using legacy `SUCCESS`
+      - `event_kind` now carries the more explicit semantic split:
+        - `generated`
+        - `success_ack`
+  - historical verification snapshot on Monday, August 31, 2026:
+    - targeted backend regressions for the new logging path passed
+    - backend `pytest` for `backend/tests/test_echelon_xml_generation.py` and `backend/tests/test_workbook_import.py`: `96 passed`
+
 - Latest implemented and verified direction on Sunday, August 30, 2026:
   - the top-level workspace navigation is now grouped as:
     - `Data Views`
@@ -396,6 +431,55 @@ with the current implementation focus now being:
   - the broader relational cleanup still remains ahead:
     - more consistent `device_subject_id` lineage joins across all persistence
     - expansion of accepted-state and submission-history persistence beyond the current testing-state slices
+
+### Workflow Event Logging
+
+- The active SQLite testing-state file remains:
+  - `data/testing/testing-state.sqlite3`
+- The active testing-state tables remain:
+  - `testing_subjects`
+  - `testing_events`
+  - `reviewed_post_baselines`
+- The current implemented design is now split between:
+  - `testing_subjects` as the current-state projection used by readiness checks, latest accepted state lookup, and summary views
+  - `testing_events` as the event history for generated previews and successful acknowledgements
+- Current implemented `testing_subjects` direction:
+  - keep legacy compatibility columns active while the richer model is phased in
+  - persist separate accepted-state slices where available for:
+    - accepted `POST`
+    - accepted `PATCH`
+    - accepted `Market Info`
+  - keep `device_subject_id` linkage as the intended long-term lineage anchor even though some transitional string matching still remains
+- Current implemented `testing_events` direction:
+  - generated XML actions write one event per affected subject
+  - success XML uploads write one success event per affected subject
+  - event rows now carry richer explicit fields in addition to `raw_event_json`, including:
+    - `event_kind`
+    - `operation_scope`
+    - `batch_id`
+    - `base_message_type`
+    - `base_version`
+    - `derived_version`
+    - `accepted_state_source`
+    - `state_before_json`
+    - `state_after_json`
+    - `delta_json`
+    - `source_file_name`
+    - `raw_xml`
+    - message-envelope `correlation_id`
+    - message-envelope `message_id`
+- Current implemented event-correlation rule:
+  - generation paths now store the exact message-envelope IDs used in the rendered XML
+  - success capture first resolves the matching generated event by exact envelope IDs and only then falls back to the prior latest-generated heuristic
+  - this matters because older uploaded XML should no longer inherit the wrong later preview state if a user previewed multiple drafts for the same device
+- Current implemented batch behavior:
+  - bulk generated rows share the outer batch wrapper `correlation_id` and `message_id` that EUDAMED acknowledgements are expected to reflect
+  - `batch_id` is present on success-event rows for cohort grouping
+  - a dedicated `testing_batches` table is still optional and has not yet been introduced
+- Current implemented compatibility boundary:
+  - existing read-model queries, UI behavior, and current SQLite seed assumptions remain valid
+  - the richer event fields are additive for now
+  - the proposal in `docs/sqlite-event-logging-schema-proposal.md` should still be treated as the next cleanup target, not as fully implemented steady state
 
 ### Canonical Validation
 
@@ -1373,16 +1457,255 @@ Files refreshed in this pass:
 
 Focus next on consolidating the remaining testing architecture onto SQLite and extending it carefully:
 
-1. replace the remaining YAML-dependent testing-history reads with SQLite-backed reads
-2. keep aligning testing history, reviewed baselines, and operation assessment around `device_subject` lineage
-3. reduce text-matched lineage resolution where `device_subject_id` joins are now available
-4. design the next SQLite-backed submission / response model so successful EUDAMED responses can update tracked state cleanly
-5. after the testing-history model is stable, extend canonical and accepted-state persistence tied to `device_subject`
-6. only after those relationships are stable, introduce migration tooling if needed for controlled SQLite schema evolution
-7. document and later implement a Production cutover mode where workbook/reference `PATCH` rows can proceed without locally generated `POST` lineage
-8. decide whether Production `PATCH` version state will come from live EUDAMED lookup, controlled source-version assumptions, or explicit operator confirmation
-9. decide and implement the first Market Info success-capture model:
-   - upload support
-   - SQLite persistence fields/events
-   - whether any returned version information should be stored separately from PATCH lineage
-10. decide whether to add a frontend test runner before broader Market Info and bulk Market Info UI work
+1. Review the current branch diff with the logging slice in mind:
+   - `backend/app/services/testing_state_store.py`
+   - `backend/app/services/testing_success_xml.py`
+   - `backend/app/services/xml_generation.py`
+   - `backend/app/services/xml_rendering.py`
+   - `backend/tests/test_workbook_import.py`
+2. Run the current verification baseline before changing the next schema slice:
+   - `python -m pytest -q backend/tests/test_echelon_xml_generation.py backend/tests/test_workbook_import.py`
+3. Validate the operator workflow manually in the app against the new correlation model:
+   - preview the same single-device `PATCH` twice with different versions
+   - upload the older success XML
+   - verify SQLite shows the acknowledged version/state rather than the newer preview state
+4. Do the same manual validation for `Market Info`:
+   - preview two different market-country drafts for the same device
+   - upload the older success XML
+   - verify accepted Market Info state and summary delta follow the acknowledged draft, not the newest preview
+5. Inspect `testing_events` directly in SQLite after those tests and confirm:
+   - repeated previews create multiple generated rows
+   - bulk rows carry shared wrapper `correlation_id` / `message_id`
+   - success rows keep `event_kind = success_ack`
+6. Decide the next schema-cleanup slice before more UI work:
+   - whether to standardize `status` casing now or later
+   - whether to introduce `testing_batches` now or continue with only `batch_id`
+   - whether accepted POST state should become a stricter first-class snapshot everywhere rather than partially transitional
+7. Replace the remaining YAML-dependent testing-history reads with SQLite-backed reads once the current logging slice is accepted.
+8. Keep aligning testing history, reviewed baselines, and operation assessment around `device_subject` lineage.
+9. Reduce text-matched lineage resolution where `device_subject_id` joins are now available.
+10. Only after the testing-history model is stable, introduce controlled SQLite migration tooling if needed.
+11. Document and later implement a Production cutover mode where workbook/reference `PATCH` rows can proceed without locally generated `POST` lineage.
+12. Decide whether Production `PATCH` version state will come from live EUDAMED lookup, controlled source-version assumptions, or explicit operator confirmation.
+
+### SQLite Inspection Checklist
+
+Use these queries against `data/testing/testing-state.sqlite3` after manual preview/upload tests.
+
+Terminal form:
+
+```bash
+sqlite3 -header -column data/testing/testing-state.sqlite3
+```
+
+1. Confirm repeated previews are append-only for one device:
+
+```sql
+SELECT
+    event_index,
+    message_type,
+    event_kind,
+    status,
+    version,
+    scenario_id,
+    correlation_id,
+    message_id,
+    payload_created_at
+FROM testing_events
+WHERE catalogue_number = 'ESP22L1S'
+  AND message_type IN ('UDI_DI.PATCH', 'MARKET_INFO.PUT')
+ORDER BY event_index;
+```
+
+2. Confirm the success row matched the exact generated envelope IDs:
+
+```sql
+SELECT
+    event_index,
+    event_kind,
+    status,
+    version,
+    correlation_id,
+    message_id,
+    scenario_id,
+    base_version,
+    derived_version
+FROM testing_events
+WHERE catalogue_number = 'ESP22L1S'
+  AND message_type = 'UDI_DI.PATCH'
+ORDER BY event_index DESC
+LIMIT 5;
+```
+
+3. Confirm the accepted subject projection now reflects the acknowledged state:
+
+```sql
+SELECT
+    product_family,
+    product_variant,
+    catalogue_number,
+    latest_successful_post_version,
+    latest_successful_patch_version,
+    latest_successful_market_info_version,
+    latest_successful_version,
+    latest_successful_message_type,
+    latest_tested_at
+FROM testing_subjects
+WHERE catalogue_number = 'ESP22L1S';
+```
+
+4. Inspect the stored before/after lineage payload for one acknowledged PATCH:
+
+```sql
+SELECT
+    event_index,
+    scenario_id,
+    base_message_type,
+    base_version,
+    derived_version,
+    state_before_json,
+    state_after_json,
+    delta_json
+FROM testing_events
+WHERE catalogue_number = 'ESP22L1S'
+  AND message_type = 'UDI_DI.PATCH'
+  AND event_kind = 'success_ack'
+ORDER BY event_index DESC
+LIMIT 1;
+```
+
+5. Confirm bulk-generated rows share the same wrapper envelope IDs:
+
+```sql
+SELECT
+    message_type,
+    operation_scope,
+    correlation_id,
+    message_id,
+    COUNT(*) AS subject_rows
+FROM testing_events
+WHERE operation_scope = 'bulk'
+  AND payload_created_at IS NOT NULL
+GROUP BY message_type, operation_scope, correlation_id, message_id
+ORDER BY subject_rows DESC, payload_created_at DESC;
+```
+
+6. If a stale-preview case is suspected, compare the newest generated rows to the latest success row for the same subject:
+
+```sql
+SELECT
+    event_index,
+    event_kind,
+    status,
+    version,
+    scenario_id,
+    correlation_id,
+    message_id
+FROM testing_events
+WHERE catalogue_number = 'ESP22L1S'
+  AND message_type = 'UDI_DI.PATCH'
+ORDER BY event_index DESC
+LIMIT 10;
+```
+
+Paste-ready terminal commands:
+
+```bash
+sqlite3 -header -column data/testing/testing-state.sqlite3 "
+SELECT
+    event_index,
+    message_type,
+    event_kind,
+    status,
+    version,
+    scenario_id,
+    correlation_id,
+    message_id,
+    payload_created_at
+FROM testing_events
+WHERE catalogue_number = 'ESP22L1S'
+  AND message_type IN ('UDI_DI.PATCH', 'MARKET_INFO.PUT')
+ORDER BY event_index;
+"
+
+sqlite3 -header -column data/testing/testing-state.sqlite3 "
+SELECT
+    event_index,
+    event_kind,
+    status,
+    version,
+    correlation_id,
+    message_id,
+    scenario_id,
+    base_version,
+    derived_version
+FROM testing_events
+WHERE catalogue_number = 'ESP22L1S'
+  AND message_type = 'UDI_DI.PATCH'
+ORDER BY event_index DESC
+LIMIT 5;
+"
+
+sqlite3 -header -column data/testing/testing-state.sqlite3 "
+SELECT
+    product_family,
+    product_variant,
+    catalogue_number,
+    latest_successful_post_version,
+    latest_successful_patch_version,
+    latest_successful_market_info_version,
+    latest_successful_version,
+    latest_successful_message_type,
+    latest_tested_at
+FROM testing_subjects
+WHERE catalogue_number = 'ESP22L1S';
+"
+
+sqlite3 -header -column data/testing/testing-state.sqlite3 "
+SELECT
+    event_index,
+    scenario_id,
+    base_message_type,
+    base_version,
+    derived_version,
+    state_before_json,
+    state_after_json,
+    delta_json
+FROM testing_events
+WHERE catalogue_number = 'ESP22L1S'
+  AND message_type = 'UDI_DI.PATCH'
+  AND event_kind = 'success_ack'
+ORDER BY event_index DESC
+LIMIT 1;
+"
+
+sqlite3 -header -column data/testing/testing-state.sqlite3 "
+SELECT
+    message_type,
+    operation_scope,
+    correlation_id,
+    message_id,
+    COUNT(*) AS subject_rows
+FROM testing_events
+WHERE operation_scope = 'bulk'
+  AND payload_created_at IS NOT NULL
+GROUP BY message_type, operation_scope, correlation_id, message_id
+ORDER BY subject_rows DESC, payload_created_at DESC;
+"
+
+sqlite3 -header -column data/testing/testing-state.sqlite3 "
+SELECT
+    event_index,
+    event_kind,
+    status,
+    version,
+    scenario_id,
+    correlation_id,
+    message_id
+FROM testing_events
+WHERE catalogue_number = 'ESP22L1S'
+  AND message_type = 'UDI_DI.PATCH'
+ORDER BY event_index DESC
+LIMIT 10;
+"
+```
