@@ -32,6 +32,7 @@ class AcknowledgementPayload:
     correlation_id: str | None
     message_id: str | None
     response_code: str
+    error_details: tuple[str, ...]
     source_file_name: str | None
     raw_xml: str
 
@@ -60,6 +61,10 @@ class TestingSuccessXmlService:
         recorded_event_count = 0
         duplicate_event_count = 0
         created_subject_count = 0
+        successful_entity_count = 0
+        error_entity_count = 0
+        error_entity_codes: list[str] = []
+        error_details: list[str] = []
         with self.store._connect() as connection:
             for acknowledgement in acknowledgements:
                 resolution = self._resolve_subject(connection, acknowledgement)
@@ -72,12 +77,18 @@ class TestingSuccessXmlService:
                     operation_scope=operation_scope,
                     batch_id=batch_id,
                 )
-                self._reconcile_subject_success_state(
-                    connection,
-                    resolution.subject_id,
-                    acknowledgement,
-                    event_id=event_id,
-                )
+                if acknowledgement.response_code == "SUCCESS":
+                    self._reconcile_subject_success_state(
+                        connection,
+                        resolution.subject_id,
+                        acknowledgement,
+                        event_id=event_id,
+                    )
+                    successful_entity_count += 1
+                else:
+                    error_entity_count += 1
+                    error_entity_codes.append(acknowledgement.entity_code)
+                    error_details.extend(acknowledgement.error_details)
                 created_subject_count += 1 if resolution.created_subject else 0
                 recorded_event_count += 1 if recorded_event else 0
                 duplicate_event_count += 1 if duplicate_event else 0
@@ -89,10 +100,10 @@ class TestingSuccessXmlService:
                 f"{first_resolution.catalogue_number or first_acknowledgement.entity_code}."
             )
         else:
-            summary_message = (
-                f"Tracked successful {first_acknowledgement.operation_label} acknowledgements for "
-                f"{recorded_event_count} of {len(acknowledgements)} response entities."
-            )
+            summary_message = f"Recorded {successful_entity_count} successful {first_acknowledgement.operation_label} acknowledgement(s)"
+            if error_entity_count:
+                summary_message += f" and {error_entity_count} error acknowledgement(s)"
+            summary_message += f" for {len(acknowledgements)} response entities."
             if duplicate_event_count:
                 summary_message += f" {duplicate_event_count} were already recorded."
         return SuccessXmlUploadResult(
@@ -117,6 +128,10 @@ class TestingSuccessXmlService:
             recorded_event_count=recorded_event_count,
             duplicate_event_count=duplicate_event_count,
             created_subject_count=created_subject_count,
+            successful_entity_count=successful_entity_count,
+            error_entity_count=error_entity_count,
+            error_entity_codes=error_entity_codes,
+            error_details=list(dict.fromkeys(error_details)),
         )
 
     def _reconcile_subject_success_state(
@@ -306,13 +321,18 @@ class TestingSuccessXmlService:
         acknowledgements: list[AcknowledgementPayload] = []
         for response_entity in response_entities:
             response_code = self._node_text(response_entity.find("message:responseCode", NAMESPACES))
-            if response_code != "SUCCESS":
-                raise ValueError(f"Only SUCCESS acknowledgements can be recorded. Received {response_code or 'UNKNOWN'}.")
-
             entity_code = self._node_text(response_entity.find("message:entityCode", NAMESPACES))
             if not entity_code:
                 raise ValueError("Success XML is missing responseEntity.entityCode.")
             entity_version = self._node_text(response_entity.find("message:entityVersion", NAMESPACES))
+            error_details = tuple(
+                detail
+                for detail in (
+                    self._node_text(element.find("message:operationErrorDetail", NAMESPACES))
+                    for element in response_entity.findall(".//message:elementReport", NAMESPACES)
+                )
+                if detail
+            )
             acknowledgements.append(
                 AcknowledgementPayload(
                     message_type=message_type,
@@ -323,6 +343,7 @@ class TestingSuccessXmlService:
                     correlation_id=correlation_id,
                     message_id=message_id,
                     response_code=response_code,
+                    error_details=error_details,
                     source_file_name=source_file_name,
                     raw_xml=raw_xml,
                 )
@@ -558,7 +579,7 @@ class TestingSuccessXmlService:
               AND COALESCE(correlation_id, '') = COALESCE(?, '')
               AND COALESCE(message_id, '') = COALESCE(?, '')
               AND message_type = ?
-              AND status = 'SUCCESS'
+              AND status = ?
             LIMIT 1
             """,
             (
@@ -566,6 +587,7 @@ class TestingSuccessXmlService:
                 acknowledgement.correlation_id,
                 acknowledgement.message_id,
                 acknowledgement.message_type,
+                "SUCCESS" if acknowledgement.response_code == "SUCCESS" else "ERROR",
             ),
         ).fetchone()
         if duplicate_row is not None:
@@ -601,11 +623,12 @@ class TestingSuccessXmlService:
         state_before_json: str | None = None
         state_after_json: str | None = None
         delta_json: str | None = None
+        is_success = acknowledgement.response_code == "SUCCESS"
         raw_event_payload: dict[str, Any] = {
             "source_file_name": acknowledgement.source_file_name,
             "message_type": acknowledgement.message_type,
             "operation_label": acknowledgement.operation_label,
-            "event_kind": "success_ack",
+            "event_kind": "success_ack" if is_success else "error_ack",
             "operation_scope": operation_scope,
             "batch_id": batch_id,
             "entity_code": acknowledgement.entity_code,
@@ -614,6 +637,7 @@ class TestingSuccessXmlService:
             "correlation_id": acknowledgement.correlation_id,
             "message_id": acknowledgement.message_id,
             "tested_at": acknowledgement.tested_at,
+            "error_details": list(acknowledgement.error_details),
             "xml": acknowledgement.raw_xml,
             "product_family": self.store._optional_string(subject_row["product_family"]) if subject_row is not None else None,
             "product_variant": self.store._optional_string(subject_row["product_variant"]) if subject_row is not None else None,
@@ -621,7 +645,7 @@ class TestingSuccessXmlService:
             "primary_udi_di": self.store._optional_string(subject_row["primary_udi_di"]) if subject_row is not None else None,
             "basic_udi_di": self.store._optional_string(subject_row["basic_udi_di"]) if subject_row is not None else None,
         }
-        if acknowledgement.message_type == "UDI_DI.PATCH":
+        if is_success and acknowledgement.message_type == "UDI_DI.PATCH":
             generated_row = self._generated_event_row(
                 connection,
                 subject_id=subject_id,
@@ -659,7 +683,7 @@ class TestingSuccessXmlService:
                         latest_state = generated_payload.get("latest_successful_state")
                         if isinstance(latest_state, dict):
                             raw_event_payload["accepted_patch_state"] = latest_state
-        elif acknowledgement.message_type == "MARKET_INFO.PUT":
+        elif is_success and acknowledgement.message_type == "MARKET_INFO.PUT":
             subject_row = connection.execute(
                 """
                 SELECT latest_successful_market_info_state_json
@@ -767,12 +791,14 @@ class TestingSuccessXmlService:
                 unchanged_fields_json,
                 raw_event_json,
                 raw_xml
-            ) VALUES (?, ?, ?, 'success_ack', 'SUCCESS', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 subject_id,
                 next_index,
                 acknowledgement.message_type,
+                "success_ack" if is_success else "error_ack",
+                "SUCCESS" if is_success else "ERROR",
                 operation_scope,
                 batch_id,
                 version,

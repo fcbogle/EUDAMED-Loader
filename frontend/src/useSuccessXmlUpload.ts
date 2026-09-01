@@ -87,10 +87,16 @@ export function useSuccessXmlUpload({
             : scope.mode === "bulkPatch"
               ? "Bulk PATCH"
               : "Bulk POST";
+      const errorSummary =
+        result.error_entity_count && result.error_entity_count > 0
+          ? ` Affected device${result.error_entity_codes?.length === 1 ? "" : "s"}: ${(result.error_entity_codes ?? []).join(", ") || "see acknowledgement"}. ${
+              result.error_details?.join(" ") ?? ""
+            }`
+          : "";
       setXmlActionMessage(
         result.duplicate_event
           ? `${result.summary_message} This success XML was already recorded and the ${operationLabel} workspace was refreshed.`
-          : `${result.summary_message} The tracked testing state and ${operationLabel} workspace were refreshed.`,
+          : `${result.summary_message}${errorSummary} The tracked testing state and ${operationLabel} workspace were refreshed.`,
       );
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Failed to upload success XML.";

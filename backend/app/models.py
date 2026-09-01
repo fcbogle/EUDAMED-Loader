@@ -432,6 +432,10 @@ class SuccessXmlUploadResult(BaseModel):
     recorded_event_count: int = 0
     duplicate_event_count: int = 0
     created_subject_count: int = 0
+    successful_entity_count: int = 0
+    error_entity_count: int = 0
+    error_entity_codes: list[str] = Field(default_factory=list)
+    error_details: list[str] = Field(default_factory=list)
 
 
 class SuccessXmlUploadRequest(BaseModel):

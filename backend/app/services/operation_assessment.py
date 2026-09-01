@@ -401,6 +401,12 @@ class OperationAssessmentService:
                 },
             )
 
+        market_info_candidate_count = sum(
+            1
+            for record in selected_records
+            if self.xml_service._bulk_patch_market_info_change_reason(record=record)
+        )
+        patch_ready_record_count = len(selected_records) - market_info_candidate_count
         status = "available"
         blocking_reasons: list[str] = []
         if missing_variant_records:
@@ -408,14 +414,26 @@ class OperationAssessmentService:
             blocking_reasons.append(
                 f"{len(missing_variant_records)} tracked posted device(s) are not currently XML-ready and would be excluded from Bulk PATCH."
             )
+        if market_info_candidate_count:
+            status = "attention"
+            blocking_reasons.append(
+                f"{market_info_candidate_count} device(s) require Market Info handling and would be excluded from Bulk PATCH."
+            )
+        if patch_ready_record_count < 1:
+            status = "blocked"
         summary_message = (
             f"Bulk PATCH is available for Basic UDI-DI {basic_udi_di}. "
-            f"{len(selected_records)} device record(s) are currently ready for PATCH."
+            f"{patch_ready_record_count} device record(s) are currently ready for PATCH."
         )
         if status == "attention":
             summary_message = (
                 f"Bulk PATCH is partially available for Basic UDI-DI {basic_udi_di}. "
-                f"{len(selected_records)} device record(s) are XML-ready, but some tracked posted devices are not."
+                f"{patch_ready_record_count} device record(s) are ready, but some tracked posted devices require a separate workflow."
+            )
+        elif status == "blocked":
+            summary_message = (
+                f"Bulk PATCH is not currently available for Basic UDI-DI {basic_udi_di}. "
+                "The selected device scope requires Market Info handling first."
             )
 
         return OperationAssessment(
@@ -424,7 +442,7 @@ class OperationAssessmentService:
             summary_message=summary_message,
             blocking_reasons=blocking_reasons,
             recommended_next_action="Choose the PATCH scenario and generate the Bulk PATCH package for the selected parent group.",
-            eligible_record_count=len(selected_records),
+            eligible_record_count=patch_ready_record_count,
             identity_scope=OperationAssessmentIdentityScope(
                 product_family=product_family,
                 product_variant=product_variant,
@@ -434,6 +452,7 @@ class OperationAssessmentService:
                 "eligible_parent_group_count": len(parent_groups),
                 "selected_basic_udi_di": basic_udi_di,
                 "eligible_child_record_count": eligible_child_records,
+                "market_info_candidate_count": market_info_candidate_count,
                 "latest_version_summary": self._latest_version_summary(posted_entries),
                 "available_parent_groups": parent_groups,
             },
@@ -716,6 +735,7 @@ class OperationAssessmentService:
         )
         latest_accepted_version = patch_state_resolution.state.version if patch_state_resolution else ("1" if tracked_registration_known else None)
         latest_successful_scenario_id = patch_state_resolution.scenario_id if patch_state_resolution else None
+        market_info_change_reason = self.xml_service._bulk_patch_market_info_change_reason(record=record)
         evidence = {
             "catalogue_number": record.catalogue_number,
             "primary_udi_di": record.primary_udi_di,
@@ -724,19 +744,26 @@ class OperationAssessmentService:
             "latest_accepted_version": latest_accepted_version,
             "latest_successful_scenario_id": latest_successful_scenario_id,
             "reviewed_post_baseline_present": reviewed_post_baseline_present,
+            "market_info_change_reason": market_info_change_reason,
         }
         blocking_reasons: list[str] = []
         if not tracked_registration_known:
             blocking_reasons.append(
                 "This device does not yet have a tracked successful Playground registration, so PATCH cannot be generated."
             )
+        if market_info_change_reason:
+            blocking_reasons.append(market_info_change_reason)
         if blocking_reasons:
             return self._blocked_assessment(
                 operation_type="single_patch",
                 product_family=record.product_family,
                 product_variant=record.product_variant,
                 catalogue_number=record.catalogue_number,
-                summary_message="PATCH is not currently available for the selected device.",
+                summary_message=(
+                    "PATCH is not currently available for the selected device because Market Information requires a separate workflow."
+                    if market_info_change_reason
+                    else "PATCH is not currently available for the selected device."
+                ),
                 blocking_reasons=blocking_reasons,
                 evidence=evidence,
             )

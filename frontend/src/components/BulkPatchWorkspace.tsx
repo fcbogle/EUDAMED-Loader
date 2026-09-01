@@ -205,6 +205,8 @@ export function BulkPatchWorkspace({
                     />
                     {bulkPatchPostedEntries.length > 10 && !bulkPatchCatalogueFilter.trim() ? (
                       <p className="panel-copy">Many posted devices are available. Enter a catalogue number filter to choose a subset.</p>
+                    ) : bulkPatchFilteredPostedEntries.length === 0 ? (
+                      <p className="panel-copy bulk-selection-empty-state">No posted catalogue numbers match this filter.</p>
                     ) : (
                       <div className="bulk-posted-grid">
                         {bulkPatchFilteredPostedEntries.map((entry, index) => {

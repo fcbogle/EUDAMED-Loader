@@ -930,4 +930,8 @@ export type SuccessXmlUploadResult = {
   recorded_event_count?: number;
   duplicate_event_count?: number;
   created_subject_count?: number;
+  successful_entity_count?: number;
+  error_entity_count?: number;
+  error_entity_codes?: string[];
+  error_details?: string[];
 };

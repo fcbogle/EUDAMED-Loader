@@ -119,7 +119,7 @@ export function XmlValidationStack({
           <p className="panel-copy">
             Selected file: {selectedBulkPreview.selected_chunk_file_name} · {selectedBulkPreview.selected_chunk_record_count} rows
           </p>
-          <p className="panel-copy">
+          <p className={selectedBulkPreview.excluded_record_count > 0 ? "panel-copy bulk-exclusion-count" : "panel-copy"}>
             Included {selectedBulkPreview.included_record_count} · Excluded {selectedBulkPreview.excluded_record_count}
           </p>
           <div className="roadmap-list">
@@ -133,9 +133,9 @@ export function XmlValidationStack({
             ))}
           </div>
           {selectedBulkExclusionSummaries.length ? (
-            <div className="roadmap-list">
+            <div className="roadmap-list bulk-exclusion-list" role="alert">
               {selectedBulkExclusionSummaries.map((summary) => (
-                <div className="roadmap-item" key={summary.key}>
+                <div className="roadmap-item bulk-exclusion-warning" key={summary.key}>
                   <strong>{summary.title}</strong>
                   <p>{summary.detail}</p>
                 </div>

@@ -159,6 +159,36 @@ class TestingStateStore:
             return None
         return self._optional_string(row["latest_successful_market_info_version"])
 
+    def has_pending_market_info_update_error(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> bool:
+        row = self._subject_row(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        if row is None:
+            return False
+        with self._connect() as connection:
+            error_row = connection.execute(
+                """
+                SELECT 1
+                FROM testing_events
+                WHERE subject_id = ?
+                  AND message_type = 'UDI_DI.PATCH'
+                  AND event_kind = 'error_ack'
+                  AND status = 'ERROR'
+                  AND raw_event_json LIKE '%Update of Market Information service%'
+                LIMIT 1
+                """,
+                (int(row["id"]),),
+            ).fetchone()
+        return error_row is not None
+
     def posted_entries(
         self,
         *,

@@ -389,6 +389,7 @@ Current behavior:
 
 - generated `POST`, `Patch XML`, and `Market Info` previews append `generated` rows to `testing_events`
 - success uploads append `success_ack` rows to `testing_events`
+- mixed acknowledgements record successful entities independently and retain non-success entities as `error_ack` rows without advancing their accepted state
 - ZIP-producing downloads append one package-level audit row to `generated_packages`; this records the flow, filename, creation time, byte size, SHA-256 digest, contained filenames, and manifest metadata without storing a duplicate ZIP blob
 - event rows carry explicit workflow metadata in addition to `raw_event_json`, including:
   - `event_kind`
@@ -406,6 +407,8 @@ Current behavior:
 - legacy `testing_subjects` compatibility fields remain active while richer event data is phased in
 
 `testing_events` remains device-scoped. `generated_packages` is deliberately separate because one bulk ZIP can contain many devices and does not belong to a single device event.
+
+Single and Bulk PATCH exclude devices with a tracked Market Information mismatch or a prior EUDAMED `marketInfoLink` rejection. Those devices must be handled through `MARKET_INFO.PUT` before a later PATCH is generated. PATCH payloads deliberately omit `marketInfos`; only `MARKET_INFO.PUT` can change that state.
 
 This is not yet the final submission-history architecture, but it is current architecture and it already affects correctness of accepted-state reconciliation.
 

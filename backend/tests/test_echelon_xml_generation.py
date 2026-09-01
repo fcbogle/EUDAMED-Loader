@@ -912,6 +912,7 @@ def test_generated_base_quantity_patch_scenario_updates_quantity() -> None:
 
     assert "<e:version>5</e:version>" in preview.derived_patch_xml
     assert "<udidi:baseQuantity>7</udidi:baseQuantity>" in preview.derived_patch_xml
+    assert "<udidi:marketInfos>" not in preview.derived_patch_xml
     assert any(delta.field_key == "base_quantity" and delta.after_value == "7" for delta in preview.field_deltas)
     assert preview.derived_patch_validation.valid is True
 

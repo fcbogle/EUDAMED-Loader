@@ -633,6 +633,27 @@ class XmlGenerationService:
             market_info_version=current_version,
         ), baseline_market_countries, current_version
 
+    def _bulk_patch_market_info_change_reason(self, *, record: CanonicalValidationRecord) -> str | None:
+        catalogue_number = record.catalogue_number or ""
+        if self.testing_state_store.has_pending_market_info_update_error(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            catalogue_number=catalogue_number,
+        ):
+            return "EUDAMED rejected a previous PATCH because Market Information must be updated through MARKET_INFO.PUT."
+
+        latest_market_info_state = self.testing_state_store.latest_successful_market_info_state(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            catalogue_number=catalogue_number,
+        )
+        if not latest_market_info_state:
+            return None
+        accepted_record, source_market_countries, _ = self._market_info_record_with_latest_state(record=record)
+        if self._market_country_signature(accepted_record.market_countries) != self._market_country_signature(source_market_countries):
+            return "Market Information differs from the tracked accepted state. Use MARKET_INFO.PUT before PATCH."
+        return None
+
     @staticmethod
     def _market_country_signature(items: list[tuple[str, bool]]) -> tuple[tuple[str, bool], ...]:
         return tuple(sorted((country, bool(original)) for country, original in items))
@@ -1167,6 +1188,17 @@ class XmlGenerationService:
                 )
             )
         for record in candidate_records:
+            market_info_change_reason = self._bulk_patch_market_info_change_reason(record=record)
+            if market_info_change_reason:
+                excluded_records.append(
+                    BulkXmlExcludedRecord(
+                        catalogue_number=record.catalogue_number,
+                        primary_udi_di=record.primary_udi_di,
+                        reason_code="market_info_update_required",
+                        reason_message=market_info_change_reason,
+                    )
+                )
+                continue
             post_record = self.projection_builder.build_device_record(record)
             patch_state_resolution = self.testing_state_store.latest_successful_patch_state(
                 product_family=record.product_family,

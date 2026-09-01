@@ -447,7 +447,9 @@ def test_success_xml_upload_records_bulk_udidi_post_acknowledgements(
     assert result.duplicate_event_count == 0
     assert result.created_subject_count == 0
     assert result.duplicate_event is False
-    assert "2 of 2 response entities" in result.summary_message
+    assert result.successful_entity_count == 2
+    assert result.error_entity_count == 0
+    assert "2 successful" in result.summary_message
 
     connection = sqlite3.connect(isolated_workbook_import_db)
     connection.row_factory = sqlite3.Row
@@ -502,6 +504,93 @@ def test_success_xml_upload_records_bulk_udidi_post_acknowledgements(
       ]
     finally:
       connection.close()
+
+
+def test_success_xml_upload_records_mixed_bulk_patch_outcomes_per_device(
+    isolated_workbook_import_db: Path,
+) -> None:
+    PlaygroundStateStore()
+    accepted_subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Linx",
+        product_variant="Linx",
+        catalogue_number="LINX22L1SD",
+        primary_udi_di="05050649085529",
+        basic_udi_di="5050649LINX2G",
+        post_success=1,
+        latest_successful_version="2",
+    )
+    error_subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Linx",
+        product_variant="Linx",
+        catalogue_number="LINX22L1S",
+        primary_udi_di="05050649085512",
+        basic_udi_di="5050649LINX2G",
+        post_success=1,
+        latest_successful_version="3",
+    )
+    xml_payload = """<?xml version='1.0' encoding='utf-8'?>
+<m:Acknowledgement xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1">
+  <m:correlationID>mixed-patch-correlation</m:correlationID>
+  <m:creationDateTime>2026-09-01T08:09:14.638+02:00</m:creationDateTime>
+  <m:messageID>mixed-patch-ack-message</m:messageID>
+  <m:sender><m:service><s:serviceID>UDI_DI</s:serviceID><s:serviceOperation>PATCH</s:serviceOperation></m:service></m:sender>
+  <m:responseEntity><m:entityCode>05050649085529</m:entityCode><m:responseCode>SUCCESS</m:responseCode></m:responseEntity>
+  <m:responseEntity>
+    <m:entityCode>05050649085512</m:entityCode><m:responseCode>PROCESSED_WITH_ERRORS</m:responseCode>
+    <m:report><m:elementReport><m:operationErrorCode>marketInfoLink</m:operationErrorCode><m:operationErrorDetail>Please utilise Update of Market Information service to update Market Information</m:operationErrorDetail></m:elementReport></m:report>
+  </m:responseEntity>
+</m:Acknowledgement>
+"""
+
+    result = TestingSuccessXmlService().record_success_xml(
+        xml_bytes=xml_payload.encode("utf-8"),
+        source_file_name="mixed-bulk-patch.xml",
+    )
+
+    assert result.successful_entity_count == 1
+    assert result.error_entity_count == 1
+    assert result.error_entity_codes == ["05050649085512"]
+    assert result.error_details == ["Please utilise Update of Market Information service to update Market Information"]
+    assert PlaygroundStateStore().has_pending_market_info_update_error(
+        product_family="Linx",
+        product_variant="Linx",
+        catalogue_number="LINX22L1S",
+    ) is True
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        rows = connection.execute(
+            """
+            SELECT subject_id, event_kind, status, raw_event_json
+            FROM testing_events
+            WHERE subject_id IN (?, ?)
+            ORDER BY subject_id, event_index
+            """,
+            (accepted_subject_id, error_subject_id),
+        ).fetchall()
+        assert [(row["subject_id"], row["event_kind"], row["status"]) for row in rows] == [
+            (accepted_subject_id, "success_ack", "SUCCESS"),
+            (error_subject_id, "error_ack", "ERROR"),
+        ]
+        assert "Update of Market Information service" in str(rows[1]["raw_event_json"])
+        state_rows = connection.execute(
+            """
+            SELECT id, latest_successful_message_type, latest_successful_version
+            FROM testing_subjects
+            WHERE id IN (?, ?)
+            ORDER BY id
+            """,
+            (accepted_subject_id, error_subject_id),
+        ).fetchall()
+        assert [tuple(row) for row in state_rows] == [
+            (accepted_subject_id, "UDI_DI.PATCH", "2"),
+            (error_subject_id, None, "3"),
+        ]
+    finally:
+        connection.close()
 
 
 def test_success_xml_upload_records_market_info_put_without_advancing_patch_version(
