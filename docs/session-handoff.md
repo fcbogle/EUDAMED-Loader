@@ -28,6 +28,43 @@ with the current implementation focus now being:
 - `Historical Playground Findings` sections capture dated evidence and prior decisions.
 - Any recorded test counts in this document are historical snapshots only. Re-run verification from the current worktree before relying on them.
 
+## Latest Playground Finding: Bulk Market Info And Bulk PATCH Reconciliation
+
+### What Happened
+
+The Navigator / Javelin / Linx Bulk PATCH and Market Info test sequence established an important EUDAMED workflow rule.
+
+- An earlier Bulk PATCH changed device data while its payload did not repeat `marketInfos`.
+- EUDAMED rejected the affected PATCH rows with a `marketInfoLink` error, directing the operator to `MARKET_INFO.PUT`.
+- A subsequent Bulk Market Info PUT deliberately removed Austria from 30 devices. EUDAMED accepted 29 rows at Market Info version `2`; `LINX22L1S` failed because EUDAMED already held version `2`, although that earlier success had not been imported into SQLite.
+- The error acknowledgement established EUDAMED version `2` as the authoritative floor for `LINX22L1S`. A Single Market Info PUT at version `3` then succeeded.
+- Repeating the Bulk PATCH after all Market Info acknowledgements were captured succeeded for all 31 Linx devices.
+
+### Implemented Safeguards
+
+- PATCH generation repeats each device's latest accepted Market Information state. It does not use workbook market countries when a later accepted `MARKET_INFO.PUT` state exists.
+- A prior `marketInfoLink` PATCH rejection blocks PATCH only until a later successful Market Info acknowledgement is recorded for that device.
+- EUDAMED-reported current Market Info versions are stored as an observed version floor. This does not replace the accepted country snapshot; it makes the next generated Market Info version `max(accepted, observed) + 1`.
+- The Single Market Info UI reads that observed floor. The backend rejects a stale supplied version when EUDAMED has reported a higher current version.
+- Bulk Market Info supports devices with mixed accepted baselines. Each generated device payload retains its own baseline and uses its own next Market Info version while applying the selected target countries.
+- Bulk PATCH download uses exactly the records included by the approved preview, preventing a preview/ZIP count mismatch.
+- An accepted Market Info state differing from the source workbook is safe for PATCH and must not be treated as a new exclusion. Only an unresolved EUDAMED rejection remains blocking.
+
+### Current Confirmed State
+
+- The final Linx Bulk PATCH acknowledgement recorded `31` successful `UDI_DI.PATCH` responses and no errors.
+- `LINX22L1S` has accepted Market Info version `3` and accepted PATCH version `4`.
+- The other Market Info cohort devices retain accepted Market Info version `2`; `LINX23L4S` was outside that Market Info cohort and retained its source Market Info state.
+- No Navigator / Javelin / Linx devices remain blocked by an unresolved Market Information PATCH rejection.
+
+### Operator Sequence
+
+1. Upload every EUDAMED acknowledgement before generating the next related action.
+2. For a `marketInfoLink` PATCH rejection, complete and acknowledge `MARKET_INFO.PUT` before retrying PATCH.
+3. Check the generated Market Info version, especially after a version-scheme error; do not upload a stale version.
+4. Review Bulk preview included and excluded counts before downloading the ZIP.
+5. Upload the final Bulk PATCH acknowledgement to reconcile accepted PATCH state.
+
 ## Naming Convention
 
 - Use `Basic UDI-DI` as the canonical operator-facing term for the shared regulatory parent context.

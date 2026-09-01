@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, api } from "./api";
 import architectureDefinitionDocumentation from "../../docs/architecture-definition-draft.md?raw";
+import sessionHandoffDocumentation from "../../docs/session-handoff.md?raw";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
 import { BulkMarketInfoWorkspace } from "./components/BulkMarketInfoWorkspace";
 import { BulkMarketInfoPreviewPanel } from "./components/BulkMarketInfoPreviewPanel";
@@ -667,6 +668,7 @@ type DocumentationSection = {
     | "xmlSampleComparison"
     | "roadmap"
     | "projectStructure"
+    | "sessionHandoff"
     | "softwareEngineeringPatterns";
   title: string;
   markdown: string;
@@ -1425,6 +1427,11 @@ export function App() {
       markdown: architectureDefinitionDocumentation,
     },
     {
+      id: "sessionHandoff",
+      title: "Session Handoff",
+      markdown: sessionHandoffDocumentation,
+    },
+    {
       id: "architecturePosition",
       title: "Architecture Position",
       markdown: architecturePositionDocumentation,
@@ -1484,7 +1491,7 @@ export function App() {
     {
       id: "project",
       title: "Project",
-      sectionIds: ["projectStructure", "architectureDefinition", "architecturePosition", "roadmap"],
+      sectionIds: ["projectStructure", "architectureDefinition", "sessionHandoff", "architecturePosition", "roadmap"],
     },
     {
       id: "dataCanonical",

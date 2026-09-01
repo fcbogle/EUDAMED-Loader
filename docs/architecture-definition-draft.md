@@ -350,8 +350,8 @@ This generates chunked `MARKET_INFO.PUT` packages for a selected posted-device c
 Current implementation behavior:
 
 - eligibility is assessed against the selected parent scope
-- the selected cohort must share one accepted market-country baseline before one shared scenario can be generated
-- user-edited market-country overrides drive one bulk Market Info scenario per chunk
+- a selected cohort may contain different accepted market-country baselines; each device retains its own baseline and receives its own next Market Info version
+- user-edited market-country overrides drive one target state per Bulk Market Info chunk
 - local validation, ZIP download, success upload, and SQLite persistence are implemented
 
 ## Current Success XML Architecture
@@ -408,11 +408,21 @@ Current behavior:
 
 `testing_events` remains device-scoped. `generated_packages` is deliberately separate because one bulk ZIP can contain many devices and does not belong to a single device event.
 
-Single and Bulk PATCH exclude devices with a tracked Market Information mismatch or a prior EUDAMED `marketInfoLink` rejection. Those devices must be handled through `MARKET_INFO.PUT` before a later PATCH is generated. PATCH payloads repeat the latest accepted Market Information state; only `MARKET_INFO.PUT` can change that state.
+Single and Bulk PATCH exclude devices with an unresolved EUDAMED `marketInfoLink` rejection. Those devices must be handled through `MARKET_INFO.PUT` before a later PATCH is generated. PATCH payloads repeat the latest accepted Market Information state, so an accepted state that differs from the workbook is safe to PATCH; only `MARKET_INFO.PUT` can change that state.
 
 Bulk `MARKET_INFO.PUT` may apply one explicit target country set to devices with different accepted/source baselines. Each payload retains its own baseline and receives its own next Market Info version.
 
 When an EUDAMED Market Info error reports a current version, SQLite retains that value as an observed version floor. It does not overwrite the accepted Market Information snapshot, but prevents generation from reusing a version EUDAMED has already accepted.
+
+### Bulk Market Info And PATCH Reconciliation
+
+Playground testing established that a `UDI_DI.PATCH` rejected with EUDAMED's `marketInfoLink` rule must be followed by a successful `MARKET_INFO.PUT` acknowledgement before PATCH is retried. The application enforces this as a device-specific pending condition, and resolves it only when a later Market Info success is recorded.
+
+The accepted Market Info state is independent of the source workbook. After a successful Market Info update, PATCH payloads repeat the accepted country set rather than reverting to workbook countries. Therefore, an accepted Market Info difference is not itself a PATCH exclusion.
+
+EUDAMED can report a higher current Market Info version than SQLite has accepted locally, for example when a previous success acknowledgement was not imported. That response is persisted as an observed version floor. Single and Bulk Market Info generation use the highest accepted or observed version as the current baseline; Single Market Info rejects a stale version supplied by the UI.
+
+This design was verified in the Navigator / Javelin / Linx test cohort: a Bulk Market Info PUT completed with 29 successes and one version-scheme error, the affected device completed a Single Market Info PUT at version 3, and the subsequent Bulk PATCH completed successfully for all 31 devices.
 
 This is not yet the final submission-history architecture, but it is current architecture and it already affects correctness of accepted-state reconciliation.
 

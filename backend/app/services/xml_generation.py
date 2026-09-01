@@ -672,17 +672,6 @@ class XmlGenerationService:
             catalogue_number=catalogue_number,
         ):
             return "EUDAMED rejected a previous PATCH because Market Information must be updated through MARKET_INFO.PUT."
-
-        latest_market_info_state = self.testing_state_store.latest_successful_market_info_state(
-            product_family=record.product_family,
-            product_variant=record.product_variant,
-            catalogue_number=catalogue_number,
-        )
-        if not latest_market_info_state:
-            return None
-        accepted_record, source_market_countries, _ = self._market_info_record_with_latest_state(record=record)
-        if self._market_country_signature(accepted_record.market_countries) != self._market_country_signature(source_market_countries):
-            return "Market Information differs from the tracked accepted state. Use MARKET_INFO.PUT before PATCH."
         return None
 
     @staticmethod

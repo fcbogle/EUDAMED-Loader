@@ -309,6 +309,29 @@ def test_single_market_info_preview_rejects_reuse_of_observed_eudamed_version(mo
     assert preview.market_info_version == "3"
 
 
+def test_bulk_patch_allows_tracked_market_info_state_that_differs_from_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = XmlGenerationService()
+    record = cast(
+        CanonicalValidationRecord,
+        service.selector.find_post_record(
+            product_family="Echelon",
+            product_variant="Echelon",
+            catalogue_number="EC22L1S",
+        ),
+    )
+    monkeypatch.setattr(service.testing_state_store, "has_pending_market_info_update_error", lambda **kwargs: False)
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "latest_successful_market_info_state",
+        lambda **kwargs: {
+            "version": "2",
+            "market_countries": [{"country": "DE", "original_placed_on_market": True}],
+        },
+    )
+
+    assert service._bulk_patch_market_info_change_reason(record=record) is None
+
+
 def test_bulk_market_info_preview_allows_mixed_baselines_for_one_explicit_target(monkeypatch: pytest.MonkeyPatch) -> None:
     service = XmlGenerationService()
     first_record = cast(
