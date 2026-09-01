@@ -136,6 +136,7 @@ class TestingReadModelService:
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH') THEN 1 ELSE 0 END) AS has_successful_child_post_or_patch,
                     ts.latest_successful_version,
                     ts.latest_successful_market_info_version,
+                    ts.latest_observed_market_info_version,
                     ts.latest_successful_market_info_state_json,
                     (
                         SELECT latest_event.message_type
@@ -181,6 +182,7 @@ class TestingReadModelService:
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH') THEN 1 ELSE 0 END) AS has_successful_child_post_or_patch,
                     ts.latest_successful_version,
                     ts.latest_successful_market_info_version,
+                    ts.latest_observed_market_info_version,
                     ts.latest_successful_market_info_state_json,
                     (
                         SELECT latest_event.message_type
@@ -419,6 +421,7 @@ class TestingReadModelService:
             has_successful_child_post_or_patch=bool(row["has_successful_child_post_or_patch"]),
             latest_successful_version=cls._optional_string(row["latest_successful_version"]),
             latest_successful_market_info_version=cls._optional_string(row["latest_successful_market_info_version"]),
+            latest_observed_market_info_version=cls._optional_string(row["latest_observed_market_info_version"]),
             latest_successful_market_info_state=cls._json_dict(row["latest_successful_market_info_state_json"]),
             latest_success_message_type=cls._optional_string(row["latest_success_message_type"]),
             latest_tested_at=cls._optional_string(row["latest_tested_at"]),

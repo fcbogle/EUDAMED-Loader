@@ -593,6 +593,108 @@ def test_success_xml_upload_records_mixed_bulk_patch_outcomes_per_device(
         connection.close()
 
 
+def test_market_info_error_records_eudamed_version_floor(
+    isolated_workbook_import_db: Path,
+) -> None:
+    PlaygroundStateStore()
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Linx",
+        product_variant="Linx",
+        catalogue_number="LINX22L1S",
+        primary_udi_di="05050649085512",
+        basic_udi_di="5050649LINX2G",
+        post_success=1,
+        latest_successful_market_info_version="1",
+        latest_successful_market_info_state_json=json.dumps(
+            {
+                "version": "1",
+                "market_countries": [{"country": "DE", "original_placed_on_market": True}],
+            }
+        ),
+    )
+    xml_payload = """<?xml version='1.0' encoding='utf-8'?>
+<m:Acknowledgement xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1">
+  <m:correlationID>market-info-version-floor</m:correlationID>
+  <m:creationDateTime>2026-09-01T10:00:00+00:00</m:creationDateTime>
+  <m:messageID>market-info-version-floor-message</m:messageID>
+  <m:sender><m:service><s:serviceID>MARKET_INFO</s:serviceID><s:serviceOperation>PUT</s:serviceOperation></m:service></m:sender>
+  <m:responseEntity>
+    <m:entityCode>05050649085512</m:entityCode><m:responseCode>PROCESSED_WITH_ERRORS</m:responseCode>
+    <m:report><m:elementReport><m:operationErrorDetail>versionNumber: EUDAMED's current version is 2.</m:operationErrorDetail></m:elementReport></m:report>
+  </m:responseEntity>
+</m:Acknowledgement>
+"""
+
+    result = TestingSuccessXmlService().record_success_xml(
+        xml_bytes=xml_payload.encode("utf-8"),
+        source_file_name="market-info-version-floor.xml",
+    )
+
+    assert result.error_entity_count == 1
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    connection.row_factory = sqlite3.Row
+    try:
+        row = connection.execute(
+            """
+            SELECT latest_successful_market_info_version, latest_observed_market_info_version,
+                   latest_successful_market_info_state_json
+            FROM testing_subjects
+            WHERE id = ?
+            """,
+            (subject_id,),
+        ).fetchone()
+        assert row is not None
+        assert row["latest_successful_market_info_version"] == "1"
+        assert row["latest_observed_market_info_version"] == "2"
+        assert json.loads(str(row["latest_successful_market_info_state_json"])) == {
+            "version": "1",
+            "market_countries": [{"country": "DE", "original_placed_on_market": True}],
+        }
+    finally:
+        connection.close()
+
+
+def test_successful_market_info_acknowledgement_clears_later_patch_market_info_block(
+    isolated_workbook_import_db: Path,
+) -> None:
+    PlaygroundStateStore()
+    subject_id = _insert_testing_subject(
+        isolated_workbook_import_db,
+        product_family="Linx",
+        product_variant="Linx",
+        catalogue_number="LINX22L1S",
+        primary_udi_di="05050649085512",
+        basic_udi_di="5050649LINX2G",
+        post_success=1,
+    )
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    try:
+        connection.execute(
+            """
+            INSERT INTO testing_events (subject_id, event_index, message_type, event_kind, status, raw_event_json)
+            VALUES (?, 0, 'UDI_DI.PATCH', 'error_ack', 'ERROR', ?)
+            """,
+            (subject_id, json.dumps({"error": "Update of Market Information service"})),
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_events (subject_id, event_index, message_type, event_kind, status, raw_event_json)
+            VALUES (?, 1, 'MARKET_INFO.PUT', 'success_ack', 'SUCCESS', '{}')
+            """,
+            (subject_id,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    assert PlaygroundStateStore().has_pending_market_info_update_error(
+        product_family="Linx",
+        product_variant="Linx",
+        catalogue_number="LINX22L1S",
+    ) is False
+
+
 def test_success_xml_upload_records_market_info_put_without_advancing_patch_version(
     isolated_workbook_import_db: Path,
 ) -> None:

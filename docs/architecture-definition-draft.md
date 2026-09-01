@@ -408,7 +408,11 @@ Current behavior:
 
 `testing_events` remains device-scoped. `generated_packages` is deliberately separate because one bulk ZIP can contain many devices and does not belong to a single device event.
 
-Single and Bulk PATCH exclude devices with a tracked Market Information mismatch or a prior EUDAMED `marketInfoLink` rejection. Those devices must be handled through `MARKET_INFO.PUT` before a later PATCH is generated. PATCH payloads deliberately omit `marketInfos`; only `MARKET_INFO.PUT` can change that state.
+Single and Bulk PATCH exclude devices with a tracked Market Information mismatch or a prior EUDAMED `marketInfoLink` rejection. Those devices must be handled through `MARKET_INFO.PUT` before a later PATCH is generated. PATCH payloads repeat the latest accepted Market Information state; only `MARKET_INFO.PUT` can change that state.
+
+Bulk `MARKET_INFO.PUT` may apply one explicit target country set to devices with different accepted/source baselines. Each payload retains its own baseline and receives its own next Market Info version.
+
+When an EUDAMED Market Info error reports a current version, SQLite retains that value as an observed version floor. It does not overwrite the accepted Market Information snapshot, but prevents generation from reusing a version EUDAMED has already accepted.
 
 This is not yet the final submission-history architecture, but it is current architecture and it already affects correctness of accepted-state reconciliation.
 

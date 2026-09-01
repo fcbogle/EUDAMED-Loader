@@ -159,6 +159,52 @@ class TestingStateStore:
             return None
         return self._optional_string(row["latest_successful_market_info_version"])
 
+    def latest_observed_market_info_version(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        catalogue_number: str,
+    ) -> str | None:
+        """Return the highest Market Info version reported by EUDAMED for this device."""
+        row = self._subject_row(
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+        )
+        if row is None:
+            return None
+        return self._optional_string(row["latest_observed_market_info_version"])
+
+    def record_observed_market_info_version(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        subject_id: int,
+        version: str,
+    ) -> None:
+        """Keep a monotonic EUDAMED version floor without changing accepted state."""
+        try:
+            observed_version = int(str(version).strip())
+        except (TypeError, ValueError):
+            return
+        if observed_version < 1:
+            return
+        row = connection.execute(
+            "SELECT latest_observed_market_info_version FROM testing_subjects WHERE id = ?",
+            (subject_id,),
+        ).fetchone()
+        try:
+            current_version = int(str(row["latest_observed_market_info_version"] or "0").strip()) if row else 0
+        except (TypeError, ValueError):
+            current_version = 0
+        if observed_version <= current_version:
+            return
+        connection.execute(
+            "UPDATE testing_subjects SET latest_observed_market_info_version = ? WHERE id = ?",
+            (str(observed_version), subject_id),
+        )
+
     def has_pending_market_info_update_error(
         self,
         *,
@@ -176,18 +222,34 @@ class TestingStateStore:
         with self._connect() as connection:
             error_row = connection.execute(
                 """
-                SELECT 1
+                SELECT event_index
                 FROM testing_events
                 WHERE subject_id = ?
                   AND message_type = 'UDI_DI.PATCH'
                   AND event_kind = 'error_ack'
                   AND status = 'ERROR'
                   AND raw_event_json LIKE '%Update of Market Information service%'
+                ORDER BY event_index DESC
                 LIMIT 1
                 """,
                 (int(row["id"]),),
             ).fetchone()
-        return error_row is not None
+            if error_row is None:
+                return False
+            market_info_success_row = connection.execute(
+                """
+                SELECT event_index
+                FROM testing_events
+                WHERE subject_id = ?
+                  AND message_type = 'MARKET_INFO.PUT'
+                  AND event_kind = 'success_ack'
+                  AND status = 'SUCCESS'
+                ORDER BY event_index DESC
+                LIMIT 1
+                """,
+                (int(row["id"]),),
+            ).fetchone()
+        return market_info_success_row is None or int(market_info_success_row["event_index"]) <= int(error_row["event_index"])
 
     def posted_entries(
         self,
@@ -895,6 +957,7 @@ class TestingStateStore:
                     exclude_from_baseline_patch_wave INTEGER NOT NULL DEFAULT 0,
                     latest_successful_version TEXT,
                     latest_successful_market_info_version TEXT,
+                    latest_observed_market_info_version TEXT,
                     latest_successful_market_info_state_json TEXT,
                     latest_successful_state_json TEXT
                 )
@@ -998,6 +1061,12 @@ class TestingStateStore:
                 connection,
                 table_name="testing_subjects",
                 column_name="latest_successful_market_info_version",
+                column_definition="TEXT",
+            )
+            self._ensure_column(
+                connection,
+                table_name="testing_subjects",
+                column_name="latest_observed_market_info_version",
                 column_definition="TEXT",
             )
             self._ensure_column(

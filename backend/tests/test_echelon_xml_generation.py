@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from io import BytesIO
 from types import SimpleNamespace
 from typing import cast
@@ -228,6 +229,11 @@ def test_bulk_market_info_preview_generates_wrapped_put_chunk(monkeypatch: pytes
         "latest_successful_market_info_version",
         lambda **kwargs: None,
     )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "latest_observed_market_info_version",
+        lambda **kwargs: None,
+    )
     generated_contexts: list[dict[str, object]] = []
     monkeypatch.setattr(
         service.testing_state_store,
@@ -249,6 +255,111 @@ def test_bulk_market_info_preview_generates_wrapped_put_chunk(monkeypatch: pytes
     assert "<s:serviceID>MARKET_INFO</s:serviceID>" in preview.selected_chunk_xml
     assert "<s:serviceOperation>PUT</s:serviceOperation>" in preview.selected_chunk_xml
     assert generated_contexts[0]["market_info_version"] == "2"
+
+
+def test_market_info_preview_uses_eudamed_observed_version_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = XmlGenerationService()
+    record = cast(
+        CanonicalValidationRecord,
+        service.selector.find_post_record(
+            product_family="Elite",
+            product_variant="Elite VT",
+            catalogue_number="EVT22L11S",
+        ),
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "latest_successful_market_info_state",
+        lambda **kwargs: {
+            "version": "1",
+            "market_countries": [{"country": "DE", "original_placed_on_market": True}],
+        },
+    )
+    monkeypatch.setattr(service.testing_state_store, "latest_successful_market_info_version", lambda **kwargs: "1")
+    monkeypatch.setattr(service.testing_state_store, "latest_observed_market_info_version", lambda **kwargs: "2")
+
+    market_info_record, _, current_version = service._market_info_record_with_latest_state(record=record)
+
+    assert current_version == "2"
+    assert market_info_record.market_info_version == "2"
+    assert market_info_record.market_countries == [("DE", True)]
+
+
+def test_single_market_info_preview_rejects_reuse_of_observed_eudamed_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = XmlGenerationService()
+    monkeypatch.setattr(service.testing_state_store, "latest_successful_market_info_state", lambda **kwargs: None)
+    monkeypatch.setattr(service.testing_state_store, "latest_successful_market_info_version", lambda **kwargs: "1")
+    monkeypatch.setattr(service.testing_state_store, "latest_observed_market_info_version", lambda **kwargs: "2")
+
+    with pytest.raises(ValueError, match="Market Info version 3 is required"):
+        service.preview_market_info_put(
+            product_family="Echelon",
+            product_variant="Echelon",
+            catalogue_number="EC22L1S",
+            market_info_version="2",
+        )
+
+    preview = service.preview_market_info_put(
+        product_family="Echelon",
+        product_variant="Echelon",
+        catalogue_number="EC22L1S",
+        market_info_version="3",
+    )
+
+    assert preview.market_info_version == "3"
+
+
+def test_bulk_market_info_preview_allows_mixed_baselines_for_one_explicit_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = XmlGenerationService()
+    first_record = cast(
+        CanonicalValidationRecord,
+        service.selector.find_post_record(
+            product_family="Elite",
+            product_variant="Elite VT",
+            catalogue_number="EVT22L11S",
+        ),
+    )
+    second_record = first_record.model_copy(
+        update={
+            "catalogue_number": "EVT22L11S-ALT",
+            "primary_udi_di": "05050649199999",
+        }
+    )
+    first_market_info_record = service.projection_builder.build_market_info_record(first_record)
+    second_market_info_record = replace(
+        first_market_info_record,
+        catalogue_number="EVT22L11S-ALT",
+        primary_udi_di="05050649199999",
+        market_countries=[("DE", True)],
+    )
+    monkeypatch.setattr(
+        service,
+        "_bulk_patch_selected_records",
+        lambda **kwargs: ([first_record, second_record], 2, []),
+    )
+    monkeypatch.setattr(
+        service,
+        "_market_info_record_with_latest_state",
+        lambda *, record: (
+            (first_market_info_record, [("GB", True)], "1")
+            if record.catalogue_number == first_record.catalogue_number
+            else (second_market_info_record, [("DE", True)], "2")
+        ),
+    )
+    monkeypatch.setattr(service.testing_state_store, "record_generated_market_info_context", lambda **kwargs: None)
+
+    preview = service.preview_bulk_market_info(
+        product_family="Elite",
+        product_variant="Elite VT",
+        basic_udi_di=basicUdiDiForRecordForTest(first_record),
+        record_count=2,
+        market_countries=[("IE", True)],
+    )
+
+    assert preview.included_record_count == 2
+    assert preview.excluded_record_count == 0
+    assert {record.derived_version for record in preview.included_records} == {"2", "3"}
+    assert preview.selected_chunk_xml.count("<marketinfo:country>IE</marketinfo:country>") == 2
 
 
 def test_bulk_market_info_routes_return_preview_and_zip(
@@ -279,6 +390,11 @@ def test_bulk_market_info_routes_return_preview_and_zip(
     monkeypatch.setattr(
         service.testing_state_store,
         "latest_successful_market_info_version",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "latest_observed_market_info_version",
         lambda **kwargs: None,
     )
     monkeypatch.setattr(
@@ -895,13 +1011,22 @@ def test_generated_storage_condition_patch_scenario_updates_comments() -> None:
     assert preview.derived_patch_validation.valid is True
 
 
-def test_generated_base_quantity_patch_scenario_updates_quantity() -> None:
-    XmlGenerationService().preview_post_registration(
+def test_generated_base_quantity_patch_scenario_updates_quantity(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = XmlGenerationService()
+    service.preview_post_registration(
         product_family="Echelon",
         product_variant="Echelon VAC",
         catalogue_number="EVAC22L1S",
     )
-    preview = XmlGenerationService().preview_generated_patch_scenario(
+    monkeypatch.setattr(
+        service.testing_state_store,
+        "latest_successful_market_info_state",
+        lambda **_: {
+            "version": "2",
+            "market_countries": [{"country": "IE", "original_placed_on_market": True}],
+        },
+    )
+    preview = service.preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",
         catalogue_number="EVAC22L1S",
@@ -912,7 +1037,8 @@ def test_generated_base_quantity_patch_scenario_updates_quantity() -> None:
 
     assert "<e:version>5</e:version>" in preview.derived_patch_xml
     assert "<udidi:baseQuantity>7</udidi:baseQuantity>" in preview.derived_patch_xml
-    assert "<udidi:marketInfos>" not in preview.derived_patch_xml
+    assert "<udidi:marketInfos>" in preview.derived_patch_xml
+    assert "<marketinfo:country>IE</marketinfo:country>" in preview.derived_patch_xml
     assert any(delta.field_key == "base_quantity" and delta.after_value == "7" for delta in preview.field_deltas)
     assert preview.derived_patch_validation.valid is True
 
@@ -1320,6 +1446,53 @@ def test_bulk_patch_preview_scopes_to_selected_basic_udi_parent_and_child_device
     assert preview.requested_record_count == len(selected_children)
     assert preview.included_record_count == len(selected_children)
     assert {record.catalogue_number for record in preview.included_records} == set(selected_children)
+
+
+def test_bulk_patch_download_packages_exactly_the_preview_included_records(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = XmlGenerationService()
+    posted_groups = service.testing_state_store.posted_parent_groups(
+        product_family="Elite",
+        product_variant="EliteVT",
+    )
+    assert posted_groups
+    basic_udi_di = str(posted_groups[0]["basic_udi_di"])
+    selected_children = cast(list[str], posted_groups[0]["sample_catalogue_numbers"][:3])
+    assert len(selected_children) == 3
+    excluded_catalogue_number = selected_children[0]
+    monkeypatch.setattr(
+        service,
+        "_bulk_patch_market_info_change_reason",
+        lambda *, record: "Market Information must be updated first."
+        if record.catalogue_number == excluded_catalogue_number
+        else None,
+    )
+
+    preview = service.preview_bulk_patch(
+        product_family="Elite",
+        product_variant="EliteVT",
+        basic_udi_di=basic_udi_di,
+        record_count=len(selected_children),
+        scenario_id="equivalent_first_patch",
+        scenario_inputs={},
+        selected_catalogue_numbers=selected_children,
+    )
+    _, package_bytes = service.download_bulk_patch(
+        product_family="Elite",
+        product_variant="EliteVT",
+        basic_udi_di=basic_udi_di,
+        record_count=len(selected_children),
+        scenario_id="equivalent_first_patch",
+        scenario_inputs={},
+        selected_catalogue_numbers=selected_children,
+    )
+
+    with ZipFile(BytesIO(package_bytes)) as archive:
+        xml_members = [name for name in archive.namelist() if name.endswith(".xml")]
+        assert len(xml_members) == 1
+        package_xml = archive.read(xml_members[0]).decode("utf-8")
+
+    assert preview.included_record_count == len(selected_children) - 1
+    assert package_xml.count("<device:UDIDIData") == preview.included_record_count
 
 
 def test_bulk_patch_routes_require_basic_udi_parent_scope() -> None:

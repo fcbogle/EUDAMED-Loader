@@ -895,6 +895,7 @@ export type TestingSubjectReadModelSummary = {
   has_successful_child_post_or_patch: boolean;
   latest_successful_version: string | null;
   latest_successful_market_info_version: string | null;
+  latest_observed_market_info_version: string | null;
   latest_successful_market_info_state: {
     version?: string;
     market_countries?: Array<{

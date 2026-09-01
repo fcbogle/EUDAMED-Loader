@@ -208,7 +208,7 @@ class DeviceXmlProjectionBuilder:
             storage_conditions=post_record.storage_conditions,
             critical_warnings=post_record.critical_warnings,
             patch_version_override="2",
-            include_market_infos_in_patch=False,
+            include_market_infos_in_patch=True,
         )
 
     @staticmethod
@@ -236,7 +236,7 @@ class DeviceXmlProjectionBuilder:
             critical_warnings=list(patch_state.critical_warnings),
             source_version_marker=patch_state.version,
             patch_version_override=patch_state.version,
-            include_market_infos_in_patch=False,
+            include_market_infos_in_patch=True,
         )
 
     @staticmethod

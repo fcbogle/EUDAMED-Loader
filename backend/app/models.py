@@ -355,6 +355,7 @@ class TestingSubjectReadModelSummary(BaseModel):
     has_successful_child_post_or_patch: bool = False
     latest_successful_version: str | None = None
     latest_successful_market_info_version: str | None = None
+    latest_observed_market_info_version: str | None = None
     latest_successful_market_info_state: dict[str, Any] | None = None
     latest_success_message_type: str | None = None
     latest_tested_at: str | None = None

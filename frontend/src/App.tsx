@@ -3625,7 +3625,14 @@ export function App() {
         (selectedMarketInfoAnchor?.catalogue_number && summary.catalogue_number === selectedMarketInfoAnchor.catalogue_number) ||
         (selectedMarketInfoAnchor?.primary_udi_di && summary.primary_udi_di === selectedMarketInfoAnchor.primary_udi_di),
     ) ?? null;
-  const selectedMarketInfoTrackedVersion = selectedMarketInfoSummary?.latest_successful_market_info_version ?? null;
+  const selectedMarketInfoTrackedVersion = [
+    selectedMarketInfoSummary?.latest_successful_market_info_version,
+    selectedMarketInfoSummary?.latest_observed_market_info_version,
+  ].reduce<string | null>((highestVersion, candidateVersion) => {
+    const candidate = Number(candidateVersion ?? "0");
+    const highest = Number(highestVersion ?? "0");
+    return Number.isFinite(candidate) && candidate > highest ? String(candidate) : highestVersion;
+  }, null);
   const selectedTrackedMarketInfoItems = useMemo(
     () =>
       selectedMarketInfoSummary?.latest_successful_market_info_state?.market_countries?.map(

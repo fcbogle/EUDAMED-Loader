@@ -603,11 +603,13 @@ class XmlGenerationService:
             product_variant=record.product_variant,
             catalogue_number=record.catalogue_number or "",
         )
-        if not isinstance(latest_market_info_state, dict):
-            return market_info_record, baseline_market_countries, "1"
-
-        accepted_market_countries = latest_market_info_state.get("market_countries")
         normalized_market_countries = baseline_market_countries
+        accepted_version: str | None = None
+        if isinstance(latest_market_info_state, dict):
+            accepted_market_countries = latest_market_info_state.get("market_countries")
+            accepted_version = self._optional_string(latest_market_info_state.get("version"))
+        else:
+            accepted_market_countries = None
         if isinstance(accepted_market_countries, list):
             candidate_items = [
                 (
@@ -618,20 +620,49 @@ class XmlGenerationService:
                 if isinstance(item, dict) and str(item.get("country") or "").strip()
             ]
             normalized_market_countries = self._normalized_market_info_countries(candidate_items) if candidate_items else baseline_market_countries
-        current_version = self._validate_market_info_version(
-            self._optional_string(latest_market_info_state.get("version"))
-            or self.testing_state_store.latest_successful_market_info_version(
-                product_family=record.product_family,
-                product_variant=record.product_variant,
-                catalogue_number=record.catalogue_number or "",
+        known_versions = [
+            value
+            for value in (
+                accepted_version,
+                self.testing_state_store.latest_successful_market_info_version(
+                    product_family=record.product_family,
+                    product_variant=record.product_variant,
+                    catalogue_number=record.catalogue_number or "",
+                ),
+                self.testing_state_store.latest_observed_market_info_version(
+                    product_family=record.product_family,
+                    product_variant=record.product_variant,
+                    catalogue_number=record.catalogue_number or "",
+                ),
             )
-            or "1"
-        )
+            if value
+        ]
+        current_version = str(max((int(self._validate_market_info_version(value)) for value in known_versions), default=1))
         return replace(
             market_info_record,
             market_countries=normalized_market_countries,
             market_info_version=current_version,
         ), baseline_market_countries, current_version
+
+    def _patch_market_countries(self, *, post_record: DeviceXmlRecord) -> list[tuple[str, bool]]:
+        latest_market_info_state = self.testing_state_store.latest_successful_market_info_state(
+            product_family=post_record.product_family,
+            product_variant=post_record.product_variant,
+            catalogue_number=post_record.catalogue_number,
+        )
+        if not isinstance(latest_market_info_state, dict):
+            return post_record.market_countries
+
+        accepted_market_countries = latest_market_info_state.get("market_countries")
+        if not isinstance(accepted_market_countries, list):
+            return post_record.market_countries
+
+        resolved_countries = [
+            (str(item.get("country") or "").strip(), bool(item.get("original_placed_on_market")))
+            for item in accepted_market_countries
+            if isinstance(item, dict) and str(item.get("country") or "").strip()
+        ]
+        return self._normalized_market_info_countries(resolved_countries) if resolved_countries else post_record.market_countries
 
     def _bulk_patch_market_info_change_reason(self, *, record: CanonicalValidationRecord) -> str | None:
         catalogue_number = record.catalogue_number or ""
@@ -1355,23 +1386,8 @@ class XmlGenerationService:
 
         included_summaries: list[BulkXmlRecordSummary] = []
         included_payloads: list[tuple[BulkXmlRecordSummary, str, dict[str, Any]]] = []
-        baseline_signature: tuple[tuple[str, bool], ...] | None = None
         for record in candidate_records:
             market_info_record, baseline_market_countries, current_version = self._market_info_record_with_latest_state(record=record)
-            record_signature = self._market_country_signature(market_info_record.market_countries)
-            if baseline_signature is None:
-                baseline_signature = record_signature
-            elif record_signature != baseline_signature:
-                excluded_records.append(
-                    BulkXmlExcludedRecord(
-                        catalogue_number=record.catalogue_number,
-                        primary_udi_di=record.primary_udi_di,
-                        reason_code="market_info_state_mismatch",
-                        reason_message="Accepted market-country state differs from the bulk scenario baseline for this cohort.",
-                    )
-                )
-                continue
-
             next_version = self._next_incremental_version(current_version)
             generated_record = replace(
                 market_info_record,
@@ -1589,18 +1605,25 @@ class XmlGenerationService:
             scenario_inputs=scenario_inputs,
             selected_catalogue_numbers=selected_catalogue_numbers,
         )
+        preview_catalogue_numbers = [
+            record.catalogue_number
+            for record in preview.included_records
+            if record.catalogue_number
+        ]
         candidate_records, _, missing_variant_records = self._bulk_patch_selected_records(
             product_family=product_family,
             product_variant=product_variant,
             basic_udi_di=basic_udi_di,
-            record_count=preview.requested_record_count,
-            selected_catalogue_numbers=selected_catalogue_numbers,
+            record_count=len(preview_catalogue_numbers),
+            selected_catalogue_numbers=preview_catalogue_numbers,
         )
         if not candidate_records and missing_variant_records:
             raise ValueError(
                 "Selected posted devices are not currently XML-ready in canonical validation: "
                 + ", ".join(missing_variant_records)
             )
+        if {record.catalogue_number for record in candidate_records} != set(preview_catalogue_numbers):
+            raise ValueError("Bulk PATCH download could not resolve the exact records from the approved preview.")
         members: list[tuple[str, bytes]] = []
         chunk_members = []
         successful_catalogues = {record.catalogue_number for record in preview.included_records}
@@ -1716,6 +1739,11 @@ class XmlGenerationService:
             catalogue_number=catalogue_number,
         )
         post_record = self.projection_builder.build_device_record(post_source_record)
+        post_record = replace(
+            post_record,
+            market_countries=self._patch_market_countries(post_record=post_record),
+            include_market_infos_in_patch=True,
+        )
         patch_state_resolution = self.testing_state_store.latest_successful_patch_state(
             product_family=product_family,
             product_variant=product_variant,
@@ -2063,6 +2091,18 @@ class XmlGenerationService:
         market_info_record = self.projection_builder.build_market_info_record(record)
         baseline_market_countries = list(market_info_record.market_countries)
         normalized_market_info_version = self._validate_market_info_version(market_info_version)
+        observed_version = self.testing_state_store.latest_observed_market_info_version(
+            product_family=record.product_family,
+            product_variant=record.product_variant,
+            catalogue_number=record.catalogue_number or "",
+        )
+        if observed_version:
+            _, _, current_version = self._market_info_record_with_latest_state(record=record)
+            required_version = self._next_incremental_version(current_version)
+            if normalized_market_info_version != required_version:
+                raise ValueError(
+                    f"Market Info version {required_version} is required because EUDAMED reports current version {observed_version}."
+                )
         if market_countries is not None:
             normalized_market_countries = self._normalized_market_info_countries(market_countries)
             market_info_record = replace(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass
 from typing import Any, Literal, cast
@@ -86,6 +87,11 @@ class TestingSuccessXmlService:
                     )
                     successful_entity_count += 1
                 else:
+                    self._reconcile_observed_market_info_version(
+                        connection,
+                        resolution.subject_id,
+                        acknowledgement,
+                    )
                     error_entity_count += 1
                     error_entity_codes.append(acknowledgement.entity_code)
                     error_details.extend(acknowledgement.error_details)
@@ -278,6 +284,26 @@ class TestingSuccessXmlService:
                 subject_id,
             ),
         )
+
+    def _reconcile_observed_market_info_version(
+        self,
+        connection: sqlite3.Connection,
+        subject_id: int,
+        acknowledgement: AcknowledgementPayload,
+    ) -> None:
+        if acknowledgement.message_type != "MARKET_INFO.PUT":
+            return
+        versions = [
+            int(match.group(1))
+            for detail in acknowledgement.error_details
+            for match in re.finditer(r"EUDAMED's current version is\s+(\d+)", detail, flags=re.IGNORECASE)
+        ]
+        if versions:
+            self.store.record_observed_market_info_version(
+                connection,
+                subject_id=subject_id,
+                version=str(max(versions)),
+            )
 
     def _parse_acknowledgements(self, *, xml_bytes: bytes, source_file_name: str | None) -> list[AcknowledgementPayload]:
         try:
