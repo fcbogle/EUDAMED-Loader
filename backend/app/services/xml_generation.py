@@ -412,7 +412,15 @@ class XmlGenerationService:
         product_variant: str,
         records: list[CanonicalValidationRecord],
         excluded_records: list[BulkXmlExcludedRecord],
+        selected_catalogue_numbers: list[str] | None = None,
     ) -> tuple[list[CanonicalValidationRecord], list[BulkXmlExcludedRecord], int]:
+        selected_catalogues = [value.strip() for value in (selected_catalogue_numbers or []) if value.strip()]
+        if selected_catalogues:
+            record_lookup = {record.catalogue_number: record for record in records if record.catalogue_number}
+            unknown_catalogues = sorted(set(selected_catalogues).difference(record_lookup))
+            if unknown_catalogues:
+                raise ValueError("Selected Bulk UDI-DI POST records are not XML-ready: " + ", ".join(unknown_catalogues))
+            records = [record_lookup[catalogue] for catalogue in selected_catalogues]
         grouped_records: dict[str, list[CanonicalValidationRecord]] = {}
         eligible_child_records = 0
 
@@ -943,6 +951,7 @@ class XmlGenerationService:
         product_family: str,
         product_variant: str,
         record_count: int,
+        selected_catalogue_numbers: list[str] | None = None,
         chunk_sequence: int = 1,
     ) -> BulkUdidiPostPreview:
         normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
@@ -956,6 +965,7 @@ class XmlGenerationService:
             product_variant=product_variant,
             records=candidate_records,
             excluded_records=excluded_records,
+            selected_catalogue_numbers=selected_catalogue_numbers,
         )
         included_records_raw = included_candidates[:normalized_count]
         if not included_records_raw:
@@ -1046,11 +1056,13 @@ class XmlGenerationService:
         product_family: str,
         product_variant: str,
         record_count: int,
+        selected_catalogue_numbers: list[str] | None = None,
     ) -> tuple[str, bytes]:
         preview = self.preview_bulk_udidi_post(
             product_family=product_family,
             product_variant=product_variant,
             record_count=record_count,
+            selected_catalogue_numbers=selected_catalogue_numbers,
         )
         raw_candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
             product_family=product_family,
@@ -1062,6 +1074,7 @@ class XmlGenerationService:
             product_variant=product_variant,
             records=raw_candidate_records,
             excluded_records=excluded_records,
+            selected_catalogue_numbers=selected_catalogue_numbers,
         )
         raw_records = raw_records[: preview.included_record_count]
 

@@ -1379,6 +1379,10 @@ export function App() {
   });
   const [selectedXmlChunkSequence, setSelectedXmlChunkSequence] = useState<number>(1);
   const [selectedBulkRecordCount, setSelectedBulkRecordCount] = useState<number>(1);
+  const [bulkUdidiPostScopeMode, setBulkUdidiPostScopeMode] = useState<BulkPatchScopeMode>("all_posted");
+  const [selectedBulkUdidiPostCatalogueNumbers, setSelectedBulkUdidiPostCatalogueNumbers] = useState<string[]>([]);
+  const [bulkUdidiPostCatalogueFilter, setBulkUdidiPostCatalogueFilter] = useState<string>("");
+  const [bulkUdidiPostImportText, setBulkUdidiPostImportText] = useState<string>("");
   const [scopeMode] = useState<ScopeMode>("all");
   const [showUnmappedOnly, setShowUnmappedOnly] = useState<boolean>(true);
   const [valueFilter, setValueFilter] = useState<string>("");
@@ -2229,8 +2233,8 @@ export function App() {
   );
   const submissionSnapshotStatus = latestImportBatch
     ? canonicalProjectionStatus === "ready"
-      ? {
-          label: "Projected",
+          ? {
+          label: "Synced",
           className: "ok",
           detail: `Workbook to SQLite and canonical projection are current for batch #${latestImportBatch.import_batch_id}.`,
         }
@@ -2437,6 +2441,34 @@ export function App() {
     }
     return Array.from(groupedCounts.values()).reduce((sum, count) => sum + Math.max(count - 1, 0), 0);
   })();
+  const bulkUdidiPostEntries = selectedBulkEligiblePostRecords
+    .filter((record) => {
+      const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
+      return Boolean(record.catalogue_number) && (!primaryUdiDi || !selectedSuccessfulPrimaryUdiDiSet.has(primaryUdiDi));
+    })
+    .map((record) => ({
+      catalogue_number: record.catalogue_number as string,
+      primary_udi_di: record.primary_udi_di ?? null,
+    }));
+  const bulkUdidiPostCatalogueNumbers = bulkUdidiPostEntries.map((entry) => entry.catalogue_number);
+  const bulkUdidiPostCatalogueNumberSet = new Set(bulkUdidiPostCatalogueNumbers);
+  const bulkUdidiPostImportedCatalogueNumbers = parseCatalogueNumberList(bulkUdidiPostImportText);
+  const bulkUdidiPostImportedMatchedCatalogueNumbers = bulkUdidiPostImportedCatalogueNumbers.filter((catalogueNumber) =>
+    bulkUdidiPostCatalogueNumberSet.has(catalogueNumber),
+  );
+  const bulkUdidiPostFilteredEntries = bulkUdidiPostEntries.filter((entry) =>
+    !bulkUdidiPostCatalogueFilter.trim() || entry.catalogue_number.toLowerCase().includes(bulkUdidiPostCatalogueFilter.trim().toLowerCase()),
+  );
+  const effectiveBulkUdidiPostCatalogueNumbers =
+    bulkUdidiPostScopeMode === "all_posted"
+      ? bulkUdidiPostCatalogueNumbers
+      : bulkUdidiPostScopeMode === "next_10"
+        ? bulkUdidiPostCatalogueNumbers.slice(0, 10)
+        : bulkUdidiPostScopeMode === "next_25"
+          ? bulkUdidiPostCatalogueNumbers.slice(0, 25)
+          : bulkUdidiPostScopeMode === "selected_catalogue_numbers"
+            ? selectedBulkUdidiPostCatalogueNumbers.filter((catalogueNumber) => bulkUdidiPostCatalogueNumberSet.has(catalogueNumber))
+            : bulkUdidiPostImportedMatchedCatalogueNumbers;
   const fallbackBulkPatchParentOptions = Array.from(
     selectedBulkEligiblePostRecords.reduce((groups, record) => {
       const basicUdi = basicUdiDiForRecord(record);
@@ -3151,13 +3183,23 @@ export function App() {
     selectedXmlVariantRecords,
     assessedPatchCandidateCatalogueNumber,
   );
+  const selectedPatchDeviceRecords = selectedXmlVariantRecords.filter((record) =>
+    testingSubjectSummaries.some(
+      (summary) =>
+        (summary.catalogue_number === record.catalogue_number ||
+          (record.primary_udi_di && summary.primary_udi_di === record.primary_udi_di)) &&
+        (summary.post_success || summary.has_successful_device_post || summary.has_successful_child_post_or_patch),
+    ),
+  );
+  const selectedPatchRecord = findRecordByCatalogueNumber(selectedPatchDeviceRecords, selectedXmlRecordKey);
   const selectedPatchWorkspaceRecord = resolvePatchWorkspaceRecord(
     selectedXmlVariantRecords,
-    assessedPatchCandidateCatalogueNumber,
-    selectedXmlPairRecord,
+    selectedPatchRecord?.catalogue_number ?? assessedPatchCandidateCatalogueNumber,
+    selectedPatchRecord ?? selectedXmlPairRecord,
   );
   const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
-  const selectedMarketInfoWorkspaceRecord = findRecordByCatalogueNumber(
+  const selectedMarketInfoRecord = findRecordByCatalogueNumber(selectedPatchDeviceRecords, selectedXmlRecordKey);
+  const selectedMarketInfoWorkspaceRecord = selectedMarketInfoRecord ?? findRecordByCatalogueNumber(
     selectedXmlVariantRecords,
     assessedMarketInfoCandidateCatalogueNumber,
   ) ?? selectedXmlMarketInfoRecord;
@@ -3986,7 +4028,7 @@ export function App() {
             : xmlMode === "bulkPost"
               ? canRunBulkPostFromAssessment
               : xmlMode === "bulkUdidiPost"
-                ? canRunBulkUdidiPostFromAssessment
+                ? canRunBulkUdidiPostFromAssessment && effectiveBulkUdidiPostCatalogueNumbers.length > 0
                 : xmlMode === "bulkPatch"
                   ? canRunBulkPatchFromAssessment
                   : canRunBulkMarketInfoFromAssessment;
@@ -4002,7 +4044,7 @@ export function App() {
             : xmlMode === "bulkPost"
               ? canRunBulkPostFromAssessment
             : xmlMode === "bulkUdidiPost"
-              ? canRunBulkUdidiPostFromAssessment
+              ? canRunBulkUdidiPostFromAssessment && effectiveBulkUdidiPostCatalogueNumbers.length > 0
               : xmlMode === "bulkPatch"
                 ? canRunBulkPatchFromAssessment
                 : canRunBulkMarketInfoFromAssessment;
@@ -4501,8 +4543,9 @@ export function App() {
         const preview = await api.previewBulkUdidiPost(
           selectedXmlFamilySummary.product_family,
           selectedXmlVariantSummary.product_variant,
-          normalizedBulkRecordCount,
+          effectiveBulkUdidiPostCatalogueNumbers.length,
           selectedXmlChunkSequence,
+          effectiveBulkUdidiPostCatalogueNumbers,
         );
         setXmlBulkUdidiPostPreview(preview);
         setXmlActionMessage(
@@ -4623,7 +4666,8 @@ export function App() {
               ? await api.downloadBulkUdidiPost(
                   selectedXmlFamilySummary.product_family,
                   selectedXmlVariantSummary.product_variant,
-                  normalizedBulkRecordCount,
+                  effectiveBulkUdidiPostCatalogueNumbers.length,
+                  effectiveBulkUdidiPostCatalogueNumbers,
                 )
             : xmlMode === "bulkMarketInfo"
               ? await (async () => {
@@ -4848,37 +4892,45 @@ export function App() {
         </div>
         <aside className="status-card">
           {activeTab === "workbooks" ? (
-            <>
-              <span className="status-label">Data Snapshot</span>
-              <div className="status-card-toolbar">
-                <button
-                  className="action-button import-workbooks-button"
-                  type="button"
-                  onClick={() => void runWorkbookImportFromUi()}
-                  disabled={isRunningWorkbookImport}
-                >
-                  {isRunningWorkbookImport ? "Importing Workbooks..." : "Import Workbooks"}
-                </button>
-                <span className={`status-pill ${submissionSnapshotStatus.className}`}>
-                  {submissionSnapshotStatus.label}
-                </span>
-              </div>
-              {latestImportBatch ? (
-                <p className="status-detail status-detail-tight">
-                  <>
-                    {`Workbook import batch #${latestImportBatch.import_batch_id} is current.`}
-                    <span className="status-detail-line">
-                      Last import: <span className="status-detail-emphasis">{formatIsoDateTime(latestImportBatch.imported_at)}</span>.
-                    </span>
-                  </>
-                </p>
-              ) : (
-                <p className="status-detail status-detail-tight">
-                  {submissionSnapshotStatus.detail}
-                </p>
-              )}
-              {workbookImportActionMessage ? <p className="status-detail status-detail-tight">{workbookImportActionMessage}</p> : null}
-            </>
+            isLoadingWorkbookImportMonitoring ? (
+              <>
+                <span className="status-label">Data Snapshot</span>
+                <span className={`status-pill ${submissionSnapshotStatus.className}`}>{submissionSnapshotStatus.label}</span>
+                <p className="status-detail status-detail-tight">{submissionSnapshotStatus.detail}</p>
+              </>
+            ) : (
+              <>
+                <span className="status-label">Data Snapshot</span>
+                <div className="status-card-toolbar">
+                  <button
+                    className="action-button import-workbooks-button"
+                    type="button"
+                    onClick={() => void runWorkbookImportFromUi()}
+                    disabled={isRunningWorkbookImport}
+                  >
+                    {isRunningWorkbookImport ? "Importing Workbooks..." : "Import Workbooks"}
+                  </button>
+                  <span className={`status-pill ${submissionSnapshotStatus.className}`}>
+                    {submissionSnapshotStatus.label}
+                  </span>
+                </div>
+                {latestImportBatch ? (
+                  <p className="status-detail status-detail-tight">
+                    <>
+                      {`Workbook import batch #${latestImportBatch.import_batch_id} is current.`}
+                      <span className="status-detail-line">
+                        Last import: <span className="status-detail-emphasis">{formatIsoDateTime(latestImportBatch.imported_at)}</span>.
+                      </span>
+                    </>
+                  </p>
+                ) : (
+                  <p className="status-detail status-detail-tight">
+                    {submissionSnapshotStatus.detail}
+                  </p>
+                )}
+                {workbookImportActionMessage ? <p className="status-detail status-detail-tight">{workbookImportActionMessage}</p> : null}
+              </>
+            )
           ) : null}
           {activeTab === "canonicalValidation" ? (
             <>
@@ -6322,6 +6374,18 @@ export function App() {
                       countryReference={marketCountryReference}
                       catalogueNumber={selectedTestingAnchor?.catalogue_number ?? null}
                       primaryUdiDi={selectedTestingAnchor?.primary_udi_di ?? null}
+                      marketInfoDeviceOptions={selectedPatchDeviceRecords
+                        .filter((record): record is typeof record & { catalogue_number: string } => Boolean(record.catalogue_number))
+                        .map((record) => ({
+                          catalogueNumber: record.catalogue_number,
+                          primaryUdiDi: record.primary_udi_di,
+                        }))}
+                      onMarketInfoDeviceChange={(catalogueNumber) => {
+                        setSelectedXmlRecordKey(catalogueNumber);
+                        setAcceptedMarketInfoItems(null);
+                        setMarketInfoScenarioItems([]);
+                        setXmlMarketInfoPreview(null);
+                      }}
                       productFamily={selectedTestingAnchor?.product_family ?? selectedXmlFamilyLabel}
                       productVariant={selectedTestingAnchor?.product_variant ?? selectedXmlVariantLabel}
                       marketInfoVersion={marketInfoVersionInput}
@@ -6582,6 +6646,17 @@ export function App() {
                       selectedPatchScenarioLabel={selectedPatchScenario.label}
                       selectedPatchScenarioStatus={selectedPatchScenarioStatus}
                       selectedPatchWorkspaceCatalogueNumber={selectedPatchWorkspaceRecord.catalogue_number}
+                      patchDeviceOptions={selectedPatchDeviceRecords
+                        .filter((record): record is typeof record & { catalogue_number: string } => Boolean(record.catalogue_number))
+                        .map((record) => ({
+                          catalogueNumber: record.catalogue_number,
+                          primaryUdiDi: record.primary_udi_di,
+                        }))}
+                      onPatchDeviceChange={(catalogueNumber) => {
+                        setSelectedXmlRecordKey(catalogueNumber);
+                        setXmlPairPreview(null);
+                        setXmlPatchPreview(null);
+                      }}
                       currentAcceptedPatchLabel={currentAcceptedPatchLabel}
                       hasReviewedPatchBaselinePost={hasReviewedPatchBaselinePost}
                       selectedPatchScenarioSummary={selectedPatchScenario.summary}
@@ -6777,12 +6852,28 @@ export function App() {
                         : "These Device UDI-DI child registrations are currently available under tracked Basic UDI-DI parents."
                     }
                     stepOneFooter={xmlMode === "bulkPost" ? bulkPostReadinessMessage : undefined}
-                    selectedBulkRecordCount={selectedBulkRecordCount}
+                    selectedBulkRecordCount={xmlMode === "bulkUdidiPost" ? effectiveBulkUdidiPostCatalogueNumbers.length : selectedBulkRecordCount}
                     onSelectedBulkRecordCountChange={(count) => {
                       setSelectedBulkRecordCount(count);
                       setSelectedXmlChunkSequence(1);
                     }}
-                    selectedBulkCapacity={selectedBulkCapacity}
+                    selectedBulkCapacity={xmlMode === "bulkUdidiPost" ? bulkUdidiPostEntries.length : selectedBulkCapacity}
+                    bulkUdidiPostScopeMode={xmlMode === "bulkUdidiPost" ? bulkUdidiPostScopeMode : undefined}
+                    onBulkUdidiPostScopeModeChange={xmlMode === "bulkUdidiPost" ? (value) => {
+                      setBulkUdidiPostScopeMode(value);
+                      setSelectedXmlChunkSequence(1);
+                    } : undefined}
+                    bulkUdidiPostEntries={xmlMode === "bulkUdidiPost" ? bulkUdidiPostEntries : undefined}
+                    bulkUdidiPostCatalogueFilter={xmlMode === "bulkUdidiPost" ? bulkUdidiPostCatalogueFilter : undefined}
+                    onBulkUdidiPostCatalogueFilterChange={xmlMode === "bulkUdidiPost" ? setBulkUdidiPostCatalogueFilter : undefined}
+                    bulkUdidiPostFilteredEntries={xmlMode === "bulkUdidiPost" ? bulkUdidiPostFilteredEntries : undefined}
+                    selectedBulkUdidiPostCatalogueNumbers={xmlMode === "bulkUdidiPost" ? selectedBulkUdidiPostCatalogueNumbers : undefined}
+                    setSelectedBulkUdidiPostCatalogueNumbers={xmlMode === "bulkUdidiPost" ? setSelectedBulkUdidiPostCatalogueNumbers : undefined}
+                    bulkUdidiPostImportText={xmlMode === "bulkUdidiPost" ? bulkUdidiPostImportText : undefined}
+                    onBulkUdidiPostImportTextChange={xmlMode === "bulkUdidiPost" ? setBulkUdidiPostImportText : undefined}
+                    bulkUdidiPostImportedCatalogueNumbersCount={xmlMode === "bulkUdidiPost" ? bulkUdidiPostImportedCatalogueNumbers.length : undefined}
+                    bulkUdidiPostImportedMatchedCatalogueNumbersCount={xmlMode === "bulkUdidiPost" ? bulkUdidiPostImportedMatchedCatalogueNumbers.length : undefined}
+                    bulkUdidiPostImportedNotFoundCatalogueNumbersCount={xmlMode === "bulkUdidiPost" ? bulkUdidiPostImportedCatalogueNumbers.length - bulkUdidiPostImportedMatchedCatalogueNumbers.length : undefined}
                     selectedXmlChunkSequence={selectedXmlChunkSequence}
                     onSelectedXmlChunkSequenceChange={setSelectedXmlChunkSequence}
                     selectedBulkChunkCount={selectedBulkChunkCount}

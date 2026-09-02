@@ -1,8 +1,17 @@
+import type { Dispatch, SetStateAction } from "react";
+
 import type { XmlValidationResult } from "../types";
 
 import { XmlAssessmentCard } from "./XmlAssessmentCard";
 import { XmlStatusStrip } from "./XmlStatusStrip";
 import { XmlWorkspaceHeader } from "./XmlWorkspaceHeader";
+
+type BulkPostScopeMode = "all_posted" | "next_10" | "next_25" | "selected_catalogue_numbers" | "import_catalogue_list";
+
+type BulkPostSelectableEntry = {
+  catalogue_number: string;
+  primary_udi_di: string | null;
+};
 
 type BulkPostWorkspaceProps = {
   familyVariantLabel: string;
@@ -16,6 +25,19 @@ type BulkPostWorkspaceProps = {
   selectedBulkRecordCount: number;
   onSelectedBulkRecordCountChange: (count: number) => void;
   selectedBulkCapacity: number;
+  bulkUdidiPostScopeMode?: BulkPostScopeMode;
+  onBulkUdidiPostScopeModeChange?: (value: BulkPostScopeMode) => void;
+  bulkUdidiPostEntries?: BulkPostSelectableEntry[];
+  bulkUdidiPostCatalogueFilter?: string;
+  onBulkUdidiPostCatalogueFilterChange?: (value: string) => void;
+  bulkUdidiPostFilteredEntries?: BulkPostSelectableEntry[];
+  selectedBulkUdidiPostCatalogueNumbers?: string[];
+  setSelectedBulkUdidiPostCatalogueNumbers?: Dispatch<SetStateAction<string[]>>;
+  bulkUdidiPostImportText?: string;
+  onBulkUdidiPostImportTextChange?: (value: string) => void;
+  bulkUdidiPostImportedCatalogueNumbersCount?: number;
+  bulkUdidiPostImportedMatchedCatalogueNumbersCount?: number;
+  bulkUdidiPostImportedNotFoundCatalogueNumbersCount?: number;
   selectedXmlChunkSequence: number;
   onSelectedXmlChunkSequenceChange: (sequence: number) => void;
   selectedBulkChunkCount: number;
@@ -35,6 +57,19 @@ export function BulkPostWorkspace({
   selectedBulkRecordCount,
   onSelectedBulkRecordCountChange,
   selectedBulkCapacity,
+  bulkUdidiPostScopeMode,
+  onBulkUdidiPostScopeModeChange,
+  bulkUdidiPostEntries = [],
+  bulkUdidiPostCatalogueFilter = "",
+  onBulkUdidiPostCatalogueFilterChange,
+  bulkUdidiPostFilteredEntries = [],
+  selectedBulkUdidiPostCatalogueNumbers = [],
+  setSelectedBulkUdidiPostCatalogueNumbers,
+  bulkUdidiPostImportText = "",
+  onBulkUdidiPostImportTextChange,
+  bulkUdidiPostImportedCatalogueNumbersCount = 0,
+  bulkUdidiPostImportedMatchedCatalogueNumbersCount = 0,
+  bulkUdidiPostImportedNotFoundCatalogueNumbersCount = 0,
   selectedXmlChunkSequence,
   onSelectedXmlChunkSequenceChange,
   selectedBulkChunkCount,
@@ -76,22 +111,108 @@ export function BulkPostWorkspace({
               subtitle="Records included in this package"
               isRefreshing={isRefreshing}
             >
-              <p className="panel-copy">Choose how many device rows to include in the generated package.</p>
-              <label className="field-label" htmlFor="xml-bulk-record-count">
-                Number of devices
-              </label>
-              <select
-                id="xml-bulk-record-count"
-                className="rule-select"
-                value={selectedBulkRecordCount}
-                onChange={(event) => onSelectedBulkRecordCountChange(Number(event.target.value))}
-              >
-                {Array.from({ length: Math.max(Math.min(selectedBulkCapacity, 300), 1) }, (_, index) => index + 1).map((count) => (
-                  <option key={count} value={count}>
-                    {count} device{count === 1 ? "" : "s"}
-                  </option>
-                ))}
-              </select>
+              {bulkUdidiPostScopeMode && onBulkUdidiPostScopeModeChange ? (
+                <>
+                  <p className="panel-copy">Choose which eligible Device UDI-DI rows to include in the generated package.</p>
+                  <label className="field-label" htmlFor="xml-bulk-udidi-post-scope-mode">
+                    Scope mode
+                  </label>
+                  <select
+                    id="xml-bulk-udidi-post-scope-mode"
+                    className="rule-select"
+                    value={bulkUdidiPostScopeMode}
+                    onChange={(event) => onBulkUdidiPostScopeModeChange(event.target.value as BulkPostScopeMode)}
+                  >
+                    <option value="all_posted">All eligible devices</option>
+                    <option value="next_10">Next 10 devices</option>
+                    <option value="next_25">Next 25 devices</option>
+                    <option value="selected_catalogue_numbers">Select catalogue numbers</option>
+                    <option value="import_catalogue_list">Import catalogue list</option>
+                  </select>
+                  {bulkUdidiPostScopeMode === "selected_catalogue_numbers" ? (
+                    <>
+                      <label className="field-label" htmlFor="xml-bulk-udidi-post-catalogue-filter">
+                        Catalogue number filter
+                      </label>
+                      <input
+                        id="xml-bulk-udidi-post-catalogue-filter"
+                        className="rule-select patch-select"
+                        type="text"
+                        placeholder={bulkUdidiPostEntries.length > 10 ? "Search eligible catalogue numbers" : "Optional filter"}
+                        value={bulkUdidiPostCatalogueFilter}
+                        onChange={(event) => onBulkUdidiPostCatalogueFilterChange?.(event.target.value)}
+                      />
+                      {bulkUdidiPostEntries.length > 10 && !bulkUdidiPostCatalogueFilter.trim() ? (
+                        <p className="panel-copy">Many eligible devices are available. Enter a catalogue number filter to choose a subset.</p>
+                      ) : bulkUdidiPostFilteredEntries.length === 0 ? (
+                        <p className="panel-copy bulk-selection-empty-state">No eligible catalogue numbers match this filter.</p>
+                      ) : (
+                        <div className="bulk-posted-grid">
+                          {bulkUdidiPostFilteredEntries.map((entry) => {
+                            const isSelected = selectedBulkUdidiPostCatalogueNumbers.includes(entry.catalogue_number);
+                            return (
+                              <label className="roadmap-item compact-structured-item bulk-selection-card" key={entry.catalogue_number}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {
+                                    setSelectedBulkUdidiPostCatalogueNumbers?.((current) =>
+                                      current.includes(entry.catalogue_number)
+                                        ? current.filter((value) => value !== entry.catalogue_number)
+                                        : [...current, entry.catalogue_number],
+                                    );
+                                  }}
+                                />
+                                <span>
+                                  <strong>{entry.catalogue_number}</strong>
+                                  <p>{entry.primary_udi_di ?? "Device UDI-DI pending"}</p>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+                  {bulkUdidiPostScopeMode === "import_catalogue_list" ? (
+                    <>
+                      <label className="field-label" htmlFor="xml-bulk-udidi-post-import-list">
+                        Catalogue numbers
+                      </label>
+                      <textarea
+                        id="xml-bulk-udidi-post-import-list"
+                        className="rule-select patch-select"
+                        rows={6}
+                        placeholder="One catalogue number per line, or comma-separated values."
+                        value={bulkUdidiPostImportText}
+                        onChange={(event) => onBulkUdidiPostImportTextChange?.(event.target.value)}
+                      />
+                      <p className="panel-copy">
+                        Imported {bulkUdidiPostImportedCatalogueNumbersCount}. Matched {bulkUdidiPostImportedMatchedCatalogueNumbersCount}. Not found {bulkUdidiPostImportedNotFoundCatalogueNumbersCount}.
+                      </p>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <p className="panel-copy">Choose how many device rows to include in the generated package.</p>
+                  <label className="field-label" htmlFor="xml-bulk-record-count">
+                    Number of devices
+                  </label>
+                  <select
+                    id="xml-bulk-record-count"
+                    className="rule-select"
+                    value={selectedBulkRecordCount}
+                    onChange={(event) => onSelectedBulkRecordCountChange(Number(event.target.value))}
+                  >
+                    {Array.from({ length: Math.max(Math.min(selectedBulkCapacity, 300), 1) }, (_, index) => index + 1).map((count) => (
+                      <option key={count} value={count}>
+                        {count} device{count === 1 ? "" : "s"}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
             </XmlAssessmentCard>
 
             <XmlAssessmentCard

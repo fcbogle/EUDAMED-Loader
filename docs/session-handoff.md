@@ -65,6 +65,22 @@ The Navigator / Javelin / Linx Bulk PATCH and Market Info test sequence establis
 4. Review Bulk preview included and excluded counts before downloading the ZIP.
 5. Upload the final Bulk PATCH acknowledgement to reconcile accepted PATCH state.
 
+## EUDAMED Playground Option Matrix
+
+Choose the Playground option by EUDAMED service and operation, not by whether the application generated a single XML file or a bulk ZIP. Single and bulk packages that use the same service use the same Playground option.
+
+| Application workflow | EUDAMED service | Playground option | Evidence status |
+| --- | --- | --- | --- |
+| Single Device UDI-DI POST | `UDI_DI.POST` | `Upload of UDI-DI/Master UDI-DI for existing Basic UDI-DI` | Confirmed during current EliteVT testing |
+| Bulk Device UDI-DI POST | `UDI_DI.POST` | `Upload of UDI-DI/Master UDI-DI for existing Basic UDI-DI` | Same EUDAMED service as the confirmed single flow |
+| Single PATCH | `UDI_DI.PATCH` | `Update of UDI-DI/Master UDI-DI` | Confirmed in Playground testing |
+| Bulk PATCH | `UDI_DI.PATCH` | `Update of UDI-DI/Master UDI-DI` | Confirmed in Playground testing |
+| Single Market Info | `MARKET_INFO.PUT` | `Update Market Information` | Confirmed in Playground testing |
+| Bulk Market Info | `MARKET_INFO.PUT` | `Update Market Information` | Confirmed in Playground testing |
+| Basic UDI-DI POST | `DEVICE.POST` | Capture when this flow is next exercised | Not reconfirmed in the current test sequence |
+
+For every upload, retain the generated ZIP/XML and upload the returned acknowledgement into the application before creating a related follow-up operation.
+
 ## Naming Convention
 
 - Use `Basic UDI-DI` as the canonical operator-facing term for the shared regulatory parent context.

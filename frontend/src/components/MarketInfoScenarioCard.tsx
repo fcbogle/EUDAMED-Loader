@@ -14,10 +14,17 @@ type MarketInfoScenarioItem = {
   originalPlacedOnMarket: boolean;
 };
 
+type MarketInfoDeviceOption = {
+  catalogueNumber: string;
+  primaryUdiDi: string | null;
+};
+
 type MarketInfoScenarioCardProps = {
   countryReference: MarketCountryReferenceEntry[];
   catalogueNumber: string | null;
   primaryUdiDi: string | null;
+  marketInfoDeviceOptions: MarketInfoDeviceOption[];
+  onMarketInfoDeviceChange: (catalogueNumber: string) => void;
   productFamily: string | null;
   productVariant: string | null;
   marketInfoVersion: string;
@@ -36,6 +43,8 @@ export function MarketInfoScenarioCard({
   countryReference,
   catalogueNumber,
   primaryUdiDi,
+  marketInfoDeviceOptions,
+  onMarketInfoDeviceChange,
   productFamily,
   productVariant,
   marketInfoVersion,
@@ -107,6 +116,20 @@ export function MarketInfoScenarioCard({
               </div>
             </div>
             <div className="market-info-editor-controls">
+              <label className="market-info-field market-info-field-full">
+                <span className="field-label">Registered Device UDI-DI</span>
+                <select
+                  className="rule-select patch-select"
+                  value={catalogueNumber ?? ""}
+                  onChange={(event) => onMarketInfoDeviceChange(event.target.value)}
+                >
+                  {marketInfoDeviceOptions.map((device) => (
+                    <option key={device.catalogueNumber} value={device.catalogueNumber}>
+                      {device.catalogueNumber} {device.primaryUdiDi ? `· ${device.primaryUdiDi}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="market-info-field">
                 <span className="field-label">Market Info version</span>
                 <input

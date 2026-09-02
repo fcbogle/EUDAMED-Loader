@@ -7,6 +7,11 @@ type PatchScenarioOption = {
   label: string;
 };
 
+type PatchDeviceOption = {
+  catalogueNumber: string;
+  primaryUdiDi: string | null;
+};
+
 type PatchDraftComparisonRow = {
   label: string;
   before: string;
@@ -17,6 +22,8 @@ type PatchScenarioCardProps = {
   selectedPatchScenarioLabel: string;
   selectedPatchScenarioStatus: string | null;
   selectedPatchWorkspaceCatalogueNumber: string | null;
+  patchDeviceOptions: PatchDeviceOption[];
+  onPatchDeviceChange: (catalogueNumber: string) => void;
   currentAcceptedPatchLabel: string;
   hasReviewedPatchBaselinePost: boolean;
   selectedPatchScenarioSummary: string;
@@ -61,6 +68,8 @@ export function PatchScenarioCard({
   selectedPatchScenarioLabel,
   selectedPatchScenarioStatus,
   selectedPatchWorkspaceCatalogueNumber,
+  patchDeviceOptions,
+  onPatchDeviceChange,
   currentAcceptedPatchLabel,
   hasReviewedPatchBaselinePost,
   selectedPatchScenarioSummary,
@@ -153,6 +162,24 @@ export function PatchScenarioCard({
               </div>
             </div>
             <div className="patch-form-grid">
+              <div className="patch-field patch-field-full">
+                <label className="field-label" htmlFor="patch-device-selector">
+                  Posted Device UDI-DI
+                </label>
+                <select
+                  id="patch-device-selector"
+                  className="rule-select patch-select"
+                  value={selectedPatchWorkspaceCatalogueNumber ?? ""}
+                  onChange={(event) => onPatchDeviceChange(event.target.value)}
+                >
+                  {patchDeviceOptions.map((device) => (
+                    <option key={device.catalogueNumber} value={device.catalogueNumber}>
+                      {device.catalogueNumber} {device.primaryUdiDi ? `· ${device.primaryUdiDi}` : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="field-source-note">PATCH generation uses the selected device's recorded accepted POST/PATCH lineage.</p>
+              </div>
               <div className="patch-field">
                 <label className="field-label" htmlFor="patch-scenario-selector">
                   Candidate PATCH scenario

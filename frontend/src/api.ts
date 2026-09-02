@@ -275,12 +275,13 @@ export const api = {
       record_count: recordCount,
       chunk_sequence: chunkSequence,
     }),
-  previewBulkUdidiPost: (productFamily: string, productVariant: string, recordCount: number, chunkSequence = 1) =>
+  previewBulkUdidiPost: (productFamily: string, productVariant: string, recordCount: number, chunkSequence = 1, selectedCatalogueNumbers: string[] = []) =>
     sendJson<BulkUdidiPostPreview>("/xml/preview-bulk-udidi-post", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       record_count: recordCount,
       chunk_sequence: chunkSequence,
+      selected_catalogue_numbers: selectedCatalogueNumbers,
     }),
   previewBulkPatch: (
     productFamily: string,
@@ -449,11 +450,12 @@ export const api = {
       product_variant: productVariant,
       record_count: recordCount,
     }),
-  downloadBulkUdidiPost: (productFamily: string, productVariant: string, recordCount: number) =>
+  downloadBulkUdidiPost: (productFamily: string, productVariant: string, recordCount: number, selectedCatalogueNumbers: string[] = []) =>
     sendDownload("/xml/download-bulk-udidi-post", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       record_count: recordCount,
+      selected_catalogue_numbers: selectedCatalogueNumbers,
     }),
   downloadBulkPatch: (
     productFamily: string,

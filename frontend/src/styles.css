@@ -1072,6 +1072,10 @@ select {
   min-width: 0;
 }
 
+.market-info-field-full {
+  grid-column: 1 / -1;
+}
+
 .market-info-field-compact {
   min-width: 0;
 }
@@ -1695,8 +1699,10 @@ a.ghost-button:visited {
 
 .import-workbooks-button {
   margin-top: 14px;
+  min-width: 168px;
   padding: 8px 12px;
   font-size: 0.84rem;
+  white-space: nowrap;
 }
 
 .ghost-button:hover,

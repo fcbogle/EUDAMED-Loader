@@ -424,6 +424,19 @@ EUDAMED can report a higher current Market Info version than SQLite has accepted
 
 This design was verified in the Navigator / Javelin / Linx test cohort: a Bulk Market Info PUT completed with 29 successes and one version-scheme error, the affected device completed a Single Market Info PUT at version 3, and the subsequent Bulk PATCH completed successfully for all 31 devices.
 
+### Playground Option Mapping
+
+The application routes operator workflows to EUDAMED service messages. Playground selection must therefore follow the service message, irrespective of whether the generated package is single-device or bulk:
+
+| Service message | Application workflows | Confirmed Playground option |
+| --- | --- | --- |
+| `UDI_DI.POST` | Single and Bulk Device UDI-DI POST | `Upload of UDI-DI/Master UDI-DI for existing Basic UDI-DI` |
+| `UDI_DI.PATCH` | Single and Bulk PATCH | `Update of UDI-DI/Master UDI-DI` |
+| `MARKET_INFO.PUT` | Single and Bulk Market Info | `Update Market Information` |
+| `DEVICE.POST` | Basic UDI-DI POST | To be reconfirmed when the flow is next tested |
+
+Generated payloads and returned acknowledgements are both retained in SQLite event/package history so the selected option, EUDAMED result, and accepted state can be reconciled together.
+
 This is not yet the final submission-history architecture, but it is current architecture and it already affects correctness of accepted-state reconciliation.
 
 ## Current UI Architecture Direction

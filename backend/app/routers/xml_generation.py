@@ -421,17 +421,19 @@ def download_xml_bulk_post(payload: dict[str, str | int] | None = None) -> Respo
 
 
 @router.post("/xml/preview-bulk-udidi-post")
-def preview_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) -> dict:
+def preview_xml_bulk_udidi_post(payload: dict[str, object] | None = None) -> dict:
     data = cast(dict[str, object], payload or {})
     product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
     product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     record_count = int(data.get("record_count", 1))
     chunk_sequence = int(data.get("chunk_sequence", 1))
+    selected_catalogue_numbers = [str(value) for value in data.get("selected_catalogue_numbers", []) if isinstance(value, str) and value.strip()]
     try:
         preview = _xml_service().preview_bulk_udidi_post(
             product_family=product_family,
             product_variant=product_variant,
             record_count=record_count,
+            selected_catalogue_numbers=selected_catalogue_numbers,
             chunk_sequence=chunk_sequence,
         )
     except ValueError as exc:
@@ -440,16 +442,18 @@ def preview_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) -> 
 
 
 @router.post("/xml/download-bulk-udidi-post")
-def download_xml_bulk_udidi_post(payload: dict[str, str | int] | None = None) -> Response:
+def download_xml_bulk_udidi_post(payload: dict[str, object] | None = None) -> Response:
     data = cast(dict[str, object], payload or {})
     product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
     product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
     record_count = int(data.get("record_count", 1))
+    selected_catalogue_numbers = [str(value) for value in data.get("selected_catalogue_numbers", []) if isinstance(value, str) and value.strip()]
     try:
         file_name, zip_bytes = _xml_service().download_bulk_udidi_post(
             product_family=product_family,
             product_variant=product_variant,
             record_count=record_count,
+            selected_catalogue_numbers=selected_catalogue_numbers,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
