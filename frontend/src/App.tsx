@@ -2843,6 +2843,7 @@ export function App() {
         parentStatusLabel: parentRegistered ? "Registered" : "Not registered",
         parentStatusClassName: parentRegistered ? "status-pill ok compact" : "status-pill warn compact",
         seedPostCount,
+        eligibleChildDeviceCount: availableRecords.length,
         childPostCount,
         patchCount: patchReadyCount,
         marketInfoCount: marketInfoReadyCount,

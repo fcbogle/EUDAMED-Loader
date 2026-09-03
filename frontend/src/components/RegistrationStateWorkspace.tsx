@@ -15,6 +15,7 @@ type RegistrationStateRow = {
   parentStatusLabel: string;
   parentStatusClassName: string;
   seedPostCount: number;
+  eligibleChildDeviceCount: number;
   childPostCount: number;
   patchCount: number;
   marketInfoCount: number;
@@ -185,6 +186,7 @@ export function RegistrationStateWorkspace({
                 <th>Basic UDI-DI</th>
                 <th>Parent</th>
                 <th>Seed POST</th>
+                <th>Eligible child devices</th>
                 <th>Child POST</th>
                 <th>PATCH</th>
                 <th>Market Info</th>
@@ -208,6 +210,7 @@ export function RegistrationStateWorkspace({
                       <span className={row.parentStatusClassName}>{row.parentStatusLabel}</span>
                     </td>
                     <td>{row.seedPostCount}</td>
+                    <td>{row.eligibleChildDeviceCount}</td>
                     <td>{row.childPostCount}</td>
                     <td>{row.patchCount}</td>
                     <td>{row.marketInfoCount}</td>
@@ -220,7 +223,7 @@ export function RegistrationStateWorkspace({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10} className="testing-summary-empty-cell">
+                  <td colSpan={11} className="testing-summary-empty-cell">
                     No registration-state rows match the current filter.
                   </td>
                 </tr>
