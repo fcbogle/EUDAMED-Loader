@@ -1240,6 +1240,7 @@ class CanonicalValidationService:
             return None
         normalized = raw.strip().upper().replace(" ", "_")
         mapping = {
+            "ON_THE_EU": "ON_THE_MARKET",
             "ON_THE_EU_MARKET": "ON_THE_MARKET",
             "ON_THE_MARKET": "ON_THE_MARKET",
         }

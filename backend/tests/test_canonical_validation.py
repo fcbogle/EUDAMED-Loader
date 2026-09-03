@@ -56,6 +56,10 @@ def _canonical_path_vocabulary() -> set[str]:
     return vocabulary
 
 
+def test_canonical_status_normalizes_short_eu_market_value() -> None:
+    assert CanonicalValidationService._status_code("On the EU") == "ON_THE_MARKET"
+
+
 def test_canonical_validation_service_builds_multi_family_bundle() -> None:
     CanonicalValidationService.clear_cache()
     bundle = CanonicalValidationService().build_validation_bundle()

@@ -198,7 +198,18 @@ This layer reads workbook and reference inputs from local files and normalizes r
 
 ### 2. Canonical Interpretation Layer
 
-This layer interprets workbook rows into stable regulatory meaning, including family/variant identity, device identity, and XML-relevant attributes.
+This layer interprets workbook rows into stable regulatory meaning, including family/variant identity, device identity, and XML-relevant attributes. It separates variable workbook headers and business-friendly values from the fixed EUDAMED concepts used for validation and XML generation.
+
+Each canonical device record retains:
+
+- source workbook, sheet, and row lineage
+- catalogue number, Device UDI-DI, and Basic UDI-DI identity
+- canonical field paths for XML-relevant data such as status, trade name, manufacturer, warnings, storage conditions, and Market Information
+- structured completeness and XML-readiness results
+
+The canonical model represents the proposed, validated business data. It is distinct from the separately tracked EUDAMED accepted state, which is established only after an acknowledgement is imported.
+
+Source aliases are normalised at this boundary. For example, both `ON_THE_EU` and `ON_THE_EU_MARKET` resolve to the EUDAMED XML value `ON_THE_MARKET`. This mapping is applied on workbook import; an import refresh is therefore required before regenerated XML uses a newly added alias.
 
 ### 3. Canonical Validation Layer
 
@@ -433,7 +444,7 @@ The application routes operator workflows to EUDAMED service messages. Playgroun
 | `UDI_DI.POST` | Single and Bulk Device UDI-DI POST | `Upload of UDI-DI/Master UDI-DI for existing Basic UDI-DI` |
 | `UDI_DI.PATCH` | Single and Bulk PATCH | `Update of UDI-DI/Master UDI-DI` |
 | `MARKET_INFO.PUT` | Single and Bulk Market Info | `Update Market Information` |
-| `DEVICE.POST` | Basic UDI-DI POST | To be reconfirmed when the flow is next tested |
+| `DEVICE.POST` | Basic UDI-DI POST | `Upload of Legacy / Regulation Device / SPP (Basic UDI and UDI-DI / Master UDI-DI)` |
 
 Generated payloads and returned acknowledgements are both retained in SQLite event/package history so the selected option, EUDAMED result, and accepted state can be reconciled together.
 

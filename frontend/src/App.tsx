@@ -1666,15 +1666,13 @@ export function App() {
     setWorkbookImportActionMessage(null);
     setError(null);
     try {
-      const result = await api.runWorkbookImport({
+      await api.runWorkbookImport({
         imported_by: "ui",
         label: `UI import ${new Date().toISOString()}`,
       });
       await loadWorkbookImportMonitoring();
       await loadCanonicalValidationBundle(true);
-      setWorkbookImportActionMessage(
-        `Workbook import completed. Batch #${result.import_batch_id} captured ${pluralize(result.source_row_count, "row")} across ${pluralize(result.workbook_count, "workbook")}.`,
-      );
+      setWorkbookImportActionMessage(null);
     } catch (requestError) {
       setWorkbookImportActionMessage(null);
       setError(requestError instanceof Error ? requestError.message : "Failed to run workbook import.");
@@ -4917,12 +4915,7 @@ export function App() {
                 </div>
                 {latestImportBatch ? (
                   <p className="status-detail status-detail-tight">
-                    <>
-                      {`Workbook import batch #${latestImportBatch.import_batch_id} is current.`}
-                      <span className="status-detail-line">
-                        Last import: <span className="status-detail-emphasis">{formatIsoDateTime(latestImportBatch.imported_at)}</span>.
-                      </span>
-                    </>
+                    Last import: <span className="status-detail-emphasis">{formatIsoDateTime(latestImportBatch.imported_at)}</span>.
                   </p>
                 ) : (
                   <p className="status-detail status-detail-tight">

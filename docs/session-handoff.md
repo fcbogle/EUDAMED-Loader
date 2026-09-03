@@ -28,6 +28,36 @@ with the current implementation focus now being:
 - `Historical Playground Findings` sections capture dated evidence and prior decisions.
 - Any recorded test counts in this document are historical snapshots only. Re-run verification from the current worktree before relying on them.
 
+## Current Repo State: September 3, 2026
+
+### Canonical Status Normalisation
+
+- The canonical model now normalises both `ON_THE_EU` and `ON_THE_EU_MARKET` to the EUDAMED-valid status `ON_THE_MARKET`.
+- This corrects a source-value alias gap discovered while generating the Navigator parent seed package. The workbook value was present, but the shorter form had not been mapped to the XML enumeration.
+- The correction applies when workbook data is imported. Re-import workbooks before regenerating affected packages.
+- Local `Message.xsd` validation remains the final pre-upload check: completeness alone does not prove that every value is a valid EUDAMED enumeration.
+
+### Bulk UDI-DI POST Scope
+
+- Bulk Device UDI-DI POST now uses the same scope interaction pattern as Bulk PATCH:
+  - all eligible devices
+  - next 10 devices
+  - next 25 devices
+  - selected catalogue numbers
+  - imported catalogue list
+- The selected scope is passed explicitly to preview and ZIP generation. Already-successful child registrations remain excluded from the eligible selection population.
+
+### Registration State Read Model
+
+- `Registration State` now shows `Eligible child devices` for every Basic UDI-DI group, including an unregistered parent.
+- `Seed POST` remains the number of parent registrations currently eligible to be generated. A value of `1` means the displayed Basic UDI-DI needs its initial `DEVICE.POST` before child registration can begin.
+- `Child POST` remains zero until the parent has a recorded successful registration; the separate eligible-child count avoids implying that a child submission is already allowed.
+
+### Workbook Snapshot UI
+
+- The workbook snapshot card uses the concise `Synced` status with the last-import timestamp after a successful import.
+- It no longer retains verbose batch and row-count completion text in the steady state. Import errors remain visible.
+
 ## Latest Playground Finding: Bulk Market Info And Bulk PATCH Reconciliation
 
 ### What Happened
@@ -77,7 +107,7 @@ Choose the Playground option by EUDAMED service and operation, not by whether th
 | Bulk PATCH | `UDI_DI.PATCH` | `Update of UDI-DI/Master UDI-DI` | Confirmed in Playground testing |
 | Single Market Info | `MARKET_INFO.PUT` | `Update Market Information` | Confirmed in Playground testing |
 | Bulk Market Info | `MARKET_INFO.PUT` | `Update Market Information` | Confirmed in Playground testing |
-| Basic UDI-DI POST | `DEVICE.POST` | Capture when this flow is next exercised | Not reconfirmed in the current test sequence |
+| Basic UDI-DI POST | `DEVICE.POST` | `Upload of Legacy / Regulation Device / SPP (Basic UDI and UDI-DI / Master UDI-DI)` | Confirmed against the EUDAMED service-to-action mapping |
 
 For every upload, retain the generated ZIP/XML and upload the returned acknowledgement into the application before creating a related follow-up operation.
 
