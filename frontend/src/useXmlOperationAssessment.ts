@@ -18,6 +18,7 @@ type UseXmlOperationAssessmentArgs = {
   xmlMode: XmlMode;
   selectedProductFamily: string | null | undefined;
   selectedProductVariant: string | null | undefined;
+  selectedPatchCatalogueNumber: string | null;
   selectedBulkPatchBasicUdiDi: string;
   selectedBulkMarketInfoBasicUdiDi: string;
 };
@@ -27,6 +28,7 @@ export function useXmlOperationAssessment({
   xmlMode,
   selectedProductFamily,
   selectedProductVariant,
+  selectedPatchCatalogueNumber,
   selectedBulkPatchBasicUdiDi,
   selectedBulkMarketInfoBasicUdiDi,
 }: UseXmlOperationAssessmentArgs) {
@@ -62,7 +64,7 @@ export function useXmlOperationAssessment({
           xmlMode === "post"
             ? await api.assessSinglePost(selectedProductFamily, selectedProductVariant)
             : xmlMode === "patch"
-              ? await api.assessSinglePatch(selectedProductFamily, selectedProductVariant)
+              ? await api.assessSinglePatch(selectedProductFamily, selectedProductVariant, selectedPatchCatalogueNumber)
               : xmlMode === "marketInfo"
                 ? await api.assessSingleMarketInfo(selectedProductFamily, selectedProductVariant)
               : xmlMode === "bulkPatch"
@@ -103,6 +105,7 @@ export function useXmlOperationAssessment({
     xmlMode,
     selectedProductFamily,
     selectedProductVariant,
+    selectedPatchCatalogueNumber,
     selectedBulkPatchBasicUdiDi,
     selectedBulkMarketInfoBasicUdiDi,
   ]);

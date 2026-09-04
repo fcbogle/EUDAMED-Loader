@@ -3125,6 +3125,7 @@ export function App() {
     xmlMode,
     selectedProductFamily: selectedXmlFamilySummary?.product_family,
     selectedProductVariant: selectedXmlVariantSummary?.product_variant,
+    selectedPatchCatalogueNumber: selectedXmlRecordKey,
     selectedBulkPatchBasicUdiDi,
     selectedBulkMarketInfoBasicUdiDi,
   });
