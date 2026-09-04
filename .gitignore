@@ -15,3 +15,8 @@ frontend/dist/
 *.key
 *.pfx
 *.crt
+
+data/testing/testing-state.sqlite3
+data/testing/backups/
+.DS_Store
+~$*.pptx
