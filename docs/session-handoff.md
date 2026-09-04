@@ -28,7 +28,14 @@ with the current implementation focus now being:
 - `Historical Playground Findings` sections capture dated evidence and prior decisions.
 - Any recorded test counts in this document are historical snapshots only. Re-run verification from the current worktree before relying on them.
 
-## Current Repo State: September 3, 2026
+## Current Repo State: September 4, 2026
+
+### Deferred Decision: Bulk Market Info Mixed Baselines
+
+- `XmlGenerationService.preview_bulk_market_info` can generate one explicit target market-country set for devices with different accepted Market Info baselines, preserving each device's own baseline and next version.
+- `OperationAssessmentService.assess_bulk_market_info` currently treats a different accepted baseline as a cohort mismatch and excludes that device from its ready count.
+- Do not change this eligibility rule without an explicit decision. The intended end-to-end contract must be chosen later: either align assessment with the generator's per-device mixed-baseline capability, or restrict generation and operator guidance to one shared accepted baseline.
+- Until that decision is made, treat the mixed-baseline support statement below as generation capability only, not a confirmed end-to-end Bulk Market Info workflow.
 
 ### Canonical Status Normalisation
 

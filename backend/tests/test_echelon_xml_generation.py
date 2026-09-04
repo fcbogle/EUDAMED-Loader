@@ -313,7 +313,7 @@ def test_bulk_patch_allows_tracked_market_info_state_that_differs_from_source(mo
     service = XmlGenerationService()
     record = cast(
         CanonicalValidationRecord,
-        service.selector.find_post_record(
+        service.selector.find_xml_ready_record(
             product_family="Echelon",
             product_variant="Echelon",
             catalogue_number="EC22L1S",
