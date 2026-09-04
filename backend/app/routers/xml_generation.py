@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Protocol, TypedDict, cast
 
 from fastapi import APIRouter, HTTPException
@@ -59,6 +60,13 @@ def _parse_market_info_countries(payload: dict[str, object]) -> list[tuple[str, 
     return parsed_items
 
 
+def _required_market_info_countries(payload: dict[str, object]) -> list[tuple[str, bool]]:
+    market_countries = _parse_market_info_countries(payload)
+    if market_countries is None:
+        raise HTTPException(status_code=400, detail="market_countries is required.")
+    return market_countries
+
+
 def _summary_entry(summary: dict | object) -> dict[str, object]:
     if isinstance(summary, dict):
         return cast(dict[str, object], summary)
@@ -79,8 +87,25 @@ def _required_string_with_detail(payload: dict[str, object], key: str, detail: s
     return value.strip()
 
 
+def _payload_int(payload: dict[str, object], key: str, default: int) -> int:
+    value = payload.get(key, default)
+    if not isinstance(value, (int, float, str)):
+        raise HTTPException(status_code=400, detail=f"{key} must be an integer.")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"{key} must be an integer.") from exc
+
+
+def _payload_nonempty_strings(payload: dict[str, object], key: str) -> list[str]:
+    value = payload.get(key, [])
+    if not isinstance(value, list):
+        raise HTTPException(status_code=400, detail=f"{key} must be a list.")
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
 def _bulk_patch_posted_entries_from_summaries(
-    summaries: list[dict] | list[object],
+    summaries: Iterable[object],
     *,
     basic_udi_di: str,
 ) -> list[dict[str, object]]:
@@ -107,7 +132,7 @@ def _bulk_patch_posted_entries_from_summaries(
 
 
 def _bulk_patch_posted_parent_groups_from_summaries(
-    summaries: list[dict] | list[object],
+    summaries: Iterable[object],
 ) -> list[_BulkPatchPostedParentGroup]:
     grouped: dict[str, _BulkPatchPostedParentGroup] = {}
     for summary in summaries:
@@ -380,8 +405,8 @@ def preview_xml_bulk_post(payload: dict[str, str | int] | None = None) -> dict:
     data = cast(dict[str, object], payload or {})
     product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
     product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
-    record_count = int(data.get("record_count", 1))
-    chunk_sequence = int(data.get("chunk_sequence", 1))
+    record_count = _payload_int(data, "record_count", 1)
+    chunk_sequence = _payload_int(data, "chunk_sequence", 1)
     try:
         preview = _xml_service().preview_bulk_post(
             product_family=product_family,
@@ -407,7 +432,7 @@ def download_xml_bulk_post(payload: dict[str, str | int] | None = None) -> Respo
         "product_variant",
         "product_family and product_variant are required.",
     )
-    record_count = int(data.get("record_count", 1))
+    record_count = _payload_int(data, "record_count", 1)
     try:
         file_name, zip_bytes = _xml_service().download_bulk_post(
             product_family=product_family,
@@ -425,9 +450,9 @@ def preview_xml_bulk_udidi_post(payload: dict[str, object] | None = None) -> dic
     data = cast(dict[str, object], payload or {})
     product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
     product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
-    record_count = int(data.get("record_count", 1))
-    chunk_sequence = int(data.get("chunk_sequence", 1))
-    selected_catalogue_numbers = [str(value) for value in data.get("selected_catalogue_numbers", []) if isinstance(value, str) and value.strip()]
+    record_count = _payload_int(data, "record_count", 1)
+    chunk_sequence = _payload_int(data, "chunk_sequence", 1)
+    selected_catalogue_numbers = _payload_nonempty_strings(data, "selected_catalogue_numbers")
     try:
         preview = _xml_service().preview_bulk_udidi_post(
             product_family=product_family,
@@ -446,8 +471,8 @@ def download_xml_bulk_udidi_post(payload: dict[str, object] | None = None) -> Re
     data = cast(dict[str, object], payload or {})
     product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
     product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
-    record_count = int(data.get("record_count", 1))
-    selected_catalogue_numbers = [str(value) for value in data.get("selected_catalogue_numbers", []) if isinstance(value, str) and value.strip()]
+    record_count = _payload_int(data, "record_count", 1)
+    selected_catalogue_numbers = _payload_nonempty_strings(data, "selected_catalogue_numbers")
     try:
         file_name, zip_bytes = _xml_service().download_bulk_udidi_post(
             product_family=product_family,
@@ -476,10 +501,10 @@ def preview_xml_bulk_patch(payload: dict | None = None) -> dict:
     scenario_id = _required_string_with_detail(
         data, "scenario_id", "product_family, product_variant, basic_udi_di, and scenario_id are required."
     )
-    record_count = int(data.get("record_count", 1))
-    chunk_sequence = int(data.get("chunk_sequence", 1))
+    record_count = _payload_int(data, "record_count", 1)
+    chunk_sequence = _payload_int(data, "chunk_sequence", 1)
     scenario_inputs = data.get("scenario_inputs") or {}
-    selected_catalogue_numbers = data.get("selected_catalogue_numbers") or []
+    selected_catalogue_numbers = _payload_nonempty_strings(data, "selected_catalogue_numbers")
     try:
         preview = _xml_service().preview_bulk_patch(
             product_family=product_family,
@@ -488,9 +513,7 @@ def preview_xml_bulk_patch(payload: dict | None = None) -> dict:
             record_count=record_count,
             scenario_id=scenario_id,
             scenario_inputs=scenario_inputs if isinstance(scenario_inputs, dict) else {},
-            selected_catalogue_numbers=[
-                str(value) for value in selected_catalogue_numbers if isinstance(value, str) and value.strip()
-            ],
+            selected_catalogue_numbers=selected_catalogue_numbers,
             chunk_sequence=chunk_sequence,
         )
     except ValueError as exc:
@@ -513,9 +536,9 @@ def download_xml_bulk_patch(payload: dict | None = None) -> Response:
     scenario_id = _required_string_with_detail(
         data, "scenario_id", "product_family, product_variant, basic_udi_di, and scenario_id are required."
     )
-    record_count = int(data.get("record_count", 1))
+    record_count = _payload_int(data, "record_count", 1)
     scenario_inputs = data.get("scenario_inputs") or {}
-    selected_catalogue_numbers = data.get("selected_catalogue_numbers") or []
+    selected_catalogue_numbers = _payload_nonempty_strings(data, "selected_catalogue_numbers")
     try:
         file_name, zip_bytes = _xml_service().download_bulk_patch(
             product_family=product_family,
@@ -524,9 +547,7 @@ def download_xml_bulk_patch(payload: dict | None = None) -> Response:
             record_count=record_count,
             scenario_id=scenario_id,
             scenario_inputs=scenario_inputs if isinstance(scenario_inputs, dict) else {},
-            selected_catalogue_numbers=[
-                str(value) for value in selected_catalogue_numbers if isinstance(value, str) and value.strip()
-            ],
+            selected_catalogue_numbers=selected_catalogue_numbers,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -546,10 +567,10 @@ def preview_xml_bulk_market_info(payload: dict | None = None) -> dict:
     basic_udi_di = _required_string_with_detail(
         data, "basic_udi_di", "product_family, product_variant, basic_udi_di, and market_countries are required."
     )
-    market_countries = _parse_market_info_countries(data)
-    record_count = int(data.get("record_count", 1))
-    chunk_sequence = int(data.get("chunk_sequence", 1))
-    selected_catalogue_numbers = data.get("selected_catalogue_numbers") or []
+    market_countries = _required_market_info_countries(data)
+    record_count = _payload_int(data, "record_count", 1)
+    chunk_sequence = _payload_int(data, "chunk_sequence", 1)
+    selected_catalogue_numbers = _payload_nonempty_strings(data, "selected_catalogue_numbers")
     try:
         preview = _xml_service().preview_bulk_market_info(
             product_family=product_family,
@@ -557,9 +578,7 @@ def preview_xml_bulk_market_info(payload: dict | None = None) -> dict:
             basic_udi_di=basic_udi_di,
             record_count=record_count,
             market_countries=market_countries,
-            selected_catalogue_numbers=[
-                str(value) for value in selected_catalogue_numbers if isinstance(value, str) and value.strip()
-            ],
+            selected_catalogue_numbers=selected_catalogue_numbers,
             chunk_sequence=chunk_sequence,
         )
     except ValueError as exc:
@@ -579,9 +598,9 @@ def download_xml_bulk_market_info(payload: dict | None = None) -> Response:
     basic_udi_di = _required_string_with_detail(
         data, "basic_udi_di", "product_family, product_variant, basic_udi_di, and market_countries are required."
     )
-    market_countries = _parse_market_info_countries(data)
-    record_count = int(data.get("record_count", 1))
-    selected_catalogue_numbers = data.get("selected_catalogue_numbers") or []
+    market_countries = _required_market_info_countries(data)
+    record_count = _payload_int(data, "record_count", 1)
+    selected_catalogue_numbers = _payload_nonempty_strings(data, "selected_catalogue_numbers")
     try:
         file_name, zip_bytes = _xml_service().download_bulk_market_info(
             product_family=product_family,
@@ -589,9 +608,7 @@ def download_xml_bulk_market_info(payload: dict | None = None) -> Response:
             basic_udi_di=basic_udi_di,
             record_count=record_count,
             market_countries=market_countries,
-            selected_catalogue_numbers=[
-                str(value) for value in selected_catalogue_numbers if isinstance(value, str) and value.strip()
-            ],
+            selected_catalogue_numbers=selected_catalogue_numbers,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -730,7 +747,7 @@ def assess_bulk_patch(payload: dict | None = None) -> dict:
 @router.post("/xml/testing-subject-summaries")
 def testing_subject_summaries(payload: dict | None = None) -> list[dict]:
     data = cast(dict[str, object], payload or {})
-    limit = int(data.get("limit", 200))
+    limit = _payload_int(data, "limit", 200)
     if limit < 1 or limit > 10000:
         raise HTTPException(status_code=400, detail="limit must be between 1 and 10000.")
     summaries = _testing_read_model().list_subject_summaries(
@@ -744,7 +761,7 @@ def testing_subject_summaries(payload: dict | None = None) -> list[dict]:
 @router.post("/xml/testing-events")
 def testing_events(payload: dict | None = None) -> list[dict]:
     data = cast(dict[str, object], payload or {})
-    limit = int(data.get("limit", 500))
+    limit = _payload_int(data, "limit", 500)
     if limit < 1 or limit > 10000:
         raise HTTPException(status_code=400, detail="limit must be between 1 and 10000.")
     events = _testing_read_model().list_events(
@@ -767,7 +784,7 @@ def preview_xml_batch(payload: dict[str, str | int] | None = None) -> dict:
     data = cast(dict[str, object], payload or {})
     product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")
     product_variant = _required_string_with_detail(data, "product_variant", "product_family and product_variant are required.")
-    chunk_sequence = int(data.get("chunk_sequence", 1))
+    chunk_sequence = _payload_int(data, "chunk_sequence", 1)
     try:
         preview = _xml_service().preview_batch(
             product_family=product_family,
