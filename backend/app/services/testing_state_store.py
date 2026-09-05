@@ -638,6 +638,19 @@ class TestingStateStore:
                     None,
                 ),
             )
+            generated_event_id = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
+            self.record_generated_batch_device(
+                connection,
+                batch_id=correlation_id,
+                message_type="UDI_DI.PATCH",
+                operation_scope=operation_scope,
+                product_family=product_family,
+                product_variant=product_variant,
+                basic_udi_di=basic_udi_di,
+                subject_id=subject_id,
+                generated_event_id=generated_event_id,
+                created_at=payload_created_at,
+            )
 
     def record_generated_post_context(
         self,
@@ -758,6 +771,19 @@ class TestingStateStore:
                     raw_event_json,
                     None,
                 ),
+            )
+            generated_event_id = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
+            self.record_generated_batch_device(
+                connection,
+                batch_id=correlation_id,
+                message_type=message_type,
+                operation_scope=operation_scope,
+                product_family=product_family,
+                product_variant=product_variant,
+                basic_udi_di=basic_udi_di,
+                subject_id=subject_id,
+                generated_event_id=generated_event_id,
+                created_at=payload_created_at,
             )
 
     def record_generated_market_info_context(
@@ -884,6 +910,19 @@ class TestingStateStore:
                     raw_event_json,
                     None,
                 ),
+            )
+            generated_event_id = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
+            self.record_generated_batch_device(
+                connection,
+                batch_id=correlation_id,
+                message_type="MARKET_INFO.PUT",
+                operation_scope=operation_scope,
+                product_family=product_family,
+                product_variant=product_variant,
+                basic_udi_di=basic_udi_di,
+                subject_id=subject_id,
+                generated_event_id=generated_event_id,
+                created_at=payload_created_at,
             )
 
     @classmethod
@@ -1024,6 +1063,35 @@ class TestingStateStore:
                     member_file_names_json TEXT NOT NULL,
                     manifest_json TEXT NOT NULL,
                     package_sha256 TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS testing_batches (
+                    batch_id TEXT PRIMARY KEY,
+                    message_type TEXT NOT NULL,
+                    operation_scope TEXT NOT NULL,
+                    product_family TEXT,
+                    product_variant TEXT,
+                    basic_udi_di TEXT,
+                    created_at TEXT NOT NULL,
+                    acknowledgement_message_id TEXT,
+                    acknowledgement_source_file_name TEXT,
+                    acknowledged_at TEXT,
+                    status TEXT NOT NULL DEFAULT 'generated'
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS testing_batch_devices (
+                    batch_id TEXT NOT NULL REFERENCES testing_batches(batch_id) ON DELETE CASCADE,
+                    subject_id INTEGER NOT NULL REFERENCES testing_subjects(id) ON DELETE CASCADE,
+                    generated_event_id INTEGER REFERENCES testing_events(id) ON DELETE SET NULL,
+                    acknowledgement_event_id INTEGER REFERENCES testing_events(id) ON DELETE SET NULL,
+                    outcome_status TEXT,
+                    PRIMARY KEY (batch_id, subject_id)
                 )
                 """
             )
@@ -1169,7 +1237,84 @@ class TestingStateStore:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS ix_generated_packages_scope ON generated_packages(product_family, product_variant, flow)"
             )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS ix_testing_batch_devices_subject_id ON testing_batch_devices(subject_id)"
+            )
             self._backfill_device_subject_links(connection)
+
+    @staticmethod
+    def record_generated_batch_device(
+        connection: sqlite3.Connection,
+        *,
+        batch_id: str | None,
+        message_type: str,
+        operation_scope: str,
+        product_family: str,
+        product_variant: str,
+        basic_udi_di: str | None,
+        subject_id: int,
+        generated_event_id: int,
+        created_at: str,
+    ) -> None:
+        if not batch_id:
+            return
+        connection.execute(
+            """
+            INSERT INTO testing_batches (
+                batch_id, message_type, operation_scope, product_family, product_variant, basic_udi_di, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(batch_id) DO NOTHING
+            """,
+            (batch_id, message_type, operation_scope, product_family, product_variant, basic_udi_di, created_at),
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_batch_devices (batch_id, subject_id, generated_event_id)
+            VALUES (?, ?, ?)
+            ON CONFLICT(batch_id, subject_id) DO UPDATE SET generated_event_id = excluded.generated_event_id
+            """,
+            (batch_id, subject_id, generated_event_id),
+        )
+
+    @staticmethod
+    def record_batch_acknowledgement(
+        connection: sqlite3.Connection,
+        *,
+        batch_id: str | None,
+        subject_id: int,
+        acknowledgement_event_id: int,
+        outcome_status: str,
+        acknowledgement_message_id: str | None,
+        source_file_name: str | None,
+        acknowledged_at: str | None,
+    ) -> None:
+        if not batch_id:
+            return
+        connection.execute(
+            """
+            UPDATE testing_batch_devices
+            SET acknowledgement_event_id = ?, outcome_status = ?
+            WHERE batch_id = ? AND subject_id = ?
+            """,
+            (acknowledgement_event_id, outcome_status, batch_id, subject_id),
+        )
+        connection.execute(
+            """
+            UPDATE testing_batches
+            SET acknowledgement_message_id = ?, acknowledgement_source_file_name = ?, acknowledged_at = ?,
+                status = CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM testing_batch_devices
+                        WHERE batch_id = testing_batches.batch_id
+                          AND outcome_status <> 'SUCCESS'
+                    ) THEN 'acknowledged_partial'
+                    ELSE 'acknowledged_success'
+                END
+            WHERE batch_id = ?
+            """,
+            (acknowledgement_message_id, source_file_name, acknowledged_at, batch_id),
+        )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)

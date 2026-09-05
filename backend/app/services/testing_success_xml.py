@@ -865,6 +865,17 @@ class TestingSuccessXmlService:
         )
         inserted_row = connection.execute("SELECT last_insert_rowid()").fetchone()
         event_id = int(inserted_row[0]) if inserted_row is not None else None
+        if event_id is not None:
+            self.store.record_batch_acknowledgement(
+                connection,
+                batch_id=acknowledgement.correlation_id,
+                subject_id=subject_id,
+                acknowledgement_event_id=event_id,
+                outcome_status="SUCCESS" if is_success else "ERROR",
+                acknowledgement_message_id=acknowledgement.message_id,
+                source_file_name=acknowledgement.source_file_name,
+                acknowledged_at=acknowledgement.tested_at,
+            )
         return True, False, event_id
 
     @staticmethod

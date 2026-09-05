@@ -387,6 +387,42 @@ def _insert_reviewed_post_baseline(
         connection.close()
 
 
+def test_generated_post_context_creates_batch_device_membership(
+    isolated_workbook_import_db: Path,
+) -> None:
+    store = PlaygroundStateStore()
+    store.record_generated_post_context(
+        product_family="Epirus",
+        product_variant="Esprit",
+        catalogue_number="ESP22L3S",
+        primary_udi_di="05050649058226",
+        basic_udi_di="5050649ESPRITVZ",
+        message_type="UDI_DI.POST",
+        accepted_post_state={"version": "1"},
+        correlation_id="batch-correlation-id",
+        message_id="request-message-id",
+        operation_scope="bulk",
+    )
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    try:
+        batch_row = connection.execute(
+            "SELECT message_type, operation_scope, status FROM testing_batches WHERE batch_id = ?",
+            ("batch-correlation-id",),
+        ).fetchone()
+        member_row = connection.execute(
+            "SELECT generated_event_id, acknowledgement_event_id FROM testing_batch_devices WHERE batch_id = ?",
+            ("batch-correlation-id",),
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert batch_row == ("UDI_DI.POST", "bulk", "generated")
+    assert member_row is not None
+    assert member_row[0] is not None
+    assert member_row[1] is None
+
+
 def test_success_xml_upload_records_bulk_udidi_post_acknowledgements(
     isolated_workbook_import_db: Path,
 ) -> None:

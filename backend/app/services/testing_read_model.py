@@ -288,6 +288,10 @@ class TestingReadModelService:
                     ts.latest_successful_market_info_version,
                     ts.latest_observed_market_info_version,
                     ts.latest_successful_market_info_state_json,
+                    COALESCE(
+                        ts.latest_successful_patch_state_json,
+                        ts.latest_successful_post_state_json
+                    ) AS current_patch_state_json,
                     (
                         SELECT latest_event.message_type
                         FROM testing_events latest_event
