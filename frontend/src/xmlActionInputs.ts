@@ -23,3 +23,21 @@ export function buildPatchScenarioInputs(args: {
       .map(([conditionCode, replacementComment]) => ({ condition_code: conditionCode, replacement_comment: replacementComment.trim() })),
   };
 }
+
+export function resolveBulkCatalogueNumbers(args: {
+  hasParent: boolean;
+  scopeMode: string;
+  postedCatalogueNumbers: string[];
+  fallbackCatalogueNumbers: string[];
+  effectiveCatalogueNumbers: string[];
+  selectedCatalogueNumbers: string[];
+  importedMatchedCatalogueNumbers: string[];
+}): string[] {
+  if (!args.hasParent) return [];
+  if (args.scopeMode === "all_posted") {
+    return args.postedCatalogueNumbers.length > 0 ? args.postedCatalogueNumbers : args.fallbackCatalogueNumbers;
+  }
+  if (args.scopeMode === "next_10" || args.scopeMode === "next_25") return args.effectiveCatalogueNumbers;
+  if (args.scopeMode === "selected_catalogue_numbers") return args.selectedCatalogueNumbers;
+  return args.importedMatchedCatalogueNumbers;
+}

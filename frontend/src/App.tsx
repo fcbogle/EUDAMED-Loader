@@ -36,7 +36,7 @@ import { useBulkScopeState } from "./useBulkScopeState";
 import { useXmlOperationAssessment } from "./useXmlOperationAssessment";
 import { useXmlPreviewState } from "./useXmlPreviewState";
 import { useXmlWorkspaceState } from "./useXmlWorkspaceState";
-import { buildPatchScenarioInputs } from "./xmlActionInputs";
+import { buildPatchScenarioInputs, resolveBulkCatalogueNumbers } from "./xmlActionInputs";
 import { useSuccessXmlUpload } from "./useSuccessXmlUpload";
 import {
   assessmentEvidenceBoolean,
@@ -4209,53 +4209,27 @@ export function App() {
   }
 
   async function resolveBulkPatchCatalogueNumbers(): Promise<string[]> {
-    if (!selectedBulkPatchParentGroup) {
-      return [];
-    }
-    if (bulkPatchScopeMode === "all_posted") {
-      if (bulkPatchPostedCatalogueNumbers.length > 0) {
-        return bulkPatchPostedCatalogueNumbers;
-      }
-      if (
-        selectedBulkPatchFallbackCatalogueNumbers.length > 0 &&
-        selectedBulkPatchFallbackCatalogueNumbers.length === selectedBulkPatchParentGroup.posted_child_count
-      ) {
-        return selectedBulkPatchFallbackCatalogueNumbers;
-      }
-      return selectedBulkPatchFallbackCatalogueNumbers;
-    }
-    if (bulkPatchScopeMode === "next_10" || bulkPatchScopeMode === "next_25") {
-      return effectiveBulkPatchCatalogueNumbers;
-    }
-    if (bulkPatchScopeMode === "selected_catalogue_numbers") {
-      return selectedBulkPatchCatalogueNumbers;
-    }
-    return bulkPatchImportedMatchedCatalogueNumbers;
+    return resolveBulkCatalogueNumbers({
+      hasParent: Boolean(selectedBulkPatchParentGroup),
+      scopeMode: bulkPatchScopeMode,
+      postedCatalogueNumbers: bulkPatchPostedCatalogueNumbers,
+      fallbackCatalogueNumbers: selectedBulkPatchFallbackCatalogueNumbers,
+      effectiveCatalogueNumbers: effectiveBulkPatchCatalogueNumbers,
+      selectedCatalogueNumbers: selectedBulkPatchCatalogueNumbers,
+      importedMatchedCatalogueNumbers: bulkPatchImportedMatchedCatalogueNumbers,
+    });
   }
 
   async function resolveBulkMarketInfoCatalogueNumbers(): Promise<string[]> {
-    if (!selectedBulkMarketInfoParentGroup) {
-      return [];
-    }
-    if (bulkMarketInfoScopeMode === "all_posted") {
-      if (bulkMarketInfoPostedCatalogueNumbers.length > 0) {
-        return bulkMarketInfoPostedCatalogueNumbers;
-      }
-      if (
-        selectedBulkMarketInfoFallbackCatalogueNumbers.length > 0 &&
-        selectedBulkMarketInfoFallbackCatalogueNumbers.length === selectedBulkMarketInfoParentGroup.posted_child_count
-      ) {
-        return selectedBulkMarketInfoFallbackCatalogueNumbers;
-      }
-      return selectedBulkMarketInfoFallbackCatalogueNumbers;
-    }
-    if (bulkMarketInfoScopeMode === "next_10" || bulkMarketInfoScopeMode === "next_25") {
-      return effectiveBulkMarketInfoCatalogueNumbers;
-    }
-    if (bulkMarketInfoScopeMode === "selected_catalogue_numbers") {
-      return selectedBulkMarketInfoCatalogueNumbers;
-    }
-    return bulkMarketInfoImportedMatchedCatalogueNumbers;
+    return resolveBulkCatalogueNumbers({
+      hasParent: Boolean(selectedBulkMarketInfoParentGroup),
+      scopeMode: bulkMarketInfoScopeMode,
+      postedCatalogueNumbers: bulkMarketInfoPostedCatalogueNumbers,
+      fallbackCatalogueNumbers: selectedBulkMarketInfoFallbackCatalogueNumbers,
+      effectiveCatalogueNumbers: effectiveBulkMarketInfoCatalogueNumbers,
+      selectedCatalogueNumbers: selectedBulkMarketInfoCatalogueNumbers,
+      importedMatchedCatalogueNumbers: bulkMarketInfoImportedMatchedCatalogueNumbers,
+    });
   }
 
   async function generateXmlPreview(): Promise<void> {
