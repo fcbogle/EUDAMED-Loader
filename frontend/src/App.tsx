@@ -1173,12 +1173,17 @@ export function App() {
     setXmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
     setXmlBulkMarketInfoPreview,
+    selectedPostXmlSectionId,
+    setSelectedPostXmlSectionId,
+    selectedMarketInfoXmlSectionId,
+    setSelectedMarketInfoXmlSectionId,
+    selectedBulkXmlSectionId,
+    setSelectedBulkXmlSectionId,
+    selectedBulkMarketInfoXmlSectionId,
+    setSelectedBulkMarketInfoXmlSectionId,
+    selectedPatchXmlSectionId,
+    setSelectedPatchXmlSectionId,
   } = useXmlPreviewState();
-  const [selectedPostXmlSectionId, setSelectedPostXmlSectionId] = useState<string | null>(null);
-  const [selectedMarketInfoXmlSectionId, setSelectedMarketInfoXmlSectionId] = useState<string | null>(null);
-  const [selectedBulkXmlSectionId, setSelectedBulkXmlSectionId] = useState<string | null>(null);
-  const [selectedBulkMarketInfoXmlSectionId, setSelectedBulkMarketInfoXmlSectionId] = useState<string | null>(null);
-  const [selectedPatchXmlSectionId, setSelectedPatchXmlSectionId] = useState<string | null>(null);
   const [marketInfoVersionInput, setMarketInfoVersionInput] = useState<string>("1");
   const [acceptedMarketInfoItems, setAcceptedMarketInfoItems] = useState<MarketInfoScenarioItem[] | null>(null);
   const [marketInfoScenarioItems, setMarketInfoScenarioItems] = useState<MarketInfoScenarioItem[]>([

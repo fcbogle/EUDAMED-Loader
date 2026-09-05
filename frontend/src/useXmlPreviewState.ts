@@ -20,6 +20,11 @@ export function useXmlPreviewState() {
   const [xmlPatchPreview, setXmlPatchPreview] = useState<GeneratedPatchScenarioPreview | null>(null);
   const [xmlBulkPatchPreview, setXmlBulkPatchPreview] = useState<BulkPatchPreview | null>(null);
   const [xmlBulkMarketInfoPreview, setXmlBulkMarketInfoPreview] = useState<BulkMarketInfoPreview | null>(null);
+  const [selectedPostXmlSectionId, setSelectedPostXmlSectionId] = useState<string | null>(null);
+  const [selectedMarketInfoXmlSectionId, setSelectedMarketInfoXmlSectionId] = useState<string | null>(null);
+  const [selectedBulkXmlSectionId, setSelectedBulkXmlSectionId] = useState<string | null>(null);
+  const [selectedBulkMarketInfoXmlSectionId, setSelectedBulkMarketInfoXmlSectionId] = useState<string | null>(null);
+  const [selectedPatchXmlSectionId, setSelectedPatchXmlSectionId] = useState<string | null>(null);
 
   return {
     xmlPreview,
@@ -38,5 +43,15 @@ export function useXmlPreviewState() {
     setXmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
     setXmlBulkMarketInfoPreview,
+    selectedPostXmlSectionId,
+    setSelectedPostXmlSectionId,
+    selectedMarketInfoXmlSectionId,
+    setSelectedMarketInfoXmlSectionId,
+    selectedBulkXmlSectionId,
+    setSelectedBulkXmlSectionId,
+    selectedBulkMarketInfoXmlSectionId,
+    setSelectedBulkMarketInfoXmlSectionId,
+    selectedPatchXmlSectionId,
+    setSelectedPatchXmlSectionId,
   };
 }
