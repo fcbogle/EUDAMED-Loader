@@ -138,6 +138,25 @@ class TestingReadModelService:
                     ts.latest_successful_market_info_version,
                     ts.latest_observed_market_info_version,
                     ts.latest_successful_market_info_state_json,
+                    COALESCE(
+                        ts.latest_successful_patch_state_json,
+                        ts.latest_successful_post_state_json,
+                        (
+                            SELECT generated.state_after_json
+                            FROM testing_events success
+                            JOIN testing_events generated
+                              ON generated.subject_id = success.subject_id
+                             AND generated.message_type = success.message_type
+                             AND generated.status = 'GENERATED'
+                             AND generated.correlation_id = success.correlation_id
+                            WHERE success.subject_id = ts.id
+                              AND success.status = 'SUCCESS'
+                              AND success.message_type = 'UDI_DI.POST'
+                              AND generated.state_after_json IS NOT NULL
+                            ORDER BY success.event_index DESC, generated.event_index DESC
+                            LIMIT 1
+                        )
+                    ) AS current_patch_state_json,
                     (
                         SELECT latest_event.message_type
                         FROM testing_events latest_event
@@ -163,6 +182,91 @@ class TestingReadModelService:
                 (*self._subject_filter_params(product_family=product_family, product_variant=product_variant), limit),
             ).fetchall()
         return [self._subject_summary_from_row(row) for row in rows]
+
+    def bulk_patch_posted_entries(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        basic_udi_di: str,
+    ) -> list[dict[str, object]]:
+        family_clause, family_params = self._family_filter_clause("ts.normalized_product_family", product_family)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    ts.id,
+                    ts.catalogue_number,
+                    ts.primary_udi_di,
+                    ts.basic_udi_di,
+                    ts.latest_successful_version,
+                    ts.latest_successful_market_info_version,
+                    ts.baseline_patch_success,
+                    ts.latest_successful_patch_state_json,
+                    ts.latest_successful_post_state_json
+                FROM testing_subjects ts
+                WHERE {family_clause}
+                  AND ts.normalized_product_variant = ?
+                  AND ts.normalized_basic_udi_di = ?
+                  AND ts.post_success = 1
+                  AND EXISTS (
+                      SELECT 1
+                      FROM testing_events event
+                      WHERE event.subject_id = ts.id
+                        AND event.status = 'SUCCESS'
+                        AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH')
+                  )
+                ORDER BY ts.catalogue_number
+                """,
+                (
+                    *family_params,
+                    self._normalize_identity(product_variant),
+                    self._normalize_identity(basic_udi_di),
+                ),
+            ).fetchall()
+
+            entries: list[dict[str, object]] = []
+            for row in rows:
+                state = self._current_patch_state(connection, row)
+                entries.append(
+                    {
+                        "catalogue_number": self._optional_string(row["catalogue_number"]),
+                        "primary_udi_di": self._optional_string(row["primary_udi_di"]),
+                        "basic_udi_di": self._optional_string(row["basic_udi_di"]),
+                        "latest_version": self._optional_string(row["latest_successful_version"]),
+                        "latest_market_info_version": self._optional_string(row["latest_successful_market_info_version"]),
+                        "baseline_patch_success": bool(row["baseline_patch_success"]),
+                        "current_state": state,
+                    }
+                )
+        return entries
+
+    def _current_patch_state(self, connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object] | None:
+        for value in (row["latest_successful_patch_state_json"], row["latest_successful_post_state_json"]):
+            state = self._json_dict(value)
+            if state is not None:
+                return state
+
+        # Older POST acknowledgements did not promote their generated baseline to the subject projection.
+        generated_row = connection.execute(
+            """
+            SELECT generated.state_after_json
+            FROM testing_events success
+            JOIN testing_events generated
+              ON generated.subject_id = success.subject_id
+             AND generated.message_type = success.message_type
+             AND generated.status = 'GENERATED'
+             AND generated.correlation_id = success.correlation_id
+            WHERE success.subject_id = ?
+              AND success.status = 'SUCCESS'
+              AND success.message_type = 'UDI_DI.POST'
+              AND generated.state_after_json IS NOT NULL
+            ORDER BY success.event_index DESC, generated.event_index DESC
+            LIMIT 1
+            """,
+            (int(row["id"]),),
+        ).fetchone()
+        return self._json_dict(generated_row["state_after_json"] if generated_row is not None else None)
 
     def subject_history(self, subject_id: int) -> TestingSubjectHistory | None:
         with self._connect() as connection:
@@ -423,6 +527,7 @@ class TestingReadModelService:
             latest_successful_market_info_version=cls._optional_string(row["latest_successful_market_info_version"]),
             latest_observed_market_info_version=cls._optional_string(row["latest_observed_market_info_version"]),
             latest_successful_market_info_state=cls._json_dict(row["latest_successful_market_info_state_json"]),
+            current_patch_state=cls._json_dict(row["current_patch_state_json"]),
             latest_success_message_type=cls._optional_string(row["latest_success_message_type"]),
             latest_tested_at=cls._optional_string(row["latest_tested_at"]),
             reviewed_post_at=cls._optional_string(row["reviewed_post_at"]),

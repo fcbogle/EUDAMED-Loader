@@ -39,6 +39,7 @@ type BulkPatchWorkspaceProps = {
   selectedPatchScenarioSummary: string;
   selectedPatchScenarioOptionsSummary?: string;
   selectedPatchScenarioImplemented: boolean;
+  bulkPatchBaselineSummary: string[];
   patchTradeNameInput: string;
   onPatchTradeNameChange: (value: string) => void;
   patchBaseQuantityInput: string;
@@ -87,6 +88,7 @@ export function BulkPatchWorkspace({
   selectedPatchScenarioSummary,
   selectedPatchScenarioOptionsSummary,
   selectedPatchScenarioImplemented,
+  bulkPatchBaselineSummary,
   patchTradeNameInput,
   onPatchTradeNameChange,
   patchBaseQuantityInput,
@@ -282,6 +284,14 @@ export function BulkPatchWorkspace({
                 </select>
                 <p className="panel-copy">{selectedPatchScenarioSummary}</p>
                 {selectedPatchScenarioOptionsSummary ? <p className="panel-copy">Options: {selectedPatchScenarioOptionsSummary}</p> : null}
+                {bulkPatchBaselineSummary.length > 0 ? (
+                  <div className="workflow-note patch-readiness-note">
+                    <strong>Current accepted baseline</strong>
+                    {bulkPatchBaselineSummary.map((summary) => (
+                      <span key={summary}>{summary}</span>
+                    ))}
+                  </div>
+                ) : null}
                 {!selectedPatchScenarioImplemented ? (
                   <div className="workflow-note patch-readiness-note">
                     <strong>Design placeholder</strong>

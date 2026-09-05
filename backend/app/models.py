@@ -357,6 +357,7 @@ class TestingSubjectReadModelSummary(BaseModel):
     latest_successful_market_info_version: str | None = None
     latest_observed_market_info_version: str | None = None
     latest_successful_market_info_state: dict[str, Any] | None = None
+    current_patch_state: dict[str, Any] | None = None
     latest_success_message_type: str | None = None
     latest_tested_at: str | None = None
     reviewed_post_at: str | None = None

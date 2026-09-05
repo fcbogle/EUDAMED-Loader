@@ -622,13 +622,9 @@ def bulk_patch_posted_entries(payload: dict | None = None) -> dict:
     product_family = _required_string_with_detail(data, "product_family", "product_family, product_variant, and basic_udi_di are required.")
     product_variant = _required_string_with_detail(data, "product_variant", "product_family, product_variant, and basic_udi_di are required.")
     basic_udi_di = _required_string_with_detail(data, "basic_udi_di", "product_family, product_variant, and basic_udi_di are required.")
-    summaries = _testing_read_model().list_subject_summaries(
+    entries = _testing_read_model().bulk_patch_posted_entries(
         product_family=product_family,
         product_variant=product_variant,
-        limit=10000,
-    )
-    entries = _bulk_patch_posted_entries_from_summaries(
-        summaries,
         basic_udi_di=basic_udi_di,
     )
     return {

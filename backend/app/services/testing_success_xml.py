@@ -50,6 +50,8 @@ class SubjectResolution:
 
 
 class TestingSuccessXmlService:
+    __test__ = False
+
     def __init__(self) -> None:
         self.store = TestingStateStore()
 

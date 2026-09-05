@@ -31,6 +31,7 @@ import workbooksDocumentation from "./content/docs/workbooks.md?raw";
 import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import xmlSampleComparisonDocumentation from "./content/docs/xml-sample-comparison.md?raw";
 import { resolveMarketCountryCode } from "./marketCountryReference";
+import { buildBulkPatchBaselineSummary } from "./bulkPatchBaselineSummary";
 import { usePatchScenarioState } from "./usePatchScenarioState";
 import { useBulkScopeState } from "./useBulkScopeState";
 import { useXmlOperationAssessment } from "./useXmlOperationAssessment";
@@ -627,6 +628,7 @@ function buildBulkPatchPostedEntries(
       latest_version: summary.latest_successful_version,
       latest_market_info_version: summary.latest_successful_market_info_version,
       baseline_patch_success: summary.baseline_patch_success,
+      current_state: summary.current_patch_state,
     }))
     .sort((left, right) => (left.catalogue_number ?? "").localeCompare(right.catalogue_number ?? ""));
 }
@@ -3268,6 +3270,10 @@ export function App() {
     PATCH_SCENARIOS.find((scenario) => scenario.id === selectedPatchScenarioId) ?? PATCH_SCENARIOS[0];
   const selectedPatchScenarioStatus = patchScenarioStatuses[selectedPatchScenario.id];
   const selectedPatchScenarioImplemented = selectedPatchScenario.implemented;
+  const bulkPatchBaselineSummary = buildBulkPatchBaselineSummary({
+    scenarioId: selectedPatchScenario.id,
+    entries: selectedBulkPatchEntries,
+  });
   const selectedLatestPatchState = xmlPairPreview?.latest_successful_patch_state ?? null;
   const selectedPatchWarningCodes = selectedLatestPatchState
     ? selectedLatestPatchState.critical_warnings.map((item) => item.code).filter((value) => value)
@@ -6252,6 +6258,7 @@ export function App() {
                       selectedPatchScenarioSummary={selectedPatchScenario.summary}
                       selectedPatchScenarioOptionsSummary={selectedPatchScenario.optionsSummary}
                       selectedPatchScenarioImplemented={selectedPatchScenarioImplemented}
+                      bulkPatchBaselineSummary={bulkPatchBaselineSummary}
                       patchTradeNameInput={patchTradeNameInput}
                       onPatchTradeNameChange={setPatchTradeNameInput}
                       patchBaseQuantityInput={patchBaseQuantityInput}

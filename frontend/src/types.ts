@@ -821,6 +821,17 @@ export type BulkPatchPostedEntry = {
   latest_version: string | null;
   latest_market_info_version?: string | null;
   baseline_patch_success: boolean;
+  current_state?: BulkPatchCurrentState | null;
+};
+
+export type BulkPatchCurrentState = {
+  trade_name?: string | null;
+  base_quantity?: number | null;
+  sterile?: boolean | null;
+  contains_latex?: boolean | null;
+  status_code?: string | null;
+  critical_warnings?: Array<{ code?: string | null }>;
+  storage_conditions?: Array<{ code?: string | null; comment?: string | null }>;
 };
 
 export type BulkPatchPostedEntriesResponse = {
@@ -896,6 +907,7 @@ export type TestingSubjectReadModelSummary = {
   latest_successful_version: string | null;
   latest_successful_market_info_version: string | null;
   latest_observed_market_info_version: string | null;
+  current_patch_state: BulkPatchCurrentState | null;
   latest_successful_market_info_state: {
     version?: string;
     market_countries?: Array<{
