@@ -1105,7 +1105,6 @@ export function App() {
   const [registrationStateActionableOnly, setRegistrationStateActionableOnly] = useState<boolean>(false);
   const [selectedTestingSummaryFamily, setSelectedTestingSummaryFamily] = useState<string>("");
   const [selectedTestingSummaryVariant, setSelectedTestingSummaryVariant] = useState<string>("");
-  const [selectedPatchScenarioId, setSelectedPatchScenarioId] = useState<PatchScenarioId>("equivalent_first_patch");
   const [testingSubjectSummaries, setTestingSubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
   const [testingSummaryWorkspaceSummary, setTestingSummaryWorkspaceSummary] = useState<TestingWorkspaceSummary | null>(null);
   const [testingSummarySubjectSummaries, setTestingSummarySubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
@@ -1143,7 +1142,23 @@ export function App() {
     setSelectedXmlChunkSequence,
     selectedBulkRecordCount,
     setSelectedBulkRecordCount,
-  } = useXmlWorkspaceState();
+    selectedPatchScenarioId,
+    setSelectedPatchScenarioId,
+    marketInfoVersionInput,
+    setMarketInfoVersionInput,
+    acceptedMarketInfoItems,
+    setAcceptedMarketInfoItems,
+    marketInfoScenarioItems,
+    setMarketInfoScenarioItems,
+    bulkMarketInfoScenarioItems,
+    setBulkMarketInfoScenarioItems,
+    xmlActionMessage,
+    setXmlActionMessage,
+    isGeneratingXml,
+    setIsGeneratingXml,
+    isDownloadingXml,
+    setIsDownloadingXml,
+  } = useXmlWorkspaceState<PatchScenarioId>("equivalent_first_patch");
   const {
     patch: {
       scopeMode: bulkPatchScopeMode,
@@ -1182,7 +1197,6 @@ export function App() {
   const [draftActions, setDraftActions] = useState<DraftAction[]>([]);
   const [isApplyingRules, setIsApplyingRules] = useState<boolean>(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [xmlActionMessage, setXmlActionMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [criticalWarningCodeOptions, setCriticalWarningCodeOptions] = useState<CriticalWarningCodeOption[]>([]);
   const {
@@ -1213,16 +1227,6 @@ export function App() {
     selectedPatchXmlSectionId,
     setSelectedPatchXmlSectionId,
   } = useXmlPreviewState();
-  const [marketInfoVersionInput, setMarketInfoVersionInput] = useState<string>("1");
-  const [acceptedMarketInfoItems, setAcceptedMarketInfoItems] = useState<MarketInfoScenarioItem[] | null>(null);
-  const [marketInfoScenarioItems, setMarketInfoScenarioItems] = useState<MarketInfoScenarioItem[]>([
-    { id: createMarketInfoScenarioId(), country: "", originalPlacedOnMarket: false },
-  ]);
-  const [bulkMarketInfoScenarioItems, setBulkMarketInfoScenarioItems] = useState<MarketInfoScenarioItem[]>([
-    { id: createMarketInfoScenarioId(), country: "", originalPlacedOnMarket: false },
-  ]);
-  const [isGeneratingXml, setIsGeneratingXml] = useState<boolean>(false);
-  const [isDownloadingXml, setIsDownloadingXml] = useState<boolean>(false);
   const [isLoadingStartup, setIsLoadingStartup] = useState<boolean>(true);
   const [isLoadingCanonicalReview, setIsLoadingCanonicalReview] = useState<boolean>(false);
   const [isLoadingCanonicalValidation, setIsLoadingCanonicalValidation] = useState<boolean>(false);
