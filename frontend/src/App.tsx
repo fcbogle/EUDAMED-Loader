@@ -3788,7 +3788,11 @@ export function App() {
     setXmlOperationAssessment,
     setXmlOperationAssessmentError,
     onUploadRecorded: (result) => {
-      if (xmlMode !== "marketInfo" || result.message_type !== "MARKET_INFO.PUT") {
+      if (
+        xmlMode !== "marketInfo" ||
+        result.message_type !== "MARKET_INFO.PUT" ||
+        result.successful_entity_count !== 1
+      ) {
         return;
       }
       const acceptedItems = marketInfoScenarioItems.map((item, index) => ({

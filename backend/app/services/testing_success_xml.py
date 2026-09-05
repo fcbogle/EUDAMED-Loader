@@ -100,9 +100,14 @@ class TestingSuccessXmlService:
                 duplicate_event_count += 1 if duplicate_event else 0
         if first_resolution is None:
             raise ValueError("Success XML did not resolve any testing subjects.")
-        if len(acknowledgements) == 1:
+        if len(acknowledgements) == 1 and successful_entity_count == 1:
             summary_message = (
                 f"Tracked successful {first_acknowledgement.operation_label} for "
+                f"{first_resolution.catalogue_number or first_acknowledgement.entity_code}."
+            )
+        elif len(acknowledgements) == 1:
+            summary_message = (
+                f"Recorded error {first_acknowledgement.operation_label} acknowledgement for "
                 f"{first_resolution.catalogue_number or first_acknowledgement.entity_code}."
             )
         else:

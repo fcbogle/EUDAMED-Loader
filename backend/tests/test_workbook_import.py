@@ -632,6 +632,7 @@ def test_market_info_error_records_eudamed_version_floor(
     )
 
     assert result.error_entity_count == 1
+    assert result.summary_message == "Recorded error Market Info PUT acknowledgement for LINX22L1S."
     connection = sqlite3.connect(isolated_workbook_import_db)
     connection.row_factory = sqlite3.Row
     try:
