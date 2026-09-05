@@ -34,6 +34,7 @@ import { resolveMarketCountryCode } from "./marketCountryReference";
 import { usePatchScenarioState } from "./usePatchScenarioState";
 import { useBulkScopeState } from "./useBulkScopeState";
 import { useXmlOperationAssessment } from "./useXmlOperationAssessment";
+import { useXmlPreviewGeneration } from "./useXmlPreviewGeneration";
 import { useXmlPreviewState } from "./useXmlPreviewState";
 import { useXmlWorkspaceState } from "./useXmlWorkspaceState";
 import { buildPatchScenarioInputs, resolveBulkCatalogueNumbers } from "./xmlActionInputs";
@@ -4232,149 +4233,38 @@ export function App() {
     });
   }
 
-  async function generateXmlPreview(): Promise<void> {
-    if (
-      (xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo") &&
-      (!selectedXmlFamilySummary || !selectedXmlVariantSummary)
-    ) {
-      return;
-    }
-    setIsGeneratingXml(true);
-    setError(null);
-    setXmlActionMessage(null);
-    try {
-      if (xmlMode === "post") {
-        if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) {
-          return;
-        }
-        const preview = await api.previewNextXmlPostRegistration(
-          selectedXmlFamilySummary.product_family,
-          selectedXmlVariantSummary.product_variant,
-        );
-        setXmlPairPreview(preview);
-      } else if (xmlMode === "single") {
-        if (!selectedXmlRecord?.catalogue_number) {
-          return;
-        }
-        const preview = await api.previewXmlRecord(
-          selectedXmlFamilySummary.product_family,
-          selectedXmlVariantSummary.product_variant,
-          selectedXmlRecord.catalogue_number,
-        );
-        setXmlPreview(preview);
-      } else if (xmlMode === "marketInfo") {
-        if (!selectedMarketInfoRequestArgs) {
-          return;
-        }
-        const preview = await api.previewXmlMarketInfoPut(
-          selectedMarketInfoRequestArgs.product_family,
-          selectedMarketInfoRequestArgs.product_variant,
-          selectedMarketInfoRequestArgs.catalogue_number,
-          normalizedMarketInfoVersion,
-          currentMarketInfoScenarioInputs(),
-        );
-        setXmlMarketInfoPreview(preview);
-      } else if (xmlMode === "patch") {
-        if (!selectedPairRequestArgs) {
-          return;
-        }
-        const preview = await api.previewGeneratedPatchScenario(
-          selectedPairRequestArgs.product_family,
-          selectedPairRequestArgs.product_variant,
-          selectedPairRequestArgs.catalogue_number,
-          selectedPatchScenario.id,
-          patchVersionInput,
-          currentPatchScenarioInputs(),
-        );
-        setXmlPatchPreview(preview);
-      } else if (xmlMode === "bulkPost") {
-        setXmlActionMessage("Generating Bulk Basic UDI POST preview...");
-        const preview = await api.previewBulkPost(
-          selectedXmlFamilySummary.product_family,
-          selectedXmlVariantSummary.product_variant,
-          normalizedBulkRecordCount,
-          selectedXmlChunkSequence,
-        );
-        setXmlBulkPostPreview(preview);
-        setXmlActionMessage(
-          `Bulk Basic UDI POST preview generated for ${selectedXmlFamilySummary.product_family} / ${selectedXmlVariantSummary.product_variant}, chunk ${preview.selected_chunk_sequence}.`
-        );
-      } else if (xmlMode === "bulkUdidiPost") {
-        setXmlActionMessage("Generating Bulk UDI-DI POST preview...");
-        const preview = await api.previewBulkUdidiPost(
-          selectedXmlFamilySummary.product_family,
-          selectedXmlVariantSummary.product_variant,
-          effectiveBulkUdidiPostCatalogueNumbers.length,
-          selectedXmlChunkSequence,
-          effectiveBulkUdidiPostCatalogueNumbers,
-        );
-        setXmlBulkUdidiPostPreview(preview);
-        setXmlActionMessage(
-          `Bulk UDI-DI POST preview generated for ${selectedXmlFamilySummary.product_family} / ${selectedXmlVariantSummary.product_variant}, chunk ${preview.selected_chunk_sequence}.`
-        );
-      } else if (xmlMode === "bulkMarketInfo") {
-        setXmlActionMessage("Generating Bulk Market Info preview...");
-        if (!selectedBulkMarketInfoParentGroup) {
-          setError("Select a Basic UDI-DI parent before generating Bulk Market Info.");
-          setXmlActionMessage("Bulk Market Info is not ready: no Basic UDI-DI parent is selected.");
-          return;
-        }
-        const bulkMarketInfoCatalogueNumbers = await resolveBulkMarketInfoCatalogueNumbers();
-        if (bulkMarketInfoCatalogueNumbers.length < 1) {
-          setError("No posted devices are currently selected for Bulk Market Info.");
-          setXmlActionMessage("Bulk Market Info is not ready: no posted devices are currently selected.");
-          return;
-        }
-        const preview = await api.previewBulkMarketInfo(
-          selectedXmlFamilySummary.product_family,
-          selectedXmlVariantSummary.product_variant,
-          selectedBulkMarketInfoParentGroup.basic_udi_di,
-          bulkMarketInfoCatalogueNumbers.length,
-          normalizedBulkMarketInfoScenarioItems,
-          bulkMarketInfoCatalogueNumbers,
-          selectedXmlChunkSequence,
-        );
-        setXmlBulkMarketInfoPreview(preview);
-        setXmlActionMessage(
-          `Bulk Market Info preview generated for ${selectedXmlFamilySummary.product_family} / ${selectedXmlVariantSummary.product_variant} / ${selectedBulkMarketInfoParentGroup.basic_udi_di}.`
-        );
-      } else {
-        setXmlActionMessage("Bulk PATCH action received. Preparing selection...");
-        if (!selectedBulkPatchParentGroup) {
-          setError("Select a Basic UDI-DI parent before generating Bulk PATCH.");
-          setXmlActionMessage("Bulk PATCH is not ready: no Basic UDI-DI parent is selected.");
-          return;
-        }
-        const bulkPatchCatalogueNumbers = await resolveBulkPatchCatalogueNumbers();
-        if (bulkPatchCatalogueNumbers.length < 1) {
-          setError("No posted devices are currently selected for Bulk PATCH.");
-          setXmlActionMessage("Bulk PATCH is not ready: no posted devices are currently selected.");
-          return;
-        }
-        setXmlActionMessage("Generating Bulk PATCH preview...");
-        const preview = await api.previewBulkPatch(
-          selectedXmlFamilySummary.product_family,
-          selectedXmlVariantSummary.product_variant,
-          selectedBulkPatchParentGroup.basic_udi_di,
-          bulkPatchCatalogueNumbers.length,
-          selectedPatchScenario.id,
-          currentPatchScenarioInputs(),
-          bulkPatchCatalogueNumbers,
-          selectedXmlChunkSequence,
-        );
-        setXmlBulkPatchPreview(preview);
-        setXmlActionMessage(
-          `Bulk PATCH preview generated for ${selectedXmlFamilySummary.product_family} / ${selectedXmlVariantSummary.product_variant} / ${selectedBulkPatchParentGroup.basic_udi_di}.`
-        );
-      }
-    } catch (requestError) {
-      const message = requestError instanceof Error ? requestError.message : "Failed to generate XML preview.";
-      setError(message);
-      setXmlActionMessage(message);
-    } finally {
-      setIsGeneratingXml(false);
-    }
-  }
+  const { generateXmlPreview } = useXmlPreviewGeneration({
+    xmlMode,
+    selectedXmlFamilySummary,
+    selectedXmlVariantSummary,
+    selectedXmlRecord,
+    selectedMarketInfoRequestArgs,
+    selectedPairRequestArgs,
+    selectedPatchScenarioId: selectedPatchScenario.id,
+    patchVersionInput,
+    normalizedMarketInfoVersion,
+    currentMarketInfoScenarioInputs,
+    currentPatchScenarioInputs,
+    normalizedBulkRecordCount,
+    selectedXmlChunkSequence,
+    effectiveBulkUdidiPostCatalogueNumbers,
+    selectedBulkMarketInfoParentGroup,
+    normalizedBulkMarketInfoScenarioItems,
+    resolveBulkMarketInfoCatalogueNumbers,
+    selectedBulkPatchParentGroup,
+    resolveBulkPatchCatalogueNumbers,
+    setXmlPreview,
+    setXmlBulkPostPreview,
+    setXmlBulkUdidiPostPreview,
+    setXmlPairPreview,
+    setXmlMarketInfoPreview,
+    setXmlPatchPreview,
+    setXmlBulkPatchPreview,
+    setXmlBulkMarketInfoPreview,
+    setError,
+    setXmlActionMessage,
+    setIsGeneratingXml,
+  });
 
   async function downloadXmlRecord(): Promise<void> {
     if (
