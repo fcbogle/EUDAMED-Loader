@@ -35,6 +35,26 @@ import { usePatchScenarioState } from "./usePatchScenarioState";
 import { useXmlOperationAssessment } from "./useXmlOperationAssessment";
 import { useSuccessXmlUpload } from "./useSuccessXmlUpload";
 import {
+  assessmentEvidenceBoolean,
+  assessmentEvidenceNumber,
+  assessmentEvidenceString,
+  assessmentEvidenceStringArray,
+  operationAssessmentStatusClass,
+  operationAssessmentStatusLabel,
+} from "./xmlOperationAssessmentView";
+import {
+  basicUdiDiForRecord,
+  buildCurrentMarketInfoItemsForCatalogue,
+  buildMarketInfoScenarioItems,
+  buildSelectionAnchor,
+  createMarketInfoScenarioId,
+  fieldValue,
+  parseBooleanString,
+  parseCatalogueNumberList,
+  type MarketInfoScenarioItem,
+} from "./xmlMarketInfoState";
+import { extractXmlStructureSections, type XmlStructureSection } from "./xmlPreviewStructure";
+import {
   resolveBulkChunkSummaryTitle,
   resolveBulkPostReadinessMessage,
   resolveGenericPreviewStatusMessage,
@@ -67,7 +87,6 @@ import type {
   NormalizationRuleFile,
   OperationAssessment,
   PostRegistrationPreview,
-  RegisteredDeviceAnchor,
   ReferenceWorkbookSummary,
   SchemaInventory,
   SheetProfile,
@@ -122,19 +141,6 @@ type PatchScenarioDefinition = {
   optionsSummary?: string;
 };
 
-type SelectionAnchorInput = {
-  product_family: string;
-  product_variant: string;
-  catalogue_number: string;
-  primary_udi_di: string | null;
-};
-
-type MarketInfoScenarioItem = {
-  id: string;
-  country: string;
-  originalPlacedOnMarket: boolean;
-};
-
 type BulkPreviewMode = "bulkPost" | "bulkUdidiPost" | "bulkPatch" | "bulkMarketInfo";
 type ValidationReviewTab = "canonicalMapping" | "sourceSheetBasicUdi";
 
@@ -142,14 +148,6 @@ type BulkExclusionSummary = {
   key: string;
   title: string;
   detail: string;
-};
-
-type XmlStructureSection = {
-  id: string;
-  label: string;
-  detail: string;
-  lineStart: number;
-  lineEnd: number;
 };
 
 function normalizeFamilyValue(value: string | null | undefined): string {
@@ -883,103 +881,6 @@ function titleCaseToken(value: string): string {
     .join(" ");
 }
 
-function buildSelectionAnchor(record: SelectionAnchorInput): RegisteredDeviceAnchor {
-  return {
-    product_family: record.product_family,
-    product_variant: record.product_variant,
-    catalogue_number: record.catalogue_number,
-    primary_udi_di: record.primary_udi_di ?? "Pending",
-    post_file_name: "Pending preview",
-    patch_file_name: "Pending preview",
-    post_valid: false,
-    patch_valid: false,
-    eudamed_status: "Selection target",
-  };
-}
-
-function fieldValue(record: { fields: Array<{ canonical_path: string; value: string | null }> } | null, canonicalPath: string): string | null {
-  if (!record) {
-    return null;
-  }
-  return record.fields.find((field) => field.canonical_path === canonicalPath)?.value ?? null;
-}
-
-function basicUdiDiForRecord(record: { fields: Array<{ canonical_path: string; value: string | null }> } | null): string | null {
-  return (
-    fieldValue(record, "basic_device.basic_udi_di") ??
-    fieldValue(record, "device_record.basic_udi_identifier")
-  );
-}
-
-function parseBooleanString(value: string | null | undefined): boolean | null {
-  if (value == null) {
-    return null;
-  }
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "true") {
-    return true;
-  }
-  if (normalized === "false") {
-    return false;
-  }
-  return null;
-}
-
-function parseCatalogueNumberList(value: string): string[] {
-  const normalized = value
-    .replace(/\r/g, "\n")
-    .split(/[\n,;]/)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
-  return Array.from(new Set(normalized));
-}
-
-function createMarketInfoScenarioId(): string {
-  return `market-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function buildMarketInfoScenarioItems(
-  items: Array<{ country: string; original_placed_on_market: boolean }>,
-): MarketInfoScenarioItem[] {
-  if (items.length < 1) {
-    return [{ id: createMarketInfoScenarioId(), country: "", originalPlacedOnMarket: false }];
-  }
-  return items.map((item) => ({
-    id: createMarketInfoScenarioId(),
-    country: item.country,
-    originalPlacedOnMarket: item.original_placed_on_market,
-  }));
-}
-
-function buildCurrentMarketInfoItemsForCatalogue(args: {
-  catalogueNumber: string | null | undefined;
-  testingSubjectSummaries: TestingSubjectReadModelSummary[];
-  selectedXmlVariantRecords: Array<{
-    catalogue_number: string | null;
-    market_availability_items?: Array<{ country: string; original_placed_on_market: boolean }>;
-  }>;
-}): MarketInfoScenarioItem[] {
-  const { catalogueNumber, testingSubjectSummaries, selectedXmlVariantRecords } = args;
-  if (!catalogueNumber) {
-    return [];
-  }
-  const matchingSummary = testingSubjectSummaries.find((summary) => summary.catalogue_number === catalogueNumber);
-  const trackedItems = matchingSummary?.latest_successful_market_info_state?.market_countries;
-  if (trackedItems?.length) {
-    return trackedItems.map((item, index) => ({
-      id: `tracked-market-${catalogueNumber}-${index}-${item.country}`,
-      country: item.country,
-      originalPlacedOnMarket: item.original_placed_on_market,
-    }));
-  }
-  const matchingRecord = selectedXmlVariantRecords.find((record) => record.catalogue_number === catalogueNumber);
-  return (matchingRecord?.market_availability_items ?? []).map((item, index) => ({
-    id: `current-market-${catalogueNumber}-${index}-${item.country}`,
-    country: item.country,
-    originalPlacedOnMarket: item.original_placed_on_market,
-  }));
-}
-
 function basicUdiMatchLabel(matchStatus: string | null | undefined): string {
   if (matchStatus === "matched") {
     return "Matched in BasicUDIs.xlsx";
@@ -1159,144 +1060,6 @@ function matchesReadModelFilter(values: Array<string | number | null | undefined
     return true;
   }
   return values.some((value) => String(value ?? "").toLowerCase().includes(normalizedFilter));
-}
-
-function operationAssessmentStatusClass(status: OperationAssessment["status"]): string {
-  return status === "available" ? "ok" : status === "attention" ? "warn" : "danger";
-}
-
-function operationAssessmentStatusLabel(status: OperationAssessment["status"]): string {
-  return status === "available" ? "Available" : status === "attention" ? "Attention" : "Blocked";
-}
-
-function assessmentEvidenceNumber(assessment: OperationAssessment | null, key: string): number | null {
-  if (!assessment) {
-    return null;
-  }
-  const value = assessment.evidence[key];
-  return typeof value === "number" ? value : null;
-}
-
-function assessmentEvidenceString(assessment: OperationAssessment | null, key: string): string | null {
-  if (!assessment) {
-    return null;
-  }
-  const value = assessment.evidence[key];
-  return typeof value === "string" && value.trim() ? value : null;
-}
-
-function assessmentEvidenceBoolean(assessment: OperationAssessment | null, key: string): boolean | null {
-  if (!assessment) {
-    return null;
-  }
-  const value = assessment.evidence[key];
-  return typeof value === "boolean" ? value : null;
-}
-
-function assessmentEvidenceStringArray(assessment: OperationAssessment | null, key: string): string[] {
-  if (!assessment) {
-    return [];
-  }
-  const value = assessment.evidence[key];
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
-}
-
-function extractXmlStructureSections(xml: string): XmlStructureSection[] {
-  const lines = xml.split("\n");
-  const markers: Array<{ match: (line: string) => boolean; label: string; detail: string }> = [
-    {
-      match: (line) => line.includes("<m:Push"),
-      label: "Message envelope",
-      detail: "Push wrapper, correlation, message, and service metadata.",
-    },
-    {
-      match: (line) => line.includes("<m:recipient>"),
-      label: "Recipient and service",
-      detail: "EUDAMED node routing and service operation details.",
-    },
-    {
-      match: (line) => line.includes("<m:payload>"),
-      label: "Payload root",
-      detail: "Start of the DEVICE.POST payload.",
-    },
-    {
-      match: (line) => line.includes("<device:UDIDIData"),
-      label: "Device registration",
-      detail: "Top-level UDI-DI registration object.",
-    },
-    {
-      match: (line) => line.includes("<udidi:identifier>"),
-      label: "Device UDI-DI",
-      detail: "Primary device identifier and issuing entity.",
-    },
-    {
-      match: (line) => line.includes("<udidi:basicUDIIdentifier>"),
-      label: "Basic UDI-DI parent",
-      detail: "Parent family or variant registration identity.",
-    },
-    {
-      match: (line) => line.includes("<udidi:status>") || line.includes("<e:state>"),
-      label: "Registration and market state",
-      detail: "Registration status and on-market state values.",
-    },
-    {
-      match: (line) => line.includes("<udidi:MDNCodes>") || line.includes("<udidi:deviceClassification>"),
-      label: "Classification",
-      detail: "Classification fields such as MDN and related metadata.",
-    },
-    {
-      match: (line) => line.includes("<udidi:tradeName>") || line.includes("<udidi:tradeNames>") || line.includes("<udidi:deviceName>"),
-      label: "Commercial presentation",
-      detail: "Trade names and user-facing device naming.",
-    },
-    {
-      match: (line) => line.includes("<udidi:referenceNumber>") || line.includes("<udidi:productionIdentifier>"),
-      label: "Reference and production identifiers",
-      detail: "Catalogue, reference, and production identifier content.",
-    },
-    {
-      match: (line) => line.includes("<udidi:description>") || line.includes("<udidi:intendedPurpose>") || line.includes("<udidi:additionalDescription>"),
-      label: "Description and intended use",
-      detail: "Narrative description and intended-purpose text.",
-    },
-    {
-      match: (line) => line.includes("<udidi:criticalWarnings>") || line.includes("<udidi:storageHandlingConditions>") || line.includes("<udidi:singleUse>"),
-      label: "Warnings and handling",
-      detail: "Warnings, storage handling, and use-condition fields.",
-    },
-  ];
-
-  const starts = markers
-    .map((marker, index) => {
-      const lineStart = lines.findIndex((line) => marker.match(line));
-      return lineStart < 0
-        ? null
-        : {
-            id: `xml-structure-${index}`,
-            label: marker.label,
-            detail: marker.detail,
-            lineStart,
-          };
-    })
-    .filter((marker): marker is { id: string; label: string; detail: string; lineStart: number } => marker !== null)
-    .sort((left, right) => left.lineStart - right.lineStart);
-
-  if (starts.length < 1) {
-    return [
-      {
-        id: "xml-structure-empty",
-        label: "Preview pending",
-        detail: "Generate a POST preview to inspect the XML structure.",
-        lineStart: 0,
-        lineEnd: Math.max(lines.length - 1, 0),
-      },
-    ];
-  }
-
-  return starts.map((section, index) => ({
-    ...section,
-    lineEnd: (starts[index + 1]?.lineStart ?? lines.length) - 1,
-  }));
 }
 
 export function App() {
