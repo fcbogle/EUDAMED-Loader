@@ -35,6 +35,7 @@ import { usePatchScenarioState } from "./usePatchScenarioState";
 import { useBulkScopeState } from "./useBulkScopeState";
 import { useXmlOperationAssessment } from "./useXmlOperationAssessment";
 import { useXmlPreviewState } from "./useXmlPreviewState";
+import { useXmlWorkspaceState } from "./useXmlWorkspaceState";
 import { useSuccessXmlUpload } from "./useSuccessXmlUpload";
 import {
   assessmentEvidenceBoolean,
@@ -1104,11 +1105,7 @@ export function App() {
   const [registrationStateActionableOnly, setRegistrationStateActionableOnly] = useState<boolean>(false);
   const [selectedTestingSummaryFamily, setSelectedTestingSummaryFamily] = useState<string>("");
   const [selectedTestingSummaryVariant, setSelectedTestingSummaryVariant] = useState<string>("");
-  const [selectedXmlRecordKey, setSelectedXmlRecordKey] = useState<string | null>(null);
-  const [xmlMode, setXmlMode] = useState<"post" | "single" | "marketInfo" | "bulkPost" | "bulkUdidiPost" | "patch" | "bulkPatch" | "bulkMarketInfo">("post");
   const [selectedPatchScenarioId, setSelectedPatchScenarioId] = useState<PatchScenarioId>("equivalent_first_patch");
-  const [selectedBulkPatchBasicUdiDi, setSelectedBulkPatchBasicUdiDi] = useState<string>("");
-  const [selectedBulkMarketInfoBasicUdiDi, setSelectedBulkMarketInfoBasicUdiDi] = useState<string>("");
   const [testingSubjectSummaries, setTestingSubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
   const [testingSummaryWorkspaceSummary, setTestingSummaryWorkspaceSummary] = useState<TestingWorkspaceSummary | null>(null);
   const [testingSummarySubjectSummaries, setTestingSummarySubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
@@ -1133,8 +1130,20 @@ export function App() {
     status_code_edit: "EUDAMED Candidate",
     mdn_codes_edit: "EUDAMED Candidate",
   });
-  const [selectedXmlChunkSequence, setSelectedXmlChunkSequence] = useState<number>(1);
-  const [selectedBulkRecordCount, setSelectedBulkRecordCount] = useState<number>(1);
+  const {
+    xmlMode,
+    setXmlMode,
+    selectedXmlRecordKey,
+    setSelectedXmlRecordKey,
+    selectedBulkPatchBasicUdiDi,
+    setSelectedBulkPatchBasicUdiDi,
+    selectedBulkMarketInfoBasicUdiDi,
+    setSelectedBulkMarketInfoBasicUdiDi,
+    selectedXmlChunkSequence,
+    setSelectedXmlChunkSequence,
+    selectedBulkRecordCount,
+    setSelectedBulkRecordCount,
+  } = useXmlWorkspaceState();
   const {
     patch: {
       scopeMode: bulkPatchScopeMode,
