@@ -33,6 +33,7 @@ import xmlSampleComparisonDocumentation from "./content/docs/xml-sample-comparis
 import { resolveMarketCountryCode } from "./marketCountryReference";
 import { usePatchScenarioState } from "./usePatchScenarioState";
 import { useXmlOperationAssessment } from "./useXmlOperationAssessment";
+import { useXmlPreviewState } from "./useXmlPreviewState";
 import { useSuccessXmlUpload } from "./useSuccessXmlUpload";
 import {
   assessmentEvidenceBoolean,
@@ -1155,14 +1156,24 @@ export function App() {
   const [xmlActionMessage, setXmlActionMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [criticalWarningCodeOptions, setCriticalWarningCodeOptions] = useState<CriticalWarningCodeOption[]>([]);
-  const [xmlPreview, setXmlPreview] = useState<SingleRecordXmlPreview | null>(null);
-  const [xmlBulkPostPreview, setXmlBulkPostPreview] = useState<BulkPostPreview | null>(null);
-  const [xmlBulkUdidiPostPreview, setXmlBulkUdidiPostPreview] = useState<BulkUdidiPostPreview | null>(null);
-  const [xmlPairPreview, setXmlPairPreview] = useState<PostRegistrationPreview | null>(null);
-  const [xmlMarketInfoPreview, setXmlMarketInfoPreview] = useState<MarketInfoPutPreview | null>(null);
-  const [xmlPatchPreview, setXmlPatchPreview] = useState<GeneratedPatchScenarioPreview | null>(null);
-  const [xmlBulkPatchPreview, setXmlBulkPatchPreview] = useState<BulkPatchPreview | null>(null);
-  const [xmlBulkMarketInfoPreview, setXmlBulkMarketInfoPreview] = useState<BulkMarketInfoPreview | null>(null);
+  const {
+    xmlPreview,
+    setXmlPreview,
+    xmlBulkPostPreview,
+    setXmlBulkPostPreview,
+    xmlBulkUdidiPostPreview,
+    setXmlBulkUdidiPostPreview,
+    xmlPairPreview,
+    setXmlPairPreview,
+    xmlMarketInfoPreview,
+    setXmlMarketInfoPreview,
+    xmlPatchPreview,
+    setXmlPatchPreview,
+    xmlBulkPatchPreview,
+    setXmlBulkPatchPreview,
+    xmlBulkMarketInfoPreview,
+    setXmlBulkMarketInfoPreview,
+  } = useXmlPreviewState();
   const [selectedPostXmlSectionId, setSelectedPostXmlSectionId] = useState<string | null>(null);
   const [selectedMarketInfoXmlSectionId, setSelectedMarketInfoXmlSectionId] = useState<string | null>(null);
   const [selectedBulkXmlSectionId, setSelectedBulkXmlSectionId] = useState<string | null>(null);
