@@ -32,6 +32,7 @@ import xmlGenerationDocumentation from "./content/docs/xml-generation.md?raw";
 import xmlSampleComparisonDocumentation from "./content/docs/xml-sample-comparison.md?raw";
 import { resolveMarketCountryCode } from "./marketCountryReference";
 import { usePatchScenarioState } from "./usePatchScenarioState";
+import { useBulkScopeState } from "./useBulkScopeState";
 import { useXmlOperationAssessment } from "./useXmlOperationAssessment";
 import { useXmlPreviewState } from "./useXmlPreviewState";
 import { useSuccessXmlUpload } from "./useSuccessXmlUpload";
@@ -116,7 +117,6 @@ const focusColumns = [
 type MainTab = "workbooks" | "canonicalValidation" | "xml" | "registrationState" | "testingSummary" | "documentation";
 type ScopeMode = "all" | "sheet";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
-type BulkPatchScopeMode = "all_posted" | "next_10" | "next_25" | "selected_catalogue_numbers" | "import_catalogue_list";
 type PatchScenarioId =
   | "equivalent_first_patch"
   | "trade_name_edit"
@@ -1108,15 +1108,7 @@ export function App() {
   const [xmlMode, setXmlMode] = useState<"post" | "single" | "marketInfo" | "bulkPost" | "bulkUdidiPost" | "patch" | "bulkPatch" | "bulkMarketInfo">("post");
   const [selectedPatchScenarioId, setSelectedPatchScenarioId] = useState<PatchScenarioId>("equivalent_first_patch");
   const [selectedBulkPatchBasicUdiDi, setSelectedBulkPatchBasicUdiDi] = useState<string>("");
-  const [bulkPatchScopeMode, setBulkPatchScopeMode] = useState<BulkPatchScopeMode>("all_posted");
-  const [selectedBulkPatchCatalogueNumbers, setSelectedBulkPatchCatalogueNumbers] = useState<string[]>([]);
-  const [bulkPatchCatalogueFilter, setBulkPatchCatalogueFilter] = useState<string>("");
-  const [bulkPatchImportText, setBulkPatchImportText] = useState<string>("");
   const [selectedBulkMarketInfoBasicUdiDi, setSelectedBulkMarketInfoBasicUdiDi] = useState<string>("");
-  const [bulkMarketInfoScopeMode, setBulkMarketInfoScopeMode] = useState<BulkPatchScopeMode>("all_posted");
-  const [selectedBulkMarketInfoCatalogueNumbers, setSelectedBulkMarketInfoCatalogueNumbers] = useState<string[]>([]);
-  const [bulkMarketInfoCatalogueFilter, setBulkMarketInfoCatalogueFilter] = useState<string>("");
-  const [bulkMarketInfoImportText, setBulkMarketInfoImportText] = useState<string>("");
   const [testingSubjectSummaries, setTestingSubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
   const [testingSummaryWorkspaceSummary, setTestingSummaryWorkspaceSummary] = useState<TestingWorkspaceSummary | null>(null);
   const [testingSummarySubjectSummaries, setTestingSummarySubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
@@ -1143,10 +1135,38 @@ export function App() {
   });
   const [selectedXmlChunkSequence, setSelectedXmlChunkSequence] = useState<number>(1);
   const [selectedBulkRecordCount, setSelectedBulkRecordCount] = useState<number>(1);
-  const [bulkUdidiPostScopeMode, setBulkUdidiPostScopeMode] = useState<BulkPatchScopeMode>("all_posted");
-  const [selectedBulkUdidiPostCatalogueNumbers, setSelectedBulkUdidiPostCatalogueNumbers] = useState<string[]>([]);
-  const [bulkUdidiPostCatalogueFilter, setBulkUdidiPostCatalogueFilter] = useState<string>("");
-  const [bulkUdidiPostImportText, setBulkUdidiPostImportText] = useState<string>("");
+  const {
+    patch: {
+      scopeMode: bulkPatchScopeMode,
+      setScopeMode: setBulkPatchScopeMode,
+      catalogueNumbers: selectedBulkPatchCatalogueNumbers,
+      setCatalogueNumbers: setSelectedBulkPatchCatalogueNumbers,
+      catalogueFilter: bulkPatchCatalogueFilter,
+      setCatalogueFilter: setBulkPatchCatalogueFilter,
+      importText: bulkPatchImportText,
+      setImportText: setBulkPatchImportText,
+    },
+    marketInfo: {
+      scopeMode: bulkMarketInfoScopeMode,
+      setScopeMode: setBulkMarketInfoScopeMode,
+      catalogueNumbers: selectedBulkMarketInfoCatalogueNumbers,
+      setCatalogueNumbers: setSelectedBulkMarketInfoCatalogueNumbers,
+      catalogueFilter: bulkMarketInfoCatalogueFilter,
+      setCatalogueFilter: setBulkMarketInfoCatalogueFilter,
+      importText: bulkMarketInfoImportText,
+      setImportText: setBulkMarketInfoImportText,
+    },
+    udidiPost: {
+      scopeMode: bulkUdidiPostScopeMode,
+      setScopeMode: setBulkUdidiPostScopeMode,
+      catalogueNumbers: selectedBulkUdidiPostCatalogueNumbers,
+      setCatalogueNumbers: setSelectedBulkUdidiPostCatalogueNumbers,
+      catalogueFilter: bulkUdidiPostCatalogueFilter,
+      setCatalogueFilter: setBulkUdidiPostCatalogueFilter,
+      importText: bulkUdidiPostImportText,
+      setImportText: setBulkUdidiPostImportText,
+    },
+  } = useBulkScopeState();
   const [scopeMode] = useState<ScopeMode>("all");
   const [showUnmappedOnly, setShowUnmappedOnly] = useState<boolean>(true);
   const [valueFilter, setValueFilter] = useState<string>("");
