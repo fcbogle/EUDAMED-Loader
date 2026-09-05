@@ -36,6 +36,7 @@ import { useBulkScopeState } from "./useBulkScopeState";
 import { useXmlOperationAssessment } from "./useXmlOperationAssessment";
 import { useXmlPreviewState } from "./useXmlPreviewState";
 import { useXmlWorkspaceState } from "./useXmlWorkspaceState";
+import { buildPatchScenarioInputs } from "./xmlActionInputs";
 import { useSuccessXmlUpload } from "./useSuccessXmlUpload";
 import {
   assessmentEvidenceBoolean,
@@ -4193,48 +4194,18 @@ export function App() {
   }
 
   function currentPatchScenarioInputs(): Record<string, unknown> {
-    if (selectedPatchScenario.id === "equivalent_first_patch" || !selectedPatchScenario.implemented) {
-      return {};
-    }
-    if (selectedPatchScenario.id === "trade_name_edit") {
-      return {
-        new_trade_name: patchTradeNameInput,
-      };
-    }
-    if (selectedPatchScenario.id === "warning_add") {
-      return {
-        new_warning_code: patchWarningCodeInput,
-        new_warning_comment: patchWarningCommentInput || null,
-      };
-    }
-    if (selectedPatchScenario.id === "base_quantity_edit") {
-      return {
-        new_base_quantity: Number(patchBaseQuantityInput),
-      };
-    }
-    if (selectedPatchScenario.id === "sterile_edit") {
-      return {
-        new_sterile: patchSterileInput,
-      };
-    }
-    if (selectedPatchScenario.id === "latex_edit") {
-      return {
-        new_contains_latex: patchLatexInput,
-      };
-    }
-    if (selectedPatchScenario.id === "status_code_edit") {
-      return {
-        new_status_code: patchStatusCodeInput,
-      };
-    }
-    return {
-      updated_conditions: Object.entries(patchStorageConditionInputs)
-        .filter(([, replacementComment]) => replacementComment.trim())
-        .map(([conditionCode, replacementComment]) => ({
-          condition_code: conditionCode,
-          replacement_comment: replacementComment.trim(),
-        })),
-    };
+    return buildPatchScenarioInputs({
+      scenarioId: selectedPatchScenario.id,
+      implemented: selectedPatchScenario.implemented,
+      tradeName: patchTradeNameInput,
+      warningCode: patchWarningCodeInput,
+      warningComment: patchWarningCommentInput,
+      baseQuantity: patchBaseQuantityInput,
+      sterile: patchSterileInput,
+      containsLatex: patchLatexInput,
+      statusCode: patchStatusCodeInput,
+      storageConditions: patchStorageConditionInputs,
+    });
   }
 
   async function resolveBulkPatchCatalogueNumbers(): Promise<string[]> {
