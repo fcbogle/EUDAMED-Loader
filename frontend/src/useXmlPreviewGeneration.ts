@@ -21,6 +21,8 @@ type XmlVariantSelection = {
 
 type XmlRecord = {
   catalogue_number: string | null;
+  product_family?: string | null;
+  product_variant?: string | null;
 };
 
 type XmlRequestArgs = {
@@ -66,6 +68,17 @@ type UseXmlPreviewGenerationArgs = {
   setError: SetValue<string | null>;
   setXmlActionMessage: SetValue<string | null>;
   setIsGeneratingXml: SetValue<boolean>;
+  xmlPairPreview: PostRegistrationPreview | null;
+  xmlPreview: SingleRecordXmlPreview | null;
+  xmlMarketInfoPreview: MarketInfoPutPreview | null;
+  xmlPatchPreview: GeneratedPatchScenarioPreview | null;
+  xmlBulkPostPreview: BulkPostPreview | null;
+  xmlBulkUdidiPostPreview: BulkUdidiPostPreview | null;
+  xmlBulkPatchPreview: BulkPatchPreview | null;
+  xmlBulkMarketInfoPreview: BulkMarketInfoPreview | null;
+  selectedXmlMarketInfoRecord: XmlRecord | null;
+  selectedXmlPairRecord: XmlRecord | null;
+  setIsDownloadingXml: SetValue<boolean>;
 };
 
 export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
@@ -242,5 +255,179 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
     }
   }
 
-  return { generateXmlPreview };
+  async function downloadXmlRecord(): Promise<void> {
+    const {
+      xmlMode,
+      selectedXmlFamilySummary,
+      selectedXmlVariantSummary,
+      selectedXmlRecord,
+      selectedMarketInfoRequestArgs,
+      selectedPairRequestArgs,
+      selectedPatchScenarioId,
+      patchVersionInput,
+      normalizedMarketInfoVersion,
+      currentMarketInfoScenarioInputs,
+      currentPatchScenarioInputs,
+      normalizedBulkRecordCount,
+      effectiveBulkUdidiPostCatalogueNumbers,
+      selectedBulkMarketInfoParentGroup,
+      normalizedBulkMarketInfoScenarioItems,
+      resolveBulkMarketInfoCatalogueNumbers,
+      selectedBulkPatchParentGroup,
+      resolveBulkPatchCatalogueNumbers,
+      setError,
+      setXmlActionMessage,
+      xmlPairPreview,
+      xmlPreview,
+      xmlMarketInfoPreview,
+      xmlPatchPreview,
+      xmlBulkPostPreview,
+      xmlBulkUdidiPostPreview,
+      xmlBulkPatchPreview,
+      xmlBulkMarketInfoPreview,
+      selectedXmlMarketInfoRecord,
+      selectedXmlPairRecord,
+      setIsDownloadingXml,
+    } = args;
+
+    if (
+      (xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo") &&
+      (!selectedXmlFamilySummary || !selectedXmlVariantSummary)
+    ) {
+      return;
+    }
+    setIsDownloadingXml(true);
+    setError(null);
+    setXmlActionMessage("Preparing download...");
+    try {
+      const downloadResult =
+        xmlMode === "post" && xmlPairPreview
+          ? await api.downloadXmlPostPackage(
+              xmlPairPreview.product_family ?? "",
+              xmlPairPreview.product_variant ?? "",
+              xmlPairPreview.catalogue_number,
+            )
+          : xmlMode === "single" && selectedXmlRecord?.catalogue_number && selectedXmlFamilySummary && selectedXmlVariantSummary
+            ? await api.downloadXmlRecord(
+                selectedXmlFamilySummary.product_family,
+                selectedXmlVariantSummary.product_variant,
+                selectedXmlRecord.catalogue_number,
+              )
+            : xmlMode === "marketInfo" && selectedMarketInfoRequestArgs
+              ? await api.downloadXmlMarketInfoPut(
+                  selectedMarketInfoRequestArgs.product_family,
+                  selectedMarketInfoRequestArgs.product_variant,
+                  selectedMarketInfoRequestArgs.catalogue_number,
+                  normalizedMarketInfoVersion,
+                  currentMarketInfoScenarioInputs(),
+                )
+              : xmlMode === "patch"
+                ? await api.downloadGeneratedPatchScenario(
+                    selectedPairRequestArgs?.product_family ?? "",
+                    selectedPairRequestArgs?.product_variant ?? "",
+                    selectedPairRequestArgs?.catalogue_number ?? "",
+                    selectedPatchScenarioId,
+                    patchVersionInput,
+                    currentPatchScenarioInputs(),
+                  )
+                : xmlMode === "bulkPost" && selectedXmlFamilySummary && selectedXmlVariantSummary
+                  ? await api.downloadBulkPost(
+                      selectedXmlFamilySummary.product_family,
+                      selectedXmlVariantSummary.product_variant,
+                      normalizedBulkRecordCount,
+                    )
+                  : xmlMode === "bulkUdidiPost" && selectedXmlFamilySummary && selectedXmlVariantSummary
+                    ? await api.downloadBulkUdidiPost(
+                        selectedXmlFamilySummary.product_family,
+                        selectedXmlVariantSummary.product_variant,
+                        effectiveBulkUdidiPostCatalogueNumbers.length,
+                        effectiveBulkUdidiPostCatalogueNumbers,
+                      )
+                    : xmlMode === "bulkMarketInfo" && selectedXmlFamilySummary && selectedXmlVariantSummary
+                      ? await (async () => {
+                          if (!selectedBulkMarketInfoParentGroup) {
+                            throw new Error("Select a Basic UDI-DI parent before downloading Bulk Market Info.");
+                          }
+                          const catalogueNumbers = await resolveBulkMarketInfoCatalogueNumbers();
+                          if (catalogueNumbers.length < 1) {
+                            throw new Error("No posted devices are currently selected for Bulk Market Info.");
+                          }
+                          return api.downloadBulkMarketInfo(
+                            selectedXmlFamilySummary.product_family,
+                            selectedXmlVariantSummary.product_variant,
+                            selectedBulkMarketInfoParentGroup.basic_udi_di,
+                            catalogueNumbers.length,
+                            normalizedBulkMarketInfoScenarioItems,
+                            catalogueNumbers,
+                          );
+                        })()
+                      : await (async () => {
+                          if (!selectedBulkPatchParentGroup || !selectedXmlFamilySummary || !selectedXmlVariantSummary) {
+                            throw new Error("Select a Basic UDI-DI parent before downloading Bulk PATCH.");
+                          }
+                          const catalogueNumbers = await resolveBulkPatchCatalogueNumbers();
+                          if (catalogueNumbers.length < 1) {
+                            throw new Error("No posted devices are currently selected for Bulk PATCH.");
+                          }
+                          return api.downloadBulkPatch(
+                            selectedXmlFamilySummary.product_family,
+                            selectedXmlVariantSummary.product_variant,
+                            selectedBulkPatchParentGroup.basic_udi_di,
+                            catalogueNumbers.length,
+                            selectedPatchScenarioId,
+                            currentPatchScenarioInputs(),
+                            catalogueNumbers,
+                          );
+                        })();
+      if (!downloadResult?.blob) return;
+
+      const resolvedFileName =
+        downloadResult.fileName ??
+        (xmlMode === "single"
+          ? xmlPreview?.file_name ??
+            `${selectedXmlFamilySummary?.product_family ?? "device"}-${selectedXmlVariantSummary?.product_variant ?? "variant"}-${selectedXmlRecord?.catalogue_number ?? "record"}.xml`
+          : xmlMode === "marketInfo"
+            ? xmlMarketInfoPreview?.file_name ??
+              `${selectedXmlMarketInfoRecord?.product_family ?? "device"}-${selectedXmlMarketInfoRecord?.product_variant ?? "variant"}-${selectedXmlMarketInfoRecord?.catalogue_number ?? "record"}-market-info-put.xml`
+            : xmlMode === "patch"
+              ? `${(
+                  xmlPatchPreview?.derived_patch_file_name ??
+                  `${selectedXmlPairRecord?.product_family ?? "device"}-${selectedXmlPairRecord?.product_variant ?? "variant"}-${selectedPatchScenarioId}.xml`
+                ).replace(/\.xml$/i, "")}.zip`
+              : xmlMode === "bulkPost"
+                ? xmlBulkPostPreview?.package_file_name ??
+                  `${selectedXmlFamilySummary?.product_family ?? "device"}-${selectedXmlVariantSummary?.product_variant ?? "variant"}-bulk-post-package.zip`
+                : xmlMode === "bulkUdidiPost"
+                  ? xmlBulkUdidiPostPreview?.package_file_name ??
+                    `${selectedXmlFamilySummary?.product_family ?? "device"}-${selectedXmlVariantSummary?.product_variant ?? "variant"}-bulk-udidi-post-package.zip`
+                  : xmlMode === "bulkPatch"
+                    ? xmlBulkPatchPreview?.package_file_name ??
+                      `${selectedXmlFamilySummary?.product_family ?? "device"}-${selectedXmlVariantSummary?.product_variant ?? "variant"}-${selectedPatchScenarioId}-bulk-patch-package.zip`
+                    : xmlBulkMarketInfoPreview?.package_file_name ??
+                      `${selectedXmlFamilySummary?.product_family ?? "device"}-${selectedXmlVariantSummary?.product_variant ?? "variant"}-bulk-market-info-package.zip`);
+      const objectUrl = URL.createObjectURL(downloadResult.blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = resolvedFileName;
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      setXmlActionMessage(
+        xmlMode === "patch" || xmlMode === "bulkPatch"
+          ? `Patch scenario ZIP download started for ${resolvedFileName}. If your browser does not prompt, check the default Downloads folder.`
+          : `Download started for ${resolvedFileName}. If your browser does not prompt, check the default Downloads folder.`,
+      );
+      window.setTimeout(() => {
+        anchor.remove();
+        URL.revokeObjectURL(objectUrl);
+      }, 1500);
+    } catch (requestError) {
+      setXmlActionMessage(null);
+      setError(requestError instanceof Error ? requestError.message : "Failed to download XML.");
+    } finally {
+      setIsDownloadingXml(false);
+    }
+  }
+
+  return { generateXmlPreview, downloadXmlRecord };
 }
