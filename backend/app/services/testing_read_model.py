@@ -5,6 +5,9 @@ import sqlite3
 
 from app.config import get_settings
 from app.models import (
+    TestingBatchDeviceReadModelEntry,
+    TestingBatchHistory,
+    TestingBatchReadModelEntry,
     TestingEventReadModelEntry,
     TestingEventSummary,
     TestingSubjectHistory,
@@ -386,6 +389,127 @@ class TestingReadModelService:
             ).fetchall()
         return [self._event_read_model_from_row(row) for row in rows]
 
+    def list_batches(
+        self,
+        *,
+        product_family: str | None = None,
+        product_variant: str | None = None,
+        limit: int = 200,
+    ) -> list[TestingBatchReadModelEntry]:
+        clauses: list[str] = ["(batch.status <> 'generated' OR batch.lineage_source = 'recorded')"]
+        params: list[object] = []
+        scope_clause = self._subject_where_clause(
+            product_family=product_family,
+            product_variant=product_variant,
+        )
+        scope_params = self._subject_filter_params(product_family=product_family, product_variant=product_variant)
+        if scope_clause:
+            clauses.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM testing_batch_devices scoped_device
+                    JOIN testing_subjects ts ON ts.id = scoped_device.subject_id
+                    WHERE scoped_device.batch_id = batch.batch_id
+                      AND """
+                + scope_clause.removeprefix("WHERE ")
+                + ")"
+            )
+            params.extend(scope_params)
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    batch.batch_id,
+                    batch.message_type,
+                    batch.operation_scope,
+                    batch.product_family,
+                    batch.product_variant,
+                    batch.basic_udi_di,
+                    batch.created_at,
+                    batch.acknowledgement_message_id,
+                    batch.acknowledgement_source_file_name,
+                    batch.acknowledged_at,
+                    batch.status,
+                    COUNT(device.subject_id) AS device_count,
+                    SUM(CASE WHEN device.outcome_status = 'SUCCESS' THEN 1 ELSE 0 END) AS successful_device_count,
+                    SUM(CASE WHEN device.outcome_status = 'ERROR' THEN 1 ELSE 0 END) AS error_device_count,
+                    SUM(CASE WHEN device.outcome_status IS NULL THEN 1 ELSE 0 END) AS pending_device_count
+                FROM testing_batches batch
+                LEFT JOIN testing_batch_devices device ON device.batch_id = batch.batch_id
+                {where_clause}
+                GROUP BY batch.batch_id
+                ORDER BY batch.created_at DESC, batch.batch_id DESC
+                LIMIT ?
+                """,
+                (*params, limit),
+            ).fetchall()
+        return [self._batch_read_model_from_row(row) for row in rows]
+
+    def batch_history(self, batch_id: str) -> TestingBatchHistory | None:
+        with self._connect() as connection:
+            batch_row = connection.execute(
+                """
+                SELECT
+                    batch.batch_id,
+                    batch.message_type,
+                    batch.operation_scope,
+                    batch.product_family,
+                    batch.product_variant,
+                    batch.basic_udi_di,
+                    batch.created_at,
+                    batch.acknowledgement_message_id,
+                    batch.acknowledgement_source_file_name,
+                    batch.acknowledged_at,
+                    batch.status,
+                    COUNT(device.subject_id) AS device_count,
+                    SUM(CASE WHEN device.outcome_status = 'SUCCESS' THEN 1 ELSE 0 END) AS successful_device_count,
+                    SUM(CASE WHEN device.outcome_status = 'ERROR' THEN 1 ELSE 0 END) AS error_device_count,
+                    SUM(CASE WHEN device.outcome_status IS NULL THEN 1 ELSE 0 END) AS pending_device_count
+                FROM testing_batches batch
+                LEFT JOIN testing_batch_devices device ON device.batch_id = batch.batch_id
+                WHERE batch.batch_id = ?
+                GROUP BY batch.batch_id
+                """,
+                (batch_id,),
+            ).fetchone()
+            if batch_row is None:
+                return None
+            device_rows = connection.execute(
+                """
+                SELECT
+                    device.subject_id,
+                    subject.catalogue_number,
+                    subject.primary_udi_di,
+                    device.generated_event_id,
+                    device.acknowledgement_event_id,
+                    device.outcome_status
+                FROM testing_batch_devices device
+                JOIN testing_subjects subject ON subject.id = device.subject_id
+                WHERE device.batch_id = ?
+                ORDER BY subject.catalogue_number, device.subject_id
+                """,
+                (batch_id,),
+            ).fetchall()
+        return TestingBatchHistory(
+            batch=self._batch_read_model_from_row(batch_row),
+            devices=[
+                TestingBatchDeviceReadModelEntry(
+                    subject_id=int(row["subject_id"]),
+                    catalogue_number=self._optional_string(row["catalogue_number"]),
+                    primary_udi_di=self._optional_string(row["primary_udi_di"]),
+                    generated_event_id=int(row["generated_event_id"]) if row["generated_event_id"] is not None else None,
+                    acknowledgement_event_id=(
+                        int(row["acknowledgement_event_id"]) if row["acknowledgement_event_id"] is not None else None
+                    ),
+                    outcome_status=self._optional_string(row["outcome_status"]),
+                )
+                for row in device_rows
+            ],
+        )
+
     def _event_count(
         self,
         connection: sqlite3.Connection,
@@ -410,6 +534,26 @@ class TestingReadModelService:
             ),
         ).fetchone()
         return int(row[0]) if row is not None else 0
+
+    @classmethod
+    def _batch_read_model_from_row(cls, row: sqlite3.Row) -> TestingBatchReadModelEntry:
+        return TestingBatchReadModelEntry(
+            batch_id=str(row["batch_id"]),
+            message_type=str(row["message_type"]),
+            operation_scope=str(row["operation_scope"]),
+            product_family=cls._optional_string(row["product_family"]),
+            product_variant=cls._optional_string(row["product_variant"]),
+            basic_udi_di=cls._optional_string(row["basic_udi_di"]),
+            created_at=str(row["created_at"]),
+            acknowledgement_message_id=cls._optional_string(row["acknowledgement_message_id"]),
+            acknowledgement_source_file_name=cls._optional_string(row["acknowledgement_source_file_name"]),
+            acknowledged_at=cls._optional_string(row["acknowledged_at"]),
+            status=str(row["status"]),
+            device_count=int(row["device_count"] or 0),
+            successful_device_count=int(row["successful_device_count"] or 0),
+            error_device_count=int(row["error_device_count"] or 0),
+            pending_device_count=int(row["pending_device_count"] or 0),
+        )
 
     @staticmethod
     def _optional_string(value: object) -> str | None:

@@ -776,6 +776,30 @@ def testing_subject_history(subject_id: int) -> dict:
     return history.model_dump(mode="json")
 
 
+@router.get("/xml/testing-batches")
+def testing_batches(
+    product_family: str | None = None,
+    product_variant: str | None = None,
+    limit: int = 200,
+) -> list[dict]:
+    if limit < 1 or limit > 10000:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 10000.")
+    batches = _testing_read_model().list_batches(
+        product_family=product_family,
+        product_variant=product_variant,
+        limit=limit,
+    )
+    return [batch.model_dump(mode="json") for batch in batches]
+
+
+@router.get("/xml/testing-batches/{batch_id}")
+def testing_batch_history(batch_id: str) -> dict:
+    history = _testing_read_model().batch_history(batch_id)
+    if history is None:
+        raise HTTPException(status_code=404, detail="Testing batch not found.")
+    return history.model_dump(mode="json")
+
+
 def preview_xml_batch(payload: dict[str, str | int] | None = None) -> dict:
     data = cast(dict[str, object], payload or {})
     product_family = _required_string_with_detail(data, "product_family", "product_family and product_variant are required.")

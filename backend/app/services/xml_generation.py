@@ -794,19 +794,6 @@ class XmlGenerationService:
                 correlation_id=correlation_id,
                 message_id=message_id,
             )
-            for xml_record in xml_records:
-                self.testing_state_store.record_generated_post_context(
-                    product_family=xml_record.product_family,
-                    product_variant=xml_record.product_variant,
-                    catalogue_number=xml_record.catalogue_number,
-                    primary_udi_di=xml_record.primary_udi_di,
-                    basic_udi_di=xml_record.basic_identifier_code,
-                    message_type="DEVICE.POST",
-                    accepted_post_state=self._post_state_snapshot_payload(xml_record),
-                    correlation_id=correlation_id,
-                    message_id=message_id,
-                    operation_scope="bulk",
-                )
             validation = self.xml_validation_service.validate_message(xml_bytes)
             file_name = self.package_builder.bulk_file_name(
                 product_family=product_family,
@@ -988,19 +975,6 @@ class XmlGenerationService:
                 correlation_id=correlation_id,
                 message_id=message_id,
             )
-            for xml_record in xml_records:
-                self.testing_state_store.record_generated_post_context(
-                    product_family=xml_record.product_family,
-                    product_variant=xml_record.product_variant,
-                    catalogue_number=xml_record.catalogue_number,
-                    primary_udi_di=xml_record.primary_udi_di,
-                    basic_udi_di=xml_record.basic_identifier_code,
-                    message_type="UDI_DI.POST",
-                    accepted_post_state=self._post_state_snapshot_payload(xml_record),
-                    correlation_id=correlation_id,
-                    message_id=message_id,
-                    operation_scope="bulk",
-                )
             validation = self.xml_validation_service.validate_message(xml_bytes)
             file_name = self.package_builder.bulk_file_name(
                 product_family=product_family,
@@ -1293,15 +1267,6 @@ class XmlGenerationService:
                 correlation_id=correlation_id,
                 message_id=message_id,
             )
-            for _, _, generated_context in chunk_payloads:
-                self.testing_state_store.record_generated_patch_context(
-                    **{
-                        **generated_context,
-                        "correlation_id": correlation_id,
-                        "message_id": message_id,
-                        "operation_scope": "bulk",
-                    }
-                )
             validation = self.xml_validation_service.validate_message(xml_bytes)
             file_name = self.package_builder.bulk_file_name(
                 product_family=product_family,
@@ -1459,15 +1424,6 @@ class XmlGenerationService:
                 correlation_id=correlation_id,
                 message_id=message_id,
             )
-            for _, _, generated_context in chunk_payloads:
-                self.testing_state_store.record_generated_market_info_context(
-                    **{
-                        **generated_context,
-                        "correlation_id": correlation_id,
-                        "message_id": message_id,
-                        "operation_scope": "bulk",
-                    }
-                )
             validation = self.xml_validation_service.validate_message(xml_bytes)
             file_name = self.package_builder.bulk_file_name(
                 product_family=product_family,
@@ -1870,7 +1826,7 @@ class XmlGenerationService:
         patch_version: str,
         scenario_inputs: dict[str, Any] | None = None,
         require_reviewed_post_baseline: bool = False,
-        record_generated_context: bool = True,
+        record_generated_context: bool = False,
         correlation_id: str | None = None,
         message_id: str | None = None,
     ) -> GeneratedPatchScenarioPreview:
@@ -1906,6 +1862,7 @@ class XmlGenerationService:
             scenario_id=scenario_id,
             patch_version=patch_version,
             scenario_inputs=scenario_inputs,
+            record_generated_context=True,
         )
         package_file_name = self.package_builder.scenario_package_file_name(
             product_family=preview.product_family or product_family,
@@ -1988,6 +1945,7 @@ class XmlGenerationService:
         product_family: str,
         product_variant: str,
         catalogue_number: str,
+        record_generated_context: bool = False,
     ) -> PostRegistrationPreview:
         record = self.selector.find_xml_ready_record(
             product_family=product_family,
@@ -2029,22 +1987,23 @@ class XmlGenerationService:
             operation="UDIDI-POST" if parent_registered else "POST",
             catalogue_number=post_record.catalogue_number,
         )
-        self.testing_state_store.record_generated_post_context(
-            product_family=record.product_family,
-            product_variant=record.product_variant,
-            catalogue_number=post_record.catalogue_number,
-            primary_udi_di=post_record.primary_udi_di,
-            basic_udi_di=post_record.basic_identifier_code,
-            message_type=message_type,
-            accepted_post_state=self._post_state_snapshot_payload(xml_record),
-            correlation_id=correlation_id,
-            message_id=message_id,
-        )
-        self.testing_state_store.mark_reviewed_post(
-            product_family=record.product_family,
-            product_variant=record.product_variant,
-            catalogue_number=post_record.catalogue_number,
-        )
+        if record_generated_context:
+            self.testing_state_store.record_generated_post_context(
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                catalogue_number=post_record.catalogue_number,
+                primary_udi_di=post_record.primary_udi_di,
+                basic_udi_di=post_record.basic_identifier_code,
+                message_type=message_type,
+                accepted_post_state=self._post_state_snapshot_payload(xml_record),
+                correlation_id=correlation_id,
+                message_id=message_id,
+            )
+            self.testing_state_store.mark_reviewed_post(
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                catalogue_number=post_record.catalogue_number,
+            )
         registered_device_anchor = self._registered_device_anchor(post_record)
         return PostRegistrationPreview(
             product_family=record.product_family,
@@ -2084,6 +2043,7 @@ class XmlGenerationService:
         catalogue_number: str,
         market_countries: list[tuple[str, bool]] | None = None,
         market_info_version: str | None = None,
+        record_generated_context: bool = False,
     ) -> MarketInfoPutPreview:
         record = self.selector.find_xml_ready_record(
             product_family=product_family,
@@ -2121,30 +2081,25 @@ class XmlGenerationService:
             correlation_id=correlation_id,
             message_id=message_id,
         )
-        self.testing_state_store.record_generated_market_info_context(
-            product_family=record.product_family,
-            product_variant=record.product_variant,
-            catalogue_number=market_info_record.catalogue_number,
-            primary_udi_di=market_info_record.primary_udi_di,
-            basic_udi_di=self._record_basic_udi_di(record),
-            market_info_version=market_info_record.market_info_version,
-            baseline_market_countries=[
-                {
-                    "country": country_code,
-                    "original_placed_on_market": original_placed_on_market,
-                }
-                for country_code, original_placed_on_market in baseline_market_countries
-            ],
-            market_countries=[
-                {
-                    "country": country_code,
-                    "original_placed_on_market": original_placed_on_market,
-                }
-                for country_code, original_placed_on_market in market_info_record.market_countries
-            ],
-            correlation_id=correlation_id,
-            message_id=message_id,
-        )
+        if record_generated_context:
+            self.testing_state_store.record_generated_market_info_context(
+                product_family=record.product_family,
+                product_variant=record.product_variant,
+                catalogue_number=market_info_record.catalogue_number,
+                primary_udi_di=market_info_record.primary_udi_di,
+                basic_udi_di=self._record_basic_udi_di(record),
+                market_info_version=market_info_record.market_info_version,
+                baseline_market_countries=[
+                    {"country": country_code, "original_placed_on_market": original_placed_on_market}
+                    for country_code, original_placed_on_market in baseline_market_countries
+                ],
+                market_countries=[
+                    {"country": country_code, "original_placed_on_market": original_placed_on_market}
+                    for country_code, original_placed_on_market in market_info_record.market_countries
+                ],
+                correlation_id=correlation_id,
+                message_id=message_id,
+            )
         validation = self.xml_validation_service.validate_message(xml_bytes)
         return MarketInfoPutPreview(
             product_family=record.product_family,
@@ -2197,6 +2152,7 @@ class XmlGenerationService:
             catalogue_number=catalogue_number,
             market_countries=market_countries,
             market_info_version=market_info_version,
+            record_generated_context=True,
         )
         package_file_name = self.package_builder.operation_package_file_name(
             product_family=product_family,
@@ -2645,6 +2601,7 @@ class XmlGenerationService:
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
+            record_generated_context=True,
         )
         package_file_name = self.package_builder.operation_package_file_name(
             product_family=preview.product_family or product_family,

@@ -1079,7 +1079,8 @@ class TestingStateStore:
                     acknowledgement_message_id TEXT,
                     acknowledgement_source_file_name TEXT,
                     acknowledged_at TEXT,
-                    status TEXT NOT NULL DEFAULT 'generated'
+                    status TEXT NOT NULL DEFAULT 'generated',
+                    lineage_source TEXT NOT NULL DEFAULT 'recorded'
                 )
                 """
             )
@@ -1197,6 +1198,12 @@ class TestingStateStore:
                 table_name="reviewed_post_baselines",
                 column_name="device_subject_id",
                 column_definition="INTEGER REFERENCES device_subject(id) ON DELETE SET NULL",
+            )
+            self._ensure_column(
+                connection,
+                table_name="testing_batches",
+                column_name="lineage_source",
+                column_definition="TEXT NOT NULL DEFAULT 'recorded'",
             )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS ix_testing_subjects_device_subject_id ON testing_subjects(device_subject_id)"

@@ -921,6 +921,38 @@ export type TestingSubjectReadModelSummary = {
   event_count: number;
 };
 
+export type TestingBatchReadModelEntry = {
+  batch_id: string;
+  message_type: string;
+  operation_scope: string;
+  product_family: string | null;
+  product_variant: string | null;
+  basic_udi_di: string | null;
+  created_at: string;
+  acknowledgement_message_id: string | null;
+  acknowledgement_source_file_name: string | null;
+  acknowledged_at: string | null;
+  status: string;
+  device_count: number;
+  successful_device_count: number;
+  error_device_count: number;
+  pending_device_count: number;
+};
+
+export type TestingBatchDeviceReadModelEntry = {
+  subject_id: number;
+  catalogue_number: string | null;
+  primary_udi_di: string | null;
+  generated_event_id: number | null;
+  acknowledgement_event_id: number | null;
+  outcome_status: string | null;
+};
+
+export type TestingBatchHistory = {
+  batch: TestingBatchReadModelEntry;
+  devices: TestingBatchDeviceReadModelEntry[];
+};
+
 export type SuccessXmlUploadResult = {
   summary_message: string;
   message_type: "DEVICE.POST" | "UDI_DI.POST" | "UDI_DI.PATCH" | "MARKET_INFO.PUT";

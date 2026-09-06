@@ -32,6 +32,8 @@ import type {
   SourceRowDetail,
   SourceRowSummary,
   TestingSubjectReadModelSummary,
+  TestingBatchHistory,
+  TestingBatchReadModelEntry,
   TestingEventReadModelEntry,
   TestingWorkspaceSummary,
   WorkbookImportDiffSummary,
@@ -357,6 +359,19 @@ export const api = {
       product_variant: params?.product_variant,
       limit: params?.limit ?? 500,
     }),
+  testingBatches: (params?: {
+    product_family?: string;
+    product_variant?: string;
+    limit?: number;
+  }) =>
+    getJson<TestingBatchReadModelEntry[]>(
+      `/xml/testing-batches${buildQuery({
+        product_family: params?.product_family,
+        product_variant: params?.product_variant,
+        limit: params?.limit ?? 200,
+      })}`,
+    ),
+  testingBatchHistory: (batchId: string) => getJson<TestingBatchHistory>(`/xml/testing-batches/${encodeURIComponent(batchId)}`),
   assessSinglePost: (productFamily: string, productVariant: string, catalogueNumber?: string | null) =>
     sendJson<OperationAssessment>("/xml/assess-single-post", "POST", {
       product_family: productFamily,

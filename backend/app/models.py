@@ -412,6 +412,38 @@ class TestingSubjectHistory(BaseModel):
     events: list[TestingEventSummary] = Field(default_factory=list)
 
 
+class TestingBatchReadModelEntry(BaseModel):
+    batch_id: str
+    message_type: str
+    operation_scope: str
+    product_family: str | None = None
+    product_variant: str | None = None
+    basic_udi_di: str | None = None
+    created_at: str
+    acknowledgement_message_id: str | None = None
+    acknowledgement_source_file_name: str | None = None
+    acknowledged_at: str | None = None
+    status: str
+    device_count: int = 0
+    successful_device_count: int = 0
+    error_device_count: int = 0
+    pending_device_count: int = 0
+
+
+class TestingBatchDeviceReadModelEntry(BaseModel):
+    subject_id: int
+    catalogue_number: str | None = None
+    primary_udi_di: str | None = None
+    generated_event_id: int | None = None
+    acknowledgement_event_id: int | None = None
+    outcome_status: str | None = None
+
+
+class TestingBatchHistory(BaseModel):
+    batch: TestingBatchReadModelEntry
+    devices: list[TestingBatchDeviceReadModelEntry] = Field(default_factory=list)
+
+
 class SuccessXmlUploadResult(BaseModel):
     summary_message: str
     message_type: Literal["DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH", "MARKET_INFO.PUT"]

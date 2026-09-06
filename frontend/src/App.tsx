@@ -17,6 +17,7 @@ import { PatchPreviewPanel } from "./components/PatchPreviewPanel";
 import { PatchScenarioCard } from "./components/PatchScenarioCard";
 import { PostPreviewPanel } from "./components/PostPreviewPanel";
 import { RegistrationStateWorkspace } from "./components/RegistrationStateWorkspace";
+import { SubmissionBatchHistory } from "./components/SubmissionBatchHistory";
 import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
 import { XmlValidationStack } from "./components/XmlValidationStack";
@@ -4547,6 +4548,7 @@ export function App() {
               snapshot data will continue to render.
             </div>
           ) : null}
+          <SubmissionBatchHistory />
           <section className="summary-grid workbook-kpi-grid">
             <div className="summary-card summary-card-meta">
               <span className="summary-label">Import Batch</span>

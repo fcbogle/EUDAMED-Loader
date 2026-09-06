@@ -34,12 +34,15 @@ from app.routers.xml_generation import (
     assess_single_market_info,
     assess_single_patch,
     assess_single_post,
+    testing_batch_history as xml_testing_batch_history,
+    testing_batches as xml_testing_batches,
     testing_subject_history as xml_testing_subject_history,
     testing_subject_summaries as xml_testing_subject_summaries,
     testing_workspace_summary as xml_testing_workspace_summary,
     xml_generation_scope,
 )
 from app.services.testing_state_store import TestingStateStore as PlaygroundStateStore
+from app.services.testing_batch_backfill import TestingBatchBackfillService
 from app.services.testing_success_xml import TestingSuccessXmlService
 from app.services.canonical_validation import CanonicalValidationService
 from app.services.testing_read_model import TestingReadModelService
@@ -2054,6 +2057,202 @@ def test_testing_read_model_routes_return_summary_subjects_and_history(
     assert subjects_payload[0]["catalogue_number"] == "CAT-001"
     assert history_payload["subject"]["catalogue_number"] == "CAT-001"
     assert history_payload["events"][0]["message_type"] == "DEVICE.POST"
+
+
+def test_testing_batch_read_model_returns_aggregate_and_device_outcomes(
+    isolated_workbook_import_db: Path,
+) -> None:
+    PlaygroundStateStore()
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    try:
+        subject_id = int(
+            connection.execute(
+                """
+                INSERT INTO testing_subjects (
+                    subject_key,
+                    normalized_product_family,
+                    normalized_product_variant,
+                    normalized_catalogue_number,
+                    product_family,
+                    product_variant,
+                    catalogue_number,
+                    primary_udi_di
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("family-a|variant-a|cat-001", "familya", "varianta", "cat-001", "Family A", "Variant A", "CAT-001", "111111"),
+            ).lastrowid
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_batches (
+                batch_id, message_type, operation_scope, product_family, product_variant, basic_udi_di,
+                created_at, acknowledgement_message_id, acknowledgement_source_file_name, acknowledged_at, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "batch-success",
+                "UDI_DI.PATCH",
+                "bulk",
+                "Family A",
+                "Variant A",
+                "BASIC-1",
+                "2026-09-05T17:00:00Z",
+                "ack-message-1",
+                "APP-DTX-000112344.xml",
+                "2026-09-05T17:10:00Z",
+                "acknowledged_success",
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_batches (
+                batch_id, message_type, operation_scope, product_family, product_variant, created_at, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("batch-pending", "MARKET_INFO.PUT", "bulk", "Family A", "Variant A", "2026-09-05T18:00:00Z", "generated"),
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_batch_devices (
+                batch_id, subject_id, generated_event_id, acknowledgement_event_id, outcome_status
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            ("batch-success", subject_id, 101, 102, "SUCCESS"),
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_batch_devices (batch_id, subject_id, generated_event_id)
+            VALUES (?, ?, ?)
+            """,
+            ("batch-pending", subject_id, 103),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    service = TestingReadModelService()
+    batches = service.list_batches(product_family="Family A", product_variant="Variant A")
+    history = service.batch_history("batch-success")
+    route_batches = xml_testing_batches(product_family="Family A", product_variant="Variant A")
+    route_history = xml_testing_batch_history("batch-success")
+
+    assert [batch.batch_id for batch in batches] == ["batch-pending", "batch-success"]
+    assert batches[0].pending_device_count == 1
+    assert batches[1].successful_device_count == 1
+    assert batches[1].acknowledgement_source_file_name == "APP-DTX-000112344.xml"
+    assert history is not None
+    assert history.devices[0].catalogue_number == "CAT-001"
+    assert history.devices[0].outcome_status == "SUCCESS"
+    assert route_batches[1]["status"] == "acknowledged_success"
+    assert route_history["devices"][0]["acknowledgement_event_id"] == 102
+
+
+def test_testing_batch_backfill_rebuilds_recorded_and_acknowledgement_only_lineage(
+    isolated_workbook_import_db: Path,
+) -> None:
+    PlaygroundStateStore()
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    try:
+        recorded_subject_id = int(
+            connection.execute(
+                """
+                INSERT INTO testing_subjects (
+                    subject_key, normalized_product_family, normalized_product_variant, normalized_catalogue_number,
+                    product_family, product_variant, catalogue_number, primary_udi_di, basic_udi_di
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("family-a|variant-a|cat-001", "familya", "varianta", "cat-001", "Family A", "Variant A", "CAT-001", "111111", "BASIC-1"),
+            ).lastrowid
+        )
+        acknowledgement_only_subject_id = int(
+            connection.execute(
+                """
+                INSERT INTO testing_subjects (
+                    subject_key, normalized_product_family, normalized_product_variant, normalized_catalogue_number,
+                    product_family, product_variant, catalogue_number, primary_udi_di, basic_udi_di
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("family-a|variant-a|cat-002", "familya", "varianta", "cat-002", "Family A", "Variant A", "CAT-002", "222222", "BASIC-1"),
+            ).lastrowid
+        )
+        unlinked_subject_id = int(
+            connection.execute(
+                """
+                INSERT INTO testing_subjects (
+                    subject_key, normalized_product_family, normalized_product_variant, normalized_catalogue_number,
+                    product_family, product_variant, catalogue_number, primary_udi_di, basic_udi_di
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("family-a|variant-a|cat-003", "familya", "varianta", "cat-003", "Family A", "Variant A", "CAT-003", "333333", "BASIC-1"),
+            ).lastrowid
+        )
+        events = [
+            (recorded_subject_id, 0, "UDI_DI.PATCH", "GENERATED", "recorded-correlation", "2026-09-01T09:00:00Z", "bulk"),
+            (recorded_subject_id, 1, "UDI_DI.PATCH", "SUCCESS", "recorded-correlation", "2026-09-01T09:05:00Z", "bulk"),
+            (acknowledgement_only_subject_id, 0, "MARKET_INFO.PUT", "SUCCESS", "ack-only-correlation", "2026-09-02T09:00:00Z", None),
+            (unlinked_subject_id, 0, "UDI_DI.POST", "GENERATED", None, "2026-09-03T09:00:00Z", "legacy"),
+            (unlinked_subject_id, 1, "UDI_DI.POST", "SUCCESS", None, "2026-09-03T09:05:00Z", None),
+        ]
+        for subject_id, event_index, message_type, status, correlation_id, event_time, operation_scope in events:
+            connection.execute(
+                """
+                INSERT INTO testing_events (
+                    subject_id, event_index, message_type, status, correlation_id, payload_created_at, tested_at,
+                    operation_scope, product_family, product_variant, basic_udi_di, raw_event_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    subject_id,
+                    event_index,
+                    message_type,
+                    status,
+                    correlation_id,
+                    event_time,
+                    event_time,
+                    operation_scope,
+                    "Family A",
+                    "Variant A",
+                    "BASIC-1",
+                    json.dumps({"status": status}),
+                ),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+    service = TestingBatchBackfillService()
+    dry_run = service.run()
+    applied = service.run(apply=True)
+    repeated = service.run(apply=True)
+
+    assert dry_run.created_recorded_batches == 1
+    assert dry_run.created_acknowledgement_only_batches == 1
+    assert dry_run.created_batch_devices == 2
+    assert dry_run.linked_acknowledgements == 2
+    assert dry_run.unlinked_generated_events == 1
+    assert dry_run.unlinked_acknowledgement_events == 1
+    assert applied == dry_run
+    assert repeated.created_recorded_batches == 0
+    assert repeated.created_acknowledgement_only_batches == 0
+
+    connection = sqlite3.connect(isolated_workbook_import_db)
+    try:
+        batches = connection.execute(
+            "SELECT batch_id, status, lineage_source FROM testing_batches ORDER BY batch_id"
+        ).fetchall()
+        devices = connection.execute(
+            "SELECT batch_id, generated_event_id, acknowledgement_event_id, outcome_status FROM testing_batch_devices ORDER BY batch_id"
+        ).fetchall()
+    finally:
+        connection.close()
+    assert batches == [
+        ("ack-only-correlation", "acknowledged_success", "backfilled_acknowledgement_only"),
+        ("recorded-correlation", "acknowledged_success", "backfilled_recorded"),
+    ]
+    assert devices[0][1:] == (None, devices[0][2], "SUCCESS")
+    assert devices[1][1] is not None
+    assert devices[1][2] is not None
 
 
 def test_operation_assessment_routes_report_single_post_and_bulk_post_availability(
