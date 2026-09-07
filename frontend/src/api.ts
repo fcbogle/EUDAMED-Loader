@@ -33,6 +33,7 @@ import type {
   SourceRowSummary,
   TestingSubjectReadModelSummary,
   TestingBatchHistory,
+  TestingBatchPage,
   TestingBatchReadModelEntry,
   TestingEventReadModelEntry,
   TestingWorkspaceSummary,
@@ -362,13 +363,27 @@ export const api = {
   testingBatches: (params?: {
     product_family?: string;
     product_variant?: string;
-    limit?: number;
+    basic_udi_di?: string;
+    catalogue_numbers?: string;
+    date_from?: string;
+    date_to?: string;
+    message_type?: string;
+    status?: string;
+    page?: number;
+    page_size?: number;
   }) =>
-    getJson<TestingBatchReadModelEntry[]>(
+    getJson<TestingBatchPage>(
       `/xml/testing-batches${buildQuery({
         product_family: params?.product_family,
         product_variant: params?.product_variant,
-        limit: params?.limit ?? 200,
+        basic_udi_di: params?.basic_udi_di,
+        catalogue_numbers: params?.catalogue_numbers,
+        date_from: params?.date_from,
+        date_to: params?.date_to,
+        message_type: params?.message_type,
+        status: params?.status,
+        page: params?.page ?? 1,
+        page_size: params?.page_size ?? 25,
       })}`,
     ),
   testingBatchHistory: (batchId: string) => getJson<TestingBatchHistory>(`/xml/testing-batches/${encodeURIComponent(batchId)}`),

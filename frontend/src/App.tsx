@@ -120,6 +120,7 @@ const focusColumns = [
 ];
 
 type MainTab = "workbooks" | "canonicalValidation" | "xml" | "registrationState" | "testingSummary" | "documentation";
+type SubmissionDataTab = "activity" | "snapshot";
 type ScopeMode = "all" | "sheet";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
 type PatchScenarioId =
@@ -1071,6 +1072,7 @@ function matchesReadModelFilter(values: Array<string | number | null | undefined
 
 export function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("workbooks");
+  const [submissionDataTab, setSubmissionDataTab] = useState<SubmissionDataTab>("snapshot");
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
     DocumentationSection["id"]
   >("projectStructure");
@@ -4517,6 +4519,25 @@ export function App() {
       {error ? <div className="panel error-banner">{error}</div> : null}
       {activeTab === "workbooks" ? (
         <>
+          <section className="submission-data-tabs" aria-label="Submission Data workspace">
+            <button
+              className={submissionDataTab === "snapshot" ? "submission-data-tab active" : "submission-data-tab"}
+              type="button"
+              onClick={() => setSubmissionDataTab("snapshot")}
+            >
+              Data Snapshot
+            </button>
+            <button
+              className={submissionDataTab === "activity" ? "submission-data-tab active" : "submission-data-tab"}
+              type="button"
+              onClick={() => setSubmissionDataTab("activity")}
+            >
+              EUDAMED Activity
+            </button>
+          </section>
+          {submissionDataTab === "activity" ? <SubmissionBatchHistory /> : null}
+          {submissionDataTab === "snapshot" ? (
+            <>
           {!isLoadingWorkbookImportMonitoring && !hasWorkbookImportSnapshot && !workbookImportSummaryError ? (
             <div className="panel">
               <div className="section-heading">
@@ -4548,7 +4569,6 @@ export function App() {
               snapshot data will continue to render.
             </div>
           ) : null}
-          <SubmissionBatchHistory />
           <section className="summary-grid workbook-kpi-grid">
             <div className="summary-card summary-card-meta">
               <span className="summary-label">Import Batch</span>
@@ -4845,7 +4865,8 @@ export function App() {
               </div>
             </div>
           </section>
-
+            </>
+          ) : null}
         </>
       ) : null}
 

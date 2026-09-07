@@ -218,6 +218,54 @@ select {
   box-shadow: 0 12px 28px rgba(0, 42, 58, 0.12);
 }
 
+.submission-data-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 6px;
+  width: fit-content;
+  border: 1px solid rgba(0, 42, 58, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.submission-data-tab {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 14px;
+  color: var(--ink-muted);
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.submission-data-tab.active {
+  color: #fff;
+  background: #00445f;
+  box-shadow: 0 2px 8px rgba(0, 42, 58, 0.2);
+}
+
+.activity-filter-bar { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin: 18px 0; }
+.activity-filter-bar input { padding: 10px 12px; border: 1px solid rgba(76, 111, 122, 0.22); border-radius: 12px; background: rgba(255, 255, 255, 0.94); color: #002a3a; font: inherit; }
+.activity-filter-bar > .read-model-filter-control:not(.activity-date-filter-control) { flex: 1 1 170px; }
+.activity-filter-bar > .read-model-filter-control:not(.activity-date-filter-control) :is(input, select) { width: 100%; }
+.activity-filter-bar > .catalogue-filter-control { flex-grow: 1.35; }
+.activity-filter-actions { display: flex; flex-basis: 100%; gap: 8px; }
+.activity-filter-actions .action-button, .activity-filter-actions .ghost-button { padding: 6px 10px; font-size: 0.74rem; }
+.activity-pagination { display: flex; align-items: center; justify-content: end; flex-wrap: wrap; gap: 8px; margin-top: 12px; color: #355864; font-size: 0.78rem; }
+.activity-pagination .ghost-button { padding: 5px 9px; font-size: 0.74rem; }
+.activity-filter-bar .read-model-filter-control.activity-filter-control { min-width: 170px; }
+.activity-filter-bar .read-model-filter-control.catalogue-filter-control { min-width: 240px; }
+.activity-filter-bar .read-model-filter-control.activity-operation-filter-control { min-width: 160px; }
+.activity-filter-bar .read-model-filter-control.activity-date-filter-control { min-width: 42px; }
+.activity-filter-bar .read-model-filter-control.activity-date-filter-control.has-value { min-width: 112px; }
+.activity-filter-bar .activity-date-input { width: 42px; min-width: 42px; height: 42px; padding: 8px; color: transparent; cursor: pointer; }
+.activity-date-input::-webkit-datetime-edit { display: none; }
+.activity-date-input::-webkit-calendar-picker-indicator { margin: 0; cursor: pointer; opacity: 1; }
+.activity-filter-bar .activity-date-filter-control.has-value .activity-date-input { width: 112px; min-width: 112px; color: #002a3a; }
+.activity-date-filter-control.has-value .activity-date-input::-webkit-datetime-edit { display: block; }
+
 .status-label,
 .summary-label,
 .section-kicker {

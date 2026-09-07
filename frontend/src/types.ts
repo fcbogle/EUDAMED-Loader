@@ -939,6 +939,13 @@ export type TestingBatchReadModelEntry = {
   pending_device_count: number;
 };
 
+export type TestingBatchPage = {
+  items: TestingBatchReadModelEntry[];
+  page: number;
+  page_size: number;
+  total_count: number;
+};
+
 export type TestingBatchDeviceReadModelEntry = {
   subject_id: number;
   catalogue_number: string | null;

@@ -7,6 +7,7 @@ from app.config import get_settings
 from app.models import (
     TestingBatchDeviceReadModelEntry,
     TestingBatchHistory,
+    TestingBatchPage,
     TestingBatchReadModelEntry,
     TestingEventReadModelEntry,
     TestingEventSummary,
@@ -394,9 +395,46 @@ class TestingReadModelService:
         *,
         product_family: str | None = None,
         product_variant: str | None = None,
+        basic_udi_di: str | None = None,
+        catalogue_numbers: tuple[str, ...] = (),
+        date_from: str | None = None,
+        date_to: str | None = None,
+        message_type: str | None = None,
+        status: str | None = None,
         limit: int = 200,
     ) -> list[TestingBatchReadModelEntry]:
-        clauses: list[str] = ["(batch.status <> 'generated' OR batch.lineage_source = 'recorded')"]
+        return self.list_batch_page(
+            product_family=product_family,
+            product_variant=product_variant,
+            basic_udi_di=basic_udi_di,
+            catalogue_numbers=catalogue_numbers,
+            date_from=date_from,
+            date_to=date_to,
+            message_type=message_type,
+            status=status,
+            page=1,
+            page_size=limit,
+        ).items
+
+    def list_batch_page(
+        self,
+        *,
+        product_family: str | None = None,
+        product_variant: str | None = None,
+        basic_udi_di: str | None = None,
+        catalogue_numbers: tuple[str, ...] = (),
+        date_from: str | None = None,
+        date_to: str | None = None,
+        message_type: str | None = None,
+        status: str | None = None,
+        page: int = 1,
+        page_size: int = 25,
+    ) -> TestingBatchPage:
+        if page < 1 or page_size < 1:
+            raise ValueError("page and page_size must be positive.")
+
+        # Generated-only records are retained for audit lineage but are not operational transactions.
+        clauses: list[str] = ["batch.status <> 'generated'"]
         params: list[object] = []
         scope_clause = self._subject_where_clause(
             product_family=product_family,
@@ -416,9 +454,36 @@ class TestingReadModelService:
                 + ")"
             )
             params.extend(scope_params)
+        if basic_udi_di:
+            clauses.append("batch.basic_udi_di = ?")
+            params.append(basic_udi_di.strip())
+        if catalogue_numbers:
+            placeholders = ", ".join("?" for _ in catalogue_numbers)
+            clauses.append(
+                f"EXISTS (SELECT 1 FROM testing_batch_devices scoped_device JOIN testing_subjects ts ON ts.id = scoped_device.subject_id WHERE scoped_device.batch_id = batch.batch_id AND ts.normalized_catalogue_number IN ({placeholders}))"
+            )
+            params.extend(self._normalize_identity(value) for value in catalogue_numbers)
+        if date_from:
+            clauses.append("batch.created_at >= ?")
+            params.append(date_from)
+        if date_to:
+            clauses.append("batch.created_at < ?")
+            params.append(f"{date_to}T23:59:59.999Z")
+        if message_type:
+            clauses.append("batch.message_type = ?")
+            params.append(message_type)
+        if status:
+            clauses.append("batch.status = ?")
+            params.append(status)
         where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
         with self._connect() as connection:
+            total_count = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM testing_batches batch {where_clause}",
+                    params,
+                ).fetchone()[0]
+            )
             rows = connection.execute(
                 f"""
                 SELECT
@@ -442,11 +507,16 @@ class TestingReadModelService:
                 {where_clause}
                 GROUP BY batch.batch_id
                 ORDER BY batch.created_at DESC, batch.batch_id DESC
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (*params, limit),
+                (*params, page_size, (page - 1) * page_size),
             ).fetchall()
-        return [self._batch_read_model_from_row(row) for row in rows]
+        return TestingBatchPage(
+            items=[self._batch_read_model_from_row(row) for row in rows],
+            page=page,
+            page_size=page_size,
+            total_count=total_count,
+        )
 
     def batch_history(self, batch_id: str) -> TestingBatchHistory | None:
         with self._connect() as connection:

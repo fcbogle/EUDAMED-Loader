@@ -3,6 +3,8 @@ import { Fragment, useEffect, useState } from "react";
 import { api } from "../api";
 import type { TestingBatchHistory, TestingBatchReadModelEntry } from "../types";
 
+const PAGE_SIZE = 25;
+
 function formatDateTime(value: string | null): string {
   if (!value) {
     return "Not acknowledged";
@@ -32,7 +34,12 @@ function statusLabel(batch: TestingBatchReadModelEntry): string {
 }
 
 export function SubmissionBatchHistory() {
+  const [filters, setFilters] = useState({ product_family: "", product_variant: "", basic_udi_di: "", catalogue_numbers: "", date_from: "", date_to: "", message_type: "", status: "" });
+  const [appliedFilters, setAppliedFilters] = useState(filters);
   const [batches, setBatches] = useState<TestingBatchReadModelEntry[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [filterOptionBatches, setFilterOptionBatches] = useState<TestingBatchReadModelEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
@@ -41,11 +48,19 @@ export function SubmissionBatchHistory() {
 
   useEffect(() => {
     let cancelled = false;
+    setIsLoading(true);
+    setError(null);
     void api
-      .testingBatches({ limit: 200 })
+      .testingBatches({ ...appliedFilters, page, page_size: PAGE_SIZE })
       .then((response) => {
         if (!cancelled) {
-          setBatches(response);
+          setBatches(response.items);
+          setTotalCount(response.total_count);
+          setFilterOptionBatches((current) => {
+            const byId = new Map(current.map((batch) => [batch.batch_id, batch]));
+            response.items.forEach((batch) => byId.set(batch.batch_id, batch));
+            return Array.from(byId.values());
+          });
         }
       })
       .catch((requestError: Error) => {
@@ -61,7 +76,17 @@ export function SubmissionBatchHistory() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [appliedFilters, page]);
+
+  const familyOptions = Array.from(new Set(filterOptionBatches.map((batch) => batch.product_family).filter(Boolean))).sort();
+  const variantOptions = Array.from(
+    new Set(
+      filterOptionBatches
+        .filter((batch) => batch.product_family === filters.product_family)
+        .map((batch) => batch.product_variant)
+        .filter(Boolean),
+    ),
+  ).sort();
 
   function toggleDetail(batchId: string): void {
     if (expandedBatchId === batchId) {
@@ -84,21 +109,78 @@ export function SubmissionBatchHistory() {
       });
   }
 
+  function applyFilters(): void {
+    setPage(1);
+    setAppliedFilters(filters);
+  }
+
+  function clearFilters(): void {
+    const cleared = { product_family: "", product_variant: "", basic_udi_di: "", catalogue_numbers: "", date_from: "", date_to: "", message_type: "", status: "" };
+    setFilters(cleared);
+    setPage(1);
+    setAppliedFilters(cleared);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const firstResult = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastResult = Math.min(page * PAGE_SIZE, totalCount);
+
   return (
     <section className="content-grid single-panel-grid">
       <div className="panel">
         <div className="section-heading">
           <div>
-            <span className="section-kicker">Submission Audit</span>
-            <h2>Batch History</h2>
+            <span className="section-kicker">EUDAMED Activity</span>
+            <h2>Explore EUDAMED Transaction History</h2>
           </div>
         </div>
         <p className="panel-copy">
-          Generated submissions remain pending until a corresponding EUDAMED acknowledgement is uploaded. Single-device submissions contain one device; bulk submissions contain all devices in the package.
+          What do you want to find? Search EUDAMED transactions by device, Basic UDI-DI, product family, catalogue number, date, or response reference.
         </p>
+        <form className="activity-filter-bar" onSubmit={(event) => { event.preventDefault(); applyFilters(); }}>
+          <label className="read-model-filter-control activity-filter-control">
+            <span>Family</span>
+            <select aria-label="Product family" value={filters.product_family} onChange={(event) => setFilters({ ...filters, product_family: event.target.value, product_variant: "" })}>
+              <option value="">All product families</option>
+              {familyOptions.map((family) => <option key={family} value={family ?? ""}>{family}</option>)}
+            </select>
+          </label>
+          <label className="read-model-filter-control activity-filter-control">
+            <span>Variant</span>
+            <select aria-label="Product variant" value={filters.product_variant} onChange={(event) => setFilters({ ...filters, product_variant: event.target.value })} disabled={!filters.product_family}>
+              <option value="">{filters.product_family ? "All variants" : "Select family first"}</option>
+              {variantOptions.map((variant) => <option key={variant} value={variant ?? ""}>{variant}</option>)}
+            </select>
+          </label>
+          <label className="read-model-filter-control activity-filter-control">
+            <span>Basic UDI-DI</span>
+            <input aria-label="Basic UDI-DI" placeholder="Enter Basic UDI-DI" value={filters.basic_udi_di} onChange={(event) => setFilters({ ...filters, basic_udi_di: event.target.value })} />
+          </label>
+          <label className="read-model-filter-control catalogue-filter-control">
+            <span>Catalogue number</span>
+            <input aria-label="Catalogue numbers" placeholder="One or more, comma separated" value={filters.catalogue_numbers} onChange={(event) => setFilters({ ...filters, catalogue_numbers: event.target.value })} />
+          </label>
+          <label className={`read-model-filter-control activity-date-filter-control${filters.date_from ? " has-value" : ""}`}>
+            <span>From</span>
+            <input className="activity-date-input" aria-label="From date" title={filters.date_from ? `From date: ${filters.date_from}` : "From date"} type="date" value={filters.date_from} onChange={(event) => setFilters({ ...filters, date_from: event.target.value })} />
+          </label>
+          <label className={`read-model-filter-control activity-date-filter-control${filters.date_to ? " has-value" : ""}`}>
+            <span>To</span>
+            <input className="activity-date-input" aria-label="To date" title={filters.date_to ? `To date: ${filters.date_to}` : "To date"} type="date" value={filters.date_to} onChange={(event) => setFilters({ ...filters, date_to: event.target.value })} />
+          </label>
+          <label className="read-model-filter-control activity-filter-control activity-operation-filter-control">
+            <span>Operation</span>
+            <select aria-label="Operation" value={filters.message_type} onChange={(event) => setFilters({ ...filters, message_type: event.target.value })}><option value="">All operations</option><option value="DEVICE.POST">Basic UDI-DI POST</option><option value="UDI_DI.POST">UDI-DI POST</option><option value="UDI_DI.PATCH">PATCH</option><option value="MARKET_INFO.PUT">Market Info</option></select>
+          </label>
+          <div className="activity-filter-actions">
+            <button className="action-button" type="submit">Search</button>
+            <button className="ghost-button" type="button" onClick={clearFilters}>Clear</button>
+          </div>
+        </form>
         {isLoading ? <p className="panel-copy">Loading batch history...</p> : null}
         {error ? <div className="panel error-banner">Batch history is unavailable: {error}</div> : null}
         {!isLoading && !error ? (
+          <>
           <div className="testing-summary-table-shell">
             <table className="workbook-files-table testing-summary-table">
               <thead>
@@ -180,12 +262,21 @@ export function SubmissionBatchHistory() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="testing-summary-empty-cell">No generated submissions are recorded yet.</td>
+                    <td colSpan={7} className="testing-summary-empty-cell">No acknowledged EUDAMED transactions match these filters.</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+          {totalCount > 0 ? (
+            <div className="activity-pagination" aria-label="Transaction history pagination">
+              <span>{`Showing ${firstResult}-${lastResult} of ${totalCount} transactions`}</span>
+              <button className="ghost-button" type="button" disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Previous</button>
+              <span>{`Page ${page} of ${totalPages}`}</span>
+              <button className="ghost-button" type="button" disabled={page === totalPages} onClick={() => setPage((current) => current + 1)}>Next</button>
+            </div>
+          ) : null}
+          </>
         ) : null}
       </div>
     </section>

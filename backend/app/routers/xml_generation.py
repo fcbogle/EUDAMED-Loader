@@ -780,16 +780,32 @@ def testing_subject_history(subject_id: int) -> dict:
 def testing_batches(
     product_family: str | None = None,
     product_variant: str | None = None,
-    limit: int = 200,
-) -> list[dict]:
-    if limit < 1 or limit > 10000:
-        raise HTTPException(status_code=400, detail="limit must be between 1 and 10000.")
-    batches = _testing_read_model().list_batches(
+    basic_udi_di: str | None = None,
+    catalogue_numbers: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    message_type: str | None = None,
+    status: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
+) -> dict:
+    if page < 1:
+        raise HTTPException(status_code=400, detail="page must be at least 1.")
+    if page_size < 1 or page_size > 100:
+        raise HTTPException(status_code=400, detail="page_size must be between 1 and 100.")
+    batches = _testing_read_model().list_batch_page(
         product_family=product_family,
         product_variant=product_variant,
-        limit=limit,
+        basic_udi_di=basic_udi_di,
+        catalogue_numbers=tuple(value.strip() for value in (catalogue_numbers or "").replace("\n", ",").split(",") if value.strip()),
+        date_from=date_from,
+        date_to=date_to,
+        message_type=message_type,
+        status=status,
+        page=page,
+        page_size=page_size,
     )
-    return [batch.model_dump(mode="json") for batch in batches]
+    return batches.model_dump(mode="json")
 
 
 @router.get("/xml/testing-batches/{batch_id}")

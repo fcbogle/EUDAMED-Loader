@@ -430,6 +430,13 @@ class TestingBatchReadModelEntry(BaseModel):
     pending_device_count: int = 0
 
 
+class TestingBatchPage(BaseModel):
+    items: list[TestingBatchReadModelEntry] = Field(default_factory=list)
+    page: int
+    page_size: int
+    total_count: int
+
+
 class TestingBatchDeviceReadModelEntry(BaseModel):
     subject_id: int
     catalogue_number: str | None = None

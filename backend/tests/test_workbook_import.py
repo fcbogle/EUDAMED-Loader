@@ -2110,6 +2110,22 @@ def test_testing_batch_read_model_returns_aggregate_and_device_outcomes(
                 batch_id, message_type, operation_scope, product_family, product_variant, created_at, status
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
+            (
+                "batch-success-earlier",
+                "DEVICE.POST",
+                "single",
+                "Family A",
+                "Variant A",
+                "2026-09-05T16:00:00Z",
+                "acknowledged_success",
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_batches (
+                batch_id, message_type, operation_scope, product_family, product_variant, created_at, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
             ("batch-pending", "MARKET_INFO.PUT", "bulk", "Family A", "Variant A", "2026-09-05T18:00:00Z", "generated"),
         )
         connection.execute(
@@ -2119,6 +2135,14 @@ def test_testing_batch_read_model_returns_aggregate_and_device_outcomes(
             ) VALUES (?, ?, ?, ?, ?)
             """,
             ("batch-success", subject_id, 101, 102, "SUCCESS"),
+        )
+        connection.execute(
+            """
+            INSERT INTO testing_batch_devices (
+                batch_id, subject_id, generated_event_id, acknowledgement_event_id, outcome_status
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            ("batch-success-earlier", subject_id, 100, 99, "SUCCESS"),
         )
         connection.execute(
             """
@@ -2133,18 +2157,23 @@ def test_testing_batch_read_model_returns_aggregate_and_device_outcomes(
 
     service = TestingReadModelService()
     batches = service.list_batches(product_family="Family A", product_variant="Variant A")
+    batch_page = service.list_batch_page(product_family="Family A", product_variant="Variant A", page=1, page_size=1)
+    second_batch_page = service.list_batch_page(product_family="Family A", product_variant="Variant A", page=2, page_size=1)
     history = service.batch_history("batch-success")
     route_batches = xml_testing_batches(product_family="Family A", product_variant="Variant A")
     route_history = xml_testing_batch_history("batch-success")
 
-    assert [batch.batch_id for batch in batches] == ["batch-pending", "batch-success"]
-    assert batches[0].pending_device_count == 1
-    assert batches[1].successful_device_count == 1
-    assert batches[1].acknowledgement_source_file_name == "APP-DTX-000112344.xml"
+    assert [batch.batch_id for batch in batches] == ["batch-success", "batch-success-earlier"]
+    assert [batch.batch_id for batch in batch_page.items] == ["batch-success"]
+    assert [batch.batch_id for batch in second_batch_page.items] == ["batch-success-earlier"]
+    assert batch_page.total_count == 2
+    assert batches[0].successful_device_count == 1
+    assert batches[0].acknowledgement_source_file_name == "APP-DTX-000112344.xml"
     assert history is not None
     assert history.devices[0].catalogue_number == "CAT-001"
     assert history.devices[0].outcome_status == "SUCCESS"
-    assert route_batches[1]["status"] == "acknowledged_success"
+    assert route_batches["total_count"] == 2
+    assert route_batches["items"][0]["status"] == "acknowledged_success"
     assert route_history["devices"][0]["acknowledgement_event_id"] == 102
 
 
