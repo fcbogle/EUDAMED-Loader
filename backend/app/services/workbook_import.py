@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import hashlib
 import json
-import logging
 import shutil
 import sqlite3
 from pathlib import Path

@@ -104,32 +104,6 @@ def _payload_nonempty_strings(payload: dict[str, object], key: str) -> list[str]
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
 
-def _bulk_patch_posted_entries_from_summaries(
-    summaries: Iterable[object],
-    *,
-    basic_udi_di: str,
-) -> list[dict[str, object]]:
-    normalized_basic_udi_di = "".join(basic_udi_di.casefold().split())
-    entries: list[dict[str, object]] = []
-    for summary in summaries:
-        entry = _summary_entry(summary)
-        if not entry.get("post_success") or not entry.get("has_successful_child_post_or_patch"):
-            continue
-        entry_basic_udi_di = str(entry.get("basic_udi_di") or "").strip()
-        if not entry_basic_udi_di or "".join(entry_basic_udi_di.casefold().split()) != normalized_basic_udi_di:
-            continue
-        entries.append(
-            {
-                "catalogue_number": entry.get("catalogue_number"),
-                "primary_udi_di": entry.get("primary_udi_di"),
-                "basic_udi_di": entry.get("basic_udi_di"),
-                "latest_version": entry.get("latest_successful_version"),
-                "baseline_patch_success": bool(entry.get("baseline_patch_success")),
-            }
-        )
-    entries.sort(key=lambda item: str(item.get("catalogue_number") or ""))
-    return entries
-
 
 def _bulk_patch_posted_parent_groups_from_summaries(
     summaries: Iterable[object],

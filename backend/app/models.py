@@ -6,12 +6,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-class FileInventoryItem(BaseModel):
-    name: str
-    path: Path
-    size_bytes: int
-
-
 class WorkbookSummary(BaseModel):
     workbook: str
     sheet_count: int
@@ -493,35 +487,6 @@ OperationAssessmentType = Literal[
     "bulk_market_info",
 ]
 OperationAssessmentStatus = Literal["available", "blocked", "attention"]
-
-
-class OperationAssessmentRequest(BaseModel):
-    product_family: str
-    product_variant: str
-
-
-class SinglePostAssessmentRequest(OperationAssessmentRequest):
-    catalogue_number: str | None = None
-
-
-class SinglePatchAssessmentRequest(OperationAssessmentRequest):
-    catalogue_number: str | None = None
-
-
-class SingleMarketInfoAssessmentRequest(OperationAssessmentRequest):
-    catalogue_number: str | None = None
-
-
-class BulkPostAssessmentRequest(OperationAssessmentRequest):
-    pass
-
-
-class BulkPatchAssessmentRequest(OperationAssessmentRequest):
-    basic_udi_di: str | None = None
-
-
-class BulkMarketInfoAssessmentRequest(OperationAssessmentRequest):
-    basic_udi_di: str | None = None
 
 
 class OperationAssessmentIdentityScope(BaseModel):

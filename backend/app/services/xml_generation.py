@@ -493,52 +493,6 @@ class XmlGenerationService:
 
         return included, excluded_records, eligible_child_records
 
-    def _bulk_patch_candidates(
-        self,
-        *,
-        records: list[CanonicalValidationRecord],
-        excluded_records: list[BulkXmlExcludedRecord],
-        basic_udi_di: str,
-        record_count: int,
-        selected_catalogue_numbers: list[str] | None = None,
-    ) -> tuple[list[CanonicalValidationRecord], list[BulkXmlExcludedRecord], int]:
-        grouped_records: dict[str, list[CanonicalValidationRecord]] = {}
-
-        for record in records:
-            summary = self._bulk_record_summary(record)
-            if summary.basic_udi_di:
-                grouped_records.setdefault(summary.basic_udi_di, []).append(record)
-
-        parent_group = grouped_records.get(basic_udi_di)
-        if not parent_group:
-            raise ValueError(f"Basic UDI-DI {basic_udi_di} does not resolve to an eligible POST cohort for bulk PATCH.")
-
-        child_records = parent_group[1:]
-        eligible_child_records = len(child_records)
-        if not child_records:
-            raise ValueError(f"Basic UDI-DI {basic_udi_di} does not currently have any eligible Device UDI-DI POST rows.")
-
-        selected_catalogue_set = {
-            catalogue_number.strip()
-            for catalogue_number in (selected_catalogue_numbers or [])
-            if isinstance(catalogue_number, str) and catalogue_number.strip()
-        }
-        if selected_catalogue_set:
-            unknown_catalogues = sorted(
-                selected_catalogue_set.difference({record.catalogue_number or "" for record in child_records})
-            )
-            if unknown_catalogues:
-                raise ValueError(
-                    "Selected bulk PATCH devices do not belong to the chosen Basic UDI-DI parent: "
-                    + ", ".join(unknown_catalogues)
-                )
-            filtered_records = [record for record in child_records if (record.catalogue_number or "") in selected_catalogue_set]
-            if not filtered_records:
-                raise ValueError(f"No selected child devices remain under Basic UDI-DI {basic_udi_di} for bulk PATCH.")
-            return filtered_records[:record_count], excluded_records, eligible_child_records
-
-        return child_records[:record_count], excluded_records, eligible_child_records
-
     def _bulk_patch_selected_records(
         self,
         *,

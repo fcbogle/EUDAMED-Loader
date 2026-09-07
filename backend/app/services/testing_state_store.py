@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import hashlib
 import json
 import sqlite3
-from typing import Any, cast
+from typing import Any
 
 from app.config import get_settings
 from app.xml_models import CriticalWarningXmlItem, PatchStateSnapshot, StorageConditionXmlItem
