@@ -135,7 +135,7 @@ export function SubmissionBatchHistory() {
           </div>
         </div>
         <p className="panel-copy">
-          What do you want to find? Search EUDAMED transactions by device, Basic UDI-DI, product family, catalogue number, date, or response reference.
+          What do you want to find? Search EUDAMED transactions by Basic UDI-DI, product family, variant, catalogue number, date, or operation.
         </p>
         <form className="activity-filter-bar" onSubmit={(event) => { event.preventDefault(); applyFilters(); }}>
           <label className="read-model-filter-control activity-filter-control">
