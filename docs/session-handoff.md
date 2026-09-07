@@ -28,6 +28,22 @@ with the current implementation focus now being:
 - `Historical Playground Findings` sections capture dated evidence and prior decisions.
 - Any recorded test counts in this document are historical snapshots only. Re-run verification from the current worktree before relying on them.
 
+## Current Repo State: September 7, 2026 — Unused Code Cleanup
+
+- Removed unused imports, summary calculations, normalization draft controls, and handlers from the frontend. The previously reported 78 TypeScript unused-declaration diagnostics are resolved, including additional unused dependencies exposed during cleanup.
+- Removed disconnected startup requests for workbook inventory, reference workbooks, sheets/profiles, schema inventory, normalization rules, and distinct values, plus their unused frontend API wrappers. Current SQLite snapshot monitoring, canonical review/validation, and XML reference-data loads remain active. Backend profiling and normalization endpoints and YAML business rules remain available.
+- Enabled `noUnusedLocals` and `noUnusedParameters` in `frontend/tsconfig.app.json`, so the regular frontend build checks for recurrence.
+- Removed the unreferenced `AcceptedGenerationWorkspace.tsx` component. A future accepted-generation workspace remains a deliberate design task; it was not connected to the active UI before removal.
+- Removed the uncalled `_bulk_patch_candidates` and `_bulk_patch_posted_entries_from_summaries` helpers, unused operation-assessment request models and `FileInventoryItem`, and unused Python imports. Active assessment contracts and per-device accepted-state selection remain unchanged.
+- Removed the empty, tracked `backend/app.db`; configured persistence remains `data/testing/testing-state.sqlite3`.
+- Retained `eudamed-backup-2026-05-20.tgz`: it is a historical project/environment archive, not runtime code, and its recovery/retention purpose has not been confirmed.
+- Corrected EUDAMED Activity search wording to list implemented filters rather than promise response-reference search.
+- The initial backend run reported `122 passed, 3 failed`. All three failures reproduced with the pre-cleanup backend modules from commit `77b5367`: the tests still assumed that ordinary previews persist state, despite the September 6 preview/submission separation in `2ed3bac`. Updated those stale tests to verify non-persisting previews and POST download persistence, including the envelope IDs in the actual ZIP XML and the reviewed-baseline gate. No runtime logging or lineage behavior was changed to satisfy these tests.
+- This supersedes older preview-logging statements below: ordinary single POST/PATCH/Market Info previews default to `record_generated_context=False`; their ZIP download paths explicitly record generated context. Bulk Market Info preview also does not call `record_generated_market_info_context`.
+- Verification: TypeScript checking with unused checks enabled passed. Initial server-render smoke checks passed for Data Snapshot, EUDAMED Activity, Canonical Validation, XML, Registration State, Testing Summary, and Documentation. These render checks do not exercise browser interactions or asynchronous data loading.
+- Final verification: backend `.venv/bin/python -m pytest -q backend/tests` passed all `125` tests; the three corrected regressions also passed independently. Frontend `npm run build` passed with unused-code checks enabled; Vite still reports a non-blocking JavaScript chunk-size warning. `git diff --check` passed.
+- Legacy SRN fallback, SQLite compatibility fields, PATCH lineage guardrails, and the deferred mixed-baseline Bulk Market Info eligibility decision are unchanged.
+
 ## Current Repo State: September 4, 2026
 
 ### Deferred Decision: Bulk Market Info Mixed Baselines

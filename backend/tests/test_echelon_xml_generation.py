@@ -254,7 +254,8 @@ def test_bulk_market_info_preview_generates_wrapped_put_chunk(monkeypatch: pytes
     assert preview.selected_chunk_validation.valid is True
     assert "<s:serviceID>MARKET_INFO</s:serviceID>" in preview.selected_chunk_xml
     assert "<s:serviceOperation>PUT</s:serviceOperation>" in preview.selected_chunk_xml
-    assert generated_contexts[0]["market_info_version"] == "2"
+    assert "<e:version>2</e:version>" in preview.selected_chunk_xml
+    assert generated_contexts == []
 
 
 def test_market_info_preview_uses_eudamed_observed_version_floor(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1286,9 +1287,20 @@ def test_generated_patch_scenario_route_requires_tracked_successful_post_for_ver
         XmlGenerationService.preview_generated_patch_scenario = original
 
 
-def test_post_preview_marks_reviewed_post_for_following_patch_generation() -> None:
+def test_post_download_marks_reviewed_post_for_following_patch_generation() -> None:
     service = XmlGenerationService()
     service.preview_post_registration(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
+
+    assert not service.testing_state_store.has_reviewed_post(
+        product_family="Echelon",
+        product_variant="Echelon VAC",
+        catalogue_number="EVAC22L1S",
+    )
+    service.download_post_package(
         product_family="Echelon",
         product_variant="Echelon VAC",
         catalogue_number="EVAC22L1S",

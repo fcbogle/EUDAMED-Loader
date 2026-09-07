@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Iterator
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from zipfile import ZipFile
 
 import pytest
 from fastapi import HTTPException
@@ -1396,7 +1398,7 @@ def test_workbook_import_service_persists_import_batch_and_subjects(
     assert field_count == 2
 
 
-def test_single_post_preview_records_generated_envelope_ids(
+def test_single_post_download_records_generated_envelope_ids(
     isolated_workbook_import_db: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1408,11 +1410,24 @@ def test_single_post_preview_records_generated_envelope_ids(
         lambda **kwargs: True,
     )
 
-    preview = service.preview_post_registration(
+    service.preview_post_registration(
         product_family="Elan",
         product_variant="Elan IC",
         catalogue_number="ELANIC22L1S",
     )
+
+    with sqlite3.connect(isolated_workbook_import_db) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM testing_events").fetchone()[0] == 0
+
+    _file_name, package_bytes = service.download_post_package(
+        product_family="Elan",
+        product_variant="Elan IC",
+        catalogue_number="ELANIC22L1S",
+    )
+    with ZipFile(BytesIO(package_bytes)) as archive:
+        xml_files = [name for name in archive.namelist() if name.endswith(".xml")]
+        assert len(xml_files) == 1
+        post_xml = archive.read(xml_files[0]).decode("utf-8")
 
     connection = sqlite3.connect(isolated_workbook_import_db)
     connection.row_factory = sqlite3.Row
@@ -1436,8 +1451,8 @@ def test_single_post_preview_records_generated_envelope_ids(
     message_id = str(generated_row["message_id"])
     assert correlation_id
     assert message_id
-    assert f"<m:correlationID>{correlation_id}</m:correlationID>" in preview.post_xml
-    assert f"<m:messageID>{message_id}</m:messageID>" in preview.post_xml
+    assert f"<m:correlationID>{correlation_id}</m:correlationID>" in post_xml
+    assert f"<m:messageID>{message_id}</m:messageID>" in post_xml
 
     event_payload = json.loads(str(generated_row["raw_event_json"]))
     assert event_payload["correlation_id"] == correlation_id
