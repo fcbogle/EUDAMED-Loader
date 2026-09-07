@@ -1,5 +1,4 @@
 import type {
-  ApplyNormalizationRulesResponse,
   BatchXmlPreview,
   BulkPatchPreview,
   BulkPatchPostedEntriesResponse,
@@ -16,31 +15,22 @@ import type {
   DeviceSubjectSummary,
   DatabaseHealthSummary,
   DatabaseSchemaSummary,
-  DistinctValueProfile,
   GeneratedPatchScenarioPreview,
   MarketInfoPutPreview,
   MarketCountryReferenceEntry,
-  NormalizationRuleFile,
   OperationAssessment,
   PostRegistrationPreview,
-  RegisteredDeviceAnchor,
-  ReferenceWorkbookSummary,
-  SchemaInventory,
-  SheetProfile,
-  SheetSummary,
   SingleRecordXmlPreview,
   SourceRowDetail,
   SourceRowSummary,
   TestingSubjectReadModelSummary,
   TestingBatchHistory,
   TestingBatchPage,
-  TestingBatchReadModelEntry,
   TestingEventReadModelEntry,
   TestingWorkspaceSummary,
   WorkbookImportDiffSummary,
   WorkbookImportRunResponse,
   WorkbookImportSnapshotSummary,
-  WorkbookSummary,
   XmlGenerationScopeBundle,
   SuccessXmlUploadResult,
 } from "./types";
@@ -127,8 +117,6 @@ async function sendDownload(path: string, method: string, body?: unknown): Promi
 }
 
 export const api = {
-  workbooks: () => getJson<WorkbookSummary[]>("/workbooks"),
-  referenceWorkbooks: () => getJson<ReferenceWorkbookSummary[]>("/reference-workbooks"),
   latestWorkbookImportSummary: () => getJson<WorkbookImportSnapshotSummary>("/workbook-imports/latest/summary"),
   workbookImportSchemaSummary: () => getJson<DatabaseSchemaSummary>("/workbook-imports/schema-summary"),
   workbookImportHealthSummary: () => getJson<DatabaseHealthSummary>("/workbook-imports/health"),
@@ -193,27 +181,6 @@ export const api = {
     getJson<DeviceIdentityIssueDetail>(`/workbook-imports/identity-issues/${issueId}`),
   runWorkbookImport: (payload?: { imported_by?: string; label?: string; notes?: string }) =>
     sendJson<WorkbookImportRunResponse>("/workbook-imports/run", "POST", payload ?? {}),
-  sheets: () => getJson<SheetSummary[]>("/sheets"),
-  sheetProfile: (workbook: string, sheet: string) =>
-    getJson<SheetProfile>(
-      `/sheet-profile?workbook=${encodeURIComponent(workbook)}&sheet=${encodeURIComponent(sheet)}`,
-    ),
-  distinctValues: (column: string, workbook?: string, sheet?: string) => {
-    const params = new URLSearchParams({ column });
-    if (workbook) {
-      params.set("workbook", workbook);
-    }
-    if (sheet) {
-      params.set("sheet", sheet);
-    }
-    return getJson<DistinctValueProfile>(`/distinct-values?${params.toString()}`);
-  },
-  normalizationRules: () => getJson<NormalizationRuleFile[]>("/normalization-rules"),
-  applyNormalizationRules: (column: string, rules: { raw: string; normalized: string }[]) =>
-    sendJson<ApplyNormalizationRulesResponse>("/normalization-rules/apply", "POST", {
-      column,
-      rules,
-    }),
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
   canonicalValidation: () => getJson<CanonicalValidationBundle>("/canonical-validation"),
   xmlGenerationScope: () => getJson<XmlGenerationScopeBundle>("/xml/scope"),
@@ -521,6 +488,5 @@ export const api = {
       market_countries: marketCountries,
       selected_catalogue_numbers: selectedCatalogueNumbers,
     }),
-  schemas: () => getJson<SchemaInventory>("/schemas"),
   criticalWarningCodes: () => getJson<CriticalWarningCodeOption[]>("/schemas/critical-warning-codes"),
 };

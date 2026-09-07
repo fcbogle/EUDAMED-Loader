@@ -58,9 +58,8 @@ import {
   fieldValue,
   parseBooleanString,
   parseCatalogueNumberList,
-  type MarketInfoScenarioItem,
 } from "./xmlMarketInfoState";
-import { extractXmlStructureSections, type XmlStructureSection } from "./xmlPreviewStructure";
+import { extractXmlStructureSections } from "./xmlPreviewStructure";
 import {
   resolveBulkChunkSummaryTitle,
   resolveBulkPostReadinessMessage,
@@ -86,25 +85,12 @@ import type {
   DatabaseHealthSummary,
   DatabaseSchemaSummary,
   DeviceSubjectSummary,
-  DistinctValueProfile,
-  GeneratedPatchScenarioPreview,
   ImportedWorkbookSummary,
-  MarketInfoPutPreview,
   MarketCountryReferenceEntry,
-  NormalizationRuleFile,
-  OperationAssessment,
-  PostRegistrationPreview,
-  ReferenceWorkbookSummary,
-  SchemaInventory,
-  SheetProfile,
-  SheetSummary,
-  SingleRecordXmlPreview,
   TestingSubjectReadModelSummary,
   TestingEventReadModelEntry,
   TestingWorkspaceSummary,
-  WorkbookImportDuplicateGroup,
   WorkbookImportSnapshotSummary,
-  WorkbookSummary,
 } from "./types";
 import {
   findRecordByCatalogueNumber,
@@ -114,14 +100,8 @@ import {
   resolvePostWorkspaceRecord,
 } from "./xmlWorkspace";
 
-const focusColumns = [
-  "UDI-DI status e.g. On the EU market",
-  "Select the language e.g English",
-];
-
 type MainTab = "workbooks" | "canonicalValidation" | "xml" | "registrationState" | "testingSummary" | "documentation";
 type SubmissionDataTab = "activity" | "snapshot";
-type ScopeMode = "all" | "sheet";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
 type PatchScenarioId =
   | "equivalent_first_patch"
@@ -635,30 +615,6 @@ function buildBulkPatchPostedEntries(
     .sort((left, right) => (left.catalogue_number ?? "").localeCompare(right.catalogue_number ?? ""));
 }
 
-type DraftAction = {
-  column: string;
-  rawValue: string;
-  count: number;
-  action: "map" | "review";
-  suggestedNormalized: string | null;
-  reason: string;
-  workbook: string | null;
-  sheet: string | null;
-};
-
-type SuggestedAction = {
-  action: "map" | "review";
-  label: string;
-  suggestedNormalized: string | null;
-  reason: string;
-};
-
-type ParsingIssue = {
-  rawValue: string;
-  count: number;
-  suggestion: SuggestedAction;
-};
-
 type DocumentationSection = {
   id:
     | "architectureDefinition"
@@ -878,10 +834,6 @@ function renderMarkdownDocument(content: string): JSX.Element[] {
   return blocks;
 }
 
-function normalizeToken(value: string): string {
-  return value.trim().toLowerCase();
-}
-
 function titleCaseToken(value: string): string {
   return value
     .split("_")
@@ -958,46 +910,6 @@ function schemaFileForTarget(schemaPath: string): string {
   return "Schema file under review";
 }
 
-function schemaFamilyForTarget(schemaPath: string): string {
-  if (schemaPath.startsWith("UDIDIType/")) {
-    return "Business payload";
-  }
-  if (schemaPath.startsWith("UDIDIDataType/")) {
-    return "Business payload";
-  }
-  if (schemaPath.startsWith("BasicUDIType/")) {
-    return "Business payload";
-  }
-  if (schemaPath.startsWith("DeviceBasicUDIType/")) {
-    return "Business payload";
-  }
-  if (schemaPath.startsWith("MDRBasicUDIType/")) {
-    return "Business payload";
-  }
-  if (schemaPath.startsWith("DeviceUDIDIDataType/")) {
-    return "Business payload";
-  }
-  if (schemaPath.startsWith("MDRUDIDIDataType/")) {
-    return "Business payload";
-  }
-  if (schemaPath.startsWith("CommonDeviceType/")) {
-    return "Business payload";
-  }
-  if (schemaPath.startsWith("MarketInfoType/")) {
-    return "Market information";
-  }
-  if (schemaPath.startsWith("MarketInfosType/")) {
-    return "Market information";
-  }
-  if (schemaPath.startsWith("ServiceType/")) {
-    return "Service envelope";
-  }
-  if (schemaPath.startsWith("Entity/")) {
-    return "Base entity metadata";
-  }
-  return "Under review";
-}
-
 function workbookFamilyLabel(workbookName: string): string {
   if (workbookName.includes("Echelon")) {
     return "Echelon";
@@ -1017,67 +929,12 @@ function workbookFamilyLabel(workbookName: string): string {
   return workbookName.replace("Template for ", "").replace(" EUDAMED.xlsx", "");
 }
 
-function suggestAction(
-  rawValue: string,
-  acceptedValues: string[],
-  currentRuleMappings: Map<string, string>,
-): SuggestedAction {
-  const rawToken = normalizeToken(rawValue);
-  const matchedAcceptedValue = acceptedValues.find((candidate) => normalizeToken(candidate) === rawToken);
-  if (matchedAcceptedValue) {
-    return {
-      action: "map",
-      label: `Map to ${matchedAcceptedValue}`,
-      suggestedNormalized: matchedAcceptedValue,
-      reason: "Value differs only by casing or light formatting from an accepted normalized value.",
-    };
-  }
-
-  const matchedRule = Array.from(currentRuleMappings.entries()).find(
-    ([candidateRaw]) => normalizeToken(candidateRaw) === rawToken,
-  );
-  if (matchedRule) {
-    return {
-      action: "map",
-      label: `Reuse ${matchedRule[1]}`,
-      suggestedNormalized: matchedRule[1],
-      reason: "A semantically equivalent raw value already exists in the accepted rule set.",
-    };
-  }
-
-  if (acceptedValues.length === 1) {
-    return {
-      action: "map",
-      label: `Map to ${acceptedValues[0]}`,
-      suggestedNormalized: acceptedValues[0],
-      reason: "This column currently has a single accepted normalized value, so the input likely needs alignment.",
-    };
-  }
-
-  return {
-    action: "review",
-    label: "Review source value",
-    suggestedNormalized: null,
-    reason: "No safe automatic normalization candidate was inferred from the current accepted values.",
-  };
-}
-
-function matchesReadModelFilter(values: Array<string | number | null | undefined>, filterValue: string): boolean {
-  const normalizedFilter = filterValue.trim().toLowerCase();
-  if (!normalizedFilter) {
-    return true;
-  }
-  return values.some((value) => String(value ?? "").toLowerCase().includes(normalizedFilter));
-}
-
 export function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("workbooks");
   const [submissionDataTab, setSubmissionDataTab] = useState<SubmissionDataTab>("snapshot");
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
     DocumentationSection["id"]
   >("projectStructure");
-  const [workbooks, setWorkbooks] = useState<WorkbookSummary[]>([]);
-  const [referenceWorkbooks, setReferenceWorkbooks] = useState<ReferenceWorkbookSummary[]>([]);
   const [latestWorkbookImportSummary, setLatestWorkbookImportSummary] = useState<WorkbookImportSnapshotSummary | null>(null);
   const [databaseSchemaSummary, setDatabaseSchemaSummary] = useState<DatabaseSchemaSummary | null>(null);
   const [databaseHealthSummary, setDatabaseHealthSummary] = useState<DatabaseHealthSummary | null>(null);
@@ -1088,13 +945,6 @@ export function App() {
   const [isLoadingWorkbookImportMonitoring, setIsLoadingWorkbookImportMonitoring] = useState<boolean>(true);
   const [isRunningWorkbookImport, setIsRunningWorkbookImport] = useState<boolean>(false);
   const [workbookImportActionMessage, setWorkbookImportActionMessage] = useState<string | null>(null);
-  const [sheets, setSheets] = useState<SheetSummary[]>([]);
-  const [selectedSheet, setSelectedSheet] = useState<SheetSummary | null>(null);
-  const [sheetProfile, setSheetProfile] = useState<SheetProfile | null>(null);
-  const [distinctValues, setDistinctValues] = useState<DistinctValueProfile | null>(null);
-  const [selectedColumn] = useState<string>(focusColumns[0]);
-  const [rules, setRules] = useState<NormalizationRuleFile[]>([]);
-  const [schemas, setSchemas] = useState<SchemaInventory | null>(null);
   const [canonicalReview, setCanonicalReview] = useState<CanonicalReviewBundle | null>(null);
   const [canonicalValidation, setCanonicalValidation] = useState<CanonicalValidationBundle | null>(null);
   const [selectedValidationRecordKey, setSelectedValidationRecordKey] = useState<string | null>(null);
@@ -1121,7 +971,7 @@ export function App() {
   const [showMarketInfoRefreshState, setShowMarketInfoRefreshState] = useState<boolean>(false);
   const [isLoadingTestingSummary, setIsLoadingTestingSummary] = useState<boolean>(false);
   const [testingSummaryError, setTestingSummaryError] = useState<string | null>(null);
-  const [patchScenarioStatuses, setPatchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
+  const [patchScenarioStatuses] = useState<Record<PatchScenarioId, EudamedStatus>>({
     equivalent_first_patch: "EUDAMED Candidate",
     trade_name_edit: "EUDAMED Candidate",
     warning_add: "EUDAMED Candidate",
@@ -1198,12 +1048,6 @@ export function App() {
       setImportText: setBulkUdidiPostImportText,
     },
   } = useBulkScopeState();
-  const [scopeMode] = useState<ScopeMode>("all");
-  const [showUnmappedOnly, setShowUnmappedOnly] = useState<boolean>(true);
-  const [valueFilter, setValueFilter] = useState<string>("");
-  const [draftActions, setDraftActions] = useState<DraftAction[]>([]);
-  const [isApplyingRules, setIsApplyingRules] = useState<boolean>(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [criticalWarningCodeOptions, setCriticalWarningCodeOptions] = useState<CriticalWarningCodeOption[]>([]);
   const {
@@ -1234,10 +1078,8 @@ export function App() {
     selectedPatchXmlSectionId,
     setSelectedPatchXmlSectionId,
   } = useXmlPreviewState();
-  const [isLoadingStartup, setIsLoadingStartup] = useState<boolean>(true);
   const [isLoadingCanonicalReview, setIsLoadingCanonicalReview] = useState<boolean>(false);
   const [isLoadingCanonicalValidation, setIsLoadingCanonicalValidation] = useState<boolean>(false);
-  const [isLoadingSchemas, setIsLoadingSchemas] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
       id: "projectStructure",
@@ -1386,21 +1228,6 @@ export function App() {
     }
   }
 
-  async function loadSchemaInventory(): Promise<void> {
-    if (schemas || isLoadingSchemas) {
-      return;
-    }
-    setIsLoadingSchemas(true);
-    try {
-      const schemaData = await api.schemas();
-      setSchemas(schemaData);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Failed to load schema inventory.");
-    } finally {
-      setIsLoadingSchemas(false);
-    }
-  }
-
   function renderLoadingPanel(title: string, message: string): JSX.Element {
     return (
       <section className="tab-stack">
@@ -1502,39 +1329,19 @@ export function App() {
 
   useEffect(() => {
     void Promise.all([
-      api.workbooks(),
-      api.referenceWorkbooks(),
       loadWorkbookImportMonitoring(),
-      api.sheets(),
-      api.normalizationRules(),
-      api.distinctValues(selectedColumn),
       api.criticalWarningCodes(),
       api.marketCountryReference(),
     ])
       .then(([
-        workbookData,
-        referenceWorkbookData,
         _workbookImportMonitoringLoaded,
-        sheetData,
-        ruleData,
-        distinctData,
         criticalWarningCodes,
         marketCountryReferenceData,
       ]) => {
-        setWorkbooks(workbookData);
-        setReferenceWorkbooks(referenceWorkbookData);
-        setSheets(sheetData);
-        setRules(ruleData);
-        setDistinctValues(distinctData);
         setCriticalWarningCodeOptions(criticalWarningCodes);
         setMarketCountryReference(marketCountryReferenceData);
-        const firstVisibleWorkbook = workbookData.find((workbook) => workbook.in_scope_for_variant_mapping);
-        const firstVisibleSheet =
-          sheetData.find((sheet) => sheet.workbook === firstVisibleWorkbook?.workbook) ?? sheetData[0] ?? null;
-        setSelectedSheet(firstVisibleSheet);
       })
-      .catch((requestError: Error) => setError(requestError.message))
-      .finally(() => setIsLoadingStartup(false));
+      .catch((requestError: Error) => setError(requestError.message));
   }, []);
 
   useEffect(() => {
@@ -1571,12 +1378,6 @@ export function App() {
   }, [activeTab, latestWorkbookImportSummary, canonicalValidation]);
 
   useEffect(() => {
-    if (activeTab === "workbooks" && !schemas) {
-      void loadSchemaInventory();
-    }
-  }, [activeTab, schemas]);
-
-  useEffect(() => {
     const availableVariants = Array.from(
       new Set(
         deviceSubjects
@@ -1597,26 +1398,6 @@ export function App() {
     }
     setSelectedDeviceSubjectVariant("");
   }, [deviceSubjects, selectedDeviceSubjectFamily, selectedDeviceSubjectVariant]);
-
-  useEffect(() => {
-    if (!selectedSheet) {
-      return;
-    }
-    void api
-      .sheetProfile(selectedSheet.workbook, selectedSheet.sheet)
-      .then(setSheetProfile)
-      .catch((requestError: Error) => setError(requestError.message));
-  }, [selectedSheet]);
-
-  useEffect(() => {
-    const workbook = scopeMode === "sheet" ? selectedSheet?.workbook : undefined;
-    const sheet = scopeMode === "sheet" ? selectedSheet?.sheet : undefined;
-
-    void api
-      .distinctValues(selectedColumn, workbook, sheet)
-      .then(setDistinctValues)
-      .catch((requestError: Error) => setError(requestError.message));
-  }, [scopeMode, selectedColumn, selectedSheet]);
 
   useEffect(() => {
     setXmlPreview(null);
@@ -1787,54 +1568,7 @@ export function App() {
     setSelectedRegistrationStateVariant("");
   }, [canonicalValidation, selectedRegistrationStateFamily, selectedRegistrationStateVariant]);
 
-  const selectedRuleFile = rules.find((item) => item.column === selectedColumn);
-  const acceptedValues = Array.from(new Set(selectedRuleFile?.rules.map((rule) => rule.normalized) ?? []));
-  const currentRuleMappings = new Map(
-    (selectedRuleFile?.rules ?? []).map((rule) => [rule.raw, rule.normalized]),
-  );
-  const selectedColumnDrafts = draftActions.filter((item) => item.column === selectedColumn);
-  const selectedColumnMapDrafts = selectedColumnDrafts.filter(
-    (item) => item.action === "map" && item.suggestedNormalized,
-  );
-  const selectedColumnReviewDrafts = selectedColumnDrafts.filter((item) => item.action === "review");
-  const filteredDistinctValues = (distinctValues?.values ?? []).filter((item) => {
-    if (showUnmappedOnly && item.status === "mapped") {
-      return false;
-    }
-    if (!valueFilter) {
-      return true;
-    }
-    const search = valueFilter.trim().toLowerCase();
-    return item.raw_value.toLowerCase().includes(search) || (item.normalized_value ?? "").toLowerCase().includes(search);
-  });
-  const unmappedCount = distinctValues?.values.filter((item) => item.status !== "mapped").length ?? 0;
-  const mappedCount = distinctValues?.values.filter((item) => item.status === "mapped").length ?? 0;
-  const detectedIssues: ParsingIssue[] = (distinctValues?.values ?? [])
-    .filter((item) => item.status !== "mapped")
-    .map((item) => ({
-      rawValue: item.raw_value,
-      count: item.count,
-      suggestion: suggestAction(item.raw_value, acceptedValues, currentRuleMappings),
-    }));
-  const autoFixableIssues = detectedIssues.filter((item) => item.suggestion.action === "map");
-  const reviewIssues = detectedIssues.filter((item) => item.suggestion.action === "review");
-  const scopeLabel =
-    scopeMode === "sheet" && selectedSheet
-      ? `${selectedSheet.workbook} / ${selectedSheet.sheet}`
-      : "All indexed sheets";
-  const yamlDraft = selectedColumnMapDrafts
-    .map((item) => `  - raw: ${item.rawValue}\n    normalized: ${item.suggestedNormalized}`)
-    .join("\n");
-  const canonicalEntityCount = canonicalReview?.entity_reviews.length ?? 0;
   const variantMappings = canonicalReview?.variant_mappings ?? [];
-  const canonicalFieldCount =
-    canonicalReview?.entity_reviews.reduce((total, entity) => total + entity.field_reviews.length, 0) ?? 0;
-  const uniqueCanonicalFieldCount = new Set(
-    (canonicalReview?.entity_reviews ?? []).flatMap((entity) =>
-      entity.field_reviews.map((fieldReview) => fieldReview.mapping.canonical_path),
-    ),
-  ).size;
-  const canonicalEntityNames = (canonicalReview?.entity_reviews ?? []).map((entity) => entity.entity_name);
   const canonicalMappingRows: CanonicalMappingRow[] = (canonicalReview?.entity_reviews ?? []).flatMap((entity) =>
     entity.field_reviews.map((fieldReview) => ({
       entityName: entity.entity_name,
@@ -1859,36 +1593,6 @@ export function App() {
       exampleCanonicalValue: fieldReview.mapping.example_canonical_value,
     })),
   );
-  const classificationCounts = canonicalMappingRows.reduce<Record<string, number>>((counts, row) => {
-    counts[row.classification] = (counts[row.classification] ?? 0) + 1;
-    return counts;
-  }, {});
-  const directCount = classificationCounts.direct ?? 0;
-  const repeatedCount = classificationCounts.repeated ?? 0;
-  const gapCount = classificationCounts.gap ?? 0;
-  const derivedRows = canonicalMappingRows.filter((row) => row.classification === "derived");
-  const normalizedRows = canonicalMappingRows.filter((row) => row.classification === "normalized");
-  const contextHeavyCount = derivedRows.length + normalizedRows.length;
-  const schemaFileCount = new Set(
-    canonicalMappingRows
-      .map((row) => row.schemaFile)
-      .filter((schemaFile) => schemaFile && schemaFile !== "Schema file under review")
-      .flatMap((schemaFile) => schemaFile.split(" | ")),
-  ).size;
-  const schemaScopeGroups = Array.from(
-    canonicalMappingRows.reduce<Map<string, Set<string>>>((groups, row) => {
-      const targets = row.schemaTarget === "Not yet aligned" ? [] : row.schemaTarget.split(" | ");
-      for (const target of targets) {
-        const family = schemaFamilyForTarget(target);
-        if (!groups.has(family)) {
-          groups.set(family, new Set<string>());
-        }
-        groups.get(family)?.add(target.split("/")[0] ?? target);
-      }
-      return groups;
-    }, new Map()),
-  );
-  const logicalSchemaTypeCount = schemaScopeGroups.reduce((count, [, schemaNames]) => count + schemaNames.size, 0);
   const canonicalValidationRecords = canonicalValidation?.records ?? [];
   const validationFamilySummaries = canonicalValidation?.family_summaries ?? [];
   const validationVariantSummaries = canonicalValidation?.variant_summaries ?? [];
@@ -1915,12 +1619,6 @@ export function App() {
       ),
     )
   ).sort((left, right) => left.localeCompare(right));
-  const validationVariantOperationLookup = new Map(
-    validationVariantSummaries.map((summary) => [
-      `${summary.source_workbook}::${summary.source_sheet}`,
-      summary.submission_operation,
-    ]),
-  );
   const selectedFamilySummary =
     (selectedValidationFamily
       ? validationFamilySummaries.find((summary) => summary.product_family === selectedValidationFamily) ?? null
@@ -1970,44 +1668,16 @@ export function App() {
       : selectedValidationBlockedRows > 0
         ? { label: "Warning", className: "warn" }
         : { label: "Ready", className: "ok" };
-  const blockerSummaries = canonicalValidation?.blocker_summaries ?? [];
-  const topBlockerHighlights = [...blockerSummaries]
-    .filter((summary) => summary.missing_count > 0)
-    .sort((left, right) => right.missing_count - left.missing_count)
-    .slice(0, 6);
   const selectedStorageExample = selectedValidationRecord?.storage_condition_items[0] ?? null;
   const selectedWarningExample = selectedValidationRecord?.critical_warning_items[0] ?? null;
   const selectedMarketAvailabilityExample = selectedValidationRecord?.market_availability_items[0] ?? null;
   const selectedOpenBlockerPreview = selectedValidationRecord?.blockers.slice(0, 3) ?? [];
   const selectedXmlBlockerPreview = selectedValidationRecord?.xml_blockers.slice(0, 3) ?? [];
-  const selectedValidationFieldLookup = new Map(
-    (selectedValidationRecord?.fields ?? []).map((field) => [field.canonical_path, field]),
-  );
   const canonicalMappingRowLookup = new Map(canonicalMappingRows.map((row) => [row.canonicalPath, row]));
   const selectedValidationMappingRows = (selectedValidationRecord?.fields ?? []).map((field) => ({
     field,
     review: canonicalMappingRowLookup.get(field.canonical_path) ?? null,
   }));
-  const trackedValidationFieldCount =
-    canonicalValidationRecords[0]?.fields.length ?? canonicalValidation?.sample_records[0]?.fields.length ?? 0;
-  const optionalValidationFieldCount = Math.max(
-    trackedValidationFieldCount - (canonicalValidation?.tracked_required_fields ?? 0),
-    0,
-  );
-  const sourceFieldCoverageEntries = canonicalValidation?.source_field_coverage ?? [];
-  const coverageSummaryLookup = new Map(
-    (canonicalValidation?.source_field_coverage_summaries ?? []).map((summary) => [summary.status, summary]),
-  );
-  const representedFieldCount = coverageSummaryLookup.get("represented")?.field_count ?? 0;
-  const partialFieldCount = coverageSummaryLookup.get("partially_represented")?.field_count ?? 0;
-  const notRepresentedFieldCount = coverageSummaryLookup.get("not_yet_represented")?.field_count ?? 0;
-  const deferredFieldCount = coverageSummaryLookup.get("deferred_by_design")?.field_count ?? 0;
-  const totalWorkbookRows = workbooks.reduce((sum, workbook) => sum + workbook.total_rows, 0);
-  const authoritativeReferenceWorkbook =
-    referenceWorkbooks.find((workbook) => workbook.source_status === "authoritative") ?? null;
-  const inScopeWorkbookCount = workbooks.filter((workbook) => workbook.in_scope_for_variant_mapping).length;
-  const excludedWorkbookCount = workbooks.filter((workbook) => !workbook.in_scope_for_variant_mapping).length;
-  const visibleWorkbooks = workbooks.filter((workbook) => workbook.in_scope_for_variant_mapping);
   const latestImportBatch = latestWorkbookImportSummary?.import_batch ?? null;
   const importedWorkbooks = latestWorkbookImportSummary?.imported_workbooks ?? [];
   const importTableCounts = latestWorkbookImportSummary?.table_counts ?? [];
@@ -2017,7 +1687,6 @@ export function App() {
   const distinctSubjectCount = latestImportBatch?.device_subject_count ?? 0;
   const workbookDuplicateRowCount = latestWorkbookImportSummary?.workbook_duplicate_row_count ?? 0;
   const workbookDuplicateGroupCount = latestWorkbookImportSummary?.workbook_duplicate_group_count ?? 0;
-  const topDuplicateGroups = latestWorkbookImportSummary?.top_duplicate_groups ?? [];
   const unresolvedIdentityRowCount = latestWorkbookImportSummary?.unresolved_identity_row_count ?? 0;
   const sourceRowTableCount = latestImportBatch?.source_row_count ?? 0;
   const deviceSubjectTableCount = latestImportBatch?.device_subject_count ?? 0;
@@ -2027,7 +1696,6 @@ export function App() {
       (!selectedDeviceSubjectVariant || subject.product_variant === selectedDeviceSubjectVariant),
   );
   const monitoredTables = databaseSchemaSummary?.tables ?? [];
-  const healthTableSummaries = databaseHealthSummary?.table_summaries ?? [];
   const healthIssues = databaseHealthSummary?.issues ?? [];
   const indexedTableCount = monitoredTables.filter((table) => table.indexes.length > 0).length;
   const foreignKeyCount = monitoredTables.reduce((sum, table) => sum + table.foreign_keys.length, 0);
@@ -2035,10 +1703,6 @@ export function App() {
     importOperationCounts.find((entry) => entry.submission_operation === "POST")?.device_subject_count ?? 0;
   const patchDeviceSubjectCount =
     importOperationCounts.find((entry) => entry.submission_operation === "PATCH")?.device_subject_count ?? 0;
-  const unclassifiedDeviceSubjectCount =
-    importOperationCounts
-      .filter((entry) => entry.submission_operation !== "POST" && entry.submission_operation !== "PATCH")
-      .reduce((sum, entry) => sum + entry.device_subject_count, 0);
   const identityIssueTableCount =
     importTableCounts.find((entry) => entry.table_name === "device_identity_issue")?.row_count ??
     0;
@@ -2086,38 +1750,6 @@ export function App() {
                 ? workbookImportSummaryError
                 : "Submission Data requires a workbook import before SQLite-backed monitoring and read-model panels can load.",
         };
-  const canonicalProjectionUiStatus =
-    canonicalValidation?.projection_status === "rebuilt"
-      ? {
-          label: "Projection rebuilt",
-          className: "warn",
-          detail:
-            canonicalValidation.source_import_batch_id !== null
-              ? `SQLite canonical projection was rebuilt for import batch #${canonicalValidation.source_import_batch_id} during this request.`
-              : "SQLite canonical projection was rebuilt during this request.",
-        }
-      : canonicalValidation?.projection_status === "ready"
-        ? {
-            label: "SQLite ready",
-            className: "ok",
-            detail:
-              canonicalValidation.source_import_batch_id !== null
-                ? `Canonical validation is reading the current SQLite projection for import batch #${canonicalValidation.source_import_batch_id}.`
-                : "Canonical validation is reading the current SQLite projection.",
-          }
-        : !latestImportBatch
-          ? {
-              label: "Import required",
-              className: "warn",
-              detail: "Canonical Validation now depends on the imported SQLite projection. Run Import Workbooks first.",
-            }
-          : {
-              label: "Loading scope",
-              className: "warn",
-              detail: trackedValidationFieldCount
-                ? `${trackedValidationFieldCount} unique canonical fields are currently carried into validation.`
-                : "Loading validation subset...",
-            };
   const selectedDeviceSubjectFamilySummary =
     validationFamilySummaries.find((summary) => summary.product_family === selectedDeviceSubjectFamily) ?? null;
   const selectedDeviceSubjectVariantSummary =
@@ -2164,12 +1796,6 @@ export function App() {
             label: "Ready",
             className: "ok",
           };
-  const selectedWorkbookName = selectedSheet?.workbook ?? visibleWorkbooks[0]?.workbook ?? null;
-  const selectedWorkbookSummary =
-    visibleWorkbooks.find((workbook) => workbook.workbook === selectedWorkbookName) ?? visibleWorkbooks[0] ?? null;
-  const workbookSheets = selectedWorkbookName
-    ? sheets.filter((sheet) => sheet.workbook === selectedWorkbookName)
-    : [];
   const xmlValidationRecords = canonicalValidationRecords;
   const xmlReadyRecords = xmlValidationRecords.filter((record) => record.xml_readiness.status === "complete");
   const xmlBlockedRecords = xmlValidationRecords.filter((record) => record.xml_readiness.status !== "complete");
@@ -2229,7 +1855,6 @@ export function App() {
       .map((record) => basicUdiDiForRecord(record))
       .filter((value): value is string => Boolean(value)),
   );
-  const selectedBulkEligibleBasicUdiCount = selectedBulkEligibleBasicUdiSet.size;
   const bulkPatchPostedParents = buildBulkPatchPostedParentGroups(testingSubjectSummaries);
   const bulkPatchPostedEntries = buildBulkPatchPostedEntries(
     testingSubjectSummaries,
@@ -2834,21 +2459,6 @@ export function App() {
       : bulkPatchScopeMode === "selected_catalogue_numbers"
         ? "Selected catalogue numbers"
         : "Import catalogue list";
-  const bulkPatchSelectionExamples = effectiveBulkPatchCatalogueNumbers.slice(0, 5);
-  const bulkPatchSelectionOverflowCount = Math.max(selectedBulkPatchSelectedCount - bulkPatchSelectionExamples.length, 0);
-  const bulkPatchSelectionVersions = Array.from(
-    new Set(
-      selectedBulkPatchEntries
-        .map((entry) => entry.latest_version)
-        .filter((version): version is string => Boolean(version)),
-    ),
-  );
-  const bulkPatchVersionSummary =
-    bulkPatchSelectionVersions.length < 1
-      ? null
-      : bulkPatchSelectionVersions.length === 1
-        ? `Current versions: all ${bulkPatchSelectionVersions[0]}`
-        : `Current versions: ${bulkPatchSelectionVersions.join(", ")}`;
   const effectiveBulkMarketInfoCatalogueNumbers =
     bulkMarketInfoScopeMode === "all_posted"
       ? (bulkMarketInfoPostedCatalogueNumbers.length > 0 ? bulkMarketInfoPostedCatalogueNumbers : selectedBulkMarketInfoFallbackCatalogueNumbers)
@@ -2955,18 +2565,6 @@ export function App() {
   const visibleMarketInfoRefreshState =
     (xmlMode === "marketInfo" || xmlMode === "bulkMarketInfo") &&
     (showMarketInfoRefreshState || isMarketInfoContextRefreshing || isLoadingXmlOperationAssessment);
-  const bulkPatchPreviewExcludedRecords = xmlBulkPatchPreview?.excluded_records ?? [];
-  const bulkPatchPrePreviewExclusions =
-    xmlMode === "bulkPatch" && bulkPatchScopeMode === "import_catalogue_list"
-      ? bulkPatchImportedNotFoundCatalogueNumbers.map((catalogueNumber) => ({
-          catalogue_number: catalogueNumber,
-          primary_udi_di: null,
-          reason_code: "not_found_under_parent",
-          reason_message: "Catalogue number is not posted under the selected parent.",
-        }))
-      : [];
-  const bulkPatchDisplayedExcludedRecords =
-    bulkPatchPreviewExcludedRecords.length > 0 ? bulkPatchPreviewExcludedRecords : bulkPatchPrePreviewExclusions;
   const bulkPatchActionStatus = !selectedBulkPatchParentGroup
     ? "Select a posted Basic UDI-DI parent to continue."
     : !canRunBulkPatch
@@ -2990,17 +2588,12 @@ export function App() {
   const assessedMarketInfoCurrentVersion = assessmentEvidenceString(xmlOperationAssessment, "current_market_info_version");
   const assessedMarketInfoCandidateCatalogueNumber = assessmentEvidenceString(xmlOperationAssessment, "catalogue_number");
   const assessedMarketInfoCandidatePrimaryUdiDi = assessmentEvidenceString(xmlOperationAssessment, "primary_udi_di");
-  const assessedPostParentRegistrationKnown = assessmentEvidenceBoolean(xmlOperationAssessment, "parent_registration_known");
   const assessedPostCandidateCatalogueNumber = assessmentEvidenceString(xmlOperationAssessment, "candidate_catalogue_number");
   const assessedPostCandidatePrimaryUdiDi = assessmentEvidenceString(xmlOperationAssessment, "candidate_primary_udi_di");
   const hasResolvedPostAssessmentCandidate = Boolean(assessedPostCandidateCatalogueNumber || assessedPostCandidatePrimaryUdiDi);
   const selectedPostCandidateRecord = findRecordByCatalogueNumber(
     selectedXmlVariantRecords,
     assessedPostCandidateCatalogueNumber,
-  );
-  const selectedPatchCandidateRecord = findRecordByCatalogueNumber(
-    selectedXmlVariantRecords,
-    assessedPatchCandidateCatalogueNumber,
   );
   const selectedPatchDeviceRecords = selectedXmlVariantRecords.filter((record) =>
     testingSubjectSummaries.some(
@@ -3261,14 +2854,6 @@ export function App() {
     }
     setSelectedBulkMarketInfoCatalogueNumbers(filtered);
   }, [bulkMarketInfoPostedCatalogueNumbers.join("|")]);
-  const bulkPatchIncludedByCatalogue = new Map(
-    (xmlBulkPatchPreview?.included_records ?? []).map((record) => [record.catalogue_number, record]),
-  );
-  const bulkPatchExcludedByCatalogue = new Map(
-    (xmlBulkPatchPreview?.excluded_records ?? [])
-      .filter((record) => record.catalogue_number)
-      .map((record) => [record.catalogue_number ?? "", record]),
-  );
   const selectedPatchScenario =
     PATCH_SCENARIOS.find((scenario) => scenario.id === selectedPatchScenarioId) ?? PATCH_SCENARIOS[0];
   const selectedPatchScenarioStatus = patchScenarioStatuses[selectedPatchScenario.id];
@@ -3338,7 +2923,6 @@ export function App() {
     currentAcceptedPatchLabel,
     patchDraftComparisonRows,
     selectedWarningRequiresComment,
-    isPatchVersionValid,
     isPatchScenarioReady,
     patchScenarioReadinessMessage,
     hasReviewedGeneratedPatchPreview,
@@ -3647,7 +3231,6 @@ export function App() {
     xmlMode === "bulkPatch" ||
     xmlMode === "bulkMarketInfo";
   const isPostWorkspaceReady = Boolean(selectedXmlFamilySummary && selectedXmlVariantSummary);
-  const isPairWorkspaceReady = Boolean(selectedPairRequestArgs);
   const canRunPostFromAssessment =
     isPostWorkspaceReady && xmlOperationAssessment?.status === "available";
   const canRunPatchFromAssessment =
@@ -3667,14 +3250,6 @@ export function App() {
     (xmlOperationAssessment?.eligible_record_count ?? 0) > 0 &&
     canRunBulkMarketInfo &&
     isBulkMarketInfoScenarioReady;
-  const acceptedXmlModes = [
-    {
-      id: "post",
-      label: "POST",
-      status: "EUDAMED Accepted" as EudamedStatus,
-      summary: "Accepted baseline POST generation for a selected XML-ready registration record.",
-    },
-  ];
   const xmlPreviewLines = resolveXmlPreviewLines({
     xmlMode,
     xmlPairPreview,
@@ -3748,7 +3323,6 @@ export function App() {
     xmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
   });
-  const pairPostValidation = xmlPairPreview?.post_validation ?? null;
   const validationStatusLabel = selectedBatchValidation
     ? selectedBatchValidation.valid
       ? "Schema valid"
@@ -4020,37 +3594,6 @@ export function App() {
     const nextScrollTop = container.scrollTop + (targetTop - containerTop) - 12;
     container.scrollTo({ top: Math.max(nextScrollTop, 0), behavior: "auto" });
   }, [xmlMode, selectedPatchXmlSection?.id, selectedPatchXmlSection?.lineStart]);
-  const profileColumns = sheetProfile?.columns ?? [];
-  const highNullColumns = profileColumns.filter((column) => {
-    if (!sheetProfile?.data_rows) {
-      return false;
-    }
-    return column.null_count / sheetProfile.data_rows > 0.25;
-  });
-  const criticalNullColumns = profileColumns.filter((column) => {
-    if (!sheetProfile?.data_rows) {
-      return false;
-    }
-    return column.null_count / sheetProfile.data_rows > 0.75;
-  });
-  const emptyColumns = profileColumns.filter((column) => column.non_null_count === 0);
-  const topNullColumns = [...profileColumns]
-    .sort((left, right) => right.null_count - left.null_count)
-    .slice(0, 5);
-  const selectedWorkbookVariantMappings = variantMappings
-    .filter((mapping) => mapping.workbook === selectedWorkbookSummary?.workbook)
-    .map((mapping) => ({
-      ...mapping,
-      submission_operation:
-        validationVariantOperationLookup.get(`${mapping.workbook}::${mapping.sheet}`) ?? mapping.submission_operation,
-    }));
-  const selectedSheetVariantMapping =
-    selectedWorkbookVariantMappings.find(
-      (mapping) => mapping.workbook === selectedSheet?.workbook && mapping.sheet === selectedSheet?.sheet,
-    ) ?? null;
-  const matchedVariantCount = variantMappings.filter((mapping) => mapping.match_status === "matched").length;
-  const excludedVariantCount = variantMappings.filter((mapping) => mapping.match_status === "excluded").length;
-  const unmatchedVariantCount = variantMappings.filter((mapping) => mapping.match_status === "unmatched").length;
   const orderedVariantMappings = [...variantMappings].sort((left, right) => {
     const order = { matched: 0, unmatched: 1, excluded: 2 };
     return order[left.match_status] - order[right.match_status];
@@ -4067,137 +3610,8 @@ export function App() {
     }
     return true;
   });
-  const familyWorkbookSummaries = visibleWorkbooks.map((workbook) => {
-    const family = workbookFamilyLabel(workbook.workbook);
-    const variantSummariesForWorkbook = validationVariantSummaries.filter(
-      (summary) => summary.source_workbook === workbook.workbook,
-    );
-    return {
-      family,
-      rows: workbook.total_rows,
-      postVariants: variantSummariesForWorkbook.filter((summary) => summary.submission_operation === "POST").length,
-      patchVariants: variantSummariesForWorkbook.filter((summary) => summary.submission_operation === "PATCH").length,
-    };
-  });
   const importedWorkbookRowLeader =
     [...importedWorkbooks].sort((left, right) => right.row_count - left.row_count)[0] ?? null;
-
-  function queueDraftAction(item: DistinctValueProfile["values"][number], suggestion: SuggestedAction): void {
-    setDraftActions((current) => {
-      const nextItem: DraftAction = {
-        column: selectedColumn,
-        rawValue: item.raw_value,
-        count: item.count,
-        action: suggestion.action,
-        suggestedNormalized: suggestion.suggestedNormalized,
-        reason: suggestion.reason,
-        workbook: scopeMode === "sheet" ? selectedSheet?.workbook ?? null : null,
-        sheet: scopeMode === "sheet" ? selectedSheet?.sheet ?? null : null,
-      };
-      const deduplicated = current.filter(
-        (entry) => !(entry.column === nextItem.column && entry.rawValue === nextItem.rawValue),
-      );
-      return [...deduplicated, nextItem];
-    });
-  }
-
-  function removeDraftAction(column: string, rawValue: string): void {
-    setDraftActions((current) =>
-      current.filter((entry) => !(entry.column === column && entry.rawValue === rawValue)),
-    );
-  }
-
-  async function refreshNormalizationState(column: string): Promise<void> {
-    const workbook = scopeMode === "sheet" ? selectedSheet?.workbook : undefined;
-    const sheet = scopeMode === "sheet" ? selectedSheet?.sheet : undefined;
-    const [ruleData, distinctData] = await Promise.all([
-      api.normalizationRules(),
-      api.distinctValues(column, workbook, sheet),
-    ]);
-    setRules(ruleData);
-    setDistinctValues(distinctData);
-  }
-
-  async function applyDraftRules(column: string): Promise<void> {
-    const rulesToApply = draftActions
-      .filter(
-        (item) => item.column === column && item.action === "map" && item.suggestedNormalized,
-      )
-      .map((item) => ({
-        raw: item.rawValue,
-        normalized: item.suggestedNormalized as string,
-      }));
-
-    if (!rulesToApply.length) {
-      setSaveMessage("No queued mapping rules to apply for this column.");
-      return;
-    }
-
-    setIsApplyingRules(true);
-    setError(null);
-    setSaveMessage(null);
-    try {
-      const result = await api.applyNormalizationRules(column, rulesToApply);
-      await refreshNormalizationState(column);
-      setDraftActions((current) =>
-        current.filter((item) => !(item.column === column && item.action === "map")),
-      );
-      setSaveMessage(`Applied ${result.applied_rules} normalization rule(s) to ${result.file_path}.`);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Failed to apply normalization rules.");
-    } finally {
-      setIsApplyingRules(false);
-    }
-  }
-
-  function queueRecommendedFixes(): void {
-    autoFixableIssues.forEach((issue) => {
-      queueDraftAction(
-        {
-          raw_value: issue.rawValue,
-          count: issue.count,
-          normalized_value: null,
-          status: "unmapped",
-        },
-        issue.suggestion,
-      );
-    });
-    setSaveMessage(
-      autoFixableIssues.length
-        ? `Queued ${autoFixableIssues.length} recommended fix${autoFixableIssues.length === 1 ? "" : "es"} for ${selectedColumn}.`
-        : "No recommended fixes available for this column.",
-    );
-  }
-
-  async function acceptRecommendedFixes(): Promise<void> {
-    const rulesToApply = autoFixableIssues
-      .filter((issue) => issue.suggestion.suggestedNormalized)
-      .map((issue) => ({
-        raw: issue.rawValue,
-        normalized: issue.suggestion.suggestedNormalized as string,
-      }));
-
-    if (!rulesToApply.length) {
-      setSaveMessage("No recommended fixes available for this column.");
-      return;
-    }
-
-    setIsApplyingRules(true);
-    setError(null);
-    setSaveMessage(null);
-    try {
-      const result = await api.applyNormalizationRules(selectedColumn, rulesToApply);
-      await refreshNormalizationState(selectedColumn);
-      setDraftActions((current) => current.filter((item) => item.column !== selectedColumn));
-      setSaveMessage(
-        `Accepted ${result.applied_rules} recommended fix${result.applied_rules === 1 ? "" : "es"} for ${selectedColumn}. Source Excel files were not changed.`,
-      );
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Failed to apply normalization rules.");
-    } finally {
-      setIsApplyingRules(false);
-    }
-  }
 
   function currentMarketInfoScenarioInputs(): Array<{ country: string; original_placed_on_market: boolean }> {
     return normalizedMarketInfoScenarioItems;

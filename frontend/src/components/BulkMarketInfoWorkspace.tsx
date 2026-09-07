@@ -8,7 +8,6 @@ import {
   resolveMarketCountryName,
 } from "../marketCountryReference";
 import { PanelRefreshShell } from "./PanelRefreshShell";
-import { XmlAssessmentCard } from "./XmlAssessmentCard";
 import { XmlStatusStrip } from "./XmlStatusStrip";
 import { XmlWorkspaceHeader } from "./XmlWorkspaceHeader";
 
@@ -87,7 +86,6 @@ export function BulkMarketInfoWorkspace({
 }: BulkMarketInfoWorkspaceProps) {
   const [addCountryValue, setAddCountryValue] = useState("");
   const [removeCountryValue, setRemoveCountryValue] = useState("");
-  const currentOriginalMarket = currentMarketItems.find((item) => item.originalPlacedOnMarket)?.country ?? null;
   const draftOriginalMarket = draftMarketItems.find((item) => item.originalPlacedOnMarket)?.country ?? "";
   const draftCountryCodes = useMemo(
     () =>
