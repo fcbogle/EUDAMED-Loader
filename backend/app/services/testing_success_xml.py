@@ -155,6 +155,29 @@ class TestingSuccessXmlService:
         *,
         event_id: int | None,
     ) -> None:
+        current = connection.execute("SELECT * FROM testing_subjects WHERE id = ?", (subject_id,)).fetchone()
+        version_column, state_column = {
+            "DEVICE.POST": ("latest_successful_post_version", "latest_successful_post_state_json"),
+            "UDI_DI.POST": ("latest_successful_post_version", "latest_successful_post_state_json"),
+            "UDI_DI.PATCH": ("latest_successful_patch_version", "latest_successful_patch_state_json"),
+            "MARKET_INFO.PUT": ("latest_successful_market_info_version", "latest_successful_market_info_state_json"),
+        }[acknowledgement.message_type]
+        matched = self._generated_event_row(
+            connection, subject_id=subject_id, message_type=acknowledgement.message_type,
+            correlation_id=acknowledgement.correlation_id, message_id=acknowledgement.message_id,
+            columns="version",
+        )
+        incoming_version = acknowledgement.entity_version or (matched["version"] if matched else None)
+        current_version = current[version_column] if current else None
+        current_state = current[state_column] if current else None
+        if current and acknowledgement.message_type == "UDI_DI.PATCH":
+            current_version = current_version or current["latest_successful_version"]
+            current_state = current_state or current["latest_successful_state_json"]
+        if incoming_version and current_version:
+            if int(incoming_version) < int(current_version):
+                return  # Keep the historical event without rolling back the accepted projection.
+            if int(incoming_version) == int(current_version) and current_state:
+                return
         if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"}:
             generated_row = self._generated_event_row(
                 connection,
@@ -182,7 +205,7 @@ class TestingSuccessXmlService:
                     registration_status = ?,
                     latest_successful_post_version = ?,
                     latest_successful_post_state_json = COALESCE(?, latest_successful_post_state_json),
-                    latest_successful_version = COALESCE(?, latest_successful_version, '1'),
+                    latest_successful_version = CAST(MAX(CAST(COALESCE(?, '1') AS INTEGER), CAST(COALESCE(latest_successful_version, '1') AS INTEGER)) AS TEXT),
                     latest_successful_message_type = ?,
                     latest_successful_event_id = COALESCE(?, latest_successful_event_id),
                     latest_tested_at = COALESCE(?, latest_tested_at)
@@ -438,6 +461,14 @@ class TestingSuccessXmlService:
             if correlation_row is not None:
                 return correlation_row
 
+        if correlation_id or message_id:
+            return None
+        count = connection.execute(
+            "SELECT COUNT(*) FROM testing_events WHERE subject_id = ? AND message_type = ? AND status = 'GENERATED'",
+            (subject_id, message_type),
+        ).fetchone()[0]
+        if count != 1:
+            return None  # Ambiguous uncorrelated legacy acknowledgements cannot identify a draft.
         return connection.execute(
             f"""
             SELECT {columns}
@@ -641,7 +672,7 @@ class TestingSuccessXmlService:
         ).fetchone()
         version: str | None = (
             acknowledgement.entity_version
-            if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST", "MARKET_INFO.PUT"}
+            if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH", "MARKET_INFO.PUT"}
             else None
         )
         scenario_id: str | None = None
@@ -773,19 +804,6 @@ class TestingSuccessXmlService:
                             market_info_state_json = json.dumps(latest_market_info_state)
             if market_info_delta:
                 raw_event_payload["market_info_delta"] = market_info_delta
-            connection.execute(
-                """
-                UPDATE testing_subjects
-                SET latest_successful_market_info_version = COALESCE(?, latest_successful_market_info_version),
-                    latest_successful_market_info_state_json = COALESCE(?, latest_successful_market_info_state_json)
-                WHERE id = ?
-                """,
-                (
-                    version,
-                    market_info_state_json,
-                    subject_id,
-                ),
-            )
         raw_event_json = json.dumps(raw_event_payload)
         connection.execute(
             """

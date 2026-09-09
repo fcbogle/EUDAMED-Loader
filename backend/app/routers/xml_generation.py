@@ -224,7 +224,7 @@ def download_xml_record(payload: dict[str, str]) -> Response:
 
 
 @router.post("/xml/preview-post-registration")
-def preview_xml_post_registration(payload: dict[str, str]) -> dict:
+def preview_xml_post_registration(payload: dict[str, object]) -> dict:
     typed_payload = cast(dict[str, object], payload)
     product_family = _required_payload_string(typed_payload, "product_family")
     product_variant = _required_payload_string(typed_payload, "product_variant")
@@ -234,6 +234,7 @@ def preview_xml_post_registration(payload: dict[str, str]) -> dict:
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
+            accepted_baseline=payload.get("accepted_baseline") is True,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -635,6 +636,11 @@ def testing_workspace_summary(payload: dict | None = None) -> dict:
         product_variant=str(data["product_variant"]) if data.get("product_variant") else None,
     )
     return summary.model_dump(mode="json")
+
+
+@router.get("/xml/operation-readiness")
+def operation_readiness() -> list[dict[str, object]]:
+    return _operation_assessment().record_readiness()
 
 
 @router.post("/xml/assess-single-post")

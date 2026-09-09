@@ -1,17 +1,12 @@
 import type {
-  BatchXmlPreview,
-  BulkPatchPreview,
   BulkPatchPostedEntriesResponse,
-  BulkMarketInfoPreview,
   BulkPatchPostedParentsResponse,
-  BulkPostPreview,
+  BulkPatchPreview,
+  BulkMarketInfoPreview,
   BulkUdidiPostPreview,
   CanonicalValidationBundle,
   CanonicalReviewBundle,
   CriticalWarningCodeOption,
-  DeviceIdentityIssueDetail,
-  DeviceIdentityIssueSummary,
-  DeviceSubjectDetail,
   DeviceSubjectSummary,
   DatabaseHealthSummary,
   DatabaseSchemaSummary,
@@ -20,18 +15,13 @@ import type {
   MarketCountryReferenceEntry,
   OperationAssessment,
   PostRegistrationPreview,
-  SingleRecordXmlPreview,
-  SourceRowDetail,
-  SourceRowSummary,
   TestingSubjectReadModelSummary,
   TestingBatchHistory,
   TestingBatchPage,
   TestingEventReadModelEntry,
   TestingWorkspaceSummary,
-  WorkbookImportDiffSummary,
   WorkbookImportRunResponse,
   WorkbookImportSnapshotSummary,
-  XmlGenerationScopeBundle,
   SuccessXmlUploadResult,
 } from "./types";
 
@@ -116,11 +106,35 @@ async function sendDownload(path: string, method: string, body?: unknown): Promi
   };
 }
 
+export type RecordReadiness = {
+  product_family: string;
+  product_variant: string;
+  catalogue_number: string | null;
+  primary_udi_di: string | null;
+  basic_udi_di: string | null;
+  parent_registered: boolean;
+  post_ready: boolean;
+  child_post_ready: boolean;
+  patch_ready: boolean;
+  market_info_ready: boolean;
+};
+
 export const api = {
+  bulkPatchPostedParents: (productFamily: string, productVariant: string) =>
+    sendJson<BulkPatchPostedParentsResponse>("/xml/bulk-patch-posted-parents", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+    }),
+  bulkPatchPostedEntries: (productFamily: string, productVariant: string, basicUdiDi: string) =>
+    sendJson<BulkPatchPostedEntriesResponse>("/xml/bulk-patch-posted-entries", "POST", {
+      product_family: productFamily,
+      product_variant: productVariant,
+      basic_udi_di: basicUdiDi,
+    }),
+  operationReadiness: () => getJson<RecordReadiness[]>("/xml/operation-readiness"),
   latestWorkbookImportSummary: () => getJson<WorkbookImportSnapshotSummary>("/workbook-imports/latest/summary"),
   workbookImportSchemaSummary: () => getJson<DatabaseSchemaSummary>("/workbook-imports/schema-summary"),
   workbookImportHealthSummary: () => getJson<DatabaseHealthSummary>("/workbook-imports/health"),
-  latestWorkbookImportDiff: () => getJson<WorkbookImportDiffSummary>("/workbook-imports/latest/diff"),
   workbookImportDeviceSubjects: (params?: {
     product_family?: string;
     product_variant?: string;
@@ -137,65 +151,17 @@ export const api = {
         limit: params?.limit ?? 20,
       })}`,
     ),
-  workbookImportDeviceSubject: (subjectId: number) =>
-    getJson<DeviceSubjectDetail>(`/workbook-imports/device-subjects/${subjectId}`),
-  workbookImportSourceRows: (params?: {
-    product_family?: string;
-    product_variant?: string;
-    catalogue_number?: string;
-    submission_operation?: string;
-    import_batch_id?: number;
-    limit?: number;
-  }) =>
-    getJson<SourceRowSummary[]>(
-      `/workbook-imports/source-rows${buildQuery({
-        product_family: params?.product_family,
-        product_variant: params?.product_variant,
-        catalogue_number: params?.catalogue_number,
-        submission_operation: params?.submission_operation,
-        import_batch_id: params?.import_batch_id,
-        limit: params?.limit ?? 20,
-      })}`,
-    ),
-  workbookImportSourceRow: (sourceRowId: number) =>
-    getJson<SourceRowDetail>(`/workbook-imports/source-rows/${sourceRowId}`),
-  workbookImportIdentityIssues: (params?: {
-    issue_code?: string;
-    product_family?: string;
-    product_variant?: string;
-    catalogue_number?: string;
-    import_batch_id?: number;
-    limit?: number;
-  }) =>
-    getJson<DeviceIdentityIssueSummary[]>(
-      `/workbook-imports/identity-issues${buildQuery({
-        issue_code: params?.issue_code,
-        product_family: params?.product_family,
-        product_variant: params?.product_variant,
-        catalogue_number: params?.catalogue_number,
-        import_batch_id: params?.import_batch_id,
-        limit: params?.limit ?? 20,
-      })}`,
-    ),
-  workbookImportIdentityIssue: (issueId: number) =>
-    getJson<DeviceIdentityIssueDetail>(`/workbook-imports/identity-issues/${issueId}`),
   runWorkbookImport: (payload?: { imported_by?: string; label?: string; notes?: string }) =>
     sendJson<WorkbookImportRunResponse>("/workbook-imports/run", "POST", payload ?? {}),
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
   canonicalValidation: () => getJson<CanonicalValidationBundle>("/canonical-validation"),
-  xmlGenerationScope: () => getJson<XmlGenerationScopeBundle>("/xml/scope"),
   marketCountryReference: () => getJson<MarketCountryReferenceEntry[]>("/xml/market-country-reference"),
-  previewXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
-    sendJson<SingleRecordXmlPreview>("/xml/preview-record", "POST", {
-      product_family: productFamily,
-      product_variant: productVariant,
-      catalogue_number: catalogueNumber,
-    }),
-  previewXmlPostRegistration: (productFamily: string, productVariant: string, catalogueNumber: string) =>
+  previewXmlPostRegistration: (productFamily: string, productVariant: string, catalogueNumber: string, acceptedBaseline = false) =>
     sendJson<PostRegistrationPreview>("/xml/preview-post-registration", "POST", {
       product_family: productFamily,
       product_variant: productVariant,
       catalogue_number: catalogueNumber,
+      accepted_baseline: acceptedBaseline,
     }),
   previewNextXmlPostRegistration: (productFamily: string, productVariant: string) =>
     sendJson<PostRegistrationPreview>("/xml/preview-next-post-registration", "POST", {
@@ -231,19 +197,6 @@ export const api = {
       scenario_id: scenarioId,
       patch_version: patchVersion,
       scenario_inputs: scenarioInputs,
-    }),
-  previewXmlBatch: (productFamily: string, productVariant: string, chunkSequence = 1) =>
-    sendJson<BatchXmlPreview>("/xml/preview-batch", "POST", {
-      product_family: productFamily,
-      product_variant: productVariant,
-      chunk_sequence: chunkSequence,
-    }),
-  previewBulkPost: (productFamily: string, productVariant: string, recordCount: number, chunkSequence = 1) =>
-    sendJson<BulkPostPreview>("/xml/preview-bulk-post", "POST", {
-      product_family: productFamily,
-      product_variant: productVariant,
-      record_count: recordCount,
-      chunk_sequence: chunkSequence,
     }),
   previewBulkUdidiPost: (productFamily: string, productVariant: string, recordCount: number, chunkSequence = 1, selectedCatalogueNumbers: string[] = []) =>
     sendJson<BulkUdidiPostPreview>("/xml/preview-bulk-udidi-post", "POST", {
@@ -290,17 +243,6 @@ export const api = {
       market_countries: marketCountries,
       selected_catalogue_numbers: selectedCatalogueNumbers,
       chunk_sequence: chunkSequence,
-    }),
-  bulkPatchPostedEntries: (productFamily: string, productVariant: string, basicUdiDi: string) =>
-    sendJson<BulkPatchPostedEntriesResponse>("/xml/bulk-patch-posted-entries", "POST", {
-      product_family: productFamily,
-      product_variant: productVariant,
-      basic_udi_di: basicUdiDi,
-    }),
-  bulkPatchPostedParents: (productFamily: string, productVariant: string) =>
-    sendJson<BulkPatchPostedParentsResponse>("/xml/bulk-patch-posted-parents", "POST", {
-      product_family: productFamily,
-      product_variant: productVariant,
     }),
   testingWorkspaceSummary: (params?: { product_family?: string; product_variant?: string }) =>
     sendJson<TestingWorkspaceSummary>("/xml/testing-workspace-summary", "POST", {
@@ -394,12 +336,6 @@ export const api = {
       file_name: fileName,
       xml_content: xmlContent,
     }),
-  downloadXmlRecord: (productFamily: string, productVariant: string, catalogueNumber: string) =>
-    sendDownload("/xml/download-record", "POST", {
-      product_family: productFamily,
-      product_variant: productVariant,
-      catalogue_number: catalogueNumber,
-    }),
   downloadXmlPostPackage: (productFamily: string, productVariant: string, catalogueNumber: string) =>
     sendDownload("/xml/download-post-package", "POST", {
       product_family: productFamily,
@@ -435,17 +371,6 @@ export const api = {
       scenario_id: scenarioId,
       patch_version: patchVersion,
       scenario_inputs: scenarioInputs,
-    }),
-  downloadXmlBatch: (productFamily: string, productVariant: string) =>
-    sendDownload("/xml/download-batch", "POST", {
-      product_family: productFamily,
-      product_variant: productVariant,
-    }),
-  downloadBulkPost: (productFamily: string, productVariant: string, recordCount: number) =>
-    sendDownload("/xml/download-bulk-post", "POST", {
-      product_family: productFamily,
-      product_variant: productVariant,
-      record_count: recordCount,
     }),
   downloadBulkUdidiPost: (productFamily: string, productVariant: string, recordCount: number, selectedCatalogueNumbers: string[] = []) =>
     sendDownload("/xml/download-bulk-udidi-post", "POST", {

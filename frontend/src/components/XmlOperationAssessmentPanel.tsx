@@ -1,3 +1,4 @@
+import type { XmlMode } from "../useXmlOperationAssessment";
 import type { OperationAssessment } from "../types";
 
 type AssessmentSummaryRow = {
@@ -6,7 +7,7 @@ type AssessmentSummaryRow = {
 };
 
 type XmlOperationAssessmentPanelProps = {
-  xmlMode: "post" | "patch" | "marketInfo" | "bulkPost" | "bulkUdidiPost" | "bulkPatch" | "bulkMarketInfo";
+  xmlMode: XmlMode;
   xmlAssessmentTitle: string;
   isLoadingXmlOperationAssessment: boolean;
   xmlOperationAssessment: OperationAssessment | null;

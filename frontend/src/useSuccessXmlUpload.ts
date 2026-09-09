@@ -1,26 +1,17 @@
 import { useRef, useState, type ChangeEvent } from "react";
 
 import { api } from "./api";
-import type { OperationAssessment, SuccessXmlUploadResult, TestingSubjectReadModelSummary } from "./types";
-
-type UploadMode = "post" | "patch" | "marketInfo" | "bulkPost" | "bulkUdidiPost" | "bulkPatch" | "bulkMarketInfo";
-
-type UploadScope = {
-  productFamily: string;
-  productVariant: string;
-  mode: UploadMode;
-  basicUdiDi?: string | null;
-};
+import { requestXmlAssessment, assessmentScopeKey, type AssessmentScope } from "./xmlAssessmentRequest";
+import type { OperationAssessment, TestingSubjectReadModelSummary } from "./types";
 
 type UseSuccessXmlUploadArgs = {
-  scope: UploadScope | null;
+  scope: AssessmentScope | null;
   setError: (message: string | null) => void;
   setXmlActionMessage: (message: string | null) => void;
   setTestingSubjectSummaries: (summaries: TestingSubjectReadModelSummary[]) => void;
   setXmlOperationAssessment: (assessment: OperationAssessment | null) => void;
   setXmlOperationAssessmentError: (message: string | null) => void;
   clearPreviewState: () => void;
-  onUploadRecorded?: (result: SuccessXmlUploadResult) => void;
 };
 
 export function useSuccessXmlUpload({
@@ -31,16 +22,20 @@ export function useSuccessXmlUpload({
   setXmlOperationAssessment,
   setXmlOperationAssessmentError,
   clearPreviewState,
-  onUploadRecorded,
 }: UseSuccessXmlUploadArgs) {
   const [isUploadingSuccessXml, setIsUploadingSuccessXml] = useState<boolean>(false);
   const successXmlInputRef = useRef<HTMLInputElement | null>(null);
+
+  const currentScopeRef = useRef(scope);
+  currentScopeRef.current = scope;
 
   async function uploadSuccessXml(file: File): Promise<void> {
     if (!scope) {
       return;
     }
 
+    const uploadScopeKey = assessmentScopeKey(scope);
+    const isCurrentScope = () => assessmentScopeKey(currentScopeRef.current) === uploadScopeKey;
     setIsUploadingSuccessXml(true);
     setError(null);
     setXmlActionMessage(`Uploading success XML for ${file.name}...`);
@@ -48,18 +43,8 @@ export function useSuccessXmlUpload({
     try {
       const xmlContent = await file.text();
       const result = await api.uploadSuccessXml(file.name, xmlContent);
-      const assessmentRequest =
-        scope.mode === "patch"
-          ? api.assessSinglePatch(scope.productFamily, scope.productVariant)
-          : scope.mode === "post"
-            ? api.assessSinglePost(scope.productFamily, scope.productVariant)
-            : scope.mode === "marketInfo"
-              ? api.assessSingleMarketInfo(scope.productFamily, scope.productVariant)
-            : scope.mode === "bulkMarketInfo"
-              ? api.assessBulkMarketInfo(scope.productFamily, scope.productVariant, scope.basicUdiDi ?? undefined)
-            : scope.mode === "bulkPatch"
-              ? api.assessBulkPatch(scope.productFamily, scope.productVariant, scope.basicUdiDi ?? undefined)
-              : api.assessBulkPost(scope.productFamily, scope.productVariant);
+      if (!isCurrentScope()) return;
+      const assessmentRequest = requestXmlAssessment(scope);
       const updatedSummariesPromise = api.testingSubjectSummaries({
         product_family: scope.productFamily,
         product_variant: scope.productVariant,
@@ -70,10 +55,10 @@ export function useSuccessXmlUpload({
         assessmentRequest,
       ]);
 
+      if (!isCurrentScope()) return;
       setTestingSubjectSummaries(updatedSummaries);
       setXmlOperationAssessment(updatedAssessment);
       setXmlOperationAssessmentError(null);
-      onUploadRecorded?.(result);
       clearPreviewState();
       const operationLabel =
         scope.mode === "patch"
@@ -99,6 +84,7 @@ export function useSuccessXmlUpload({
           : `${result.summary_message}${errorSummary} The tracked testing state and ${operationLabel} workspace were refreshed.`,
       );
     } catch (requestError) {
+      if (!isCurrentScope()) return;
       const message = requestError instanceof Error ? requestError.message : "Failed to upload success XML.";
       setError(message);
       setXmlActionMessage(message);

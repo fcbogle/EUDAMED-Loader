@@ -752,6 +752,8 @@ def test_success_xml_upload_records_market_info_put_without_advancing_patch_vers
         latest_successful_version="3",
     )
     store.record_generated_market_info_context(
+        correlation_id="market-info-success-correlation",
+        message_id="market-info-success-message",
         product_family="Epirus",
         product_variant="Esprit",
         catalogue_number="ESP22L1S",
@@ -875,6 +877,8 @@ def test_duplicate_market_info_success_upload_repairs_tracked_state_from_generat
         latest_successful_market_info_version="1",
     )
     store.record_generated_market_info_context(
+        correlation_id="cd4e1072-2016-4622-9261-1e8afecca573",
+        message_id="fa5bcd9b-dc9f-4bde-aca2-7d505cf22b4a",
         product_family="Epirus",
         product_variant="Esprit",
         catalogue_number="ESP22L1S",
@@ -1037,6 +1041,8 @@ def test_market_info_success_delta_uses_latest_accepted_subject_state_when_gener
         connection.close()
 
     store.record_generated_market_info_context(
+        correlation_id="market-info-success-correlation-2",
+        message_id="market-info-success-message-2",
         product_family="Epirus",
         product_variant="Esprit",
         catalogue_number="ESP22L1S",
@@ -2954,7 +2960,7 @@ def test_operation_assessment_routes_report_bulk_patch_parent_selection_and_avai
     assert selected_payload["evidence"]["latest_version_summary"] == ["2"]
 
 
-def test_operation_assessment_routes_report_bulk_market_info_parent_selection_and_partial_availability(
+def test_operation_assessment_allows_bulk_market_info_with_mixed_accepted_countries(
     isolated_workbook_import_db: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3065,11 +3071,11 @@ def test_operation_assessment_routes_report_bulk_market_info_parent_selection_an
     assert parent_selection_payload["status"] == "attention"
     assert parent_selection_payload["evidence"]["eligible_parent_group_count"] == 1
     assert selected_payload["operation_type"] == "bulk_market_info"
-    assert selected_payload["status"] == "attention"
-    assert selected_payload["eligible_record_count"] == 1
+    assert selected_payload["status"] == "available"
+    assert selected_payload["eligible_record_count"] == 2
     assert selected_payload["evidence"]["selected_basic_udi_di"] == "BASIC-1"
-    assert selected_payload["evidence"]["market_info_state_mismatch_count"] == 1
-    assert selected_payload["evidence"]["current_market_info_version_summary"] == ["1"]
+    assert selected_payload["evidence"]["market_info_state_mismatch_count"] == 0
+    assert selected_payload["evidence"]["current_market_info_version_summary"] == ["1", "2"]
 
 
 def test_sqlite_canonical_validation_route_rebuilds_stale_snapshot(
@@ -3606,3 +3612,225 @@ def test_workbook_import_skips_excluded_footspares_workbook(
     assert source_workbook_count == 0
     assert source_row_count == 0
     assert identity_issue_count == 0
+
+
+def _synthetic_ack(message_type: str, version: str | None, correlation: str, entity: str = "111111") -> bytes:
+    service, operation = message_type.split(".")
+    version_xml = f"<m:entityVersion>{version}</m:entityVersion>" if version else ""
+    return f'''<m:PullAck xmlns:m="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1" xmlns:s="https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Service/v1">
+      <m:correlationID>{correlation}</m:correlationID><m:messageID>ack-{correlation}</m:messageID>
+      <m:creationDateTime>2026-09-09T12:00:00Z</m:creationDateTime>
+      <m:sender><m:service><s:serviceID>{service}</s:serviceID><s:serviceOperation>{operation}</s:serviceOperation></m:service></m:sender>
+      <m:responseEntity><m:responseCode>SUCCESS</m:responseCode><m:entityCode>{entity}</m:entityCode>{version_xml}</m:responseEntity>
+    </m:PullAck>'''.encode()
+
+
+def _synthetic_xml_record():
+    from app.services.xml_projection import DeviceXmlRecord
+    from app.xml_models import StorageConditionXmlItem
+
+    return DeviceXmlRecord(
+        product_family="Family A", product_variant="Variant A", catalogue_number="CAT-001",
+        primary_udi_di="111111", issuing_entity="GS1", submission_operation="POST",
+        trade_name="Accepted name", language_code="EN", basic_identifier_code="BASIC-1",
+        basic_identifier_issuing_entity="GS1", device_identifier_code="111111",
+        device_identifier_issuing_entity="GS1", risk_class="CLASS_IIA", model_name="Accepted model",
+        manufacturer_srn="GB-MF-000000001", authorised_representative_srn=None,
+        human_tissues_cells=False, animal_tissues_cells=False, human_product_check=False,
+        medicinal_product_check=False, basic_device_type="MDR", active=False,
+        administering_medicine=False, implantable=False, measuring_function=False, reusable=False,
+        nomenclature_codes=["P0901"], status_code="ON_THE_MARKET", production_identifier=None,
+        reference_number="CAT-001", secondary_identifier_code=None, secondary_identifier_issuing_entity=None,
+        sterile=False, sterilization=False, source_version_marker="1", number_of_reuses=0,
+        contains_latex=False, reprocessed=False, market_countries=[("DE", True), ("AT", False)],
+        base_quantity=1, storage_conditions=[StorageConditionXmlItem(code="SHC006", comment="Accepted storage")],
+        critical_warnings=[],
+    )
+
+
+@pytest.mark.parametrize("patch_version", ["2", "4"])
+def test_patch_retains_accepted_fields_and_market_countries_after_source_change(
+    isolated_workbook_import_db: Path, monkeypatch: pytest.MonkeyPatch, patch_version: str,
+) -> None:
+    from dataclasses import replace
+    from app.xml_models import PatchStateSnapshot
+
+    service = XmlGenerationService()
+    accepted = _synthetic_xml_record()
+    identity = dict(product_family="Family A", product_variant="Variant A", catalogue_number="CAT-001")
+    service.testing_state_store.record_generated_post_context(
+        **identity, primary_udi_di="111111", basic_udi_di="BASIC-1", message_type="UDI_DI.POST",
+        accepted_post_state=service._post_state_snapshot_payload(accepted), correlation_id="post-1", message_id="post-message",
+    )
+    TestingSuccessXmlService().record_success_xml(xml_bytes=_synthetic_ack("UDI_DI.POST", "1", "post-1"), source_file_name="post.xml")
+    service.testing_state_store.record_generated_market_info_context(
+        **identity, primary_udi_di="111111", basic_udi_di="BASIC-1", market_info_version="2",
+        baseline_market_countries=[{"country": "DE", "original_placed_on_market": True}, {"country": "AT", "original_placed_on_market": False}],
+        market_countries=[{"country": "IE", "original_placed_on_market": True}],
+        correlation_id="market-2", message_id="market-message",
+    )
+    TestingSuccessXmlService().record_success_xml(xml_bytes=_synthetic_ack("MARKET_INFO.PUT", "2", "market-2"), source_file_name="market.xml")
+    changed_source = replace(accepted, trade_name="Unaccepted name", model_name="Unaccepted model", market_countries=[("FR", True)])
+    monkeypatch.setattr(service.selector, "find_xml_ready_record", lambda **kwargs: SimpleNamespace(**identity, submission_operation="POST"))
+    monkeypatch.setattr(service.projection_builder, "build_device_record", lambda record: changed_source)
+    baseline_preview = service.preview_post_registration(**identity, accepted_baseline=True)
+    assert "Accepted name" in baseline_preview.post_xml
+    assert "Unaccepted name" not in baseline_preview.post_xml
+    assert "<marketinfo:country>IE</marketinfo:country>" in baseline_preview.post_xml
+    assert "Unaccepted name" in service.preview_post_registration(**identity).post_xml
+    service.preview_post_registration(**identity, record_generated_context=True)
+    assert not service.testing_state_store.has_reviewed_post(**identity)
+    with sqlite3.connect(isolated_workbook_import_db) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM generated_packages WHERE reviewed_at IS NOT NULL").fetchone()[0] == 0
+    post = service._accepted_post_record(changed_source)
+    post = replace(post, market_countries=service._patch_market_countries(post_record=post), include_market_infos_in_patch=True)
+    base = post if patch_version == "2" else service.projection_builder.build_patch_record_from_state(post, PatchStateSnapshot(version="3", trade_name="Accepted PATCH name", base_quantity=2))
+    derived, _, _ = service._build_generated_patch_scenario(
+        post_record=post, scenario_base_record=base, base_message_type="POST" if patch_version == "2" else "PATCH",
+        scenario_id="base_quantity_edit", patch_version=patch_version, scenario_inputs={"new_base_quantity": 7},
+    )
+    assert derived.market_countries == [("IE", True)]
+    assert derived.model_name == "Accepted model"
+    assert derived.trade_name == ("Accepted name" if patch_version == "2" else "Accepted PATCH name")
+    assert derived.base_quantity == 7
+    assert post.storage_conditions[0].comment == "Accepted storage"
+    assert "<marketinfo:country>IE</marketinfo:country>" in service.renderer.render_message(derived).decode()
+    summaries = TestingReadModelService().list_subject_summaries(**{k: v for k, v in identity.items() if k != "catalogue_number"})
+    assert summaries[0].current_patch_state["trade_name"] == "Accepted name"
+    assert TestingReadModelService().subject_history(summaries[0].id).subject.current_patch_state == summaries[0].current_patch_state
+
+
+@pytest.mark.parametrize("order", [("3", "2", "3"), ("2", "3", "2")])
+def test_late_and_duplicate_market_acknowledgements_do_not_roll_back_countries(
+    isolated_workbook_import_db: Path, order: tuple[str, ...],
+) -> None:
+    store = PlaygroundStateStore()
+    identity = dict(product_family="Family A", product_variant="Variant A", catalogue_number="CAT-001")
+    for version, country in [("2", "DE"), ("3", "IE")]:
+        store.record_generated_market_info_context(
+            **identity, primary_udi_di="111111", basic_udi_di="BASIC-1", market_info_version=version,
+            baseline_market_countries=[{"country": "AT", "original_placed_on_market": True}],
+            market_countries=[{"country": country, "original_placed_on_market": True}],
+            correlation_id=f"market-{version}", message_id=f"generated-{version}",
+        )
+    for version in order:
+        TestingSuccessXmlService().record_success_xml(
+            xml_bytes=_synthetic_ack("MARKET_INFO.PUT", version, f"market-{version}"), source_file_name=f"market-{version}.xml",
+        )
+    assert store.latest_successful_market_info_state(**identity) == {
+        "version": "3", "market_countries": [{"country": "IE", "original_placed_on_market": True}],
+    }
+    with sqlite3.connect(isolated_workbook_import_db) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM testing_events WHERE status = 'SUCCESS'").fetchone()[0] == 2
+
+
+def test_unmatched_acknowledgement_cannot_accept_an_unrelated_draft(isolated_workbook_import_db: Path) -> None:
+    store = PlaygroundStateStore()
+    identity = dict(product_family="Family A", product_variant="Variant A", catalogue_number="CAT-001")
+    store.record_generated_market_info_context(
+        **identity, primary_udi_di="111111", basic_udi_di="BASIC-1", market_info_version="2",
+        baseline_market_countries=[], market_countries=[{"country": "IE", "original_placed_on_market": True}],
+        correlation_id="draft", message_id="draft-message",
+    )
+    TestingSuccessXmlService().record_success_xml(
+        xml_bytes=_synthetic_ack("MARKET_INFO.PUT", "2", "unrelated"), source_file_name="unrelated.xml",
+    )
+    assert store.latest_successful_market_info_state(**identity) is None
+    assert store.latest_successful_market_info_version(**identity) == "2"
+
+
+def test_old_patch_acknowledgement_does_not_replace_legacy_accepted_patch(isolated_workbook_import_db: Path) -> None:
+    store = PlaygroundStateStore()
+    identity = dict(product_family="Family A", product_variant="Variant A", catalogue_number="CAT-001")
+    _insert_testing_subject(
+        isolated_workbook_import_db, **identity, primary_udi_di="111111", basic_udi_di="BASIC-1", post_success=1,
+        latest_successful_version="4", latest_successful_state_json=json.dumps({"version": "4", "trade_name": "Accepted v4"}),
+    )
+    store.record_generated_patch_context(
+        **identity, primary_udi_di="111111", basic_udi_di="BASIC-1", patch_version="2", scenario_id="trade_name_edit",
+        scenario_label="Trade name", base_message_type="POST", base_version="1", accepted_state_source="accepted_post",
+        changed_fields=[], state_before={"version": "1"}, latest_successful_state={"version": "2", "trade_name": "Old v2"},
+        correlation_id="old-patch", message_id="old-patch-message",
+    )
+    TestingSuccessXmlService().record_success_xml(
+        xml_bytes=_synthetic_ack("UDI_DI.PATCH", "2", "old-patch"), source_file_name="old-patch.xml",
+    )
+    state = store.latest_successful_patch_state(**identity)
+    assert state.state.version == "4"
+    assert state.state.trade_name == "Accepted v4"
+
+
+def test_bulk_market_download_logs_each_device_against_its_actual_chunk(
+    isolated_workbook_import_db: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from lxml import etree
+    from app.services.xml_projection import MarketInfoXmlRecord
+
+    service = XmlGenerationService()
+    first = _synthetic_validation_bundle_from_promotions({("synthetic.xlsx", "Variant A", 2): {
+        "product_family": "Family A", "product_variant": "Variant A", "catalogue_number": "CAT-001",
+        "primary_udi_di": "111111", "submission_operation": "POST", "basic_udi_di": "BASIC-1",
+    }}).records[0]
+    second = first.model_copy(update={"catalogue_number": "CAT-002", "primary_udi_di": "222222"})
+    monkeypatch.setattr(service, "_bulk_patch_selected_records", lambda **kwargs: ([first, second], 2, []))
+
+    def market_record(*, record):
+        version = "1" if record.catalogue_number == "CAT-001" else "2"
+        country = "DE" if version == "1" else "AT"
+        return MarketInfoXmlRecord(
+            product_family="Family A", product_variant="Variant A", catalogue_number=record.catalogue_number,
+            primary_udi_di=record.primary_udi_di, market_info_version=version,
+            manufacturer_srn="GB-MF-000000001", device_identifier_code=record.primary_udi_di,
+            device_identifier_issuing_entity="GS1", market_countries=[(country, True)],
+        ), [(country, True)], version
+
+    monkeypatch.setattr(service, "_market_info_record_with_latest_state", market_record)
+    args = dict(product_family="Family A", product_variant="Variant A", basic_udi_di="BASIC-1", record_count=2, market_countries=[("IE", True)])
+    service.preview_bulk_market_info(**args)
+    with sqlite3.connect(isolated_workbook_import_db) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM testing_events").fetchone()[0] == 0
+    _, package = service.download_bulk_market_info(**args)
+    with sqlite3.connect(isolated_workbook_import_db) as connection:
+        rows = connection.execute("SELECT correlation_id, message_id, version FROM testing_events WHERE status = 'GENERATED' ORDER BY version").fetchall()
+    assert len(rows) == 2
+    with ZipFile(BytesIO(package)) as archive:
+        envelope_ids = set()
+        ns = {"m": "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1"}
+        for name in archive.namelist():
+            if not name.endswith(".xml"):
+                continue
+            root = etree.fromstring(archive.read(name))
+            envelope_ids.add((root.findtext("m:correlationID", namespaces=ns), root.findtext("m:messageID", namespaces=ns)))
+    assert envelope_ids == {(row[0], row[1]) for row in rows}
+    assert [row[2] for row in rows] == ["2", "3"]
+    for row, entity in zip(rows, ["111111", "222222"], strict=True):
+        TestingSuccessXmlService().record_success_xml(
+            xml_bytes=_synthetic_ack("MARKET_INFO.PUT", row[2], row[0], entity), source_file_name=f"{entity}.xml",
+        )
+    for catalogue in ["CAT-001", "CAT-002"]:
+        state = service.testing_state_store.latest_successful_market_info_state(product_family="Family A", product_variant="Variant A", catalogue_number=catalogue)
+        assert state["market_countries"] == [{"country": "IE", "original_placed_on_market": True}]
+
+
+def test_dashboard_readiness_uses_the_operation_assessment_rules(
+    isolated_workbook_import_db: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.operation_assessment import OperationAssessmentService
+
+    service = OperationAssessmentService()
+    bundle = _synthetic_validation_bundle_from_promotions({("synthetic.xlsx", "Variant A", 2): {
+        "product_family": "Family A", "product_variant": "Variant A", "catalogue_number": "CAT-001",
+        "primary_udi_di": "111111", "submission_operation": "POST", "basic_udi_di": "BASIC-1",
+    }})
+    monkeypatch.setattr(service.xml_service, "_validation_bundle", lambda: bundle)
+    before = service.record_readiness()[0]
+    assert before["post_ready"] is True
+    assert before["child_post_ready"] is False
+    assert before["patch_ready"] is False
+    _insert_testing_subject(isolated_workbook_import_db, product_family="Family A", product_variant="Variant A", catalogue_number="PARENT", primary_udi_di="999999", basic_udi_di="BASIC-1", post_success=1)
+    parent_id = service.testing_read_model.list_subject_summaries()[0].id
+    _insert_testing_event(isolated_workbook_import_db, subject_id=parent_id, event_index=0, message_type="DEVICE.POST", status="SUCCESS", version="1")
+    after = service.record_readiness()[0]
+    assert after["child_post_ready"] is True
+    assert after["post_ready"] == (service._assess_single_post_record(bundle.records[0]).status == "available")
+    assert after["patch_ready"] == (service._assess_single_patch_record(bundle.records[0]).status == "available")

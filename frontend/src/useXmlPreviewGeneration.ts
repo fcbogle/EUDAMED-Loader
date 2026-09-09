@@ -3,12 +3,10 @@ import type { XmlMode } from "./useXmlOperationAssessment";
 import type {
   BulkMarketInfoPreview,
   BulkPatchPreview,
-  BulkPostPreview,
   BulkUdidiPostPreview,
   GeneratedPatchScenarioPreview,
   MarketInfoPutPreview,
   PostRegistrationPreview,
-  SingleRecordXmlPreview,
 } from "./types";
 
 type XmlFamilySelection = {
@@ -57,8 +55,6 @@ type UseXmlPreviewGenerationArgs = {
   resolveBulkMarketInfoCatalogueNumbers: () => Promise<string[]>;
   selectedBulkPatchParentGroup: BulkParentGroup | null;
   resolveBulkPatchCatalogueNumbers: () => Promise<string[]>;
-  setXmlPreview: SetValue<SingleRecordXmlPreview | null>;
-  setXmlBulkPostPreview: SetValue<BulkPostPreview | null>;
   setXmlBulkUdidiPostPreview: SetValue<BulkUdidiPostPreview | null>;
   setXmlPairPreview: SetValue<PostRegistrationPreview | null>;
   setXmlMarketInfoPreview: SetValue<MarketInfoPutPreview | null>;
@@ -69,10 +65,8 @@ type UseXmlPreviewGenerationArgs = {
   setXmlActionMessage: SetValue<string | null>;
   setIsGeneratingXml: SetValue<boolean>;
   xmlPairPreview: PostRegistrationPreview | null;
-  xmlPreview: SingleRecordXmlPreview | null;
   xmlMarketInfoPreview: MarketInfoPutPreview | null;
   xmlPatchPreview: GeneratedPatchScenarioPreview | null;
-  xmlBulkPostPreview: BulkPostPreview | null;
   xmlBulkUdidiPostPreview: BulkUdidiPostPreview | null;
   xmlBulkPatchPreview: BulkPatchPreview | null;
   xmlBulkMarketInfoPreview: BulkMarketInfoPreview | null;
@@ -87,7 +81,6 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
       xmlMode,
       selectedXmlFamilySummary,
       selectedXmlVariantSummary,
-      selectedXmlRecord,
       selectedMarketInfoRequestArgs,
       selectedPairRequestArgs,
       selectedPatchScenarioId,
@@ -95,7 +88,6 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
       normalizedMarketInfoVersion,
       currentMarketInfoScenarioInputs,
       currentPatchScenarioInputs,
-      normalizedBulkRecordCount,
       selectedXmlChunkSequence,
       effectiveBulkUdidiPostCatalogueNumbers,
       selectedBulkMarketInfoParentGroup,
@@ -103,8 +95,6 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
       resolveBulkMarketInfoCatalogueNumbers,
       selectedBulkPatchParentGroup,
       resolveBulkPatchCatalogueNumbers,
-      setXmlPreview,
-      setXmlBulkPostPreview,
       setXmlBulkUdidiPostPreview,
       setXmlPairPreview,
       setXmlMarketInfoPreview,
@@ -117,7 +107,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
     } = args;
 
     if (
-      (xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo") &&
+      (xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo") &&
       (!selectedXmlFamilySummary || !selectedXmlVariantSummary)
     ) {
       return;
@@ -133,14 +123,6 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
           selectedXmlVariantSummary.product_variant,
         );
         setXmlPairPreview(preview);
-      } else if (xmlMode === "single") {
-        if (!selectedXmlRecord?.catalogue_number || !selectedXmlFamilySummary || !selectedXmlVariantSummary) return;
-        const preview = await api.previewXmlRecord(
-          selectedXmlFamilySummary.product_family,
-          selectedXmlVariantSummary.product_variant,
-          selectedXmlRecord.catalogue_number,
-        );
-        setXmlPreview(preview);
       } else if (xmlMode === "marketInfo") {
         if (!selectedMarketInfoRequestArgs) return;
         const preview = await api.previewXmlMarketInfoPut(
@@ -162,19 +144,6 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
           currentPatchScenarioInputs(),
         );
         setXmlPatchPreview(preview);
-      } else if (xmlMode === "bulkPost") {
-        if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) return;
-        setXmlActionMessage("Generating Bulk Basic UDI POST preview...");
-        const preview = await api.previewBulkPost(
-          selectedXmlFamilySummary.product_family,
-          selectedXmlVariantSummary.product_variant,
-          normalizedBulkRecordCount,
-          selectedXmlChunkSequence,
-        );
-        setXmlBulkPostPreview(preview);
-        setXmlActionMessage(
-          `Bulk Basic UDI POST preview generated for ${selectedXmlFamilySummary.product_family} / ${selectedXmlVariantSummary.product_variant}, chunk ${preview.selected_chunk_sequence}.`,
-        );
       } else if (xmlMode === "bulkUdidiPost") {
         if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) return;
         setXmlActionMessage("Generating Bulk UDI-DI POST preview...");
@@ -260,7 +229,6 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
       xmlMode,
       selectedXmlFamilySummary,
       selectedXmlVariantSummary,
-      selectedXmlRecord,
       selectedMarketInfoRequestArgs,
       selectedPairRequestArgs,
       selectedPatchScenarioId,
@@ -268,7 +236,6 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
       normalizedMarketInfoVersion,
       currentMarketInfoScenarioInputs,
       currentPatchScenarioInputs,
-      normalizedBulkRecordCount,
       effectiveBulkUdidiPostCatalogueNumbers,
       selectedBulkMarketInfoParentGroup,
       normalizedBulkMarketInfoScenarioItems,
@@ -278,10 +245,8 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
       setError,
       setXmlActionMessage,
       xmlPairPreview,
-      xmlPreview,
       xmlMarketInfoPreview,
       xmlPatchPreview,
-      xmlBulkPostPreview,
       xmlBulkUdidiPostPreview,
       xmlBulkPatchPreview,
       xmlBulkMarketInfoPreview,
@@ -291,7 +256,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
     } = args;
 
     if (
-      (xmlMode === "single" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo") &&
+      (xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo") &&
       (!selectedXmlFamilySummary || !selectedXmlVariantSummary)
     ) {
       return;
@@ -307,13 +272,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
               xmlPairPreview.product_variant ?? "",
               xmlPairPreview.catalogue_number,
             )
-          : xmlMode === "single" && selectedXmlRecord?.catalogue_number && selectedXmlFamilySummary && selectedXmlVariantSummary
-            ? await api.downloadXmlRecord(
-                selectedXmlFamilySummary.product_family,
-                selectedXmlVariantSummary.product_variant,
-                selectedXmlRecord.catalogue_number,
-              )
-            : xmlMode === "marketInfo" && selectedMarketInfoRequestArgs
+          : xmlMode === "marketInfo" && selectedMarketInfoRequestArgs
               ? await api.downloadXmlMarketInfoPut(
                   selectedMarketInfoRequestArgs.product_family,
                   selectedMarketInfoRequestArgs.product_variant,
@@ -330,13 +289,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
                     patchVersionInput,
                     currentPatchScenarioInputs(),
                   )
-                : xmlMode === "bulkPost" && selectedXmlFamilySummary && selectedXmlVariantSummary
-                  ? await api.downloadBulkPost(
-                      selectedXmlFamilySummary.product_family,
-                      selectedXmlVariantSummary.product_variant,
-                      normalizedBulkRecordCount,
-                    )
-                  : xmlMode === "bulkUdidiPost" && selectedXmlFamilySummary && selectedXmlVariantSummary
+                : xmlMode === "bulkUdidiPost" && selectedXmlFamilySummary && selectedXmlVariantSummary
                     ? await api.downloadBulkUdidiPost(
                         selectedXmlFamilySummary.product_family,
                         selectedXmlVariantSummary.product_variant,
@@ -383,10 +336,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
 
       const resolvedFileName =
         downloadResult.fileName ??
-        (xmlMode === "single"
-          ? xmlPreview?.file_name ??
-            `${selectedXmlFamilySummary?.product_family ?? "device"}-${selectedXmlVariantSummary?.product_variant ?? "variant"}-${selectedXmlRecord?.catalogue_number ?? "record"}.xml`
-          : xmlMode === "marketInfo"
+        (xmlMode === "marketInfo"
             ? xmlMarketInfoPreview?.file_name ??
               `${selectedXmlMarketInfoRecord?.product_family ?? "device"}-${selectedXmlMarketInfoRecord?.product_variant ?? "variant"}-${selectedXmlMarketInfoRecord?.catalogue_number ?? "record"}-market-info-put.xml`
             : xmlMode === "patch"
@@ -394,10 +344,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
                   xmlPatchPreview?.derived_patch_file_name ??
                   `${selectedXmlPairRecord?.product_family ?? "device"}-${selectedXmlPairRecord?.product_variant ?? "variant"}-${selectedPatchScenarioId}.xml`
                 ).replace(/\.xml$/i, "")}.zip`
-              : xmlMode === "bulkPost"
-                ? xmlBulkPostPreview?.package_file_name ??
-                  `${selectedXmlFamilySummary?.product_family ?? "device"}-${selectedXmlVariantSummary?.product_variant ?? "variant"}-bulk-post-package.zip`
-                : xmlMode === "bulkUdidiPost"
+              : xmlMode === "bulkUdidiPost"
                   ? xmlBulkUdidiPostPreview?.package_file_name ??
                     `${selectedXmlFamilySummary?.product_family ?? "device"}-${selectedXmlVariantSummary?.product_variant ?? "variant"}-bulk-udidi-post-package.zip`
                   : xmlMode === "bulkPatch"
@@ -414,8 +361,8 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
       anchor.click();
       setXmlActionMessage(
         xmlMode === "patch" || xmlMode === "bulkPatch"
-          ? `Patch scenario ZIP download started for ${resolvedFileName}. If your browser does not prompt, check the default Downloads folder.`
-          : `Download started for ${resolvedFileName}. If your browser does not prompt, check the default Downloads folder.`,
+          ? `Patch scenario ZIP download started for ${resolvedFileName}. Review recorded for this ZIP. If your browser does not prompt, check the default Downloads folder.`
+          : `Download started for ${resolvedFileName}. Review recorded for this ZIP. If your browser does not prompt, check the default Downloads folder.`,
       );
       window.setTimeout(() => {
         anchor.remove();

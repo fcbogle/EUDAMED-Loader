@@ -529,19 +529,6 @@ export type XmlValidationResult = {
   errors: XmlValidationIssue[];
 };
 
-export type SingleRecordXmlPreview = {
-  mode: "single";
-  product_family: string | null;
-  product_variant: string | null;
-  submission_operation: string | null;
-  catalogue_number: string;
-  trade_name: string | null;
-  primary_udi_di: string;
-  file_name: string;
-  xml: string;
-  validation: XmlValidationResult;
-};
-
 export type PostRegistrationPreview = {
   mode: "post_registration";
   product_family: string | null;
@@ -686,24 +673,6 @@ export type BatchXmlChunkSummary = {
   validation: XmlValidationResult;
 };
 
-export type BatchXmlPreview = {
-  mode: "batch";
-  product_family: string | null;
-  product_variant: string | null;
-  submission_operation: string | null;
-  package_file_name: string;
-  total_ready_records: number;
-  excluded_records: number;
-  max_records_per_file: number;
-  chunk_count: number;
-  selected_chunk_sequence: number;
-  selected_chunk_file_name: string;
-  selected_chunk_record_count: number;
-  selected_chunk_xml: string;
-  selected_chunk_validation: XmlValidationResult;
-  chunks: BatchXmlChunkSummary[];
-};
-
 export type BulkXmlRecordSummary = {
   catalogue_number: string;
   primary_udi_di: string | null;
@@ -724,27 +693,6 @@ export type BulkXmlExcludedRecord = {
   primary_udi_di: string | null;
   reason_code: string;
   reason_message: string;
-};
-
-export type BulkPostPreview = {
-  mode: "bulk_post";
-  product_family: string;
-  product_variant: string;
-  requested_record_count: number;
-  eligible_post_records: number;
-  included_record_count: number;
-  excluded_record_count: number;
-  package_file_name: string;
-  max_records_per_file: number;
-  chunk_count: number;
-  selected_chunk_sequence: number;
-  selected_chunk_file_name: string;
-  selected_chunk_record_count: number;
-  selected_chunk_xml: string;
-  selected_chunk_validation: XmlValidationResult;
-  included_records: BulkXmlRecordSummary[];
-  excluded_records: BulkXmlExcludedRecord[];
-  chunks: BatchXmlChunkSummary[];
 };
 
 export type BulkUdidiPostPreview = {

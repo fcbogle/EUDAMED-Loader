@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.services.identity import normalize_identity, normalized_family_candidates
 from app.services.canonical_projection import (
     CanonicalProjectionNoImportError,
     CanonicalProjectionService,
@@ -91,27 +92,9 @@ class ValidationRecordSelector:
         normalized = value.strip()
         return normalized or None
 
-    @classmethod
-    def _normalize_identity(cls, value: object) -> str:
-        text = cls._optional_string(value)
-        if not text:
-            return ""
-        return "".join(text.casefold().split())
+    _normalize_identity = staticmethod(normalize_identity)
 
-    @classmethod
-    def _normalized_family_candidates(cls, product_family: object) -> tuple[str, ...]:
-        normalized_full = cls._normalize_identity(product_family)
-        if not normalized_full:
-            return ()
-        candidates = {normalized_full}
-        family_text = cls._optional_string(product_family)
-        if family_text and "/" in family_text:
-            candidates.update(
-                cls._normalize_identity(part)
-                for part in family_text.split("/")
-                if cls._normalize_identity(part)
-            )
-        return tuple(sorted(candidates))
+    _normalized_family_candidates = staticmethod(normalized_family_candidates)
 
     @classmethod
     def _record_matches_family_variant(

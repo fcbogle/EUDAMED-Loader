@@ -12,7 +12,6 @@ export function useXmlWorkspaceState<PatchScenarioId extends string>(initialPatc
   const [selectedBulkRecordCount, setSelectedBulkRecordCount] = useState<number>(1);
   const [selectedPatchScenarioId, setSelectedPatchScenarioId] = useState<PatchScenarioId>(initialPatchScenarioId);
   const [marketInfoVersionInput, setMarketInfoVersionInput] = useState<string>("1");
-  const [acceptedMarketInfoItems, setAcceptedMarketInfoItems] = useState<MarketInfoScenarioItem[] | null>(null);
   const [marketInfoScenarioItems, setMarketInfoScenarioItems] = useState<MarketInfoScenarioItem[]>([
     { id: createMarketInfoScenarioId(), country: "", originalPlacedOnMarket: false },
   ]);
@@ -40,8 +39,6 @@ export function useXmlWorkspaceState<PatchScenarioId extends string>(initialPatc
     setSelectedPatchScenarioId,
     marketInfoVersionInput,
     setMarketInfoVersionInput,
-    acceptedMarketInfoItems,
-    setAcceptedMarketInfoItems,
     marketInfoScenarioItems,
     setMarketInfoScenarioItems,
     bulkMarketInfoScenarioItems,

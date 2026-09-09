@@ -44,7 +44,7 @@ type UsePatchScenarioStateArgs = {
   selectedCurrentStatusCode: string | null;
   selectedPatchWarningCodes: string[];
   selectedPatchStorageConditionMap: Map<string, string>;
-  hasReviewedPatchBaselinePost: boolean;
+  hasLoadedPatchBaseline: boolean;
   isSharedAnchorLoading: boolean;
   xmlPairPreview: PostRegistrationPreview | null;
   xmlPatchPreview: GeneratedPatchScenarioPreview | null;
@@ -73,7 +73,7 @@ export function usePatchScenarioState({
   selectedCurrentStatusCode,
   selectedPatchWarningCodes,
   selectedPatchStorageConditionMap,
-  hasReviewedPatchBaselinePost,
+  hasLoadedPatchBaseline,
   isSharedAnchorLoading,
   xmlPairPreview,
   xmlPatchPreview,
@@ -303,7 +303,7 @@ export function usePatchScenarioState({
   const selectedWarningRequiresComment = patchWarningCodeInput.trim().toUpperCase() === "CW999";
   const isPatchVersionValid = Number.isInteger(currentPatchVersion) && currentPatchVersion === requiredPatchVersion;
   const isPatchScenarioReady =
-    hasReviewedPatchBaselinePost &&
+    hasLoadedPatchBaseline &&
     selectedPatchScenario.implemented &&
     isPatchVersionValid &&
     (selectedPatchScenario.id === "equivalent_first_patch"
@@ -323,9 +323,9 @@ export function usePatchScenarioState({
                   : Object.values(patchStorageConditionInputs).some((value) => value.trim()));
 
   const patchScenarioReadinessMessage = !selectedPatchWorkspaceCatalogueNumber
-    ? "Generate the baseline POST for an XML-ready POST record first."
-    : !hasReviewedPatchBaselinePost
-      ? "Generate and review the POST for this exact selected record before drafting a PATCH."
+    ? "Select an XML-ready device with a successful registration first."
+    : !hasLoadedPatchBaseline
+      ? "Load the accepted baseline for this exact selected record before drafting a PATCH."
       : !patchVersionInput.trim()
         ? "Enter the required PATCH version integer."
         : !selectedPatchScenario.implemented
@@ -384,6 +384,6 @@ export function usePatchScenarioState({
     isPatchVersionValid,
     isPatchScenarioReady,
     patchScenarioReadinessMessage,
-    hasReviewedGeneratedPatchPreview: Boolean(matchesSelectedPatchPreview && xmlPatchPreview),
+    hasCurrentGeneratedPatchPreview: Boolean(matchesSelectedPatchPreview && xmlPatchPreview),
   };
 }

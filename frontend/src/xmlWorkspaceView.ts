@@ -1,25 +1,16 @@
 import type {
   BulkMarketInfoPreview,
   BulkPatchPreview,
-  BulkPostPreview,
   BulkUdidiPostPreview,
   MarketInfoPutPreview,
   OperationAssessment,
   PostRegistrationPreview,
-  SingleRecordXmlPreview,
   XmlValidationResult,
 } from "./types";
 import type { XmlWorkspaceRecord } from "./xmlWorkspace";
 
-export type XmlMode =
-  | "post"
-  | "single"
-  | "marketInfo"
-  | "patch"
-  | "bulkPost"
-  | "bulkUdidiPost"
-  | "bulkPatch"
-  | "bulkMarketInfo";
+import type { XmlMode } from "./useXmlOperationAssessment";
+export type { XmlMode } from "./useXmlOperationAssessment";
 
 export type AssessmentSummaryRow = {
   label: string;
@@ -28,7 +19,6 @@ export type AssessmentSummaryRow = {
 
 export function resolveSelectedBulkChunkCount(args: {
   xmlMode: XmlMode;
-  xmlBulkPostPreview: BulkPostPreview | null;
   xmlBulkUdidiPostPreview: BulkUdidiPostPreview | null;
   xmlBulkPatchPreview: BulkPatchPreview | null;
   xmlBulkMarketInfoPreview: BulkMarketInfoPreview | null;
@@ -38,7 +28,6 @@ export function resolveSelectedBulkChunkCount(args: {
 }): number {
   const {
     xmlMode,
-    xmlBulkPostPreview,
     xmlBulkUdidiPostPreview,
     xmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
@@ -46,9 +35,7 @@ export function resolveSelectedBulkChunkCount(args: {
     selectedBulkPatchSelectedCount,
     selectedXmlVariantChunkCount,
   } = args;
-  return xmlMode === "bulkPost"
-    ? xmlBulkPostPreview?.chunk_count ?? Math.max(Math.ceil(normalizedBulkRecordCount / 300), 1)
-    : xmlMode === "bulkUdidiPost"
+  return xmlMode === "bulkUdidiPost"
       ? xmlBulkUdidiPostPreview?.chunk_count ?? Math.max(Math.ceil(normalizedBulkRecordCount / 300), 1)
       : xmlMode === "bulkPatch"
         ? xmlBulkPatchPreview?.chunk_count ?? Math.max(Math.ceil(Math.max(selectedBulkPatchSelectedCount, 1) / 300), 1)
@@ -59,15 +46,12 @@ export function resolveSelectedBulkChunkCount(args: {
 
 export function resolveSelectedBulkPreview(args: {
   xmlMode: XmlMode;
-  xmlBulkPostPreview: BulkPostPreview | null;
   xmlBulkUdidiPostPreview: BulkUdidiPostPreview | null;
   xmlBulkPatchPreview: BulkPatchPreview | null;
   xmlBulkMarketInfoPreview: BulkMarketInfoPreview | null;
-}): BulkPostPreview | BulkUdidiPostPreview | BulkPatchPreview | BulkMarketInfoPreview | null {
-  const { xmlMode, xmlBulkPostPreview, xmlBulkUdidiPostPreview, xmlBulkPatchPreview, xmlBulkMarketInfoPreview } = args;
-  return xmlMode === "bulkPost"
-    ? xmlBulkPostPreview
-    : xmlMode === "bulkUdidiPost"
+}): BulkUdidiPostPreview | BulkPatchPreview | BulkMarketInfoPreview | null {
+  const { xmlMode, xmlBulkUdidiPostPreview, xmlBulkPatchPreview, xmlBulkMarketInfoPreview } = args;
+  return xmlMode === "bulkUdidiPost"
       ? xmlBulkUdidiPostPreview
       : xmlMode === "bulkPatch"
         ? xmlBulkPatchPreview
@@ -76,18 +60,11 @@ export function resolveSelectedBulkPreview(args: {
         : null;
 }
 
-export function resolveBulkPostReadinessMessage(count: number): string {
-  return count > 0
-    ? `Ready to generate ${count} unposted Basic UDI-DI parent${count === 1 ? "" : "s"}.`
-    : "All Basic UDI-DI parents for this variant already have successful parent DEVICE.POST entries. Use Bulk UDI-DI POST for additional child devices.";
-}
-
 export function resolveXmlPreviewLines(args: {
   xmlMode: XmlMode;
   xmlPairPreview: PostRegistrationPreview | null;
   selectedPostWorkspaceRecord: XmlWorkspaceRecord | null;
   selectedXmlRecord: XmlWorkspaceRecord | null;
-  xmlPreview: SingleRecordXmlPreview | null;
   selectedXmlMarketInfoRecord: XmlWorkspaceRecord | null;
   xmlMarketInfoPreview: MarketInfoPutPreview | null;
   xmlPatchPreview: { derived_patch_xml: string } | null;
@@ -95,7 +72,6 @@ export function resolveXmlPreviewLines(args: {
   selectedPatchScenarioStatus: string | null;
   selectedPatchScenarioTarget: string;
   patchVersionInput: string;
-  xmlBulkPostPreview: BulkPostPreview | null;
   xmlBulkUdidiPostPreview: BulkUdidiPostPreview | null;
   xmlBulkPatchPreview: BulkPatchPreview | null;
   xmlBulkMarketInfoPreview: BulkMarketInfoPreview | null;
@@ -108,8 +84,6 @@ export function resolveXmlPreviewLines(args: {
     xmlMode,
     xmlPairPreview,
     selectedPostWorkspaceRecord,
-    selectedXmlRecord,
-    xmlPreview,
     selectedXmlMarketInfoRecord,
     xmlMarketInfoPreview,
     xmlPatchPreview,
@@ -117,7 +91,6 @@ export function resolveXmlPreviewLines(args: {
     selectedPatchScenarioStatus,
     selectedPatchScenarioTarget,
     patchVersionInput,
-    xmlBulkPostPreview,
     xmlBulkUdidiPostPreview,
     xmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
@@ -137,16 +110,7 @@ export function resolveXmlPreviewLines(args: {
             `<udi-di>${selectedPostWorkspaceRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
           ].join("\n")
         : "<!-- No available Device UDI-DI POST candidate is currently available for the selected family and variant -->"
-    : xmlMode === "single"
-      ? selectedXmlRecord
-        ? xmlPreview?.xml ??
-          [
-            "<!-- Generate XML to load the schema-valid Push message preview -->",
-            `<catalogue-number>${selectedXmlRecord.catalogue_number ?? "PENDING"}</catalogue-number>`,
-            `<udi-di>${selectedXmlRecord.primary_udi_di ?? "PENDING"}</udi-di>`,
-          ].join("\n")
-        : "<!-- No XML-ready record is currently available for the selected family and variant -->"
-      : xmlMode === "marketInfo"
+    : xmlMode === "marketInfo"
         ? selectedXmlMarketInfoRecord
           ? xmlMarketInfoPreview?.xml ??
             [
@@ -165,16 +129,7 @@ export function resolveXmlPreviewLines(args: {
               `<target>${selectedPatchScenarioTarget}</target>`,
               `<patch-version>${patchVersionInput || "PENDING"}</patch-version>`,
             ].join("\n")
-          : xmlMode === "bulkPost"
-            ? xmlBulkPostPreview?.selected_chunk_xml ??
-              [
-                "<!-- Generate XML to preview the selected bulk Basic UDI POST chunk -->",
-                `<product-family>${selectedXmlFamilyProductFamily ?? "PENDING"}</product-family>`,
-                `<product-variant>${selectedXmlVariantProductVariant ?? "PENDING"}</product-variant>`,
-                `<record-count>${normalizedBulkRecordCount}</record-count>`,
-                `<chunk-sequence>${selectedXmlChunkSequence}</chunk-sequence>`,
-              ].join("\n")
-            : xmlMode === "bulkUdidiPost"
+          : xmlMode === "bulkUdidiPost"
               ? xmlBulkUdidiPostPreview?.selected_chunk_xml ??
                 [
                   "<!-- Generate XML to preview the selected bulk UDI-DI POST chunk -->",
@@ -207,10 +162,8 @@ export function resolveXmlPreviewLines(args: {
 export function resolveSelectedBatchValidation(args: {
   xmlMode: XmlMode;
   xmlPairPreview: PostRegistrationPreview | null;
-  xmlPreview: SingleRecordXmlPreview | null;
   xmlMarketInfoPreview: MarketInfoPutPreview | null;
   xmlPatchPreview: { derived_patch_validation: XmlValidationResult } | null;
-  xmlBulkPostPreview: BulkPostPreview | null;
   xmlBulkUdidiPostPreview: BulkUdidiPostPreview | null;
   xmlBulkPatchPreview: BulkPatchPreview | null;
   xmlBulkMarketInfoPreview: BulkMarketInfoPreview | null;
@@ -218,25 +171,19 @@ export function resolveSelectedBatchValidation(args: {
   const {
     xmlMode,
     xmlPairPreview,
-    xmlPreview,
     xmlMarketInfoPreview,
     xmlPatchPreview,
-    xmlBulkPostPreview,
     xmlBulkUdidiPostPreview,
     xmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
   } = args;
   return xmlMode === "post"
     ? xmlPairPreview?.post_validation ?? null
-    : xmlMode === "single"
-      ? xmlPreview?.validation ?? null
-      : xmlMode === "marketInfo"
+    : xmlMode === "marketInfo"
         ? xmlMarketInfoPreview?.validation ?? null
         : xmlMode === "patch"
           ? xmlPatchPreview?.derived_patch_validation ?? null
-          : xmlMode === "bulkPost"
-            ? xmlBulkPostPreview?.selected_chunk_validation ?? null
-            : xmlMode === "bulkUdidiPost"
+          : xmlMode === "bulkUdidiPost"
               ? xmlBulkUdidiPostPreview?.selected_chunk_validation ?? null
               : xmlMode === "bulkPatch"
                 ? xmlBulkPatchPreview?.selected_chunk_validation ?? null
@@ -244,13 +191,9 @@ export function resolveSelectedBatchValidation(args: {
 }
 
 export function resolveGenericPreviewTitle(xmlMode: XmlMode): string {
-  return xmlMode === "single"
-    ? "Single Record XML Preview"
-    : xmlMode === "marketInfo"
+  return xmlMode === "marketInfo"
       ? "Market Info Preview"
-      : xmlMode === "bulkPost"
-        ? "Bulk Basic UDI POST Preview"
-        : xmlMode === "bulkUdidiPost"
+      : xmlMode === "bulkUdidiPost"
           ? "Bulk UDI-DI POST Preview"
           : xmlMode === "bulkPatch"
             ? "Bulk PATCH Preview"
@@ -259,27 +202,17 @@ export function resolveGenericPreviewTitle(xmlMode: XmlMode): string {
 
 export function resolveGenericPreviewStatusMessage(args: {
   xmlMode: XmlMode;
-  xmlPreview: SingleRecordXmlPreview | null;
   xmlMarketInfoPreview: MarketInfoPutPreview | null;
-  xmlBulkPostPreview: BulkPostPreview | null;
   xmlBulkUdidiPostPreview: BulkUdidiPostPreview | null;
   xmlBulkPatchPreview: BulkPatchPreview | null;
   xmlBulkMarketInfoPreview: BulkMarketInfoPreview | null;
 }): string {
-  const { xmlMode, xmlPreview, xmlMarketInfoPreview, xmlBulkPostPreview, xmlBulkUdidiPostPreview, xmlBulkPatchPreview, xmlBulkMarketInfoPreview } = args;
-  return xmlMode === "single"
-    ? xmlPreview
-      ? `Preview generated for ${xmlPreview.product_family} / ${xmlPreview.product_variant} / ${xmlPreview.catalogue_number}.`
-      : "No XML preview generated yet for the selected row."
-    : xmlMode === "marketInfo"
+  const { xmlMode, xmlMarketInfoPreview, xmlBulkUdidiPostPreview, xmlBulkPatchPreview, xmlBulkMarketInfoPreview } = args;
+  return xmlMode === "marketInfo"
       ? xmlMarketInfoPreview
         ? `MARKET_INFO.PUT preview generated for ${xmlMarketInfoPreview.product_family} / ${xmlMarketInfoPreview.product_variant} / ${xmlMarketInfoPreview.catalogue_number}.`
         : "No MARKET_INFO.PUT preview generated yet for the registered testing anchor."
-      : xmlMode === "bulkPost"
-        ? xmlBulkPostPreview
-          ? `Bulk Basic UDI POST preview generated for ${xmlBulkPostPreview.product_family} / ${xmlBulkPostPreview.product_variant}, chunk ${xmlBulkPostPreview.selected_chunk_sequence}.`
-          : "No bulk Basic UDI POST preview generated yet for the selected variant."
-        : xmlMode === "bulkUdidiPost"
+      : xmlMode === "bulkUdidiPost"
           ? xmlBulkUdidiPostPreview
             ? `Bulk UDI-DI POST preview generated for ${xmlBulkUdidiPostPreview.product_family} / ${xmlBulkUdidiPostPreview.product_variant}, chunk ${xmlBulkUdidiPostPreview.selected_chunk_sequence}.`
             : "No bulk UDI-DI POST preview generated yet for the selected variant."
@@ -293,9 +226,7 @@ export function resolveGenericPreviewStatusMessage(args: {
 }
 
 export function resolveBulkChunkSummaryTitle(xmlMode: XmlMode): string {
-  return xmlMode === "bulkPost"
-    ? "Bulk Basic UDI POST chunk summary"
-    : xmlMode === "bulkUdidiPost"
+  return xmlMode === "bulkUdidiPost"
       ? "Bulk UDI-DI POST chunk summary"
       : xmlMode === "bulkPatch"
         ? "Bulk PATCH chunk summary"
@@ -312,15 +243,11 @@ export function resolveXmlModeUi(xmlMode: XmlMode): {
     label:
       xmlMode === "post"
         ? "POST"
-        : xmlMode === "single"
-          ? "Single XML"
-          : xmlMode === "marketInfo"
+        : xmlMode === "marketInfo"
             ? "Market Info"
             : xmlMode === "patch"
               ? "Patch XML"
-              : xmlMode === "bulkPost"
-                ? "Bulk Basic UDI POST"
-                : xmlMode === "bulkUdidiPost"
+              : xmlMode === "bulkUdidiPost"
                   ? "Bulk UDI-DI POST"
                   : xmlMode === "bulkPatch"
                     ? "Bulk PATCH"
@@ -328,15 +255,11 @@ export function resolveXmlModeUi(xmlMode: XmlMode): {
     description:
       xmlMode === "post"
         ? "Generate one accepted registration POST for a selected XML-ready device record."
-        : xmlMode === "single"
-          ? "Generate one wrapped Push message for a selected XML-ready device record."
-          : xmlMode === "marketInfo"
+        : xmlMode === "marketInfo"
             ? "Generate one standalone MARKET_INFO.PUT message for a selected XML-ready record."
             : xmlMode === "patch"
               ? "Generate one scenario-derived PATCH draft at a time from the accepted POST or the latest accepted PATCH."
-              : xmlMode === "bulkPost"
-                ? "Generate one parent DEVICE.POST per Basic UDI-DI that is not already registered."
-                : xmlMode === "bulkUdidiPost"
+              : xmlMode === "bulkUdidiPost"
                   ? "Generate Device UDI-DI POST messages only for devices under an already accepted Basic UDI-DI."
                   : xmlMode === "bulkPatch"
                     ? "Generate a chunked bulk PATCH package that applies one PATCH scenario across the selected bulk POST cohort."
@@ -344,15 +267,11 @@ export function resolveXmlModeUi(xmlMode: XmlMode): {
     workspaceTitle:
       xmlMode === "post"
         ? "POST Workspace"
-        : xmlMode === "single"
-          ? "Single Record Workspace"
-          : xmlMode === "marketInfo"
+        : xmlMode === "marketInfo"
             ? "Market Info Workspace"
             : xmlMode === "patch"
               ? "Patch Scenario Workspace"
-              : xmlMode === "bulkPost"
-                ? "Bulk Basic UDI POST Workspace"
-                : xmlMode === "bulkUdidiPost"
+              : xmlMode === "bulkUdidiPost"
                   ? "Bulk UDI-DI POST Workspace"
                   : xmlMode === "bulkPatch"
                     ? "Bulk PATCH Workspace"
@@ -364,9 +283,7 @@ export function resolveXmlModeUi(xmlMode: XmlMode): {
           ? "Market Info assessment"
         : xmlMode === "patch"
           ? "PATCH assessment"
-          : xmlMode === "bulkPost"
-            ? "Bulk Basic UDI POST assessment"
-            : xmlMode === "bulkUdidiPost"
+          : xmlMode === "bulkUdidiPost"
               ? "Bulk UDI-DI POST assessment"
               : xmlMode === "bulkPatch"
                 ? "Bulk PATCH assessment"
@@ -378,7 +295,7 @@ export function resolveXmlAssessmentSummaryRows(args: {
   xmlMode: XmlMode;
   xmlOperationAssessment: OperationAssessment | null;
   assessedPatchLatestAcceptedVersion: string | null;
-  assessedPatchReviewedBaseline: boolean | null;
+  assessedPostReviewHistory: boolean | null;
   assessedPatchTrackedRegistration: boolean | null;
   assessedMarketInfoCurrentVersion: string | null;
   assessedSelectedBasicUdiDi: string | null;
@@ -395,7 +312,7 @@ export function resolveXmlAssessmentSummaryRows(args: {
     xmlMode,
     xmlOperationAssessment,
     assessedPatchLatestAcceptedVersion,
-    assessedPatchReviewedBaseline,
+    assessedPostReviewHistory,
     assessedPatchTrackedRegistration,
     assessedMarketInfoCurrentVersion,
     assessedSelectedBasicUdiDi,
@@ -448,9 +365,9 @@ export function resolveXmlAssessmentSummaryRows(args: {
             value: assessedPatchLatestAcceptedVersion ?? "Not tracked",
           },
           {
-            label: "Reviewed baseline POST",
+            label: "POST review history",
             value:
-              assessedPatchReviewedBaseline === null ? "Unknown" : assessedPatchReviewedBaseline ? "Present" : "Missing",
+              assessedPostReviewHistory === null ? "Unknown" : assessedPostReviewHistory ? "Present" : "Missing",
           },
           {
             label: "Tracked registration",

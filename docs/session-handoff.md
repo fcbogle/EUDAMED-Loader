@@ -7,7 +7,7 @@ Continue refining the XML workspaces so the UI and backend now clearly separate:
 - `POST`
 - `Patch XML`
 - `Market Info`
-- `Bulk Basic UDI POST`
+- `Bulk Basic UDI POST` (backend/API-only)
 - `Bulk UDI-DI POST`
 - `Bulk PATCH`
 - `Bulk Market Info`
@@ -27,6 +27,18 @@ with the current implementation focus now being:
 - `Current Repo State` sections below should be treated as authoritative for the next session.
 - `Historical Playground Findings` sections capture dated evidence and prior decisions.
 - Any recorded test counts in this document are historical snapshots only. Re-run verification from the current worktree before relying on them.
+
+## Current Repo State: September 9, 2026 — XML Workflow Consolidation
+
+- Implemented the authorized consolidation while retaining the six visible XML workspaces. Bulk Basic UDI POST is API-only; its inaccessible UI branch and the old Single XML branch were removed.
+- Accepted-state resolution is shared by XML generation and read models. New POST contexts capture the full XML projection. PATCH retains the accepted device baseline and the latest separately accepted Market Info country list after source changes. Older partial snapshots remain compatible, with their historical-data limits documented.
+- Late/duplicate acknowledgements cannot roll back newer accepted state. Identified acknowledgements no longer attach to an arbitrary latest draft. Bulk Market Info downloads now record per-device generation context using the actual downloaded chunk envelope IDs.
+- Frontend readiness uses backend per-record assessments. Bulk selections use backend posted-parent/device queries; estimated workbook cohorts and sample fallbacks were removed. Initial assessment and acknowledgement refresh share the same dispatcher and exact device identity, with a guard against stale upload completion.
+- Consolidated identity normalization and removed disconnected frontend API methods, state, preview types and the unused generic preview panel.
+- **Review decision implemented:** preview generation is a check; ZIP download confirms review of the exact packaged contents across all flows. The shared package recorder stores nullable `reviewed_at`, `review_basis`, and `reviewed_members_json` fields alongside the archive hash. Edited drafts require another download; old receipts remain history. Removed the optional reviewed-POST generation gate and renamed frontend loaded-preview checks to avoid implying review. Acceptance still requires a successful acknowledgement.
+- Changes are uncommitted. No live Playground operation, application database update or deployment was performed. The additive SQLite review-column migration is implemented and tested in isolated databases; it runs on application initialization and leaves historical package rows unreviewed.
+- Verification: the full backend run passed 147 tests. All 15 focused ZIP-review tests also passed, including the additional accepted-state regression added during the full run (148 distinct backend tests exercised). All 11 frontend tests and the production build pass; the existing Vite bundle-size warning remains. No browser visual comparison or live Playground submission was performed.
+- Details and compatibility limits: [XML workflow consolidation](code-consolidation-2026-09-09.md).
 
 ## Current Repo State: September 7, 2026 — Unused Code Cleanup
 

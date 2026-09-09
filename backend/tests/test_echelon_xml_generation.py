@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
+import sqlite3
 from io import BytesIO
 from types import SimpleNamespace
 from typing import cast
@@ -32,6 +34,18 @@ from app.services.xml_generation import XmlGenerationService
 from app.services.xml_rendering import EudamedMessageRenderer
 from app.services.xml_selection import ValidationRecordSelector
 from app.validation_models import CanonicalValidationBundle, CanonicalValidationRecord
+
+
+def _assert_zip_review_recorded(package_bytes: bytes) -> None:
+    with sqlite3.connect(get_settings().testing_state_db_path) as connection:
+        receipt = connection.execute(
+            "SELECT reviewed_at, review_basis, reviewed_members_json FROM generated_packages WHERE package_sha256 = ?",
+            (hashlib.sha256(package_bytes).hexdigest(),),
+        ).fetchone()
+    assert receipt is not None
+    assert receipt[0] is not None
+    assert receipt[1] == "zip_download"
+    assert receipt[2] is not None
 
 
 @pytest.fixture
@@ -724,6 +738,7 @@ def test_market_info_put_routes_return_payloads(route_xml_service_without_import
 
     assert response.media_type == "application/zip"
     assert 'filename="echelon-echelon-market-info-put-EC22L1S.zip"' in response.headers["Content-Disposition"]
+    _assert_zip_review_recorded(response.body)
     with ZipFile(BytesIO(response.body)) as archive:
         assert "echelon-echelon-market-info-put-EC22L1S.xml" in archive.namelist()
         assert "manifest.json" in archive.namelist()
@@ -772,6 +787,7 @@ def test_market_info_put_routes_accept_override_countries(route_xml_service_with
     )
 
     assert response.media_type == "application/zip"
+    _assert_zip_review_recorded(response.body)
     with ZipFile(BytesIO(response.body)) as archive:
         xml_member = archive.read("echelon-echelon-market-info-put-EC22L1S.xml")
         assert b"<marketinfo:country>FR</marketinfo:country>" in xml_member
@@ -861,6 +877,7 @@ def test_generic_batch_download_route_returns_zip_package(route_xml_service_with
     assert response.media_type == "application/zip"
     assert 'filename="echelon-echelon-vt-batch-package.zip"' in response.headers["Content-Disposition"]
 
+    _assert_zip_review_recorded(response.body)
     with ZipFile(BytesIO(response.body)) as archive:
         names = archive.namelist()
         assert "manifest.json" in names
@@ -1179,6 +1196,7 @@ def test_generated_patch_scenario_download_route_returns_zip_package(route_xml_s
 
     assert response.media_type == "application/zip"
     assert 'filename="echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.zip"' in response.headers["Content-Disposition"]
+    _assert_zip_review_recorded(response.body)
     with ZipFile(BytesIO(response.body)) as archive:
         members = archive.namelist()
         patch_xml = archive.read("echelon-echelon-vac-patch-trade-name-edit-EVAC22L1S.xml")
@@ -1287,7 +1305,7 @@ def test_generated_patch_scenario_route_requires_tracked_successful_post_for_ver
         XmlGenerationService.preview_generated_patch_scenario = original
 
 
-def test_post_download_marks_reviewed_post_for_following_patch_generation() -> None:
+def test_post_download_records_review_history_without_gating_patch_preview() -> None:
     service = XmlGenerationService()
     service.preview_post_registration(
         product_family="Echelon",
@@ -1367,12 +1385,13 @@ def test_download_bulk_post_scans_full_variant_population_before_message_cap(mon
         lambda **kwargs: (kwargs["records"][:1], kwargs["excluded_records"], 1),
     )
 
-    service.download_bulk_post(
+    _, downloaded_bytes = service.download_bulk_post(
         product_family="Echelon",
         product_variant="Echelon VAC",
         record_count=1,
     )
 
+    _assert_zip_review_recorded(downloaded_bytes)
     assert requested_counts == [None, None]
 
 
@@ -1407,12 +1426,13 @@ def test_download_bulk_udidi_post_scans_full_variant_population_before_message_c
 
     monkeypatch.setattr(service, "_variant_post_records_with_exclusions", spy)
 
-    service.download_bulk_udidi_post(
+    _, downloaded_bytes = service.download_bulk_udidi_post(
         product_family="Elite",
         product_variant="EliteVT",
         record_count=1,
     )
 
+    _assert_zip_review_recorded(downloaded_bytes)
     assert requested_counts == [None, None]
 
 
@@ -1521,6 +1541,7 @@ def test_bulk_patch_download_packages_exactly_the_preview_included_records(monke
         selected_catalogue_numbers=selected_children,
     )
 
+    _assert_zip_review_recorded(package_bytes)
     with ZipFile(BytesIO(package_bytes)) as archive:
         xml_members = [name for name in archive.namelist() if name.endswith(".xml")]
         assert len(xml_members) == 1

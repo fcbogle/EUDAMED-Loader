@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 
-import { api } from "./api";
+import { requestXmlAssessment } from "./xmlAssessmentRequest";
 import type { OperationAssessment } from "./types";
 
 export type XmlMode =
   | "post"
-  | "single"
   | "marketInfo"
-  | "bulkPost"
   | "bulkUdidiPost"
   | "patch"
   | "bulkPatch"
@@ -46,12 +44,6 @@ export function useXmlOperationAssessment({
       setIsLoadingXmlOperationAssessment(false);
       return;
     }
-    if (xmlMode === "single") {
-      setXmlOperationAssessment(null);
-      setXmlOperationAssessmentError(null);
-      setIsLoadingXmlOperationAssessment(false);
-      return;
-    }
 
     let cancelled = false;
     setIsLoadingXmlOperationAssessment(true);
@@ -60,26 +52,13 @@ export function useXmlOperationAssessment({
 
     void (async () => {
       try {
-        const assessment =
-          xmlMode === "post"
-            ? await api.assessSinglePost(selectedProductFamily, selectedProductVariant)
-            : xmlMode === "patch"
-              ? await api.assessSinglePatch(selectedProductFamily, selectedProductVariant, selectedPatchCatalogueNumber)
-              : xmlMode === "marketInfo"
-                ? await api.assessSingleMarketInfo(selectedProductFamily, selectedProductVariant)
-              : xmlMode === "bulkPatch"
-                ? await api.assessBulkPatch(
-                    selectedProductFamily,
-                    selectedProductVariant,
-                    selectedBulkPatchBasicUdiDi || undefined,
-                  )
-                : xmlMode === "bulkMarketInfo"
-                  ? await api.assessBulkMarketInfo(
-                      selectedProductFamily,
-                      selectedProductVariant,
-                      selectedBulkMarketInfoBasicUdiDi || undefined,
-                    )
-                : await api.assessBulkPost(selectedProductFamily, selectedProductVariant);
+        const assessment = await requestXmlAssessment({
+          mode: xmlMode,
+          productFamily: selectedProductFamily,
+          productVariant: selectedProductVariant,
+          catalogueNumber: xmlMode === "patch" || xmlMode === "marketInfo" ? selectedPatchCatalogueNumber : null,
+          basicUdiDi: xmlMode === "bulkMarketInfo" ? selectedBulkMarketInfoBasicUdiDi : selectedBulkPatchBasicUdiDi,
+        });
         if (!cancelled) {
           setXmlOperationAssessment(assessment);
         }

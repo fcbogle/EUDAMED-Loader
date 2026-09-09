@@ -3,17 +3,13 @@ import { useState } from "react";
 import type {
   BulkMarketInfoPreview,
   BulkPatchPreview,
-  BulkPostPreview,
   BulkUdidiPostPreview,
   GeneratedPatchScenarioPreview,
   MarketInfoPutPreview,
   PostRegistrationPreview,
-  SingleRecordXmlPreview,
 } from "./types";
 
 export function useXmlPreviewState() {
-  const [xmlPreview, setXmlPreview] = useState<SingleRecordXmlPreview | null>(null);
-  const [xmlBulkPostPreview, setXmlBulkPostPreview] = useState<BulkPostPreview | null>(null);
   const [xmlBulkUdidiPostPreview, setXmlBulkUdidiPostPreview] = useState<BulkUdidiPostPreview | null>(null);
   const [xmlPairPreview, setXmlPairPreview] = useState<PostRegistrationPreview | null>(null);
   const [xmlMarketInfoPreview, setXmlMarketInfoPreview] = useState<MarketInfoPutPreview | null>(null);
@@ -27,10 +23,6 @@ export function useXmlPreviewState() {
   const [selectedPatchXmlSectionId, setSelectedPatchXmlSectionId] = useState<string | null>(null);
 
   return {
-    xmlPreview,
-    setXmlPreview,
-    xmlBulkPostPreview,
-    setXmlBulkPostPreview,
     xmlBulkUdidiPostPreview,
     setXmlBulkUdidiPostPreview,
     xmlPairPreview,

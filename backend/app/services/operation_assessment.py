@@ -16,6 +16,33 @@ class OperationAssessmentService:
         self.testing_read_model = TestingReadModelService()
         self.testing_state_store = self.xml_service.testing_state_store
 
+    def record_readiness(self) -> list[dict[str, object]]:
+        """The same per-record rules used by operation assessment, for dashboard counts."""
+        try:
+            records = self.xml_service._validation_bundle().records
+        except ValueError:
+            return []  # First-run UI: import is required before any operation is eligible.
+        result = []
+        for record in records:
+            if record.xml_readiness.status != "complete" or (record.submission_operation or "").upper() != "POST":
+                continue
+            post = self._assess_single_post_record(record)
+            patch = self._assess_single_patch_record(record)
+            market = self._assess_single_market_info_record(record)
+            result.append({
+                "product_family": record.product_family,
+                "product_variant": record.product_variant,
+                "catalogue_number": record.catalogue_number,
+                "primary_udi_di": record.primary_udi_di,
+                "basic_udi_di": post.evidence.get("candidate_basic_udi_di"),
+                "parent_registered": bool(post.evidence.get("parent_registration_known")),
+                "post_ready": post.status == "available",
+                "child_post_ready": post.status == "available" and bool(post.evidence.get("parent_registration_known")),
+                "patch_ready": patch.status == "available",
+                "market_info_ready": market.status == "available",
+            })
+        return result
+
     def assess_single_post(
         self,
         *,
@@ -285,12 +312,12 @@ class OperationAssessmentService:
                     f"Bulk POST is available. {eligible_parent_group_count} parent Basic UDI-DI groups and "
                     f"{eligible_child_record_count} Device UDI-DI records are currently eligible."
                 )
-                recommended_next_action = "Choose whether to generate parent POSTs first or child POSTs under already registered parents."
+                recommended_next_action = "Use Single POST for new parents or Bulk POST for children of registered parents."
             elif eligible_parent_group_count > 0:
                 summary_message = (
                     f"Bulk POST is available. {eligible_parent_group_count} parent Basic UDI-DI groups can be posted now."
                 )
-                recommended_next_action = "Generate the parent Bulk POST package for the eligible Basic UDI-DI groups."
+                recommended_next_action = "Use Single POST to register each new Basic UDI-DI with its first device."
             else:
                 summary_message = (
                     f"Bulk POST is available. {eligible_child_record_count} Device UDI-DI records can be posted under already registered parents."
@@ -550,22 +577,14 @@ class OperationAssessmentService:
                 },
             )
 
-        mismatch_count = 0
         ready_record_count = 0
         current_versions: set[str] = set()
-        baseline_signature: tuple[tuple[str, bool], ...] | None = None
         accepted_state_sources: set[str] = set()
         blocking_reasons: list[str] = []
         for record in selected_records:
             market_info_record, baseline_market_countries, current_version = self.xml_service._market_info_record_with_latest_state(
                 record=record
             )
-            record_signature = self.xml_service._market_country_signature(market_info_record.market_countries)
-            if baseline_signature is None:
-                baseline_signature = record_signature
-            elif record_signature != baseline_signature:
-                mismatch_count += 1
-                continue
             ready_record_count += 1
             current_versions.add(current_version)
             accepted_state_sources.add(
@@ -577,20 +596,12 @@ class OperationAssessmentService:
         status = "available"
         if ready_record_count < 1:
             status = "blocked"
-            if mismatch_count > 0:
-                blocking_reasons.append(
-                    "Accepted market-country state differs across the selected cohort, so one shared Bulk Market Info scenario cannot be generated."
-                )
             if missing_variant_records:
                 blocking_reasons.append(
                     f"{len(missing_variant_records)} tracked posted device(s) are not currently XML-ready and cannot be included."
                 )
-        elif mismatch_count > 0 or missing_variant_records:
+        elif missing_variant_records:
             status = "attention"
-            if mismatch_count > 0:
-                blocking_reasons.append(
-                    f"{mismatch_count} selected device(s) would be excluded because their accepted market-country state differs from the cohort baseline."
-                )
             if missing_variant_records:
                 blocking_reasons.append(
                     f"{len(missing_variant_records)} tracked posted device(s) are not currently XML-ready and would be excluded from Bulk Market Info."
@@ -632,7 +643,7 @@ class OperationAssessmentService:
                 "eligible_child_record_count": eligible_child_records,
                 "market_info_ready_record_count": ready_record_count,
                 "current_market_info_version_summary": version_summary,
-                "market_info_state_mismatch_count": mismatch_count,
+                "market_info_state_mismatch_count": 0,
                 "missing_variant_record_count": len(missing_variant_records),
                 "accepted_state_sources": sorted(accepted_state_sources),
                 "available_parent_groups": parent_groups,
@@ -715,6 +726,7 @@ class OperationAssessmentService:
 
     def _assess_single_patch_record(self, record: CanonicalValidationRecord) -> OperationAssessment:
         basic_udi_di = self.xml_service._bulk_record_summary(record).basic_udi_di
+        # Compatibility evidence: POST review history is not a prerequisite for drafting.
         reviewed_post_baseline_present = self.testing_state_store.has_reviewed_post(
             product_family=record.product_family,
             product_variant=record.product_variant,

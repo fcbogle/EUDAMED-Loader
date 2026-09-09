@@ -25,7 +25,7 @@ type PatchScenarioCardProps = {
   patchDeviceOptions: PatchDeviceOption[];
   onPatchDeviceChange: (catalogueNumber: string) => void;
   currentAcceptedPatchLabel: string;
-  hasReviewedPatchBaselinePost: boolean;
+  hasLoadedPatchBaseline: boolean;
   selectedPatchScenarioSummary: string;
   patchDraftComparisonRows: PatchDraftComparisonRow[];
   currentAcceptedPatchVersion: number;
@@ -71,7 +71,7 @@ export function PatchScenarioCard({
   patchDeviceOptions,
   onPatchDeviceChange,
   currentAcceptedPatchLabel,
-  hasReviewedPatchBaselinePost,
+  hasLoadedPatchBaseline,
   selectedPatchScenarioSummary,
   patchDraftComparisonRows,
   currentAcceptedPatchVersion,
@@ -120,14 +120,14 @@ export function PatchScenarioCard({
         </div>
         <p className="draft-meta">Parent POST {selectedPatchWorkspaceCatalogueNumber ?? "Not resolved"} · Current accepted base {currentAcceptedPatchLabel}</p>
         <div className="family-scope-pill-row xml-status-row">
-          <span className={hasReviewedPatchBaselinePost ? "status-pill ok compact" : "status-pill warn compact"}>
-            {hasReviewedPatchBaselinePost ? "Baseline POST reviewed" : "Baseline POST required"}
+          <span className={hasLoadedPatchBaseline ? "status-pill ok compact" : "status-pill warn compact"}>
+            {hasLoadedPatchBaseline ? "Accepted baseline loaded" : "Accepted baseline required"}
           </span>
           <span className="status-pill ok compact">Parent POST</span>
           <span className="status-pill ok compact">{selectedPatchWorkspaceCatalogueNumber ?? "Not resolved"}</span>
         </div>
         <p className="panel-copy">{selectedPatchScenarioSummary}</p>
-        {hasReviewedPatchBaselinePost ? (
+        {hasLoadedPatchBaseline ? (
           <>
             <div className="patch-compare-grid">
               <div className="patch-compare-card">
@@ -418,10 +418,10 @@ export function PatchScenarioCard({
           </>
         ) : (
           <div className="workflow-note patch-readiness-note">
-            <strong>POST review required</strong>
+            <strong>Accepted baseline required</strong>
             <span>
-              Generate and review `POST` for `{selectedPatchWorkspaceCatalogueNumber ?? "the selected device"}` first.
-              Scenario drafting stays blocked until that exact baseline POST has been loaded in this session.
+              Load the accepted baseline for `{selectedPatchWorkspaceCatalogueNumber ?? "the selected device"}` first.
+              Scenario drafting requires the matching accepted baseline; downloading the ZIP confirms review.
             </span>
           </div>
         )}

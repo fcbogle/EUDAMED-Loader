@@ -3,10 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import hashlib
+from io import BytesIO
+from zipfile import ZipFile
 import json
 import sqlite3
 from typing import Any
 
+from app.services.identity import normalize_identity, normalized_family_candidates
+from app.services.accepted_state import accepted_device_state, accepted_post_state, accepted_market_state
 from app.config import get_settings
 from app.xml_models import CriticalWarningXmlItem, PatchStateSnapshot, StorageConditionXmlItem
 
@@ -44,11 +48,24 @@ class TestingStateStore:
         members: list[tuple[str, bytes]],
         manifest: dict[str, Any],
         package_bytes: bytes,
+        confirms_review: bool = False,
     ) -> None:
-        """Record ZIP creation metadata without duplicating the archive in SQLite."""
+        """Record package metadata; an explicit ZIP download reviews only these bytes.
+
+        Creation alone is not review. Historical rows are never backfilled as reviewed.
+        A review receipt fingerprints every archive member, including the manifest,
+        without copying XML or ZIP contents into the database.
+        """
         created_at = datetime.now(UTC).isoformat(timespec="milliseconds")
         member_file_names = [file_name for file_name, _ in members]
         xml_member_count = sum(file_name.lower().endswith(".xml") for file_name in member_file_names)
+        reviewed_members = None
+        if confirms_review:
+            with ZipFile(BytesIO(package_bytes)) as archive:
+                reviewed_members = [
+                    {"file_name": member.filename, "sha256": hashlib.sha256(archive.read(member)).hexdigest()}
+                    for member in archive.infolist() if not member.is_dir()
+                ]
         with self._connect() as connection:
             connection.execute(
                 """
@@ -66,8 +83,11 @@ class TestingStateStore:
                     xml_member_count,
                     member_file_names_json,
                     manifest_json,
-                    package_sha256
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    package_sha256,
+                    reviewed_at,
+                    review_basis,
+                    reviewed_members_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     created_at,
@@ -84,8 +104,16 @@ class TestingStateStore:
                     json.dumps(member_file_names),
                     json.dumps(manifest, sort_keys=True),
                     hashlib.sha256(package_bytes).hexdigest(),
+                    created_at if confirms_review else None,
+                    "zip_download" if confirms_review else None,
+                    json.dumps(reviewed_members, sort_keys=True) if confirms_review else None,
                 ),
             )
+            if confirms_review and flow == "post_registration" and product_family and product_variant and catalogue_number:
+                self._record_post_review_history(
+                    connection, product_family=product_family,
+                    product_variant=product_variant, catalogue_number=catalogue_number,
+                )
 
     def latest_successful_patch_state(
         self,
@@ -99,11 +127,11 @@ class TestingStateStore:
             product_variant=product_variant,
             catalogue_number=catalogue_number,
         )
-        patch_state_json = row["latest_successful_patch_state_json"] or row["latest_successful_state_json"] if row is not None else None
-        if row is None or not patch_state_json:
+        if row is None:
             return None
-        latest_state = json.loads(str(patch_state_json))
-        if not isinstance(latest_state, dict):
+        with self._connect() as connection:
+            latest_state = accepted_device_state(connection, row)
+        if latest_state is None:
             return None
         version = str(latest_state.get("version") or "").strip()
         if not version:
@@ -135,13 +163,17 @@ class TestingStateStore:
             product_variant=product_variant,
             catalogue_number=catalogue_number,
         )
-        if row is None or not row["latest_successful_market_info_state_json"]:
+        if row is None:
             return None
-        try:
-            latest_state = json.loads(str(row["latest_successful_market_info_state_json"]))
-        except (TypeError, ValueError, json.JSONDecodeError):
+        with self._connect() as connection:
+            return accepted_market_state(connection, row)
+
+    def accepted_post_state(self, *, product_family: str, product_variant: str, catalogue_number: str) -> dict[str, Any] | None:
+        row = self._subject_row(product_family=product_family, product_variant=product_variant, catalogue_number=catalogue_number)
+        if row is None:
             return None
-        return latest_state if isinstance(latest_state, dict) else None
+        with self._connect() as connection:
+            return accepted_post_state(connection, row)
 
     def latest_successful_market_info_version(
         self,
@@ -434,47 +466,48 @@ class TestingStateStore:
             ).fetchone()
         return row is not None
 
-    def mark_reviewed_post(
+    def _record_post_review_history(
         self,
+        connection: sqlite3.Connection,
         *,
         product_family: str,
         product_variant: str,
         catalogue_number: str,
     ) -> None:
-        with self._connect() as connection:
-            device_subject_id = self._resolve_device_subject_id(
-                connection,
-                product_family=product_family,
-                product_variant=product_variant,
-                catalogue_number=catalogue_number,
-                primary_udi_di=None,
-            )
-            connection.execute(
-                """
-                INSERT INTO reviewed_post_baselines (
-                    device_subject_id,
-                    normalized_product_family,
-                    normalized_product_variant,
-                    normalized_catalogue_number,
-                    product_family,
-                    product_variant,
-                    catalogue_number
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(normalized_product_family, normalized_product_variant, normalized_catalogue_number)
-                DO UPDATE SET
-                    reviewed_at = CURRENT_TIMESTAMP,
-                    device_subject_id = COALESCE(excluded.device_subject_id, reviewed_post_baselines.device_subject_id)
-                """,
-                (
-                    device_subject_id,
-                    self._normalize_identity(product_family),
-                    self._normalize_identity(product_variant),
-                    self._normalize_identity(catalogue_number),
-                    self._optional_string(product_family),
-                    self._optional_string(product_variant),
-                    self._optional_string(catalogue_number),
-                ),
-            )
+        """Maintain the legacy POST history indicator after its ZIP receipt is recorded."""
+        device_subject_id = self._resolve_device_subject_id(
+            connection,
+            product_family=product_family,
+            product_variant=product_variant,
+            catalogue_number=catalogue_number,
+            primary_udi_di=None,
+        )
+        connection.execute(
+            """
+            INSERT INTO reviewed_post_baselines (
+                device_subject_id,
+                normalized_product_family,
+                normalized_product_variant,
+                normalized_catalogue_number,
+                product_family,
+                product_variant,
+                catalogue_number
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(normalized_product_family, normalized_product_variant, normalized_catalogue_number)
+            DO UPDATE SET
+                reviewed_at = CURRENT_TIMESTAMP,
+                device_subject_id = COALESCE(excluded.device_subject_id, reviewed_post_baselines.device_subject_id)
+            """,
+            (
+                device_subject_id,
+                self._normalize_identity(product_family),
+                self._normalize_identity(product_variant),
+                self._normalize_identity(catalogue_number),
+                self._optional_string(product_family),
+                self._optional_string(product_variant),
+                self._optional_string(catalogue_number),
+            ),
+        )
 
     def has_reviewed_post(
         self,
@@ -483,6 +516,7 @@ class TestingStateStore:
         product_variant: str,
         catalogue_number: str,
     ) -> bool:
+        """Historical POST download indicator; never proof that a current draft was reviewed."""
         family_clause, family_params = self._family_match_clause(product_family, table_name="reviewed_post_baselines")
         with self._connect() as connection:
             row = connection.execute(
@@ -1062,7 +1096,10 @@ class TestingStateStore:
                     xml_member_count INTEGER NOT NULL,
                     member_file_names_json TEXT NOT NULL,
                     manifest_json TEXT NOT NULL,
-                    package_sha256 TEXT NOT NULL
+                    package_sha256 TEXT NOT NULL,
+                    reviewed_at TEXT,
+                    review_basis TEXT,
+                    reviewed_members_json TEXT
                 )
                 """
             )
@@ -1192,6 +1229,12 @@ class TestingStateStore:
                     table_name="testing_events",
                     column_name=column_name,
                     column_definition=column_definition,
+                )
+            # Additive migration: previous package creation does not prove review.
+            for column_name in ("reviewed_at", "review_basis", "reviewed_members_json"):
+                self._ensure_column(
+                    connection, table_name="generated_packages", column_name=column_name,
+                    column_definition="TEXT",
                 )
             self._ensure_column(
                 connection,
@@ -1604,20 +1647,7 @@ class TestingStateStore:
         right_normalized = cls._normalize_identity(right)
         return bool(left_normalized and right_normalized and left_normalized == right_normalized)
 
-    @classmethod
-    def _normalized_family_candidates(cls, product_family: object) -> tuple[str, ...]:
-        normalized_full = cls._normalize_identity(product_family)
-        if not normalized_full:
-            return ()
-        candidates = {normalized_full}
-        family_text = cls._optional_string(product_family)
-        if family_text and "/" in family_text:
-            candidates.update(
-                cls._normalize_identity(part)
-                for part in family_text.split("/")
-                if cls._normalize_identity(part)
-            )
-        return tuple(sorted(candidates))
+    _normalized_family_candidates = staticmethod(normalized_family_candidates)
 
     @classmethod
     def _family_match_clause(cls, product_family: object, *, table_name: str) -> tuple[str, tuple[str, ...]]:
@@ -1645,12 +1675,7 @@ class TestingStateStore:
             return clauses[0], tuple(params)
         return f"({' OR '.join(clauses)})", tuple(params)
 
-    @classmethod
-    def _normalize_identity(cls, value: object) -> str:
-        text = cls._optional_string(value)
-        if not text:
-            return ""
-        return "".join(text.casefold().split())
+    _normalize_identity = staticmethod(normalize_identity)
 
     @staticmethod
     def _optional_int(value: object) -> int | None:

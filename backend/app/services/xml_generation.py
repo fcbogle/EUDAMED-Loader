@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
+
+from fastapi.encoders import jsonable_encoder
 from typing import Any
 from uuid import uuid4
 
+from app.services.identity import normalize_identity, normalized_family_candidates
 from app.config import get_settings
 from app.services.canonical_projection import (
     CanonicalValidationBundle,
@@ -31,6 +34,9 @@ from app.xml_models import (
     BulkXmlRecordSummary,
     GeneratedPatchScenarioPreview,
     MarketInfoPutPreview,
+    PatchStateSnapshot,
+    CriticalWarningXmlItem,
+    StorageConditionXmlItem,
     PatchScenarioContext,
     PatchScenarioFieldDelta,
     PostRegistrationPreview,
@@ -70,6 +76,11 @@ class XmlGenerationService:
         flow: str,
         operation_scope: str,
     ) -> tuple[str, bytes]:
+        """Prepare a requested ZIP and record review of its exact contents.
+
+        Called only by ZIP download operations, never by preview generation.
+        Review is the operator's download action, not EUDAMED acceptance.
+        """
         file_name, zip_bytes = self.package_builder.build_archive(
             package_file_name=package_file_name,
             members=members,
@@ -86,6 +97,7 @@ class XmlGenerationService:
             members=members,
             manifest=manifest,
             package_bytes=zip_bytes,
+            confirms_review=True,
         )
         return file_name, zip_bytes
 
@@ -112,6 +124,7 @@ class XmlGenerationService:
     def _post_state_snapshot_payload(record: DeviceXmlRecord) -> dict[str, Any]:
         return {
             "version": "1",
+            "device_record": jsonable_encoder(asdict(record)),
             "trade_name": record.trade_name,
             "base_quantity": record.base_quantity,
             "sterile": record.sterile,
@@ -182,27 +195,9 @@ class XmlGenerationService:
     def _message_envelope_ids() -> tuple[str, str]:
         return str(uuid4()), str(uuid4())
 
-    @classmethod
-    def _normalize_identity(cls, value: object) -> str:
-        text = cls._optional_string(value)
-        if not text:
-            return ""
-        return "".join(text.casefold().split())
+    _normalize_identity = staticmethod(normalize_identity)
 
-    @classmethod
-    def _normalized_family_candidates(cls, product_family: object) -> tuple[str, ...]:
-        normalized_full = cls._normalize_identity(product_family)
-        if not normalized_full:
-            return ()
-        candidates = {normalized_full}
-        family_text = cls._optional_string(product_family)
-        if family_text and "/" in family_text:
-            candidates.update(
-                cls._normalize_identity(part)
-                for part in family_text.split("/")
-                if cls._normalize_identity(part)
-            )
-        return tuple(sorted(candidates))
+    _normalized_family_candidates = staticmethod(normalized_family_candidates)
 
     @classmethod
     def _record_matches_family_variant(
@@ -264,23 +259,6 @@ class XmlGenerationService:
             eligible_posts.append(record)
         limited_posts = eligible_posts if record_count is None else eligible_posts[:record_count]
         return limited_posts, excluded, len(eligible_posts)
-
-    def _require_reviewed_post_baseline(
-        self,
-        *,
-        product_family: str,
-        product_variant: str,
-        catalogue_number: str,
-    ) -> None:
-        if self.testing_state_store.has_reviewed_post(
-            product_family=product_family,
-            product_variant=product_variant,
-            catalogue_number=catalogue_number,
-        ):
-            return
-        raise ValueError(
-            "Generate and review the baseline POST for this exact selected record before drafting a PATCH."
-        )
 
     def _require_tracked_successful_post_baseline(
         self,
@@ -606,6 +584,25 @@ class XmlGenerationService:
             market_info_version=current_version,
         ), baseline_market_countries, current_version
 
+    def _accepted_post_record(self, record: DeviceXmlRecord) -> DeviceXmlRecord:
+        state = self.testing_state_store.accepted_post_state(
+            product_family=record.product_family, product_variant=record.product_variant,
+            catalogue_number=record.catalogue_number,
+        )
+        if not state:
+            return record  # Older imported acceptance may have no complete snapshot.
+        full = state.get("device_record")
+        if isinstance(full, dict):
+            values = {key: value for key, value in full.items() if key in record.__dataclass_fields__}
+            values["storage_conditions"] = [StorageConditionXmlItem(**item) for item in values.get("storage_conditions", [])]
+            values["critical_warnings"] = [CriticalWarningXmlItem(**item) for item in values.get("critical_warnings", [])]
+            values["market_countries"] = [tuple(item) for item in values.get("market_countries", [])]
+            return replace(record, **values)
+        # Preserve every field known in legacy partial accepted POST snapshots.
+        snapshot = PatchStateSnapshot.model_validate({**state, "version": "1"})
+        accepted = self.projection_builder.build_patch_record_from_state(record, snapshot)
+        return replace(accepted, patch_version_override=None, source_version_marker="1")
+
     def _patch_market_countries(self, *, post_record: DeviceXmlRecord) -> list[tuple[str, bool]]:
         latest_market_info_state = self.testing_state_store.latest_successful_market_info_state(
             product_family=post_record.product_family,
@@ -635,10 +632,6 @@ class XmlGenerationService:
         ):
             return "EUDAMED rejected a previous PATCH because Market Information must be updated through MARKET_INFO.PUT."
         return None
-
-    @staticmethod
-    def _market_country_signature(items: list[tuple[str, bool]]) -> tuple[tuple[str, bool], ...]:
-        return tuple(sorted((country, bool(original)) for country, original in items))
 
     @staticmethod
     def _next_incremental_version(version: str | None) -> str:
@@ -1178,7 +1171,6 @@ class XmlGenerationService:
                     scenario_id=scenario_id,
                     patch_version=derived_version,
                     scenario_inputs=scenario_data,
-                    require_reviewed_post_baseline=False,
                 )
             except ValueError as exc:
                 excluded_records.append(
@@ -1283,6 +1275,7 @@ class XmlGenerationService:
         market_countries: list[tuple[str, bool]],
         selected_catalogue_numbers: list[str] | None = None,
         chunk_sequence: int = 1,
+        record_generated_context: bool = False,
     ) -> BulkMarketInfoPreview:
         normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
         normalized_market_countries = self._normalized_market_info_countries(market_countries)
@@ -1341,7 +1334,7 @@ class XmlGenerationService:
                                 "country": country_code,
                                 "original_placed_on_market": original_placed_on_market,
                             }
-                            for country_code, original_placed_on_market in baseline_market_countries
+                            for country_code, original_placed_on_market in market_info_record.market_countries
                         ],
                         "market_countries": [
                             {
@@ -1386,6 +1379,11 @@ class XmlGenerationService:
                 sequence=sequence,
                 total_chunks=total_chunks,
             )
+            if record_generated_context and sequence == chunk_sequence:
+                for _, _, context in chunk_payloads:
+                    self.testing_state_store.record_generated_market_info_context(
+                        **context, correlation_id=correlation_id, message_id=message_id, operation_scope="bulk",
+                    )
             chunk_records = [summary for summary, _, _ in chunk_payloads]
             rendered_chunks.append((sequence, chunk_records, xml_bytes, validation, file_name))
             chunk_summaries.append(
@@ -1459,6 +1457,7 @@ class XmlGenerationService:
                 market_countries=market_countries,
                 selected_catalogue_numbers=selected_catalogue_numbers,
                 chunk_sequence=chunk.sequence,
+                record_generated_context=True,
             )
             members.append((chunk.file_name, selected_chunk_preview.selected_chunk_xml.encode("utf-8")))
             manifest_chunks.append(
@@ -1535,7 +1534,7 @@ class XmlGenerationService:
                 + ", ".join(missing_variant_records)
             )
         if {record.catalogue_number for record in candidate_records} != set(preview_catalogue_numbers):
-            raise ValueError("Bulk PATCH download could not resolve the exact records from the approved preview.")
+            raise ValueError("Bulk PATCH download could not resolve the exact records from the generated preview.")
         members: list[tuple[str, bytes]] = []
         chunk_members = []
         successful_catalogues = {record.catalogue_number for record in preview.included_records}
@@ -1560,7 +1559,6 @@ class XmlGenerationService:
                 scenario_id=scenario_id,
                 patch_version=derived_version,
                 scenario_inputs=scenario_data,
-                require_reviewed_post_baseline=False,
             )
             summary = next(item for item in preview.included_records if item.catalogue_number == record.catalogue_number)
             included_payloads.append((summary, scenario_preview, generated_context))
@@ -1634,23 +1632,16 @@ class XmlGenerationService:
         scenario_id: str,
         patch_version: str,
         scenario_inputs: dict[str, Any] | None = None,
-        require_reviewed_post_baseline: bool = False,
         correlation_id: str | None = None,
         message_id: str | None = None,
     ) -> tuple[GeneratedPatchScenarioPreview, dict[str, Any]]:
-        if require_reviewed_post_baseline:
-            self._require_reviewed_post_baseline(
-                product_family=product_family,
-                product_variant=product_variant,
-                catalogue_number=catalogue_number,
-            )
         scenario_data = scenario_inputs or {}
         post_source_record = self.selector.find_post_record(
             product_family=product_family,
             product_variant=product_variant,
             catalogue_number=catalogue_number,
         )
-        post_record = self.projection_builder.build_device_record(post_source_record)
+        post_record = self._accepted_post_record(self.projection_builder.build_device_record(post_source_record))
         post_record = replace(
             post_record,
             market_countries=self._patch_market_countries(post_record=post_record),
@@ -1779,7 +1770,6 @@ class XmlGenerationService:
         scenario_id: str,
         patch_version: str,
         scenario_inputs: dict[str, Any] | None = None,
-        require_reviewed_post_baseline: bool = False,
         record_generated_context: bool = False,
         correlation_id: str | None = None,
         message_id: str | None = None,
@@ -1791,7 +1781,6 @@ class XmlGenerationService:
             scenario_id=scenario_id,
             patch_version=patch_version,
             scenario_inputs=scenario_inputs,
-            require_reviewed_post_baseline=require_reviewed_post_baseline,
             correlation_id=correlation_id,
             message_id=message_id,
         )
@@ -1900,6 +1889,7 @@ class XmlGenerationService:
         product_variant: str,
         catalogue_number: str,
         record_generated_context: bool = False,
+        accepted_baseline: bool = False,
     ) -> PostRegistrationPreview:
         record = self.selector.find_xml_ready_record(
             product_family=product_family,
@@ -1913,6 +1903,9 @@ class XmlGenerationService:
             )
 
         post_record = self.projection_builder.build_device_record(record)
+        if accepted_baseline:
+            post_record = self._accepted_post_record(post_record)
+            post_record = replace(post_record, market_countries=self._patch_market_countries(post_record=post_record))
         parent_registered = self.testing_state_store.has_successful_basic_udi_post(
             product_family=record.product_family,
             product_variant=record.product_variant,
@@ -1952,11 +1945,6 @@ class XmlGenerationService:
                 accepted_post_state=self._post_state_snapshot_payload(xml_record),
                 correlation_id=correlation_id,
                 message_id=message_id,
-            )
-            self.testing_state_store.mark_reviewed_post(
-                product_family=record.product_family,
-                product_variant=record.product_variant,
-                catalogue_number=post_record.catalogue_number,
             )
         registered_device_anchor = self._registered_device_anchor(post_record)
         return PostRegistrationPreview(
@@ -2004,8 +1992,7 @@ class XmlGenerationService:
             product_variant=product_variant,
             catalogue_number=catalogue_number,
         )
-        market_info_record = self.projection_builder.build_market_info_record(record)
-        baseline_market_countries = list(market_info_record.market_countries)
+        market_info_record, baseline_market_countries, _ = self._market_info_record_with_latest_state(record=record)
         normalized_market_info_version = self._validate_market_info_version(market_info_version)
         observed_version = self.testing_state_store.latest_observed_market_info_version(
             product_family=record.product_family,

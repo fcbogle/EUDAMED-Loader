@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import sqlite3
 
+from app.services.identity import normalize_identity, normalized_family_candidates
+from app.services.accepted_state import accepted_device_state, accepted_market_state
 from app.config import get_settings
 from app.models import (
     TestingBatchDeviceReadModelEntry,
@@ -142,25 +144,9 @@ class TestingReadModelService:
                     ts.latest_successful_market_info_version,
                     ts.latest_observed_market_info_version,
                     ts.latest_successful_market_info_state_json,
-                    COALESCE(
-                        ts.latest_successful_patch_state_json,
-                        ts.latest_successful_post_state_json,
-                        (
-                            SELECT generated.state_after_json
-                            FROM testing_events success
-                            JOIN testing_events generated
-                              ON generated.subject_id = success.subject_id
-                             AND generated.message_type = success.message_type
-                             AND generated.status = 'GENERATED'
-                             AND generated.correlation_id = success.correlation_id
-                            WHERE success.subject_id = ts.id
-                              AND success.status = 'SUCCESS'
-                              AND success.message_type = 'UDI_DI.POST'
-                              AND generated.state_after_json IS NOT NULL
-                            ORDER BY success.event_index DESC, generated.event_index DESC
-                            LIMIT 1
-                        )
-                    ) AS current_patch_state_json,
+                    ts.latest_successful_patch_state_json,
+                    ts.latest_successful_post_state_json,
+                    ts.latest_successful_state_json,
                     (
                         SELECT latest_event.message_type
                         FROM testing_events latest_event
@@ -185,7 +171,14 @@ class TestingReadModelService:
                 """,
                 (*self._subject_filter_params(product_family=product_family, product_variant=product_variant), limit),
             ).fetchall()
-        return [self._subject_summary_from_row(row) for row in rows]
+            return [
+                self._subject_summary_from_row({
+                    **dict(row),
+                    "current_patch_state_json": json.dumps(accepted_device_state(connection, row)),
+                    "latest_successful_market_info_state_json": json.dumps(accepted_market_state(connection, row)),
+                })
+                for row in rows
+            ]
 
     def bulk_patch_posted_entries(
         self,
@@ -246,31 +239,9 @@ class TestingReadModelService:
         return entries
 
     def _current_patch_state(self, connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object] | None:
-        for value in (row["latest_successful_patch_state_json"], row["latest_successful_post_state_json"]):
-            state = self._json_dict(value)
-            if state is not None:
-                return state
-
-        # Older POST acknowledgements did not promote their generated baseline to the subject projection.
-        generated_row = connection.execute(
-            """
-            SELECT generated.state_after_json
-            FROM testing_events success
-            JOIN testing_events generated
-              ON generated.subject_id = success.subject_id
-             AND generated.message_type = success.message_type
-             AND generated.status = 'GENERATED'
-             AND generated.correlation_id = success.correlation_id
-            WHERE success.subject_id = ?
-              AND success.status = 'SUCCESS'
-              AND success.message_type = 'UDI_DI.POST'
-              AND generated.state_after_json IS NOT NULL
-            ORDER BY success.event_index DESC, generated.event_index DESC
-            LIMIT 1
-            """,
-            (int(row["id"]),),
-        ).fetchone()
-        return self._json_dict(generated_row["state_after_json"] if generated_row is not None else None)
+        # Entry queries may omit legacy fields; resolve from the same subject projection.
+        subject = connection.execute("SELECT * FROM testing_subjects WHERE id = ?", (row["id"],)).fetchone()
+        return accepted_device_state(connection, subject) if subject else None
 
     def subject_history(self, subject_id: int) -> TestingSubjectHistory | None:
         with self._connect() as connection:
@@ -292,10 +263,9 @@ class TestingReadModelService:
                     ts.latest_successful_market_info_version,
                     ts.latest_observed_market_info_version,
                     ts.latest_successful_market_info_state_json,
-                    COALESCE(
-                        ts.latest_successful_patch_state_json,
-                        ts.latest_successful_post_state_json
-                    ) AS current_patch_state_json,
+                    ts.latest_successful_patch_state_json,
+                    ts.latest_successful_post_state_json,
+                    ts.latest_successful_state_json,
                     (
                         SELECT latest_event.message_type
                         FROM testing_events latest_event
@@ -344,8 +314,13 @@ class TestingReadModelService:
                 """,
                 (subject_id,),
             ).fetchall()
+            subject_summary = self._subject_summary_from_row({
+                **dict(subject_row),
+                "current_patch_state_json": json.dumps(accepted_device_state(connection, subject_row)),
+                "latest_successful_market_info_state_json": json.dumps(accepted_market_state(connection, subject_row)),
+            })
         return TestingSubjectHistory(
-            subject=self._subject_summary_from_row(subject_row),
+            subject=subject_summary,
             events=[self._event_summary_from_row(row) for row in event_rows],
         )
 
@@ -634,12 +609,7 @@ class TestingReadModelService:
         normalized = value.strip()
         return normalized or None
 
-    @classmethod
-    def _normalize_identity(cls, value: object) -> str:
-        text = cls._optional_string(value)
-        if not text:
-            return ""
-        return "".join(text.casefold().split())
+    _normalize_identity = staticmethod(normalize_identity)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
@@ -712,20 +682,7 @@ class TestingReadModelService:
     def _family_filter_params(cls, product_family: str | None) -> tuple[str, ...]:
         return cls._normalized_family_candidates(product_family)
 
-    @classmethod
-    def _normalized_family_candidates(cls, product_family: object) -> tuple[str, ...]:
-        normalized_full = cls._normalize_identity(product_family)
-        if not normalized_full:
-            return ()
-        candidates = {normalized_full}
-        family_text = cls._optional_string(product_family)
-        if family_text and "/" in family_text:
-            candidates.update(
-                cls._normalize_identity(part)
-                for part in family_text.split("/")
-                if cls._normalize_identity(part)
-            )
-        return tuple(sorted(candidates))
+    _normalized_family_candidates = staticmethod(normalized_family_candidates)
 
     @classmethod
     def _subject_summary_from_row(cls, row: sqlite3.Row) -> TestingSubjectReadModelSummary:

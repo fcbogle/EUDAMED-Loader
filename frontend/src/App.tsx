@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useBulkPostedCohorts } from "./useBulkPostedCohorts";
 
-import { ApiError, api } from "./api";
+import { ApiError, api, type RecordReadiness } from "./api";
 import architectureDefinitionDocumentation from "../../docs/architecture-definition-draft.md?raw";
 import sessionHandoffDocumentation from "../../docs/session-handoff.md?raw";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
@@ -9,7 +10,6 @@ import { BulkMarketInfoPreviewPanel } from "./components/BulkMarketInfoPreviewPa
 import { BulkPatchWorkspace } from "./components/BulkPatchWorkspace";
 import { BulkPostWorkspace } from "./components/BulkPostWorkspace";
 import { BulkXmlPreviewPanel } from "./components/BulkXmlPreviewPanel";
-import { GenericXmlPreviewPanel } from "./components/GenericXmlPreviewPanel";
 import { MarketInfoPreviewPanel } from "./components/MarketInfoPreviewPanel";
 import { MarketInfoScenarioCard } from "./components/MarketInfoScenarioCard";
 import canonicalValidationDocumentation from "./content/docs/canonical-validation.md?raw";
@@ -62,7 +62,6 @@ import {
 import { extractXmlStructureSections } from "./xmlPreviewStructure";
 import {
   resolveBulkChunkSummaryTitle,
-  resolveBulkPostReadinessMessage,
   resolveGenericPreviewStatusMessage,
   resolveGenericPreviewTitle,
   resolveSelectedBatchValidation,
@@ -74,10 +73,7 @@ import {
 } from "./xmlWorkspaceView";
 import type {
   BulkPatchPreview,
-  BulkPatchPostedEntry,
-  BulkPatchPostedParentGroup,
   BulkMarketInfoPreview,
-  BulkPostPreview,
   BulkUdidiPostPreview,
   CanonicalValidationBundle,
   CanonicalReviewBundle,
@@ -128,7 +124,7 @@ type PatchScenarioDefinition = {
   optionsSummary?: string;
 };
 
-type BulkPreviewMode = "bulkPost" | "bulkUdidiPost" | "bulkPatch" | "bulkMarketInfo";
+type BulkPreviewMode = "bulkUdidiPost" | "bulkPatch" | "bulkMarketInfo";
 type ValidationReviewTab = "canonicalMapping" | "sourceSheetBasicUdi";
 
 type BulkExclusionSummary = {
@@ -415,14 +411,9 @@ function shortenHash(value: string): string {
   return `${value.slice(0, 8)}...${value.slice(-8)}`;
 }
 
-function extractBasicUdiDi(reasonMessage: string): string | null {
-  const match = reasonMessage.match(/Basic UDI-DI\s+([A-Za-z0-9.-]+)/i);
-  return match?.[1] ?? null;
-}
-
 function summarizeBulkExcludedRecords(
   mode: BulkPreviewMode,
-  preview: BulkPostPreview | BulkUdidiPostPreview | BulkPatchPreview | BulkMarketInfoPreview,
+  preview: BulkUdidiPostPreview | BulkPatchPreview | BulkMarketInfoPreview,
 ): BulkExclusionSummary[] {
   const familyVariantLabel = `${preview.product_family} / ${preview.product_variant}`;
   const excludedRecords = preview.excluded_records;
@@ -430,64 +421,7 @@ function summarizeBulkExcludedRecords(
     return [];
   }
 
-  if (mode === "bulkPost") {
-    const duplicateByBasicUdi = new Map<string, number>();
-    let parentAlreadyRegistered = 0;
-    let missingBasicUdi = 0;
-    let notPostOperation = 0;
-    let notXmlReady = 0;
 
-    for (const record of excludedRecords) {
-      if (record.reason_code === "duplicate_basic_udi_di") {
-        const basicUdiDi = extractBasicUdiDi(record.reason_message) ?? "Unknown";
-        duplicateByBasicUdi.set(basicUdiDi, (duplicateByBasicUdi.get(basicUdiDi) ?? 0) + 1);
-      } else if (record.reason_code === "parent_already_registered") {
-        parentAlreadyRegistered += 1;
-      } else if (record.reason_code === "missing_basic_udi_di") {
-        missingBasicUdi += 1;
-      } else if (record.reason_code === "not_post_operation") {
-        notPostOperation += 1;
-      } else if (record.reason_code === "xml_not_ready") {
-        notXmlReady += 1;
-      }
-    }
-
-    const summaries: BulkExclusionSummary[] = Array.from(duplicateByBasicUdi.entries()).map(([basicUdiDi, count]) => ({
-      key: `duplicate-${basicUdiDi}`,
-      title: basicUdiDi,
-      detail: `${pluralize(count, "record")} in ${familyVariantLabel} ${count === 1 ? "is" : "are"} associated with Basic UDI-DI ${basicUdiDi}. Bulk Basic UDI POST keeps only one parent seed row for that Basic UDI-DI group.`,
-    }));
-
-    if (parentAlreadyRegistered > 0) {
-      summaries.push({
-        key: "parent-already-registered",
-        title: "Already posted parents",
-        detail: `${pluralize(parentAlreadyRegistered, "record")} in ${familyVariantLabel} ${parentAlreadyRegistered === 1 ? "belongs" : "belong"} to Basic UDI-DI parent groups that already have a successful parent DEVICE.POST.`,
-      });
-    }
-    if (missingBasicUdi > 0) {
-      summaries.push({
-        key: "missing-basic-udi",
-        title: "Missing Basic UDI-DI",
-        detail: `${pluralize(missingBasicUdi, "record")} in ${familyVariantLabel} ${missingBasicUdi === 1 ? "does" : "do"} not resolve to a Basic UDI-DI and ${missingBasicUdi === 1 ? "cannot" : "cannot"} be used for Bulk Basic UDI POST.`,
-      });
-    }
-    if (notPostOperation > 0) {
-      summaries.push({
-        key: "not-post-operation",
-        title: "Non-POST rows",
-        detail: `${pluralize(notPostOperation, "record")} in ${familyVariantLabel} ${notPostOperation === 1 ? "is" : "are"} not classified as POST rows and ${notPostOperation === 1 ? "was" : "were"} excluded from Bulk Basic UDI POST consideration.`,
-      });
-    }
-    if (notXmlReady > 0) {
-      summaries.push({
-        key: "not-xml-ready",
-        title: "Not XML-ready",
-        detail: `${pluralize(notXmlReady, "record")} in ${familyVariantLabel} ${notXmlReady === 1 ? "is" : "are"} not XML-ready and ${notXmlReady === 1 ? "was" : "were"} excluded from Bulk Basic UDI POST consideration.`,
-      });
-    }
-    return summaries;
-  }
 
   if (mode === "bulkUdidiPost") {
     let parentNotRegistered = 0;
@@ -560,59 +494,6 @@ function summarizeBulkExcludedRecords(
       mode === "bulkPatch" ? "Bulk PATCH" : "Bulk Market Info"
     }: ${reasonMessage}`,
   }));
-}
-
-function buildBulkPatchPostedParentGroups(
-  subjectSummaries: TestingSubjectReadModelSummary[],
-): BulkPatchPostedParentGroup[] {
-  const grouped = new Map<string, BulkPatchPostedParentGroup>();
-  for (const summary of subjectSummaries) {
-    if (!summary.post_success || !summary.has_successful_child_post_or_patch || !summary.basic_udi_di) {
-      continue;
-    }
-    const existing = grouped.get(summary.basic_udi_di) ?? {
-      basic_udi_di: summary.basic_udi_di,
-      posted_child_count: 0,
-      sample_catalogue_numbers: [],
-    };
-    existing.posted_child_count += 1;
-    if (
-      summary.catalogue_number &&
-      existing.sample_catalogue_numbers.length < 10 &&
-      !existing.sample_catalogue_numbers.includes(summary.catalogue_number)
-    ) {
-      existing.sample_catalogue_numbers.push(summary.catalogue_number);
-    }
-    grouped.set(summary.basic_udi_di, existing);
-  }
-  return Array.from(grouped.values()).sort((left, right) => left.basic_udi_di.localeCompare(right.basic_udi_di));
-}
-
-function buildBulkPatchPostedEntries(
-  subjectSummaries: TestingSubjectReadModelSummary[],
-  basicUdiDi: string | null,
-): BulkPatchPostedEntry[] {
-  if (!basicUdiDi) {
-    return [];
-  }
-  const normalizedBasicUdiDi = basicUdiDi.trim().toLowerCase();
-  return subjectSummaries
-    .filter(
-      (summary) =>
-        summary.post_success &&
-        summary.has_successful_child_post_or_patch &&
-        (summary.basic_udi_di ?? "").trim().toLowerCase() === normalizedBasicUdiDi,
-    )
-    .map((summary) => ({
-      catalogue_number: summary.catalogue_number,
-      primary_udi_di: summary.primary_udi_di,
-      basic_udi_di: summary.basic_udi_di,
-      latest_version: summary.latest_successful_version,
-      latest_market_info_version: summary.latest_successful_market_info_version,
-      baseline_patch_success: summary.baseline_patch_success,
-      current_state: summary.current_patch_state,
-    }))
-    .sort((left, right) => (left.catalogue_number ?? "").localeCompare(right.catalogue_number ?? ""));
 }
 
 type DocumentationSection = {
@@ -841,26 +722,6 @@ function titleCaseToken(value: string): string {
     .join(" ");
 }
 
-function basicUdiMatchLabel(matchStatus: string | null | undefined): string {
-  if (matchStatus === "matched") {
-    return "Matched in BasicUDIs.xlsx";
-  }
-  if (matchStatus === "excluded") {
-    return "Excluded from Basic UDI mapping";
-  }
-  if (matchStatus === "unmatched") {
-    return "Unmatched in BasicUDIs.xlsx";
-  }
-  return "Basic UDI mapping unknown";
-}
-
-function basicUdiMatchPillClass(matchStatus: string | null | undefined): string {
-  if (matchStatus === "matched") {
-    return "status-pill ok compact";
-  }
-  return "status-pill warn compact";
-}
-
 function formatSchemaPathForInlineNote(schemaPath: string): string {
   const normalizedPath = schemaPath.replace(/\\/g, "/");
   const dataIndex = normalizedPath.indexOf("data/");
@@ -930,6 +791,7 @@ function workbookFamilyLabel(workbookName: string): string {
 }
 
 export function App() {
+  const [recordReadiness, setRecordReadiness] = useState<RecordReadiness[]>([]);
   const [activeTab, setActiveTab] = useState<MainTab>("workbooks");
   const [submissionDataTab, setSubmissionDataTab] = useState<SubmissionDataTab>("snapshot");
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
@@ -1003,8 +865,6 @@ export function App() {
     setSelectedPatchScenarioId,
     marketInfoVersionInput,
     setMarketInfoVersionInput,
-    acceptedMarketInfoItems,
-    setAcceptedMarketInfoItems,
     marketInfoScenarioItems,
     setMarketInfoScenarioItems,
     bulkMarketInfoScenarioItems,
@@ -1051,10 +911,6 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [criticalWarningCodeOptions, setCriticalWarningCodeOptions] = useState<CriticalWarningCodeOption[]>([]);
   const {
-    xmlPreview,
-    setXmlPreview,
-    xmlBulkPostPreview,
-    setXmlBulkPostPreview,
     xmlBulkUdidiPostPreview,
     setXmlBulkUdidiPostPreview,
     xmlPairPreview,
@@ -1400,8 +1256,6 @@ export function App() {
   }, [deviceSubjects, selectedDeviceSubjectFamily, selectedDeviceSubjectVariant]);
 
   useEffect(() => {
-    setXmlPreview(null);
-    setXmlBulkPostPreview(null);
     setXmlBulkUdidiPostPreview(null);
     setXmlPairPreview(null);
     setXmlMarketInfoPreview(null);
@@ -1832,62 +1686,41 @@ export function App() {
     ) ??
     selectedXmlVariantRecords.find((record) => (record.submission_operation ?? "").toUpperCase() === "POST") ??
     null;
+  const readinessForRecord = (record: { product_family: string | null; product_variant: string | null; catalogue_number: string | null }) =>
+    recordReadiness.find((entry) => familyLabelsOverlap(entry.product_family, record.product_family ?? "") && entry.product_variant === record.product_variant && entry.catalogue_number === record.catalogue_number);
+  useEffect(() => {
+    if (!canonicalValidation) return;
+    let cancelled = false;
+    void api.operationReadiness().then((rows) => { if (!cancelled) setRecordReadiness(rows); })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setRecordReadiness([]);
+        setError(error instanceof Error ? error.message : "Operation readiness is unavailable.");
+      });
+    return () => { cancelled = true; };
+  }, [canonicalValidation, testingSubjectSummaries, testingSummarySubjectSummaries]);
   const selectedBulkEligiblePostRecords = selectedXmlVariantRecords.filter(
     (record) => (record.submission_operation ?? "").toUpperCase() === "POST",
   );
   const selectedBulkEligiblePostCount = selectedBulkEligiblePostRecords.length;
-  const selectedSuccessfulPrimaryUdiDiSet = new Set(
-    testingSubjectSummaries
-      .filter((summary) => summary.has_successful_device_post || summary.has_successful_child_post_or_patch)
-      .map((summary) => (summary.primary_udi_di ?? "").trim().toLowerCase())
-      .filter((value): value is string => Boolean(value)),
-  );
-  const selectedExactAvailablePostCount = selectedBulkEligiblePostRecords.filter((record) => {
-    const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
-    return primaryUdiDi ? !selectedSuccessfulPrimaryUdiDiSet.has(primaryUdiDi) : true;
-  }).length;
-  const selectedPatchTrackedBaseCount = testingSubjectSummaries.filter(
-    (summary) =>
-      summary.post_success || summary.has_successful_device_post || summary.has_successful_child_post_or_patch,
-  ).length;
-  const selectedBulkEligibleBasicUdiSet = new Set(
-    selectedBulkEligiblePostRecords
-      .map((record) => basicUdiDiForRecord(record))
-      .filter((value): value is string => Boolean(value)),
-  );
-  const bulkPatchPostedParents = buildBulkPatchPostedParentGroups(testingSubjectSummaries);
-  const bulkPatchPostedEntries = buildBulkPatchPostedEntries(
+  const selectedExactAvailablePostCount = selectedBulkEligiblePostRecords.filter((record) => readinessForRecord(record)?.post_ready).length;
+  const selectedPatchTrackedBaseCount = testingSubjectSummaries.filter((summary) => readinessForRecord(summary)?.patch_ready).length;
+  const {
+    parents: bulkPatchPostedParents,
+    patchEntries: bulkPatchPostedEntries,
+    marketEntries: bulkMarketInfoPostedEntries,
+  } = useBulkPostedCohorts(
+    selectedXmlFamilySummary?.product_family,
+    selectedXmlVariantSummary?.product_variant,
+    selectedBulkPatchBasicUdiDi,
+    selectedBulkMarketInfoBasicUdiDi,
     testingSubjectSummaries,
-    selectedBulkPatchBasicUdiDi || null,
+    setError,
   );
-  const bulkMarketInfoPostedParents = buildBulkPatchPostedParentGroups(testingSubjectSummaries);
-  const bulkMarketInfoPostedEntries = buildBulkPatchPostedEntries(
-    testingSubjectSummaries,
-    selectedBulkMarketInfoBasicUdiDi || null,
-  );
-  const postedBulkParentBasicUdiSet = new Set(
-    bulkPatchPostedParents
-      .map((group) => group.basic_udi_di)
-      .filter((value): value is string => Boolean(value)),
-  );
-  const selectedBulkUnpostedBasicUdiCount = Array.from(selectedBulkEligibleBasicUdiSet).filter(
-    (basicUdiDi) => !postedBulkParentBasicUdiSet.has(basicUdiDi),
-  ).length;
-  const selectedBulkEligibleUdidiPostCount = (() => {
-    const groupedCounts = new Map<string, number>();
-    for (const record of selectedBulkEligiblePostRecords) {
-      const basicUdi = basicUdiDiForRecord(record);
-      if (basicUdi) {
-        groupedCounts.set(basicUdi, (groupedCounts.get(basicUdi) ?? 0) + 1);
-      }
-    }
-    return Array.from(groupedCounts.values()).reduce((sum, count) => sum + Math.max(count - 1, 0), 0);
-  })();
+  const bulkMarketInfoPostedParents = bulkPatchPostedParents;
+  const selectedBulkEligibleUdidiPostCount = selectedBulkEligiblePostRecords.filter((record) => readinessForRecord(record)?.child_post_ready).length;
   const bulkUdidiPostEntries = selectedBulkEligiblePostRecords
-    .filter((record) => {
-      const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
-      return Boolean(record.catalogue_number) && (!primaryUdiDi || !selectedSuccessfulPrimaryUdiDiSet.has(primaryUdiDi));
-    })
+    .filter((record) => Boolean(record.catalogue_number) && readinessForRecord(record)?.child_post_ready)
     .map((record) => ({
       catalogue_number: record.catalogue_number as string,
       primary_udi_di: record.primary_udi_di ?? null,
@@ -1911,44 +1744,17 @@ export function App() {
           : bulkUdidiPostScopeMode === "selected_catalogue_numbers"
             ? selectedBulkUdidiPostCatalogueNumbers.filter((catalogueNumber) => bulkUdidiPostCatalogueNumberSet.has(catalogueNumber))
             : bulkUdidiPostImportedMatchedCatalogueNumbers;
-  const fallbackBulkPatchParentOptions = Array.from(
-    selectedBulkEligiblePostRecords.reduce((groups, record) => {
-      const basicUdi = basicUdiDiForRecord(record);
-      if (!basicUdi) {
-        return groups;
-      }
-      const existing = groups.get(basicUdi) ?? { totalRecords: 0, childCatalogueNumbers: [] as string[] };
-      existing.totalRecords += 1;
-      if (record.catalogue_number && record.primary_udi_di && !existing.childCatalogueNumbers.includes(record.catalogue_number)) {
-        existing.childCatalogueNumbers.push(record.catalogue_number);
-      }
-      groups.set(basicUdi, existing);
-      return groups;
-    }, new Map<string, { totalRecords: number; childCatalogueNumbers: string[] }>()),
-  )
-    .map(([basic_udi_di, group]) => {
-      const postedChildCount = Math.max(group.totalRecords - 1, 0);
-      return {
-        basic_udi_di,
-        posted_child_count: postedChildCount,
-        sample_catalogue_numbers: group.childCatalogueNumbers.slice(0, postedChildCount),
-      };
-    })
-    .filter((group) => group.posted_child_count > 0);
-  const displayedBulkPatchParentOptions =
-    bulkPatchPostedParents.length > 0 ? bulkPatchPostedParents : fallbackBulkPatchParentOptions;
+  const displayedBulkPatchParentOptions = bulkPatchPostedParents;
   const selectedBulkPatchParentGroup =
     displayedBulkPatchParentOptions.find((group) => group.basic_udi_di === selectedBulkPatchBasicUdiDi) ??
     displayedBulkPatchParentOptions[0] ??
     null;
   const displayedBulkMarketInfoParentOptions =
-    bulkMarketInfoPostedParents.length > 0 ? bulkMarketInfoPostedParents : fallbackBulkPatchParentOptions;
+    bulkMarketInfoPostedParents;
   const selectedBulkMarketInfoParentGroup =
     displayedBulkMarketInfoParentOptions.find((group) => group.basic_udi_di === selectedBulkMarketInfoBasicUdiDi) ??
     displayedBulkMarketInfoParentOptions[0] ??
     null;
-  const selectedBulkPatchFallbackCatalogueNumbers = selectedBulkPatchParentGroup?.sample_catalogue_numbers ?? [];
-  const selectedBulkMarketInfoFallbackCatalogueNumbers = selectedBulkMarketInfoParentGroup?.sample_catalogue_numbers ?? [];
   const bulkPatchPostedCatalogueNumbers = bulkPatchPostedEntries
     .map((entry) => entry.catalogue_number)
     .filter((catalogueNumber): catalogueNumber is string => Boolean(catalogueNumber));
@@ -2051,9 +1857,7 @@ export function App() {
       testingSummaryRegisteredBasicUdiSet.has(basicUdiDi)
     );
   }).length;
-  const testingSummaryPatchReadyCount = testingSummarySubjectSummaries.filter(
-    (summary) => summary.post_success || summary.has_successful_device_post || summary.has_successful_child_post_or_patch,
-  ).length;
+  const testingSummaryPatchReadyCount = testingSummarySubjectSummaries.filter((summary) => readinessForRecord(summary)?.patch_ready).length;
   const testingSummaryRows = (canonicalValidation?.variant_summaries ?? [])
     .filter((summary) => (selectedTestingSummaryFamily ? summary.product_family === selectedTestingSummaryFamily : true))
     .filter((summary) => (selectedTestingSummaryVariant ? summary.product_variant === selectedTestingSummaryVariant : true))
@@ -2066,12 +1870,6 @@ export function App() {
       );
       const matchingSubjects = testingSummarySubjectSummaries.filter(
         (subject) => familyLabelsOverlap(subject.product_family, summary.product_family) && subject.product_variant === summary.product_variant,
-      );
-      const rowSuccessfulPrimaryUdiSet = new Set(
-        matchingSubjects
-          .filter((subject) => subject.has_successful_device_post || subject.has_successful_child_post_or_patch || subject.post_success)
-          .map((subject) => (subject.primary_udi_di ?? "").trim().toLowerCase())
-          .filter((value): value is string => Boolean(value)),
       );
       const rowRegisteredBasicUdiSet = new Set(
         matchingSubjects
@@ -2086,29 +1884,17 @@ export function App() {
           ].filter((value): value is string => Boolean(value)),
         ),
       );
-      const availableChildPostCount = matchingRecords.filter((record) => {
-        const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
-        const basicUdiDi = basicUdiDiForRecord(record);
-        return (
-          typeof basicUdiDi === "string" &&
-          (!primaryUdiDi || !rowSuccessfulPrimaryUdiSet.has(primaryUdiDi)) &&
-          rowRegisteredBasicUdiSet.has(basicUdiDi)
-        );
-      }).length;
+      const availableChildPostCount = matchingRecords.filter((record) => readinessForRecord(record)?.child_post_ready).length;
       const patchReadyCount = matchingSubjects.filter(
-        (subject) => subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch,
+        (subject) => readinessForRecord(subject)?.patch_ready,
       ).length;
       const patchCompletedCount = matchingSubjects.filter((subject) => Number(subject.latest_successful_version ?? "0") > 1).length;
-      const availablePostCount = matchingRecords.filter((record) => {
-        const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
-        return primaryUdiDi ? !rowSuccessfulPrimaryUdiSet.has(primaryUdiDi) : true;
-      }).length;
+      const availablePostCount = matchingRecords.filter((record) => readinessForRecord(record)?.post_ready).length;
       const parentRegisteredCount = rowRegisteredBasicUdiSet.size;
       const successfulChildPostCount = matchingSubjects.filter((subject) => subject.has_successful_child_post_or_patch).length;
       const marketInfoReadyCount = matchingSubjects.filter(
         (subject) =>
-          Boolean(subject.reviewed_post_at) &&
-          (subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch),
+          readinessForRecord(subject)?.market_info_ready,
       ).length;
       const marketInfoCompletedCount = matchingSubjects.filter(
         (subject) =>
@@ -2226,24 +2012,14 @@ export function App() {
     })().values(),
   )
     .map((group) => {
-      const successfulPrimarySet = new Set(
-        group.subjects
-          .filter((subject) => subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch)
-          .map((subject) => (subject.primary_udi_di ?? "").trim().toLowerCase())
-          .filter((value): value is string => Boolean(value)),
-      );
-      const availableRecords = group.records.filter((record) => {
-        const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
-        return primaryUdiDi ? !successfulPrimarySet.has(primaryUdiDi) : true;
-      });
+      const availableRecords = group.records.filter((record) => readinessForRecord(record)?.post_ready);
       const parentRegistered = group.subjects.some((subject) => subject.post_success);
       const patchReadyCount = group.subjects.filter(
-        (subject) => subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch,
+        (subject) => readinessForRecord(subject)?.patch_ready,
       ).length;
       const marketInfoReadyCount = group.subjects.filter(
         (subject) =>
-          Boolean(subject.reviewed_post_at) &&
-          (subject.post_success || subject.has_successful_device_post || subject.has_successful_child_post_or_patch),
+          readinessForRecord(subject)?.market_info_ready,
       ).length;
       const seedPostCount = parentRegistered ? 0 : availableRecords.length > 0 ? 1 : 0;
       const childPostCount = parentRegistered ? availableRecords.length : 0;
@@ -2413,11 +2189,11 @@ export function App() {
   }));
   const effectiveBulkPatchCatalogueNumbers =
     bulkPatchScopeMode === "all_posted"
-      ? (bulkPatchPostedCatalogueNumbers.length > 0 ? bulkPatchPostedCatalogueNumbers : selectedBulkPatchFallbackCatalogueNumbers)
+      ? bulkPatchPostedCatalogueNumbers
       : bulkPatchScopeMode === "next_10"
-        ? (bulkPatchPostedCatalogueNumbers.length > 0 ? bulkPatchPostedCatalogueNumbers : selectedBulkPatchFallbackCatalogueNumbers).slice(0, 10)
+        ? bulkPatchPostedCatalogueNumbers.slice(0, 10)
         : bulkPatchScopeMode === "next_25"
-          ? (bulkPatchPostedCatalogueNumbers.length > 0 ? bulkPatchPostedCatalogueNumbers : selectedBulkPatchFallbackCatalogueNumbers).slice(0, 25)
+          ? bulkPatchPostedCatalogueNumbers.slice(0, 25)
       : bulkPatchScopeMode === "selected_catalogue_numbers"
         ? selectedBulkPatchCatalogueNumbers
         : bulkPatchImportedMatchedCatalogueNumbers;
@@ -2428,7 +2204,7 @@ export function App() {
   const selectedBulkPatchSelectedCount = effectiveBulkPatchCatalogueNumbers.length;
   const selectedBulkPatchEligibleCount =
     selectedBulkPatchParentGroup?.posted_child_count ??
-    Math.max(bulkPatchPostedEntries.length, selectedBulkPatchFallbackCatalogueNumbers.length);
+    bulkPatchPostedEntries.length;
   const canRunBulkPatch =
     Boolean(selectedBulkPatchParentGroup) &&
     (
@@ -2461,11 +2237,11 @@ export function App() {
         : "Import catalogue list";
   const effectiveBulkMarketInfoCatalogueNumbers =
     bulkMarketInfoScopeMode === "all_posted"
-      ? (bulkMarketInfoPostedCatalogueNumbers.length > 0 ? bulkMarketInfoPostedCatalogueNumbers : selectedBulkMarketInfoFallbackCatalogueNumbers)
+      ? bulkMarketInfoPostedCatalogueNumbers
       : bulkMarketInfoScopeMode === "next_10"
-        ? (bulkMarketInfoPostedCatalogueNumbers.length > 0 ? bulkMarketInfoPostedCatalogueNumbers : selectedBulkMarketInfoFallbackCatalogueNumbers).slice(0, 10)
+        ? bulkMarketInfoPostedCatalogueNumbers.slice(0, 10)
         : bulkMarketInfoScopeMode === "next_25"
-          ? (bulkMarketInfoPostedCatalogueNumbers.length > 0 ? bulkMarketInfoPostedCatalogueNumbers : selectedBulkMarketInfoFallbackCatalogueNumbers).slice(0, 25)
+          ? bulkMarketInfoPostedCatalogueNumbers.slice(0, 25)
           : bulkMarketInfoScopeMode === "selected_catalogue_numbers"
             ? selectedBulkMarketInfoCatalogueNumbers
             : bulkMarketInfoImportedMatchedCatalogueNumbers;
@@ -2495,7 +2271,7 @@ export function App() {
   const selectedBulkMarketInfoSelectedCount = effectiveBulkMarketInfoCatalogueNumbers.length;
   const selectedBulkMarketInfoEligibleCount =
     selectedBulkMarketInfoParentGroup?.posted_child_count ??
-    Math.max(bulkMarketInfoPostedEntries.length, selectedBulkMarketInfoFallbackCatalogueNumbers.length);
+    bulkMarketInfoPostedEntries.length;
   const canRunBulkMarketInfo =
     Boolean(selectedBulkMarketInfoParentGroup) &&
     (
@@ -2519,7 +2295,6 @@ export function App() {
   const selectedBulkMarketInfoBaselineCatalogueNumber =
     effectiveBulkMarketInfoCatalogueNumbers[0] ??
     bulkMarketInfoPostedCatalogueNumbers[0] ??
-    selectedBulkMarketInfoFallbackCatalogueNumbers[0] ??
     null;
   const selectedBulkMarketInfoCurrentItems = buildCurrentMarketInfoItemsForCatalogue({
     catalogueNumber: selectedBulkMarketInfoBaselineCatalogueNumber,
@@ -2581,7 +2356,7 @@ export function App() {
   const assessedLatestVersionSummary = assessmentEvidenceStringArray(xmlOperationAssessment, "latest_version_summary");
   const assessedCurrentMarketInfoVersionSummary = assessmentEvidenceStringArray(xmlOperationAssessment, "current_market_info_version_summary");
   const assessedPatchLatestAcceptedVersion = assessmentEvidenceString(xmlOperationAssessment, "latest_accepted_version");
-  const assessedPatchReviewedBaseline = assessmentEvidenceBoolean(xmlOperationAssessment, "reviewed_post_baseline_present");
+  const assessedPostReviewHistory = assessmentEvidenceBoolean(xmlOperationAssessment, "reviewed_post_baseline_present");
   const assessedPatchTrackedRegistration = assessmentEvidenceBoolean(xmlOperationAssessment, "tracked_registration_known");
   const assessedPatchCandidateCatalogueNumber = assessmentEvidenceString(xmlOperationAssessment, "catalogue_number");
   const assessedPatchCandidatePrimaryUdiDi = assessmentEvidenceString(xmlOperationAssessment, "primary_udi_di");
@@ -2628,7 +2403,7 @@ export function App() {
     selectedProductVariant: selectedXmlVariantSummary?.product_variant,
   });
   const hasSelectedPatchBaselinePost = Boolean(selectedPatchWorkspaceRecord);
-  const hasReviewedPatchBaselinePost = Boolean(
+  const hasLoadedPatchBaseline = Boolean(
     selectedPairRequestArgs &&
       xmlPairPreview &&
       xmlPairPreview.product_family === selectedPairRequestArgs.product_family &&
@@ -2639,9 +2414,7 @@ export function App() {
     ? Math.max(Math.ceil(selectedXmlVariantSummary.xml_ready_records / 300), 1)
     : 1;
   const selectedBulkCapacity =
-    xmlMode === "bulkPost"
-      ? assessedUnpostedParentGroupCount ?? selectedBulkUnpostedBasicUdiCount
-      : xmlMode === "bulkUdidiPost"
+    xmlMode === "bulkUdidiPost"
         ? assessedBulkChildRecordCount ?? selectedBulkEligibleUdidiPostCount
         : xmlMode === "bulkPatch"
           ? selectedBulkPatchEligibleCount
@@ -2649,7 +2422,6 @@ export function App() {
   const normalizedBulkRecordCount = Math.min(Math.max(selectedBulkRecordCount, 1), Math.max(selectedBulkCapacity, 1));
   const selectedBulkChunkCount = resolveSelectedBulkChunkCount({
     xmlMode,
-    xmlBulkPostPreview,
     xmlBulkUdidiPostPreview,
     xmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
@@ -2659,20 +2431,16 @@ export function App() {
   });
   const selectedBulkPreview = resolveSelectedBulkPreview({
     xmlMode,
-    xmlBulkPostPreview,
     xmlBulkUdidiPostPreview,
     xmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
   });
   const selectedBulkExclusionSummaries = selectedBulkPreview
     ? summarizeBulkExcludedRecords(
-        xmlMode === "bulkPost" ? "bulkPost" : xmlMode === "bulkUdidiPost" ? "bulkUdidiPost" : xmlMode === "bulkPatch" ? "bulkPatch" : "bulkMarketInfo",
+        xmlMode === "bulkUdidiPost" ? "bulkUdidiPost" : xmlMode === "bulkPatch" ? "bulkPatch" : "bulkMarketInfo",
         selectedBulkPreview,
       )
     : [];
-  const bulkPostReadinessMessage = resolveBulkPostReadinessMessage(
-    assessedUnpostedParentGroupCount ?? selectedBulkUnpostedBasicUdiCount,
-  );
   useEffect(() => {
     const parentOption = displayedBulkPatchParentOptions[0]?.basic_udi_di ?? "";
     if (
@@ -2925,7 +2693,7 @@ export function App() {
     selectedWarningRequiresComment,
     isPatchScenarioReady,
     patchScenarioReadinessMessage,
-    hasReviewedGeneratedPatchPreview,
+    hasCurrentGeneratedPatchPreview,
   } = usePatchScenarioState({
     selectedXmlFamily,
     selectedXmlVariant,
@@ -2940,7 +2708,7 @@ export function App() {
     selectedCurrentStatusCode,
     selectedPatchWarningCodes,
     selectedPatchStorageConditionMap,
-    hasReviewedPatchBaselinePost,
+    hasLoadedPatchBaseline,
     isSharedAnchorLoading,
     xmlPairPreview,
     xmlPatchPreview,
@@ -2960,12 +2728,16 @@ export function App() {
           selectedPairRequestArgs.product_family,
           selectedPairRequestArgs.product_variant,
           selectedPairRequestArgs.catalogue_number,
+          true,
         );
         if (!cancelled) {
           setXmlPairPreview(preview);
         }
-      } catch {
-        // Keep the last loaded anchor state until the user explicitly regenerates or changes selection.
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setXmlPairPreview(null);
+          setError(error instanceof Error ? error.message : "Accepted baseline is unavailable.");
+        }
       }
     })();
 
@@ -2973,6 +2745,7 @@ export function App() {
       cancelled = true;
     };
   }, [
+    testingSubjectSummaries,
     xmlMode,
     selectedPairRequestArgs?.product_family,
     selectedPairRequestArgs?.product_variant,
@@ -3004,13 +2777,11 @@ export function App() {
   useEffect(() => {
     setSelectedBulkRecordCount(1);
     setSelectedXmlChunkSequence(1);
-    setXmlBulkPostPreview(null);
     setXmlBulkUdidiPostPreview(null);
     setXmlBulkPatchPreview(null);
     setXmlBulkMarketInfoPreview(null);
   }, [selectedXmlFamily, selectedXmlVariant]);
   useEffect(() => {
-    setAcceptedMarketInfoItems(null);
     setMarketInfoScenarioItems(
       buildMarketInfoScenarioItems(selectedXmlMarketInfoRecord?.market_availability_items ?? []),
     );
@@ -3047,9 +2818,6 @@ export function App() {
     patchStatusCodeInput,
     patchStorageConditionInputs,
   ]);
-  useEffect(() => {
-    setXmlBulkPostPreview(null);
-  }, [selectedBulkRecordCount]);
   useEffect(() => {
     setXmlBulkUdidiPostPreview(null);
   }, [selectedBulkRecordCount]);
@@ -3101,7 +2869,6 @@ export function App() {
     [selectedMarketInfoSummary?.latest_successful_market_info_state],
   );
   const selectedCurrentMarketInfoItems =
-    acceptedMarketInfoItems ??
     (selectedTrackedMarketInfoItems.length > 0
       ? selectedTrackedMarketInfoItems
       : (selectedXmlMarketInfoRecord?.market_availability_items ?? []).map((item, index) => ({
@@ -3123,7 +2890,6 @@ export function App() {
     if (selectedTrackedMarketInfoItems.length < 1) {
       return;
     }
-    setAcceptedMarketInfoItems(selectedTrackedMarketInfoItems.map((item) => ({ ...item })));
     setMarketInfoScenarioItems(selectedTrackedMarketInfoItems.map((item) => ({ ...item })));
   }, [
     selectedMarketInfoAnchor?.catalogue_number,
@@ -3162,18 +2928,13 @@ export function App() {
   );
   const successXmlUploadScope =
     selectedXmlFamilySummary &&
-    selectedXmlVariantSummary &&
-      (xmlMode === "post" ||
-      xmlMode === "marketInfo" ||
-      xmlMode === "patch" ||
-      xmlMode === "bulkPost" ||
-      xmlMode === "bulkUdidiPost" ||
-      xmlMode === "bulkPatch" ||
-      xmlMode === "bulkMarketInfo")
+    selectedXmlVariantSummary
       ? {
           productFamily: selectedXmlFamilySummary.product_family,
           productVariant: selectedXmlVariantSummary.product_variant,
           mode: xmlMode,
+          catalogueNumber: xmlMode === "patch" ? selectedPairRequestArgs?.catalogue_number
+            : xmlMode === "marketInfo" ? selectedMarketInfoRequestArgs?.catalogue_number : null,
           basicUdiDi:
             xmlMode === "bulkPatch"
               ? selectedBulkPatchBasicUdiDi || null
@@ -3194,23 +2955,7 @@ export function App() {
     setTestingSubjectSummaries,
     setXmlOperationAssessment,
     setXmlOperationAssessmentError,
-    onUploadRecorded: (result) => {
-      if (
-        xmlMode !== "marketInfo" ||
-        result.message_type !== "MARKET_INFO.PUT" ||
-        result.successful_entity_count !== 1
-      ) {
-        return;
-      }
-      const acceptedItems = marketInfoScenarioItems.map((item, index) => ({
-        ...item,
-        id: `accepted-market-${index}-${item.country}`,
-      }));
-      setAcceptedMarketInfoItems(acceptedItems);
-      setMarketInfoScenarioItems(acceptedItems.map((item) => ({ ...item })));
-    },
     clearPreviewState: () => {
-      setXmlBulkPostPreview(null);
       setXmlBulkUdidiPostPreview(null);
       setXmlBulkPatchPreview(null);
       setXmlBulkMarketInfoPreview(null);
@@ -3222,21 +2967,11 @@ export function App() {
       setSelectedPatchXmlSectionId(null);
     },
   });
-  const isOperationAssessmentMode =
-    xmlMode === "post" ||
-    xmlMode === "marketInfo" ||
-    xmlMode === "patch" ||
-    xmlMode === "bulkPost" ||
-    xmlMode === "bulkUdidiPost" ||
-    xmlMode === "bulkPatch" ||
-    xmlMode === "bulkMarketInfo";
   const isPostWorkspaceReady = Boolean(selectedXmlFamilySummary && selectedXmlVariantSummary);
   const canRunPostFromAssessment =
     isPostWorkspaceReady && xmlOperationAssessment?.status === "available";
   const canRunPatchFromAssessment =
     isPatchScenarioReady && xmlOperationAssessment?.status === "available";
-  const canRunBulkPostFromAssessment =
-    Boolean(selectedXmlVariantSummary) && (assessedBulkParentGroupCount ?? 0) > 0;
   const canRunBulkUdidiPostFromAssessment =
     Boolean(selectedXmlVariantSummary) && (assessedBulkChildRecordCount ?? 0) > 0;
   const canRunBulkPatchFromAssessment =
@@ -3255,7 +2990,6 @@ export function App() {
     xmlPairPreview,
     selectedPostWorkspaceRecord,
     selectedXmlRecord,
-    xmlPreview,
     selectedXmlMarketInfoRecord,
     xmlMarketInfoPreview,
     xmlPatchPreview,
@@ -3263,7 +2997,6 @@ export function App() {
     selectedPatchScenarioStatus,
     selectedPatchScenarioTarget: selectedPatchScenario.target,
     patchVersionInput,
-    xmlBulkPostPreview,
     xmlBulkUdidiPostPreview,
     xmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
@@ -3298,9 +3031,9 @@ export function App() {
   const bulkMarketInfoXmlPreviewLineRefs = useRef<Record<number, HTMLSpanElement | null>>({});
   const bulkMarketInfoXmlPreviewContainerRef = useRef<HTMLPreElement | null>(null);
   const bulkXmlStructureSections =
-    xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? extractXmlStructureSections(xmlPreviewLines) : [];
+    xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? extractXmlStructureSections(xmlPreviewLines) : [];
   const selectedBulkXmlSection =
-    xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch"
+    xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch"
       ? bulkXmlStructureSections.find((section) => section.id === selectedBulkXmlSectionId) ?? bulkXmlStructureSections[0] ?? null
       : null;
   const bulkXmlPreviewLineRefs = useRef<Record<number, HTMLSpanElement | null>>({});
@@ -3315,10 +3048,8 @@ export function App() {
   const selectedBatchValidation = resolveSelectedBatchValidation({
     xmlMode,
     xmlPairPreview,
-    xmlPreview,
     xmlMarketInfoPreview,
     xmlPatchPreview,
-    xmlBulkPostPreview,
     xmlBulkUdidiPostPreview,
     xmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
@@ -3334,9 +3065,7 @@ export function App() {
   const genericPreviewTitle = resolveGenericPreviewTitle(xmlMode);
   const genericPreviewStatusMessage = resolveGenericPreviewStatusMessage({
     xmlMode,
-    xmlPreview,
     xmlMarketInfoPreview,
-    xmlBulkPostPreview,
     xmlBulkUdidiPostPreview,
     xmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
@@ -3344,10 +3073,10 @@ export function App() {
   const bulkChunkSummaryTitle = resolveBulkChunkSummaryTitle(xmlMode);
   const patchPreviewStatusMessage = xmlPatchPreview
     ? `Scenario-derived PATCH preview loaded for ${xmlPatchPreview.product_family} / ${xmlPatchPreview.product_variant} / ${xmlPatchPreview.catalogue_number}.`
-    : hasReviewedPatchBaselinePost
-      ? "No generated PATCH scenario preview loaded yet for the reviewed POST baseline."
+    : hasLoadedPatchBaseline
+      ? "No generated PATCH scenario preview loaded yet for the accepted device baseline."
       : hasSelectedPatchBaselinePost
-        ? "Review the baseline POST first. Scenario PATCH generation stays blocked until that POST has been generated for this exact record."
+        ? "Load the accepted baseline for this exact record before generating a PATCH scenario."
         : "No baseline POST is currently available for the selected family and variant.";
   const marketInfoPreviewStatusMessage = xmlMarketInfoPreview
     ? `Market Info preview generated for ${xmlMarketInfoPreview.product_family} / ${xmlMarketInfoPreview.product_variant} / ${xmlMarketInfoPreview.catalogue_number}.`
@@ -3362,9 +3091,7 @@ export function App() {
   const bulkPreviewStructureTitle =
     xmlMode === "bulkPatch"
       ? "Bulk PATCH structure"
-      : xmlMode === "bulkPost"
-        ? "Bulk BASIC UDI-DI POST structure"
-        : "Bulk DEVICE UDI-DI POST structure";
+      : "Bulk DEVICE UDI-DI POST structure";
   const bulkPreviewStructureSubtitle =
     xmlMode === "bulkPatch"
       ? "Navigate the main batch PATCH message sections."
@@ -3378,7 +3105,7 @@ export function App() {
     xmlMode,
     xmlOperationAssessment,
     assessedPatchLatestAcceptedVersion,
-    assessedPatchReviewedBaseline,
+    assessedPostReviewHistory,
     assessedPatchTrackedRegistration,
     assessedMarketInfoCurrentVersion,
     assessedSelectedBasicUdiDi,
@@ -3394,25 +3121,19 @@ export function App() {
   const activePreviewLabel =
     xmlMode === "post"
       ? "Post"
-      : xmlMode === "single"
-        ? "Single XML"
-        : xmlMode === "marketInfo"
+      : xmlMode === "marketInfo"
         ? "Market Info"
           : xmlMode === "patch"
             ? "Patch"
-            : `${xmlMode === "bulkPost" ? "Bulk Basic UDI POST" : xmlMode === "bulkUdidiPost" ? "Bulk UDI-DI POST" : xmlMode === "bulkPatch" ? "Bulk PATCH" : "Bulk Market Info"} Chunk ${selectedXmlChunkSequence}`;
+            : `${xmlMode === "bulkUdidiPost" ? "Bulk UDI-DI POST" : xmlMode === "bulkPatch" ? "Bulk PATCH" : "Bulk Market Info"} Chunk ${selectedXmlChunkSequence}`;
   const activePreviewFileName =
     xmlMode === "post"
       ? xmlPairPreview?.post_file_name ?? null
-      : xmlMode === "single"
-        ? xmlPreview?.file_name ?? null
-        : xmlMode === "marketInfo"
+      : xmlMode === "marketInfo"
         ? xmlMarketInfoPreview?.file_name ?? null
           : xmlMode === "patch"
             ? xmlPatchPreview?.derived_patch_file_name ?? null
-            : xmlMode === "bulkPost"
-              ? xmlBulkPostPreview?.selected_chunk_file_name ?? null
-              : xmlMode === "bulkUdidiPost"
+            : xmlMode === "bulkUdidiPost"
               ? xmlBulkUdidiPostPreview?.selected_chunk_file_name ?? null
               : xmlMode === "bulkPatch"
                 ? xmlBulkPatchPreview?.selected_chunk_file_name ?? null
@@ -3420,15 +3141,11 @@ export function App() {
   const canGenerateCurrentXml =
     xmlMode === "post"
       ? canRunPostFromAssessment
-      : xmlMode === "single"
-        ? Boolean(selectedXmlRecord)
-        : xmlMode === "marketInfo"
+      : xmlMode === "marketInfo"
           ? isMarketInfoScenarioReady
           : xmlMode === "patch"
             ? canRunPatchFromAssessment
-            : xmlMode === "bulkPost"
-              ? canRunBulkPostFromAssessment
-              : xmlMode === "bulkUdidiPost"
+            : xmlMode === "bulkUdidiPost"
                 ? canRunBulkUdidiPostFromAssessment && effectiveBulkUdidiPostCatalogueNumbers.length > 0
                 : xmlMode === "bulkPatch"
                   ? canRunBulkPatchFromAssessment
@@ -3436,14 +3153,10 @@ export function App() {
   const canDownloadCurrentXml =
     xmlMode === "post"
       ? Boolean(xmlPairPreview)
-      : xmlMode === "single"
-        ? Boolean(selectedXmlRecord)
-        : xmlMode === "marketInfo"
+      : xmlMode === "marketInfo"
           ? Boolean(canRunMarketInfoFromAssessment && xmlMarketInfoPreview)
           : xmlMode === "patch"
-            ? Boolean(hasReviewedPatchBaselinePost && hasReviewedGeneratedPatchPreview)
-            : xmlMode === "bulkPost"
-              ? canRunBulkPostFromAssessment
+            ? Boolean(hasLoadedPatchBaseline && hasCurrentGeneratedPatchPreview)
             : xmlMode === "bulkUdidiPost"
               ? canRunBulkUdidiPostFromAssessment && effectiveBulkUdidiPostCatalogueNumbers.length > 0
               : xmlMode === "bulkPatch"
@@ -3540,7 +3253,7 @@ export function App() {
   }, [xmlMode, selectedBulkMarketInfoXmlSection?.id, selectedBulkMarketInfoXmlSection?.lineStart]);
 
   useEffect(() => {
-    if (xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" && xmlMode !== "bulkPatch") {
+    if (xmlMode !== "bulkUdidiPost" && xmlMode !== "bulkPatch") {
       return;
     }
     if (bulkXmlStructureSections.length < 1) {
@@ -3553,7 +3266,7 @@ export function App() {
   }, [xmlMode, bulkXmlStructureSections, selectedBulkXmlSectionId]);
 
   useEffect(() => {
-    if ((xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" && xmlMode !== "bulkPatch") || !selectedBulkXmlSection) {
+    if ((xmlMode !== "bulkUdidiPost" && xmlMode !== "bulkPatch") || !selectedBulkXmlSection) {
       return;
     }
     const container = bulkXmlPreviewContainerRef.current;
@@ -3637,7 +3350,6 @@ export function App() {
       hasParent: Boolean(selectedBulkPatchParentGroup),
       scopeMode: bulkPatchScopeMode,
       postedCatalogueNumbers: bulkPatchPostedCatalogueNumbers,
-      fallbackCatalogueNumbers: selectedBulkPatchFallbackCatalogueNumbers,
       effectiveCatalogueNumbers: effectiveBulkPatchCatalogueNumbers,
       selectedCatalogueNumbers: selectedBulkPatchCatalogueNumbers,
       importedMatchedCatalogueNumbers: bulkPatchImportedMatchedCatalogueNumbers,
@@ -3649,7 +3361,6 @@ export function App() {
       hasParent: Boolean(selectedBulkMarketInfoParentGroup),
       scopeMode: bulkMarketInfoScopeMode,
       postedCatalogueNumbers: bulkMarketInfoPostedCatalogueNumbers,
-      fallbackCatalogueNumbers: selectedBulkMarketInfoFallbackCatalogueNumbers,
       effectiveCatalogueNumbers: effectiveBulkMarketInfoCatalogueNumbers,
       selectedCatalogueNumbers: selectedBulkMarketInfoCatalogueNumbers,
       importedMatchedCatalogueNumbers: bulkMarketInfoImportedMatchedCatalogueNumbers,
@@ -3676,8 +3387,6 @@ export function App() {
     resolveBulkMarketInfoCatalogueNumbers,
     selectedBulkPatchParentGroup,
     resolveBulkPatchCatalogueNumbers,
-    setXmlPreview,
-    setXmlBulkPostPreview,
     setXmlBulkUdidiPostPreview,
     setXmlPairPreview,
     setXmlMarketInfoPreview,
@@ -3688,10 +3397,8 @@ export function App() {
     setXmlActionMessage,
     setIsGeneratingXml,
     xmlPairPreview,
-    xmlPreview,
     xmlMarketInfoPreview,
     xmlPatchPreview,
-    xmlBulkPostPreview,
     xmlBulkUdidiPostPreview,
     xmlBulkPatchPreview,
     xmlBulkMarketInfoPreview,
@@ -4691,7 +4398,7 @@ export function App() {
               className={`summary-card summary-card-kpi ${
                 xmlMode === "patch" || xmlMode === "bulkPatch"
                   ? "summary-card-kpi-patch"
-                  : xmlMode === "post" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost"
+                  : xmlMode === "post" || xmlMode === "bulkUdidiPost"
                     ? "summary-card-kpi-post"
                     : "summary-card-kpi-secondary"
               }`}
@@ -4716,12 +4423,7 @@ export function App() {
                   noun: "PATCH candidate",
                 };
               }
-              if (xmlMode === "bulkPost") {
-                return {
-                  count: assessedUnpostedParentGroupCount ?? selectedBulkUnpostedBasicUdiCount,
-                  noun: "parent POST group",
-                };
-              }
+
               if (xmlMode === "bulkUdidiPost") {
                 return {
                   count: assessedBulkChildRecordCount ?? selectedBulkEligibleUdidiPostCount,
@@ -4752,12 +4454,7 @@ export function App() {
                   noun: "tracked PATCH base in variant",
                 };
               }
-              if (xmlMode === "bulkPost") {
-                return {
-                  count: selectedBulkEligiblePostCount,
-                  noun: "POST row in variant",
-                };
-              }
+
               if (xmlMode === "bulkUdidiPost") {
                 return {
                   count: assessedBulkChildRecordCount ?? selectedBulkEligibleUdidiPostCount,
@@ -4777,7 +4474,7 @@ export function App() {
             })();
 
             const xmlWorkspaceStatus =
-              isOperationAssessmentMode && xmlOperationAssessment
+              xmlOperationAssessment
                 ? {
                     label:
                       xmlOperationAssessment.status === "available"
@@ -4803,9 +4500,7 @@ export function App() {
                 ? "next POST candidate"
                 : xmlMode === "patch"
                   ? "next PATCH candidate"
-                  : xmlMode === "bulkPost"
-                    ? "next POST group"
-                    : xmlMode === "bulkUdidiPost"
+                  : xmlMode === "bulkUdidiPost"
                       ? "next child POST scope"
                       : xmlMode === "bulkPatch"
                         ? "next PATCH scope"
@@ -5009,8 +4704,8 @@ export function App() {
                     {xmlMode === "post" || xmlMode === "marketInfo" || xmlMode === "patch"
                       ? xmlMode === "post"
                         ? selectedXmlFamilyLabel
-                        : xmlMode === "patch" && !hasReviewedPatchBaselinePost
-                          ? "No reviewed POST"
+                        : xmlMode === "patch" && !hasLoadedPatchBaseline
+                          ? "No accepted baseline"
                           : selectedTestingAnchor?.product_family ?? "No testing anchor"
                       : selectedXmlFamilyLabel}
                   </strong>
@@ -5018,7 +4713,7 @@ export function App() {
                     {xmlMode === "post" || xmlMode === "marketInfo" || xmlMode === "patch"
                       ? xmlMode === "post"
                         ? selectedXmlVariantLabel
-                        : xmlMode === "patch" && !hasReviewedPatchBaselinePost
+                        : xmlMode === "patch" && !hasLoadedPatchBaseline
                           ? "Select a variant with an XML-ready POST record"
                           : selectedTestingAnchor?.product_variant ?? "No anchor variant"
                       : selectedXmlVariantLabel}
@@ -5056,52 +4751,8 @@ export function App() {
                 ) : null}
               </div>
             ) : null}
-            {(xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo") && selectedXmlVariantSummary ? (
-              xmlMode === "bulkPost" ? (
-                <div className="draft-card bulk-patch-summary-bar">
-                  <div className="draft-card-head">
-                    <strong>Bulk POST summary</strong>
-                    <span className={selectedBulkRecordCount > 0 ? "status-pill ok compact" : "status-pill warn compact"}>
-                      {selectedBulkRecordCount > 0
-                        ? `${selectedBulkRecordCount} device${selectedBulkRecordCount === 1 ? "" : "s"}`
-                        : "No devices selected"}
-                      </span>
-                  </div>
-                  {isLoadingXmlOperationAssessment ? (
-                    <div className="xml-refresh-indicator" aria-live="polite">
-                      <strong>Refreshing...</strong>
-                      <span>Updating the bulk POST scope for the selected family and variant.</span>
-                    </div>
-                  ) : null}
-                  <div className="bulk-patch-summary-row">
-                    <div className="bulk-patch-summary-metrics">
-                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
-                        <strong>Basic UDI-DI parents</strong>
-                        <span>{selectedBulkUnpostedBasicUdiCount || "None available"}</span>
-                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
-                      </div>
-                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
-                        <strong>Number of devices</strong>
-                        <span>{selectedBulkRecordCount || "Not selected"}</span>
-                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
-                      </div>
-                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
-                        <strong>Variant</strong>
-                        <span>{selectedXmlFamilySummary?.product_family} / {selectedXmlVariantSummary.product_variant}</span>
-                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
-                      </div>
-                      <div className="workflow-note patch-readiness-note bulk-patch-summary-tile">
-                        <strong>Preview chunk</strong>
-                        <span>Chunk {selectedXmlChunkSequence} of {selectedBulkChunkCount}</span>
-                        {isLoadingXmlOperationAssessment ? <span className="xml-refresh-inline">Refreshing...</span> : null}
-                      </div>
-                    </div>
-                  </div>
-                  <p className="panel-copy bulk-patch-summary-status">
-                    {bulkPostReadinessMessage}
-                  </p>
-                </div>
-              ) : xmlMode === "bulkUdidiPost" ? (
+            {(xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo") && selectedXmlVariantSummary ? (
+              xmlMode === "bulkUdidiPost" ? (
                 <div className="draft-card bulk-patch-summary-bar">
                   <div className="draft-card-head">
                     <strong>Bulk UDI-DI POST summary</strong>
@@ -5222,7 +4873,7 @@ export function App() {
                 </div>
               )
             ) : null}
-            {isOperationAssessmentMode ? (
+            {(
               <XmlOperationAssessmentPanel
                 xmlMode={xmlMode}
                 xmlAssessmentTitle={xmlAssessmentTitle}
@@ -5254,7 +4905,7 @@ export function App() {
                 selectedXmlVariantBlockedRecords={selectedXmlVariantSummary?.xml_blocked_records ?? 0}
                 selectedXmlVariantTotalRecords={selectedXmlVariantSummary?.total_records ?? 0}
               />
-            ) : null}
+            )}
             {xmlMode === "post" ? (
               <PostPreviewPanel
                 postSuccessXmlInputRef={postSuccessXmlInputRef}
@@ -5290,9 +4941,7 @@ export function App() {
                   ? "xml-focus-layout patch-focus-layout"
                   : xmlMode === "marketInfo"
                     ? "xml-focus-layout market-info-focus-layout"
-                  : xmlMode === "bulkPatch" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkMarketInfo"
-                    ? "xml-focus-layout bulk-patch-focus-layout"
-                    : "xml-focus-layout"
+                  : "xml-focus-layout bulk-patch-focus-layout"
               }
             >
               <div className="xml-preview-surface">
@@ -5337,7 +4986,6 @@ export function App() {
                         }))}
                       onMarketInfoDeviceChange={(catalogueNumber) => {
                         setSelectedXmlRecordKey(catalogueNumber);
-                        setAcceptedMarketInfoItems(null);
                         setMarketInfoScenarioItems([]);
                         setXmlMarketInfoPreview(null);
                       }}
@@ -5445,28 +5093,20 @@ export function App() {
                     marketInfoXmlPreviewLineRefs={bulkMarketInfoXmlPreviewLineRefs}
                     marketInfoXmlPreviewContainerRef={bulkMarketInfoXmlPreviewContainerRef}
                   />
-                ) : xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" ? (
+                ) : (
                   <BulkXmlPreviewPanel
                     successXmlInputRef={postSuccessXmlInputRef}
                     handleSuccessXmlSelected={handlePostSuccessXmlSelected}
                     title={genericPreviewTitle}
                     generateButtonLabel={
-                      xmlMode === "bulkPost"
-                        ? "Generate Bulk BASIC UDI-DI POST"
-                        : xmlMode === "bulkUdidiPost"
+                      xmlMode === "bulkUdidiPost"
                           ? "Generate Bulk DEVICE UDI-DI POST"
-                          : xmlMode === "bulkPatch"
-                            ? "Generate Bulk PATCH"
-                            : "Generate Bulk Market Info"
+                          : "Generate Bulk PATCH"
                     }
                     downloadButtonLabel={
-                      xmlMode === "bulkPost"
-                        ? "Download Bulk BASIC UDI-DI POST ZIP"
-                        : xmlMode === "bulkUdidiPost"
+                      xmlMode === "bulkUdidiPost"
                           ? "Download Bulk DEVICE UDI-DI POST ZIP"
-                          : xmlMode === "bulkPatch"
-                            ? "Download Bulk PATCH ZIP"
-                            : "Download Bulk Market Info ZIP"
+                          : "Download Bulk PATCH ZIP"
                     }
                     canGenerateCurrentXml={canGenerateCurrentXml}
                     canDownloadCurrentXml={canDownloadCurrentXml}
@@ -5493,109 +5133,11 @@ export function App() {
                     xmlPreviewLineRefs={bulkXmlPreviewLineRefs}
                     xmlPreviewContainerRef={bulkXmlPreviewContainerRef}
                   />
-                ) : (
-                  <>
-                    <GenericXmlPreviewPanel
-                      title={genericPreviewTitle}
-                      useBulkMetaLayout={false}
-                      activePreviewLabel={activePreviewLabel}
-                      selectedBatchValidation={selectedBatchValidation}
-                      validationStatusLabel={validationStatusLabel}
-                      selectedSchemaLabel={selectedSchemaLabel}
-                      activePreviewFileName={activePreviewFileName}
-                      previewStatusMessage={genericPreviewStatusMessage}
-                      xmlPreviewLines={xmlPreviewLines}
-                    />
-                  </>
                 )}
               </div>
 
               <div className="xml-sidebar-surface">
-                {xmlMode === "patch" || xmlMode === "marketInfo" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo" ? null : (
-                <div className="draft-actions-bar xml-actions-bar">
-                  <button
-                    className="action-button"
-                    type="button"
-                    onClick={() => void generateXmlPreview()}
-                    disabled={
-                      ((xmlMode === "single" || xmlMode === "marketInfo") && !selectedXmlVariantSummary) ||
-                      !canGenerateCurrentXml ||
-                      isGeneratingXml ||
-                      isDownloadingXml
-                    }
-                  >
-                      {isGeneratingXml
-                      ? "Generating..."
-                      : xmlMode === "single"
-                        ? "Generate XML"
-                      : xmlMode === "marketInfo"
-                        ? "Generate Market Info"
-                        : "Generate XML"}
-                  </button>
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={() => void generateXmlPreview()}
-                    disabled={
-                      ((xmlMode === "single" || xmlMode === "marketInfo") && !selectedXmlVariantSummary) ||
-                      !canGenerateCurrentXml ||
-                      isGeneratingXml ||
-                      isDownloadingXml
-                    }
-                  >
-                    Validate Against XSD
-                  </button>
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={() => void downloadXmlRecord()}
-                    disabled={
-                      ((xmlMode === "single" || xmlMode === "marketInfo") && !selectedXmlVariantSummary) ||
-                      !canDownloadCurrentXml ||
-                      isGeneratingXml ||
-                      isDownloadingXml
-                    }
-                  >
-                    {isDownloadingXml
-                      ? "Preparing ZIP..."
-                      : xmlMode === "single"
-                        ? "Download XML"
-                      : xmlMode === "marketInfo"
-                        ? "Download Market Info"
-                        : "Download XML"}
-                  </button>
-                  {xmlActionMessage ? <span className="save-message">{xmlActionMessage}</span> : null}
-                </div>
-                )}
-                {xmlMode === "single" ? (
-                  selectedXmlRecord ? (
-                    <div className="draft-list xml-record-stack">
-                      <div className="draft-card xml-record-card">
-                        <div className="draft-card-head">
-                          <strong>{selectedXmlRecord.catalogue_number}</strong>
-                          <span className="status-pill ok compact">{selectedXmlRecord.submission_operation ?? "No operation"}</span>
-                        </div>
-                        <p className="draft-meta">
-                          {selectedXmlRecord.product_family} / {selectedXmlRecord.product_variant}
-                        </p>
-                        <p className="panel-copy">{selectedXmlRecord.trade_name ?? "No trade name"}</p>
-                        <p className="panel-copy">
-                          UDI-DI {selectedXmlRecord.primary_udi_di} · Issuing entity {selectedXmlRecord.issuing_entity ?? "Unknown"}
-                        </p>
-                        <div className="family-scope-pill-row xml-status-row">
-                          <span className={basicUdiMatchPillClass(selectedXmlRecord.reference_match_status)}>
-                            {basicUdiMatchLabel(selectedXmlRecord.reference_match_status)}
-                          </span>
-                        </div>
-                        <p className="panel-copy">
-                          Review one XML-ready sample row before moving to batch generation.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="panel-copy">No XML-ready sample row is currently available for the selected family and variant.</p>
-                  )
-                ) : xmlMode === "patch" ? (
+                {xmlMode === "patch" ? (
                   selectedPatchWorkspaceRecord ? (
                     <PatchScenarioCard
                       selectedPatchScenarioLabel={selectedPatchScenario.label}
@@ -5613,7 +5155,7 @@ export function App() {
                         setXmlPatchPreview(null);
                       }}
                       currentAcceptedPatchLabel={currentAcceptedPatchLabel}
-                      hasReviewedPatchBaselinePost={hasReviewedPatchBaselinePost}
+                      hasLoadedPatchBaseline={hasLoadedPatchBaseline}
                       selectedPatchScenarioSummary={selectedPatchScenario.summary}
                       patchDraftComparisonRows={patchDraftComparisonRows}
                       currentAcceptedPatchVersion={currentAcceptedPatchVersion}
@@ -5655,7 +5197,7 @@ export function App() {
                       xmlPatchPreview={xmlPatchPreview}
                     />
                   ) : null
-                ) : xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo" ? (
+                ) : xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo" ? (
                   xmlMode === "bulkPatch" ? (
                     <BulkPatchWorkspace
                       familyVariantLabel={`${selectedXmlFamilyLabel} / ${selectedXmlVariantLabel}`}
@@ -5797,39 +5339,37 @@ export function App() {
                   ) : (
                   <BulkPostWorkspace
                     familyVariantLabel={`${selectedXmlFamilyLabel} / ${selectedXmlVariantLabel}`}
-                    title={xmlMode === "bulkPost" ? "Bulk BASIC UDI-DI POST" : "Bulk DEVICE UDI-DI POST"}
+                    title={"Bulk DEVICE UDI-DI POST"}
                       isRefreshing={visibleMarketInfoRefreshState}
-                    stepOneTitle={xmlMode === "bulkPost" ? "Parent registration scope" : "Child registration scope"}
-                    stepOneCount={xmlMode === "bulkPost" ? selectedBulkUnpostedBasicUdiCount : selectedBulkEligibleUdidiPostCount}
-                    stepOneLabel={xmlMode === "bulkPost" ? "unposted parent" : "eligible device"}
+                    stepOneTitle={"Child registration scope"}
+                    stepOneCount={selectedBulkEligibleUdidiPostCount}
+                    stepOneLabel={"eligible device"}
                     stepOneCopy={
-                      xmlMode === "bulkPost"
-                        ? "These Basic UDI-DI parent registrations are currently available for this selected family and variant."
-                        : "These Device UDI-DI child registrations are currently available under tracked Basic UDI-DI parents."
+                      "These Device UDI-DI child registrations are currently available under tracked Basic UDI-DI parents."
                     }
-                    stepOneFooter={xmlMode === "bulkPost" ? bulkPostReadinessMessage : undefined}
-                    selectedBulkRecordCount={xmlMode === "bulkUdidiPost" ? effectiveBulkUdidiPostCatalogueNumbers.length : selectedBulkRecordCount}
+                    stepOneFooter={undefined}
+                    selectedBulkRecordCount={effectiveBulkUdidiPostCatalogueNumbers.length}
                     onSelectedBulkRecordCountChange={(count) => {
                       setSelectedBulkRecordCount(count);
                       setSelectedXmlChunkSequence(1);
                     }}
-                    selectedBulkCapacity={xmlMode === "bulkUdidiPost" ? bulkUdidiPostEntries.length : selectedBulkCapacity}
-                    bulkUdidiPostScopeMode={xmlMode === "bulkUdidiPost" ? bulkUdidiPostScopeMode : undefined}
-                    onBulkUdidiPostScopeModeChange={xmlMode === "bulkUdidiPost" ? (value) => {
+                    selectedBulkCapacity={bulkUdidiPostEntries.length}
+                    bulkUdidiPostScopeMode={bulkUdidiPostScopeMode}
+                    onBulkUdidiPostScopeModeChange={(value) => {
                       setBulkUdidiPostScopeMode(value);
                       setSelectedXmlChunkSequence(1);
-                    } : undefined}
-                    bulkUdidiPostEntries={xmlMode === "bulkUdidiPost" ? bulkUdidiPostEntries : undefined}
-                    bulkUdidiPostCatalogueFilter={xmlMode === "bulkUdidiPost" ? bulkUdidiPostCatalogueFilter : undefined}
-                    onBulkUdidiPostCatalogueFilterChange={xmlMode === "bulkUdidiPost" ? setBulkUdidiPostCatalogueFilter : undefined}
-                    bulkUdidiPostFilteredEntries={xmlMode === "bulkUdidiPost" ? bulkUdidiPostFilteredEntries : undefined}
-                    selectedBulkUdidiPostCatalogueNumbers={xmlMode === "bulkUdidiPost" ? selectedBulkUdidiPostCatalogueNumbers : undefined}
-                    setSelectedBulkUdidiPostCatalogueNumbers={xmlMode === "bulkUdidiPost" ? setSelectedBulkUdidiPostCatalogueNumbers : undefined}
-                    bulkUdidiPostImportText={xmlMode === "bulkUdidiPost" ? bulkUdidiPostImportText : undefined}
-                    onBulkUdidiPostImportTextChange={xmlMode === "bulkUdidiPost" ? setBulkUdidiPostImportText : undefined}
-                    bulkUdidiPostImportedCatalogueNumbersCount={xmlMode === "bulkUdidiPost" ? bulkUdidiPostImportedCatalogueNumbers.length : undefined}
-                    bulkUdidiPostImportedMatchedCatalogueNumbersCount={xmlMode === "bulkUdidiPost" ? bulkUdidiPostImportedMatchedCatalogueNumbers.length : undefined}
-                    bulkUdidiPostImportedNotFoundCatalogueNumbersCount={xmlMode === "bulkUdidiPost" ? bulkUdidiPostImportedCatalogueNumbers.length - bulkUdidiPostImportedMatchedCatalogueNumbers.length : undefined}
+                    }}
+                    bulkUdidiPostEntries={bulkUdidiPostEntries}
+                    bulkUdidiPostCatalogueFilter={bulkUdidiPostCatalogueFilter}
+                    onBulkUdidiPostCatalogueFilterChange={setBulkUdidiPostCatalogueFilter}
+                    bulkUdidiPostFilteredEntries={bulkUdidiPostFilteredEntries}
+                    selectedBulkUdidiPostCatalogueNumbers={selectedBulkUdidiPostCatalogueNumbers}
+                    setSelectedBulkUdidiPostCatalogueNumbers={setSelectedBulkUdidiPostCatalogueNumbers}
+                    bulkUdidiPostImportText={bulkUdidiPostImportText}
+                    onBulkUdidiPostImportTextChange={setBulkUdidiPostImportText}
+                    bulkUdidiPostImportedCatalogueNumbersCount={bulkUdidiPostImportedCatalogueNumbers.length}
+                    bulkUdidiPostImportedMatchedCatalogueNumbersCount={bulkUdidiPostImportedMatchedCatalogueNumbers.length}
+                    bulkUdidiPostImportedNotFoundCatalogueNumbersCount={bulkUdidiPostImportedCatalogueNumbers.length - bulkUdidiPostImportedMatchedCatalogueNumbers.length}
                     selectedXmlChunkSequence={selectedXmlChunkSequence}
                     onSelectedXmlChunkSequenceChange={setSelectedXmlChunkSequence}
                     selectedBulkChunkCount={selectedBulkChunkCount}
@@ -5844,36 +5384,12 @@ export function App() {
                 ) : (
                   <p className="panel-copy">No XML-ready bulk scope is currently available for the selected family and variant.</p>
                 )}
-                {xmlMode !== "bulkPatch" && xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" && xmlMode !== "bulkMarketInfo" && xmlMode !== "patch" && xmlMode !== "marketInfo" ? (
-                  <div className="workflow-note">
-                      <strong>
-                        {xmlMode === "single"
-                            ? "Single-record review"
-                            : xmlMode === "marketInfo"
-                              ? "Standalone market-info review"
-                              : xmlMode === "patch"
-                                ? "Scenario PATCH review"
-                                : "Bulk UDI-DI POST scope"}
-                    </strong>
-                    <span>
-                      {xmlMode === "single"
-                          ? "Use the auto-selected sample row to confirm payload shape and schema validity before reviewing batch output."
-                          : xmlMode === "marketInfo"
-                            ? "Use one XML-ready record to inspect the standalone MARKET_INFO.PUT wrapper and its current marketInfos collection."
-                            : xmlMode === "patch"
-                              ? "Use one selected POST parent, then compare the derived scenario PATCH against the accepted POST or latest accepted PATCH before external EUDAMED testing."
-                                : "Bulk UDI-DI POST emits standalone Device UDI-DI registrations and assumes the referenced Basic UDI-DI has already been accepted."}
-                    </span>
-                  </div>
-                ) : null}
                 <XmlValidationStack
                   showGenericValidationCards={
-                    xmlMode !== "bulkPatch" && xmlMode !== "bulkPost" && xmlMode !== "bulkUdidiPost" && xmlMode !== "patch"
+                    xmlMode !== "bulkPatch" && xmlMode !== "bulkUdidiPost" && xmlMode !== "patch"
                   }
                   xmlModeLabel={
-                    xmlMode === "single" || xmlMode === "marketInfo" || xmlMode === "patch" || xmlMode === "bulkPost" || xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo"
-                      ? xmlMode
-                      : "single"
+                    xmlMode
                   }
                   selectedBatchValidation={selectedBatchValidation}
                   xmlPatchValidationSchemaPath={xmlPatchPreview?.derived_patch_validation.schema_path ?? null}
