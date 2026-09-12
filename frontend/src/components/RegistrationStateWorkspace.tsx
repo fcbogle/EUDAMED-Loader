@@ -209,11 +209,9 @@ export function RegistrationStateWorkspace({
                     <td>
                       <span className={row.parentStatusClassName}>{row.parentStatusLabel}</span>
                     </td>
-                    <td>{row.seedPostCount}</td>
-                    <td>{row.eligibleChildDeviceCount}</td>
-                    <td>{row.childPostCount}</td>
-                    <td>{row.patchCount}</td>
-                    <td>{row.marketInfoCount}</td>
+                    {[row.seedPostCount, row.eligibleChildDeviceCount, row.childPostCount, row.patchCount, row.marketInfoCount].map((count, index) => (
+                      <td key={index}>{row.statusLabel === "Loading" || row.statusLabel === "Unavailable" ? "—" : count}</td>
+                    ))}
                     <td>{row.latestLabel}</td>
                     <td>{row.nextActionLabel}</td>
                     <td>

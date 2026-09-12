@@ -792,6 +792,8 @@ function workbookFamilyLabel(workbookName: string): string {
 
 export function App() {
   const [recordReadiness, setRecordReadiness] = useState<RecordReadiness[]>([]);
+  const [isLoadingReadiness, setIsLoadingReadiness] = useState(true);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<MainTab>("workbooks");
   const [submissionDataTab, setSubmissionDataTab] = useState<SubmissionDataTab>("snapshot");
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
@@ -1686,17 +1688,31 @@ export function App() {
     ) ??
     selectedXmlVariantRecords.find((record) => (record.submission_operation ?? "").toUpperCase() === "POST") ??
     null;
+  const readinessByDevice = useMemo(() => {
+    const index = new Map<string, RecordReadiness[]>();
+    for (const entry of recordReadiness) {
+      const key = JSON.stringify([entry.product_variant, entry.catalogue_number]);
+      const candidates = index.get(key) ?? [];
+      candidates.push(entry);
+      index.set(key, candidates);
+    }
+    return index;
+  }, [recordReadiness]);
   const readinessForRecord = (record: { product_family: string | null; product_variant: string | null; catalogue_number: string | null }) =>
-    recordReadiness.find((entry) => familyLabelsOverlap(entry.product_family, record.product_family ?? "") && entry.product_variant === record.product_variant && entry.catalogue_number === record.catalogue_number);
+    readinessByDevice.get(JSON.stringify([record.product_variant, record.catalogue_number]))
+      ?.find((entry) => familyLabelsOverlap(entry.product_family, record.product_family));
   useEffect(() => {
     if (!canonicalValidation) return;
     let cancelled = false;
+    setIsLoadingReadiness(true);
+    setReadinessError(null);
     void api.operationReadiness().then((rows) => { if (!cancelled) setRecordReadiness(rows); })
       .catch((error: unknown) => {
         if (cancelled) return;
         setRecordReadiness([]);
+        setReadinessError(error instanceof Error ? error.message : "Operation readiness is unavailable.");
         setError(error instanceof Error ? error.message : "Operation readiness is unavailable.");
-      });
+      }).finally(() => { if (!cancelled) setIsLoadingReadiness(false); });
     return () => { cancelled = true; };
   }, [canonicalValidation, testingSubjectSummaries, testingSummarySubjectSummaries]);
   const selectedBulkEligiblePostRecords = selectedXmlVariantRecords.filter(
@@ -1812,6 +1828,8 @@ export function App() {
     "Market Info ready",
     "Mixed",
     "Blocked",
+    "Loading",
+    "Unavailable",
   ];
   const testingSummaryFamilyOptions = canonicalValidation?.family_summaries.map((summary) => summary.product_family) ?? [];
   const testingSummaryVariantOptions = Array.from(
@@ -2043,7 +2061,17 @@ export function App() {
         statusClassName = "status-pill ok compact";
       }
       const latestLabel = resolveTestingSummaryLatestOperationLabel(group.subjects);
+      const readinessMissing = actionableModeCount === 0 &&
+        [...group.records, ...group.subjects].some((record) => !readinessForRecord(record));
+      if (isLoadingReadiness) {
+        statusLabel = "Loading";
+        statusClassName = "status-pill warn compact";
+      } else if (readinessError || readinessMissing) {
+        statusLabel = "Unavailable";
+        statusClassName = "status-pill warn compact";
+      }
       const nextActionLabel =
+        isLoadingReadiness ? "Checking readiness" : readinessError || readinessMissing ? "Readiness unavailable" :
         seedPostCount > 0
           ? "Register Basic UDI-DI"
           : childPostCount > 0
@@ -5446,8 +5474,8 @@ export function App() {
           )
         ) : (
           <RegistrationStateWorkspace
-            isLoading={isLoadingTestingSummary}
-            error={testingSummaryError}
+            isLoading={isLoadingTestingSummary || isLoadingReadiness}
+            error={testingSummaryError ?? readinessError}
             selectedFamily={selectedRegistrationStateFamily}
             selectedVariant={selectedRegistrationStateVariant}
             selectedStatus={selectedRegistrationStateStatus}
@@ -5456,7 +5484,9 @@ export function App() {
             familyOptions={registrationStateFamilyOptions}
             variantOptions={registrationStateVariantOptions}
             statusOptions={registrationStateStatusOptions}
-            metrics={registrationStateMetrics}
+            metrics={isLoadingReadiness || readinessError
+              ? registrationStateMetrics.map((metric) => ({ ...metric, value: "—" }))
+              : registrationStateMetrics}
             rows={registrationStateRows}
             onFamilyChange={(value) => {
               setSelectedRegistrationStateFamily(value);

@@ -1,1868 +1,243 @@
 # Session Handoff
 
-## Current Objective
-
-Continue refining the XML workspaces so the UI and backend now clearly separate:
-
-- `POST`
-- `Patch XML`
-- `Market Info`
-- `Bulk Basic UDI POST` (backend/API-only)
-- `Bulk UDI-DI POST`
-- `Bulk PATCH`
-- `Bulk Market Info`
-
-with the current implementation focus now being:
-
-- preserve the clean split between parent-only and child-only bulk registration flows
-- keep `Patch XML` as the controlled single-device PATCH workspace
-- keep `Bulk PATCH` aligned to latest successful per-device accepted state
-- keep `Market Info` and `Bulk Market Info` aligned with the same visual and state-model rules as `POST` and `PATCH`
-- make the bulk UI simpler and more operationally accurate
-- stabilize the SQLite-backed application persistence layer
-- prepare the next phase of workflow-event logging so XML generation, validation, download, and success capture can be audited more explicitly
-
-## Reading Guide
-
-- `Current Repo State` sections below should be treated as authoritative for the next session.
-- `Historical Playground Findings` sections capture dated evidence and prior decisions.
-- Any recorded test counts in this document are historical snapshots only. Re-run verification from the current worktree before relying on them.
-
-## Current Repo State: September 9, 2026 — XML Workflow Consolidation
-
-- Implemented the authorized consolidation while retaining the six visible XML workspaces. Bulk Basic UDI POST is API-only; its inaccessible UI branch and the old Single XML branch were removed.
-- Accepted-state resolution is shared by XML generation and read models. New POST contexts capture the full XML projection. PATCH retains the accepted device baseline and the latest separately accepted Market Info country list after source changes. Older partial snapshots remain compatible, with their historical-data limits documented.
-- Late/duplicate acknowledgements cannot roll back newer accepted state. Identified acknowledgements no longer attach to an arbitrary latest draft. Bulk Market Info downloads now record per-device generation context using the actual downloaded chunk envelope IDs.
-- Frontend readiness uses backend per-record assessments. Bulk selections use backend posted-parent/device queries; estimated workbook cohorts and sample fallbacks were removed. Initial assessment and acknowledgement refresh share the same dispatcher and exact device identity, with a guard against stale upload completion.
-- Consolidated identity normalization and removed disconnected frontend API methods, state, preview types and the unused generic preview panel.
-- **Review decision implemented:** preview generation is a check; ZIP download confirms review of the exact packaged contents across all flows. The shared package recorder stores nullable `reviewed_at`, `review_basis`, and `reviewed_members_json` fields alongside the archive hash. Edited drafts require another download; old receipts remain history. Removed the optional reviewed-POST generation gate and renamed frontend loaded-preview checks to avoid implying review. Acceptance still requires a successful acknowledgement.
-- Changes are uncommitted. No live Playground operation, application database update or deployment was performed. The additive SQLite review-column migration is implemented and tested in isolated databases; it runs on application initialization and leaves historical package rows unreviewed.
-- Verification: the full backend run passed 147 tests. All 15 focused ZIP-review tests also passed, including the additional accepted-state regression added during the full run (148 distinct backend tests exercised). All 11 frontend tests and the production build pass; the existing Vite bundle-size warning remains. No browser visual comparison or live Playground submission was performed.
-- Details and compatibility limits: [XML workflow consolidation](code-consolidation-2026-09-09.md).
-
-## Current Repo State: September 7, 2026 — Unused Code Cleanup
-
-- Removed unused imports, summary calculations, normalization draft controls, and handlers from the frontend. The previously reported 78 TypeScript unused-declaration diagnostics are resolved, including additional unused dependencies exposed during cleanup.
-- Removed disconnected startup requests for workbook inventory, reference workbooks, sheets/profiles, schema inventory, normalization rules, and distinct values, plus their unused frontend API wrappers. Current SQLite snapshot monitoring, canonical review/validation, and XML reference-data loads remain active. Backend profiling and normalization endpoints and YAML business rules remain available.
-- Enabled `noUnusedLocals` and `noUnusedParameters` in `frontend/tsconfig.app.json`, so the regular frontend build checks for recurrence.
-- Removed the unreferenced `AcceptedGenerationWorkspace.tsx` component. A future accepted-generation workspace remains a deliberate design task; it was not connected to the active UI before removal.
-- Removed the uncalled `_bulk_patch_candidates` and `_bulk_patch_posted_entries_from_summaries` helpers, unused operation-assessment request models and `FileInventoryItem`, and unused Python imports. Active assessment contracts and per-device accepted-state selection remain unchanged.
-- Removed the empty, tracked `backend/app.db`; configured persistence remains `data/testing/testing-state.sqlite3`.
-- Retained `eudamed-backup-2026-05-20.tgz`: it is a historical project/environment archive, not runtime code, and its recovery/retention purpose has not been confirmed.
-- Corrected EUDAMED Activity search wording to list implemented filters rather than promise response-reference search.
-- The initial backend run reported `122 passed, 3 failed`. All three failures reproduced with the pre-cleanup backend modules from commit `77b5367`: the tests still assumed that ordinary previews persist state, despite the September 6 preview/submission separation in `2ed3bac`. Updated those stale tests to verify non-persisting previews and POST download persistence, including the envelope IDs in the actual ZIP XML and the reviewed-baseline gate. No runtime logging or lineage behavior was changed to satisfy these tests.
-- This supersedes older preview-logging statements below: ordinary single POST/PATCH/Market Info previews default to `record_generated_context=False`; their ZIP download paths explicitly record generated context. Bulk Market Info preview also does not call `record_generated_market_info_context`.
-- Verification: TypeScript checking with unused checks enabled passed. Initial server-render smoke checks passed for Data Snapshot, EUDAMED Activity, Canonical Validation, XML, Registration State, Testing Summary, and Documentation. These render checks do not exercise browser interactions or asynchronous data loading.
-- Final verification: backend `.venv/bin/python -m pytest -q backend/tests` passed all `125` tests; the three corrected regressions also passed independently. Frontend `npm run build` passed with unused-code checks enabled; Vite still reports a non-blocking JavaScript chunk-size warning. `git diff --check` passed.
-- Legacy SRN fallback, SQLite compatibility fields, PATCH lineage guardrails, and the deferred mixed-baseline Bulk Market Info eligibility decision are unchanged.
-
-## Current Repo State: September 4, 2026
-
-### Deferred Decision: Bulk Market Info Mixed Baselines
-
-- `XmlGenerationService.preview_bulk_market_info` can generate one explicit target market-country set for devices with different accepted Market Info baselines, preserving each device's own baseline and next version.
-- `OperationAssessmentService.assess_bulk_market_info` currently treats a different accepted baseline as a cohort mismatch and excludes that device from its ready count.
-- Do not change this eligibility rule without an explicit decision. The intended end-to-end contract must be chosen later: either align assessment with the generator's per-device mixed-baseline capability, or restrict generation and operator guidance to one shared accepted baseline.
-- Until that decision is made, treat the mixed-baseline support statement below as generation capability only, not a confirmed end-to-end Bulk Market Info workflow.
-
-### Canonical Status Normalisation
-
-- The canonical model now normalises both `ON_THE_EU` and `ON_THE_EU_MARKET` to the EUDAMED-valid status `ON_THE_MARKET`.
-- This corrects a source-value alias gap discovered while generating the Navigator parent seed package. The workbook value was present, but the shorter form had not been mapped to the XML enumeration.
-- The correction applies when workbook data is imported. Re-import workbooks before regenerating affected packages.
-- Local `Message.xsd` validation remains the final pre-upload check: completeness alone does not prove that every value is a valid EUDAMED enumeration.
-
-### Bulk UDI-DI POST Scope
-
-- Bulk Device UDI-DI POST now uses the same scope interaction pattern as Bulk PATCH:
-  - all eligible devices
-  - next 10 devices
-  - next 25 devices
-  - selected catalogue numbers
-  - imported catalogue list
-- The selected scope is passed explicitly to preview and ZIP generation. Already-successful child registrations remain excluded from the eligible selection population.
-
-### Registration State Read Model
-
-- `Registration State` now shows `Eligible child devices` for every Basic UDI-DI group, including an unregistered parent.
-- `Seed POST` remains the number of parent registrations currently eligible to be generated. A value of `1` means the displayed Basic UDI-DI needs its initial `DEVICE.POST` before child registration can begin.
-- `Child POST` remains zero until the parent has a recorded successful registration; the separate eligible-child count avoids implying that a child submission is already allowed.
-
-### Workbook Snapshot UI
-
-- The workbook snapshot card uses the concise `Synced` status with the last-import timestamp after a successful import.
-- It no longer retains verbose batch and row-count completion text in the steady state. Import errors remain visible.
-
-## Latest Playground Finding: Bulk Market Info And Bulk PATCH Reconciliation
-
-### What Happened
-
-The Navigator / Javelin / Linx Bulk PATCH and Market Info test sequence established an important EUDAMED workflow rule.
-
-- An earlier Bulk PATCH changed device data while its payload did not repeat `marketInfos`.
-- EUDAMED rejected the affected PATCH rows with a `marketInfoLink` error, directing the operator to `MARKET_INFO.PUT`.
-- A subsequent Bulk Market Info PUT deliberately removed Austria from 30 devices. EUDAMED accepted 29 rows at Market Info version `2`; `LINX22L1S` failed because EUDAMED already held version `2`, although that earlier success had not been imported into SQLite.
-- The error acknowledgement established EUDAMED version `2` as the authoritative floor for `LINX22L1S`. A Single Market Info PUT at version `3` then succeeded.
-- Repeating the Bulk PATCH after all Market Info acknowledgements were captured succeeded for all 31 Linx devices.
-
-### Implemented Safeguards
-
-- PATCH generation repeats each device's latest accepted Market Information state. It does not use workbook market countries when a later accepted `MARKET_INFO.PUT` state exists.
-- A prior `marketInfoLink` PATCH rejection blocks PATCH only until a later successful Market Info acknowledgement is recorded for that device.
-- EUDAMED-reported current Market Info versions are stored as an observed version floor. This does not replace the accepted country snapshot; it makes the next generated Market Info version `max(accepted, observed) + 1`.
-- The Single Market Info UI reads that observed floor. The backend rejects a stale supplied version when EUDAMED has reported a higher current version.
-- Bulk Market Info supports devices with mixed accepted baselines. Each generated device payload retains its own baseline and uses its own next Market Info version while applying the selected target countries.
-- Bulk PATCH download uses exactly the records included by the approved preview, preventing a preview/ZIP count mismatch.
-- An accepted Market Info state differing from the source workbook is safe for PATCH and must not be treated as a new exclusion. Only an unresolved EUDAMED rejection remains blocking.
-
-### Current Confirmed State
-
-- The final Linx Bulk PATCH acknowledgement recorded `31` successful `UDI_DI.PATCH` responses and no errors.
-- `LINX22L1S` has accepted Market Info version `3` and accepted PATCH version `4`.
-- The other Market Info cohort devices retain accepted Market Info version `2`; `LINX23L4S` was outside that Market Info cohort and retained its source Market Info state.
-- No Navigator / Javelin / Linx devices remain blocked by an unresolved Market Information PATCH rejection.
-
-### Operator Sequence
-
-1. Upload every EUDAMED acknowledgement before generating the next related action.
-2. For a `marketInfoLink` PATCH rejection, complete and acknowledge `MARKET_INFO.PUT` before retrying PATCH.
-3. Check the generated Market Info version, especially after a version-scheme error; do not upload a stale version.
-4. Review Bulk preview included and excluded counts before downloading the ZIP.
-5. Upload the final Bulk PATCH acknowledgement to reconcile accepted PATCH state.
-
-## EUDAMED Playground Option Matrix
-
-Choose the Playground option by EUDAMED service and operation, not by whether the application generated a single XML file or a bulk ZIP. Single and bulk packages that use the same service use the same Playground option.
-
-| Application workflow | EUDAMED service | Playground option | Evidence status |
-| --- | --- | --- | --- |
-| Single Device UDI-DI POST | `UDI_DI.POST` | `Upload of UDI-DI/Master UDI-DI for existing Basic UDI-DI` | Confirmed during current EliteVT testing |
-| Bulk Device UDI-DI POST | `UDI_DI.POST` | `Upload of UDI-DI/Master UDI-DI for existing Basic UDI-DI` | Same EUDAMED service as the confirmed single flow |
-| Single PATCH | `UDI_DI.PATCH` | `Update of UDI-DI/Master UDI-DI` | Confirmed in Playground testing |
-| Bulk PATCH | `UDI_DI.PATCH` | `Update of UDI-DI/Master UDI-DI` | Confirmed in Playground testing |
-| Single Market Info | `MARKET_INFO.PUT` | `Update Market Information` | Confirmed in Playground testing |
-| Bulk Market Info | `MARKET_INFO.PUT` | `Update Market Information` | Confirmed in Playground testing |
-| Basic UDI-DI POST | `DEVICE.POST` | `Upload of Legacy / Regulation Device / SPP (Basic UDI and UDI-DI / Master UDI-DI)` | Confirmed against the EUDAMED service-to-action mapping |
-
-For every upload, retain the generated ZIP/XML and upload the returned acknowledgement into the application before creating a related follow-up operation.
-
-## Naming Convention
-
-- Use `Basic UDI-DI` as the canonical operator-facing term for the shared regulatory parent context.
-- Use `Device UDI-DI` as the canonical operator-facing term for the device-specific identifier for one registerable device record.
-- `parent` and `child` may still be used as shorthand to describe the relationship between one `Basic UDI-DI` and its related `Device UDI-DI` records, but they are explanatory terms rather than the primary labels.
-- `primary_udi_di` remains the current internal field and API property name, but in business and UI language it should be read as `Device UDI-DI`.
-- `catalogue_number` remains a workbook and operator selection identifier; it is not the EUDAMED record identifier.
-
-## Latest Confirmed Decisions
-
-- Latest verification refresh on Monday, August 31, 2026:
-  - current branch remains:
-    - `feature/workflow-event-logging`
-  - current full verification from the present worktree:
-    - backend `python -m pytest -q`: `111 passed, 1 warning`
-    - frontend production build: `npm run build` passed
-  - current known warning remains:
-    - pytest emits a non-blocking collection warning because `TestingSuccessXmlService` looks like a test class name to pytest
-  - this verification supersedes older pass-count snapshots elsewhere in this document
-  - targeted follow-up verification from the present worktree:
-    - backend `python -m pytest -q backend/tests/test_workbook_import.py -k single_post_preview_records_generated_envelope_ids`: `1 passed`
-  - current documentation wiring update:
-    - the Documentation tab now reads the architecture draft directly from `docs/architecture-definition-draft.md`
-    - the old duplicated frontend copy was removed so the architecture draft is now single-source
-  - current Single `POST` envelope-id finding:
-    - current single `POST` generation correctly persists generated `correlation_id` and `message_id` values into `testing_events`
-    - this was confirmed both by a targeted regression test and by direct SQLite inspection of a newly generated single `UDI_DI.POST` preview row for `ESP23R4SD`
-  - current interpretation of older blank-id rows:
-    - older generated rows with missing `correlation_id` / `message_id` are most likely from an earlier backend process before the current branch code was loaded
-    - they do not reproduce on the current single `POST` preview path
-
-- Latest implemented and verified direction on Monday, August 31, 2026:
-  - the first compatibility-safe slice of database-backed workflow-event logging is now implemented on `feature/workflow-event-logging`
-  - current implemented logging rule:
-    - generated `POST`, `Patch XML`, and `Market Info` events are now append-only rows in `testing_events`
-    - repeated previews no longer overwrite the previous generated row for the same subject
-  - current generated/success correlation rule:
-    - generated event rows now persist the same message-envelope `correlation_id` and `message_id` values that are written into the XML
-    - success XML upload now tries to resolve the exact generated event by:
-      - `subject_id`
-      - `message_type`
-      - `correlation_id`
-      - `message_id`
-    - if no exact generated row is found, success capture still falls back to the old latest-generated lookup so existing behavior is retained
-  - current PATCH accepted-state rule:
-    - successful `UDI_DI.PATCH` acknowledgements now advance tracked PATCH version state even when no matching generated preview row exists
-    - if no trustworthy generated preview context exists, the store advances the accepted version conservatively without inventing a new accepted PATCH snapshot
-  - current compatibility rule:
-    - legacy compatibility fields remain active on `testing_subjects`:
-      - `post_success`
-      - `latest_successful_version`
-      - `latest_successful_state_json`
-    - existing route/UI behavior is intentionally preserved while richer event metadata is added under the same SQLite layer
-  - current known design boundary:
-    - this slice fixes correctness inside the SQLite testing-state layer
-    - it does not yet complete the broader schema cleanup proposed in `docs/sqlite-event-logging-schema-proposal.md`
-    - status casing still remains transitional:
-      - generated rows continue using legacy `GENERATED`
-      - success rows continue using legacy `SUCCESS`
-      - `event_kind` now carries the more explicit semantic split:
-        - `generated`
-        - `success_ack`
-  - historical verification snapshot on Monday, August 31, 2026:
-    - targeted backend regressions for the new logging path passed
-    - backend `pytest` for `backend/tests/test_echelon_xml_generation.py` and `backend/tests/test_workbook_import.py`: `96 passed`
-
-- Latest implemented and verified direction on Sunday, August 30, 2026:
-  - the top-level workspace navigation is now grouped as:
-    - `Data Views`
-    - `Testing Workspaces`
-    - `Documentation`
-  - the data-facing workspaces now include:
-    - `Submission Data`
-    - `Registration State`
-    - `Testing Summary`
-  - `Registration State` is now the concise family/variant readiness view for:
-    - registered vs unregistered `Basic UDI-DI`
-    - available seed `POST`
-    - available child `POST`
-    - available `PATCH`
-    - current latest tracked state
-  - the workspace titles were simplified to be more operator-facing:
-    - `EUDAMED Testing Workspace`
-    - `EUDAMED Testing Snapshot`
-    - simpler status-card wording with a brief statement and bold last-import timestamp
-  - refresh behavior is now more visible across the XML workspaces:
-    - a shared refresh strip is shown while family/variant-driven panels are reloading
-    - the intended refresh styling is positive/green rather than blue
-    - `Market Info` and `Bulk Market Info` must follow the same refresh language as `POST`, `PATCH`, `Bulk POST`, and `Bulk PATCH`
-  - `Bulk Market Info` is now part of the active first-iteration testing surface:
-    - selector-driven market-country editing mirrors the single-device Market Info workspace
-    - XML preview should follow the same structure-first presentation style as the other bulk workspaces
-    - successful Playground testing and success-XML upload are now part of the intended operator workflow
-  - market-country normalization is now a shared backend concern:
-    - country names and aliases should resolve through one common normalization/reference path
-    - all operations should use the same country-code interpretation rules rather than each flow maintaining its own country mapping behavior
-  - Market Info success capture direction was tightened:
-    - persist Market Info version separately from PATCH lineage
-    - retain enough context to report added countries, removed countries, and original-market movement in `Testing Summary`
-    - accepted Market Info state should become the visible baseline after successful upload
-  - the next major implementation theme after the current UI pass is database-backed workflow-event logging rather than another large UI restructure
-  - current branch context:
-    - `feature/workflow-event-logging` is the active branch for the next persistence/audit expansion
-  - current known non-app note:
-    - Azure Container Apps used for other work were scaled to `minReplicas = 0` on Sunday, August 30, 2026 to reduce spend while not in active use
-
-- Latest implemented and verified direction on Friday, August 28, 2026:
-  - `Testing Summary` now has two distinct layers:
-    - a family/variant summary table for operational readiness
-    - a `Testing Events` table with one row per recorded successful test event
-  - the `Testing Events` table is filtered by the same family/variant selectors as the summary table
-  - the `Testing Events` table is now paginated client-side with:
-    - default page size `25`
-    - page-size options `25`, `50`, `100`
-    - page reset to `1` when the family or variant filter changes
-  - the summary table now exposes separate Market Info status and latest-state fields rather than hiding all activity in a single generic latest column
-  - family alias matching in `Testing Summary` was corrected so `Epirus` and `Epirus / Esprit` aggregate into the same logical scope where appropriate
-  - `MARKET_INFO.PUT` success capture is now part of the active workflow:
-    - success XML upload is exposed in the single-device Market Info preview
-    - successful Market Info acknowledgements are persisted in `testing_events`
-    - Market Info success is surfaced in `Testing Summary` recent activity and event history
-  - current Market Info versioning direction is now:
-    - use the current accepted Market Info/device version as the input context for the next `MARKET_INFO.PUT`
-    - persist successful Market Info outcomes in `latest_successful_market_info_version`
-    - do not treat successful Market Info as advancing `latest_successful_version` for PATCH lineage
-  - current Market Info UI direction is now:
-    - keep the same visual system as single `POST` and single `PATCH`
-    - keep the simplified selector-driven editor:
-      - `Add country`
-      - `Remove country`
-      - `Original market`
-    - show current and proposed countries as compact chips with small flag markers
-    - refresh current/proposed Market Info state after successful XML upload so the accepted state becomes the new visible baseline
-  - `Market Info` is no longer a placeholder workspace
-  - the single-device `Market Info` workspace now uses the same broad full-width card language as single `POST` and single `PATCH`
-  - the `Market Info Edit` card now sits above `Market Info Preview` and uses the full available container width
-  - the Market Info editor was simplified from a row-per-country form into a selector-driven interaction using:
-    - `Add country`
-    - `Remove country`
-    - `Original market`
-  - current and draft Market Info state now initialize from the same selected record source, so the draft should match the current market-country set when the UI first loads for a resolved record
-  - draft market countries are now shown as compact chips with small flag markers and an `Original` badge rather than a tall list
-  - `Source Sheet to Basic UDI` is now the default Canonical Validation detail view
-  - the Canonical Validation detail-view toggle buttons were reduced in size so they read as compact mode toggles rather than primary action buttons
-  - backend automated coverage was extended for the new Market Info override path:
-    - preview generation with override countries
-    - override normalization and deduping
-    - rejection of an empty effective override set
-    - router payload parsing and validation for `market_countries`
-  - current verified repo status on Friday, August 28, 2026:
-    - backend `pytest`: `96 passed`
-    - frontend production build: `npm run build` passed
-  - current known limitation:
-    - no frontend automated test runner is configured yet, so Market Info UI behavior is currently verified by build plus manual inspection rather than browser automation
-  - current risk note:
-    - `MARKET-INFO.PUT` remains less proven than `POST` and `PATCH`
-    - first Playground testing should use a minimal single-device change on a clearly registered device and should preserve the current original market on the first test unless there is a specific reason to test that field
-  - current minor warning only:
-    - pytest emits a non-blocking collection warning because `TestingSuccessXmlService` looks like a test class name to pytest
-    - this does not fail the suite
-
-- Latest confirmed Market Info direction on Thursday, August 27, 2026:
-  - public EUDAMED pages and publicly accessible MDCG guidance do not currently give a clear verified rule for whether `MARKET-INFO.PUT` increments the accepted device version, leaves it unchanged, or uses a separate market-information version concept
-  - the current application design should therefore treat Market Info version handling as evidence-led rather than fully specified by public guidance
-  - current working rule:
-    - successful `DEVICE.POST` and `UDI_DI.POST` establish tracked version `1`
-    - successful `UDI_DI.PATCH` advances the tracked accepted device version
-    - `MARKET-INFO.PUT` should target the current accepted device identity and current accepted Market Info/device version as input context when the XML shape requires version context
-    - successful `MARKET-INFO.PUT` should be persisted separately in `latest_successful_market_info_version`
-    - `MARKET-INFO.PUT` should not, by default, advance `latest_successful_version`
-  - until Playground or restricted EUDAMED documentation proves otherwise, Market Info success should remain separate from core device-version lineage even when a Market Info-specific version field is updated
-  - production-cutover implication:
-    - keep Market Info success tracking separate from PATCH lineage
-    - capture enough acknowledgement evidence from future successful Market Info tests to determine whether EUDAMED mutates device version, returns a distinct market-state version, or leaves version unchanged
-
-- Latest implemented and verified direction on Sunday, August 23, 2026:
-  - the single `POST` / single `PATCH` refactor has now been extended into the bulk workspaces at the shell/layout level
-  - `Bulk Basic UDI-DI POST`, `Bulk DEVICE UDI-DI POST`, and `Bulk PATCH` now use the same general preview-card language as single `POST` / single `PATCH`:
-    - right-aligned action row
-    - compact preview status strip
-    - metadata cards
-    - full-width raw XML preview
-  - bulk workspace wording was simplified to be more operational and less wizard-like
-  - `Upload Success XML` is now exposed in the bulk preview card as well as the single preview cards
-  - the backend success-XML parser now accepts multi-entity EUDAMED acknowledgement XML rather than requiring exactly one `responseEntity`
-  - bulk child `UDI_DI.POST` success XML can now be recorded in one upload transaction
-  - successful `POST` acknowledgements now stamp `latest_successful_version = 1` for the affected tracked testing subjects
-  - this matters because successful bulk child `POST` uploads should immediately create valid version `1` baselines for later `PATCH`
-  - a successful `Epirus / Esprit` bulk child `UDI_DI.POST` wave of `50` devices was recorded
-  - after that upload, SQLite verification confirmed:
-    - `50` affected child devices were marked `post_success = 1`
-    - those `50` affected child devices were stamped `latest_successful_version = 1`
-  - an alias-resolution bug was then traced in `TestingStateStore`:
-    - bulk child-post exclusion logic was querying family `Epirus`
-    - newly recorded testing rows were stored under `Epirus / Esprit`
-    - the family match helper did not previously treat those as the same scope
-  - that alias bug is now fixed, and bulk child-post eligibility now excludes the newly recorded `50` successful child posts correctly
-  - current verified post-upload remaining bulk child-post count for `Epirus / Esprit` is now `366`
-  - the bulk child `POST` summary pills in the UI were also aligned so the top-line `Ready` count and `In scope` count use the same backend-assessed child-post count
-  - current next execution step:
-    - verify that Bulk `POST` visibly refreshes its workspace state immediately after successful XML upload without requiring a manual page reload
-    - then move on to operational testing of `Bulk PATCH`
-
-- As of Sunday, August 9, 2026, the live EUDAMED Playground validator rejected `m:Push version="3.0.30"` and required `3.0.32` instead.
-- The repo has therefore been hotfixed to default `EUDAMED_MESSAGE_SCHEMA_VERSION` to `3.0.32` for current Playground testing.
-- The bundled local `MessageType.xsd` fixed `m:Push@version` value has also been hotfixed from `3.0.30` to `3.0.32` so local validation and tests remain aligned with current Playground behavior.
-- This is intentionally captured as a reversible config decision because the public EUDAMED technical documentation page still showed XSD version `3.0.30` at the time of testing.
-- Playground upload testing on Sunday, August 9, 2026 also revealed an actor mismatch guard:
-  - generated XML carried `UK-MF-000048777`
-  - logged-in Playground actor was `UK-MF-000033261`
-  - EUDAMED rejected the upload because `MFActorCode` / sender actor must match the submitting actor
-- The repo now supports a testing-only override via `EUDAMED_MANUFACTURER_SRN_OVERRIDE` so Playground XML can be aligned to the logged-in actor without rewriting the underlying source/reference data.
-- Playground testing then revealed a second actor-reference issue:
-  - generated XML carried `ARActorCode` `DE-AR-000006292`
-  - Playground could not resolve that actor in the current environment
-- The repo now supports `EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE=true` so `ARActorCode` can be omitted for controlled Playground testing when the referenced AR is not available there.
-- Search results in Playground then identified the current AR actor for the logged-in manufacturer context as `DE-AR-000031681` (`Blatchford Europe GmbH`).
-- The repo now supports `EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE` so Playground XML can carry a valid AR actor without mutating the underlying legacy reference data.
-- On Sunday, August 9, 2026, a `DEVICE.POST` upload succeeded in Playground using this working actor combination:
-  - `EUDAMED_MESSAGE_SCHEMA_VERSION=3.0.32`
-  - `EUDAMED_MANUFACTURER_SRN_OVERRIDE=UK-MF-000033261`
-  - `EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE=DE-AR-000031681`
-  - `EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE=false`
-- On Sunday, August 9, 2026, the baseline equivalent first-child `UDI_DI.PATCH` from the generated `Post + Patch` pair also succeeded in Playground with `e:version = 2`.
-- Baseline `POST` remains version `1`.
-- The current implemented repo still treats the equivalent first child `PATCH` as version `2`.
-- Later scenario `PATCH` drafts inherit from the latest successful tracked PATCH state for the device when available.
-- The user must enter the next scenario `PATCH` version explicitly based on the EUDAMED playground state.
-- `Patch XML` remains accessible as a workspace, but PATCH generation and download should stay blocked until the baseline `POST` has been generated and reviewed for the same selected device record in the current session.
-- Deriving later scenario `PATCH` drafts from the reviewed device lineage is acceptable for the initial testing phase.
-- New design direction agreed on Tuesday, August 11, 2026:
-  - the baseline workspace should move from `Post + Patch` to `POST` only
-  - `Patch XML` should become the only workspace that generates PATCH messages
-  - `Patch XML` should include an explicit `Equivalent First Patch` option
-  - a version `2` `PATCH` should be allowed to be the first real update derived directly from the accepted `POST`
-  - that version `2` `PATCH` must still match the accepted `POST` in every non-target field
-  - only the explicitly changed field or fields should differ
-  - version `3+` `PATCH` messages should continue to derive from the latest accepted tracked `PATCH` state for that device
-- The old fixture-backed PATCH scenario artifacts have now been removed from the repo.
-- The current PATCH workflow is therefore entirely record-driven:
-  - selected device record lineage
-  - reviewed baseline `POST` for that same record
-  - equivalent first-child `PATCH`
-  - latest successful tracked device state for later scenario drafts
-- The redundant combined `download-post-patch-pair` path has been removed.
-- Separate `POST` ZIP and `PATCH` ZIP downloads remain the supported baseline-pair download behavior.
-- Workbook-drift detection or workbook-refreshed scenario regeneration can be considered later, after initial testing.
-- Agreed next execution order on Thursday, August 13, 2026:
-  - complete and harden the clean bulk registration split
-  - continue `Bulk PATCH` and `Market Info` Playground testing
-  - implement broader database-backed persistence beyond the current testing-state store
-  - continue UI refinement after the database-backed state model is in place
-- Latest implemented decisions on Friday, August 14, 2026:
-  - `Single XML` has been removed from the user-facing `EUDAMED Testing` workspace
-  - `Bulk Basic UDI POST` is now treated as a parent-only flow
-  - `Bulk UDI-DI POST` is now treated as a child-only flow
-  - parent existence is now resolved from the testing-state store, currently backed by `data/testing/testing-state.sqlite3`
-  - if a parent `Basic UDI-DI` already has a successful `DEVICE.POST`, `Bulk Basic UDI POST` should not generate a new parent seed
-  - in that case the clean backend message is now:
-    - `Parent Basic UDI-DI already exists for {family} / {variant}. Use Bulk UDI-DI POST to add child devices.`
-  - if a parent `Basic UDI-DI` does not yet have a successful `DEVICE.POST`, `Bulk UDI-DI POST` should not silently reserve a seed row any longer
-  - instead it now blocks child generation and tells the user to run `Bulk Basic UDI POST` first
-  - the bulk POST router responses for these business-rule stops now return `400 Bad Request` rather than `404 Not Found`
-  - the simplified bulk summary cards now use the full available width in the UI
-  - `Bulk Basic UDI POST` UI readiness now uses unposted-parent count rather than total-parent count
-  - bulk parent / child eligibility now scans the full XML-ready variant population before applying the `300` message cap
-  - the `300` cap therefore limits emitted package size, not eligibility discovery
-  - single-device `Patch XML` generation is now backend-gated as well as frontend-gated
-  - the backend now requires the exact baseline `POST` for the selected `product_family` / `product_variant` / `catalogue_number` to have been generated and reviewed in the current process before `PATCH` preview or download is allowed
-  - bulk `PATCH` remains exempt from that single-device reviewed-baseline gate
-  - `Bulk Basic UDI POST` frontend readiness now resolves by actual unposted `Basic UDI-DI` set difference rather than by subtracting unrelated posted-parent counts
-  - explicit action feedback is now shown when generating `Bulk Basic UDI POST` and `Bulk UDI-DI POST` previews
-  - historical verification snapshot on Friday, August 14, 2026:
-    - backend `pytest`: `51 passed`
-    - frontend production build: `npm run build` passed
-- Latest implemented and verified decisions on Friday, August 14, 2026 and Saturday, August 15, 2026:
-  - single `POST` now selects the next valid candidate from tracked state rather than blindly offering the first row in the chosen family and variant
-  - single `PATCH` now requires both:
-    - reviewed baseline `POST` preview for the exact selected record in the current session
-    - tracked successful Playground registration for that same device before version `2` `PATCH` can be generated
-  - `Bulk UDI-DI POST` now excludes `Device UDI-DI` values already known as successfully registered in tracked state
-  - historical verification snapshot on Friday, August 14, 2026 and Saturday, August 15, 2026:
-    - backend `pytest`: `58 passed`
-    - frontend production build: `npm run build` passed
-  - successful Playground test results are persisted in `data/testing/testing-state.sqlite3`, with historical seed data now extracted into `data/testing/testing-state-seed.sql`, and are documented in `docs/eudamed-playground-test-report.md`
-    - successful single `DEVICE.POST` for `Epirus / Esprit / ESP22L1S` on Thursday, August 14, 2026
-    - successful single `UDI_DI.PATCH` version `2` trade-name update for `Epirus / Esprit / ESP22L1S` on Thursday, August 14, 2026
-    - successful second `Elite / Elite VT` bulk child `UDI_DI.POST` wave of five new child devices on Thursday, August 14, 2026
-    - successful `Elite / Elite VT` bulk `UDI_DI.PATCH` equivalent-first wave across ten child devices on Thursday, August 14, 2026
-  - latest traced single-`POST` eligibility findings on Saturday, August 15, 2026:
-    - `Echelon VAC` is blocked because the parent `Basic UDI-DI` is already known in tracked state, so additional registrations should use `Bulk UDI-DI POST`
-    - `Echelon VT` is blocked because every validated row in that variant is currently classified as `PATCH`, not `POST`
-- Latest agreed design direction on Wednesday, August 19, 2026:
-  - `EUDAMED Testing` should move toward a process-type-driven workflow rather than exposing raw XML actions first
-  - the user should first choose the intended operation type, then choose `Product Family` and `Variant`
-  - SQLite-backed backend assessment should then determine and present the current operational situation for that selection
-  - the UI should guide the user by explaining:
-    - what is possible
-    - what is blocked
-    - why it is blocked
-    - how many records are eligible
-    - what the next valid action is
-  - example intended outcomes:
-    - if a parent `Basic UDI-DI` is already registered, parent `POST` should stop and direct the user toward child `POST`
-    - if no successful tracked registration exists for the targeted device lineage, `PATCH` should stop and explain that accepted / tracked state is required first
-    - for bulk operations, the system should resolve the eligible cohort and present counts and groupings before generation
-- refined `POST` direction confirmed on Wednesday, August 19, 2026:
-  - the `POST` workspace should present the next single available `Device UDI-DI` record for the selected family and variant
-  - if the parent `Basic UDI-DI` is already registered, the UI should explain that available `Device UDI-DI` records can be posted under that registered parent
-  - the UI should not anchor `POST` to an arbitrary selected or first XML-ready `POST` row if that exact child device is already registered
-  - if no further `Device UDI-DI` records are available for `POST`, the UI should say so explicitly
-  - refined `PATCH` direction confirmed on Wednesday, August 19, 2026:
-    - `Patch XML` should stay record-based rather than family-based
-    - one PATCH flow should always target one exact child device lineage
-    - the system should not infer a PATCH target from family and variant alone when multiple sibling child devices exist
-    - the resolved PATCH target should remain stable across assessment, preview, download, and later response handling
-- implemented `POST` shape refinement confirmed on Thursday, August 20, 2026:
-  - single `POST` now emits `DEVICE.POST` when the parent `Basic UDI-DI` is not yet registered
-  - single `POST` now emits child-only `UDI_DI.POST` when the parent `Basic UDI-DI` is already registered and the `Device UDI-DI` is still available
-  - the child-only payload still references the registered parent through `basicUDIIdentifier`
-- latest implemented UI and persistence refinements on Friday, August 21, 2026 and Saturday, August 22, 2026:
-  - single `POST` preview now uses a dedicated full-width card layout with:
-    - title and right-aligned action row
-    - compact preview status strip
-    - four metadata cards
-    - XML structure navigator
-    - highlighted raw XML preview
-  - single `POST` now includes an `Upload Success XML` action in the preview workspace
-  - the backend now exposes `/api/xml/upload-success-xml`
-  - that endpoint currently accepts successful EUDAMED acknowledgement XML for:
-    - `DEVICE.POST`
-    - `UDI_DI.POST`
-  - the upload endpoint now:
-    - parses the acknowledgement XML
-    - rejects non-`SUCCESS` acknowledgements
-    - resolves the tracked subject by:
-      - `basic_udi_di` for `DEVICE.POST`
-      - `primary_udi_di` for `UDI_DI.POST`
-    - records the success idempotently in `testing_events`
-    - marks `testing_subjects.post_success = 1`
-  - the frontend sends uploaded success XML as JSON payload content rather than multipart form data to avoid introducing `python-multipart`
-  - single `POST` scope and count pills were refined to use exact tracked-success differences rather than broad XML-ready totals
-  - single `PATCH` preview now follows the same visual language as single `POST`:
-    - full-width preview card
-    - right-aligned action row
-    - compact preview status strip
-    - four metadata cards
-    - XML structure navigator
-    - highlighted raw XML preview
-  - single `PATCH` no longer exposes the earlier `Base Message` / `Derived Patch` toggle in the main preview
-  - single `PATCH` now presents one derived PATCH preview path only in the primary preview card
-  - redundant single-PATCH review and validation subpanels beneath the preview were removed so the preview card is the main source of preview/validation state
-  - current agreed code-structure direction:
-    - continue converging single `POST` and single `PATCH` UI first
-    - only then refactor `frontend/src/App.tsx`
-    - the intended refactor boundary is shared preview/layout primitives reusable by:
-      - single `POST`
-      - single `PATCH`
-      - `Bulk Basic UDI POST`
-      - `Bulk UDI-DI POST`
-      - `Bulk PATCH`
-  - current important design conclusion on Saturday, August 22, 2026:
-    - do not assume EUDAMED Playground mirrors Production registration state
-    - workbook/import business state and Playground testing evidence should remain distinct concepts
-    - this means current PATCH gating should not be redesigned solely on the basis of Playground visibility gaps
-    - however, the current implemented PATCH gate still relies on SQLite-tracked POST lineage and does not yet promote workbook-declared PATCH/registered state into that accepted-state model
-- this should be implemented as explicit operation-specific readiness assessment rather than one generic workflow engine
-- no data-model change has yet been agreed for linking testing history beyond the current `device_subject`-anchored direction; discuss that separately before implementation
-
-## Current Repo State
-
-## Current Implemented Behavior
-
-### Submission Data
-
-- The `Submission Data` workspace now mixes:
-  - live workbook inventory from direct Excel inspection
-  - SQLite-backed import snapshot, read-model, and monitoring panels
-- The current SQLite import layer persists:
-  - `import_batch`
-  - `source_workbook`
-  - `source_row`
-  - `device_subject`
-  - `device_identity_issue`
-  - `canonical_device_record`
-  - `canonical_field_value`
-  - `canonical_projection_snapshot`
-- The active SQLite file is currently:
-  - `data/testing/testing-state.sqlite3`
-- The current workbook-import and projection flow is:
-  - workbook rows are imported into SQLite as `source_row`
-  - matching rows are resolved into stable `device_subject` identities
-  - unresolved or conflicting identity cases are captured in `device_identity_issue`
-  - the current canonical validation subset is persisted into `canonical_device_record` and `canonical_field_value`
-  - a batch-level canonical projection snapshot is persisted in `canonical_projection_snapshot`
-- The UI now surfaces database-backed panels for:
-  - `Database Tables`
-  - `Workbook Snapshot`
-  - `Database Monitoring`
-  - `Latest Drift`
-- The UI now also uses SQLite-backed read-model endpoints for:
-  - `device_subject` summaries
-  - `source_row` summaries and detail views
-  - `device_identity_issue` summaries and detail views
-- The UI now treats missing workbook-import data as an empty state rather than a hard error:
-  - if no import batch exists yet, the page shows `Import Workbooks`
-  - the same control remains available in the status card for reruns
-- The current workbook-import monitoring endpoints are:
-  - `/api/workbook-imports/latest/summary`
-  - `/api/workbook-imports/schema-summary`
-  - `/api/workbook-imports/health`
-  - `/api/workbook-imports/latest/diff`
-- The current SQLite-backed read-model endpoints are:
-  - `/api/workbook-imports/device-subjects`
-  - `/api/workbook-imports/source-rows`
-  - `/api/workbook-imports/identity-issues`
-- `latest/summary` and `latest/diff` may legitimately return `404` when no import batch exists yet
-  - the frontend now treats that as first-run state, not as a fatal failure
-- Current design boundary:
-  - SQLite is now the active operational store for workbook import state, monitoring, identity issue tracking, and canonical projection snapshots
-  - the `Submission Data` workspace is no longer summary-only database chrome; it already depends on SQLite-backed read paths
-  - the broader relational cleanup still remains ahead:
-    - more consistent `device_subject_id` lineage joins across all persistence
-    - expansion of accepted-state and submission-history persistence beyond the current testing-state slices
-
-### Workflow Event Logging
-
-- The active SQLite testing-state file remains:
-  - `data/testing/testing-state.sqlite3`
-- The active testing-state tables remain:
-  - `testing_subjects`
-  - `testing_events`
-  - `reviewed_post_baselines`
-- The current implemented design is now split between:
-  - `testing_subjects` as the current-state projection used by readiness checks, latest accepted state lookup, and summary views
-  - `testing_events` as the event history for generated previews and successful acknowledgements
-- Current implemented `testing_subjects` direction:
-  - keep legacy compatibility columns active while the richer model is phased in
-  - persist separate accepted-state slices where available for:
-    - accepted `POST`
-    - accepted `PATCH`
-    - accepted `Market Info`
-  - keep `device_subject_id` linkage as the intended long-term lineage anchor even though some transitional string matching still remains
-- Current implemented `testing_events` direction:
-  - generated XML actions write one event per affected subject
-  - success XML uploads write one success event per affected subject
-  - event rows now carry richer explicit fields in addition to `raw_event_json`, including:
-    - `event_kind`
-    - `operation_scope`
-    - `batch_id`
-    - `base_message_type`
-    - `base_version`
-    - `derived_version`
-    - `accepted_state_source`
-    - `state_before_json`
-    - `state_after_json`
-    - `delta_json`
-    - `source_file_name`
-    - `raw_xml`
-    - message-envelope `correlation_id`
-    - message-envelope `message_id`
-- Current implemented event-correlation rule:
-  - generation paths now store the exact message-envelope IDs used in the rendered XML
-  - success capture first resolves the matching generated event by exact envelope IDs and only then falls back to the prior latest-generated heuristic
-  - this matters because older uploaded XML should no longer inherit the wrong later preview state if a user previewed multiple drafts for the same device
-- Current implemented batch behavior:
-  - bulk generated rows share the outer batch wrapper `correlation_id` and `message_id` that EUDAMED acknowledgements are expected to reflect
-  - `batch_id` is present on success-event rows for cohort grouping
-  - a dedicated `testing_batches` table is still optional and has not yet been introduced
-- Current implemented compatibility boundary:
-  - existing read-model queries, UI behavior, and current SQLite seed assumptions remain valid
-  - the richer event fields are additive for now
-  - the proposal in `docs/sqlite-event-logging-schema-proposal.md` should still be treated as the next cleanup target, not as fully implemented steady state
-
-### Canonical Validation
-
-- The canonical validation UI now prefers a SQLite-backed projection rather than rebuilding only from direct workbook inspection.
-- The active SQLite-backed canonical validation route is:
-  - `/api/canonical-validation`
-- Current route behavior:
-  - if no workbook import exists yet, the route now returns `404` and the UI treats that as an import-required state
-  - if a workbook import exists and the SQLite projection is current, the route reports `persistence_source = sqlite_projection` and `projection_status = ready`
-  - if a workbook import exists but the stored projection is stale, the route rebuilds the SQLite projection for the latest batch and reports `projection_status = rebuilt`
-  - if a workbook import exists but the SQLite projection is missing and cannot be rebuilt, the route now fails with `503` rather than silently hiding the persistence problem
-- The `Submission Data` workspace now surfaces projection state separately from generic import state:
-  - `ready`
-  - `stale`
-  - `missing`
-- The `Canonical Validation` workspace now surfaces SQLite projection status separately from validation scope:
-  - `SQLite ready`
-  - `Projection rebuilt`
-  - `Import required`
-- Current practical meaning:
-  - workbook import is now the entry point for refreshing the SQLite-backed canonical view
-  - canonical validation is no longer just a transient workbook read; it is part of the persisted SQLite workflow
-
-### EUDAMED Testing
-
-Current pill order:
-
-- `POST`
-- `Patch XML`
-- `Market Info`
-- divider
-- `Bulk Basic UDI POST`
-- `Bulk UDI-DI POST`
-- `Bulk PATCH`
-- `Bulk Market Info`
-
-Shared-device testing group:
-
-- `POST`
-- `Patch XML`
-- `Market Info`
-
-General XML tools:
-
-- `Bulk Basic UDI POST`
-- `Bulk UDI-DI POST`
-- `Bulk PATCH`
-- `Bulk Market Info`
-
-Current top-level workspace grouping:
-
-- `Data Views`
-  - `Submission Data`
-  - `Registration State`
-  - `Testing Summary`
-- `Testing Workspaces`
-  - `Canonical Validation`
-  - `EUDAMED Testing`
-- `Documentation`
-
-Current visual direction:
-
-- single `POST` and single `PATCH` should use the same card language and theme
-- single `Market Info` should use that same card language rather than a bespoke editor layout
-- `Bulk Basic UDI-DI POST`, `Bulk DEVICE UDI-DI POST`, `Bulk PATCH`, and `Bulk Market Info` should continue converging toward that same card language rather than keeping older sidebar-style preview/actions layouts
-- action-heavy XML workspaces should prefer:
-  - one primary preview card
-  - compact status/meta strips
-  - fewer duplicated review/validation panels
-- raw XML preview should follow the same general interaction model across single and bulk workspaces:
-  - structure-aware preview area
-  - compact metadata strip
-  - preview and validation status surfaced without redundant lower-page cards
-- family/variant-driven panels should show a visible refreshing state while reassessment is in progress
-- future refactoring should extract these shared UI primitives rather than duplicating more mode-specific JSX inside `frontend/src/App.tsx`
-
-Current directional design intent:
-
-- `EUDAMED Testing` should evolve from a mode selector into a process-aware operations workspace.
-- The primary user flow should become:
-  - choose operation type
-  - choose `Product Family`
-  - choose `Variant`
-  - let the backend assess the current SQLite-backed situation
-  - present the valid next action with supporting counts and reasons
-- The system should define the situation for the user rather than expecting the user to infer it from low-level XML tooling.
-- The backend now exposes explicit SQLite-backed operation-readiness assessments for:
-  - parent `POST`
-  - child `POST`
-  - single-device `PATCH`
-  - `Bulk PATCH`
-- `Bulk Market Info` now also has a dedicated SQLite-backed assessment path for parent selection, cohort consistency, and shared market-country baseline checks.
-- The backend also supports dedicated single-device and bulk Market Info preview/download paths with user-edited market-country overrides and success-XML capture.
-- Current active assessment coverage is represented by:
-  - `single_post`
-  - `single_patch`
-  - `bulk_post`
-  - `bulk_patch`
-- `single Market Info` remains distinct from the current readiness-assessment contract:
-  - it currently anchors to the selected resolved registered device rather than a dedicated backend operation-assessment response
-- `Bulk Market Info` now sits between the older direct-preview model and the broader assessment model:
-  - it has a dedicated backend assessment for selected parent scope and accepted market-country alignment
-  - it still does not yet share one fully unified operation contract with `POST` and `PATCH`
-- Market Info capabilities currently in place:
-  - XML generation and local validation are implemented
-  - Playground success capture and SQLite persistence are implemented
-  - a dedicated single-device readiness/assessment contract remains a later cleanup item
-- Those assessments are SQLite-backed and should describe:
-  - eligible record counts
-  - required identity scope such as `Basic UDI-DI` or child `UDI-DI`
-  - blocking reasons
-  - recommended next action
-- Keep the operation-specific rule sets explicit; do not collapse this into one opaque generic workflow engine.
-
-Current first implementation contract for operation assessment:
-
-- one backend endpoint per active operation type is now implemented and the payload shape stays consistent across them
-- the active operation types are:
-  - `single_post`
-  - `single_patch`
-  - `bulk_post`
-  - `bulk_patch`
-- current partial extension:
-  - `bulk_market_info`
-- deferred:
-  - `single_market_info`
-
-Recommended shared assessment payload:
-
-- `operation_type`
-  - one of the active operation identifiers above
-- `product_family`
-- `product_variant`
-- `status`
-  - `available`
-  - `blocked`
-  - `attention`
-- `summary_message`
-  - short user-facing sentence in plain English
-- `blocking_reasons`
-  - flat list of simple user-facing reasons
-- `recommended_next_action`
-  - short action label such as:
-    - `Generate POST`
-    - `Use Bulk UDI-DI POST`
-    - `Review accepted PATCH lineage`
-    - `Select a posted parent group`
-- `eligible_record_count`
-  - integer count for the operation as currently selected
-- `identity_scope`
-  - operation-specific identity context such as:
-    - `catalogue_number`
-    - `primary_udi_di`
-    - `basic_udi_di`
-    - selected parent group
-- `evidence`
-  - structured supporting facts used by the UI, not raw SQL state
-
-Recommended operation-specific evidence payloads:
-
-- `single_post`
-  - `candidate_catalogue_number`
-  - `candidate_primary_udi_di`
-  - `candidate_basic_udi_di`
-  - `parent_registration_known`
-  - `child_registration_known`
-  - `xml_ready`
-- `single_patch`
-  - `catalogue_number`
-  - `primary_udi_di`
-  - `basic_udi_di`
-  - `tracked_registration_known`
-  - `latest_accepted_version`
-  - `latest_successful_scenario_id`
-  - `reviewed_post_baseline_present`
-- `bulk_post`
-  - `eligible_parent_group_count`
-  - `eligible_child_record_count`
-  - `posted_parent_group_count`
-  - `unposted_parent_group_count`
-  - `available_basic_udi_di_groups`
-- `bulk_patch`
-  - `eligible_parent_group_count`
-  - `selected_basic_udi_di`
-  - `eligible_child_record_count`
-  - `latest_version_summary`
-  - `available_parent_groups`
-
-Recommended plain-language blocking messages:
-
-- `single_post`
-  - `This parent Basic UDI-DI is already registered. Use child POST instead.`
-  - `This Device UDI-DI is already registered, so a new POST is not available.`
-- `single_patch`
-  - `This device does not yet have a tracked successful registration, so PATCH is not available.`
-  - `No accepted version state is available for this device lineage.`
-- `bulk_post`
-  - `All parent Basic UDI-DI groups are already registered.`
-  - `No new Device UDI-DI records remain for this variant.`
-- `bulk_patch`
-  - `No posted child devices are currently available under the selected parent.`
-  - `Select a posted parent group before generating Bulk PATCH.`
-
-Recommended implementation rule:
-
-- the existing UI can be retained and reused
-- after the user selects:
-  - `Device Family`
-  - `Variant`
-  - `Operation`
-- the backend assessment should be loaded first
-- preview, generate, and download controls should then be enabled only when the assessment says the operation is currently possible
-- after successful XML upload, the currently selected operation workspace should refresh its assessment and visible counts automatically rather than leaving stale preview state on screen
-
-### Workflow Event Logging And Future Audit Direction
-
-- The first compatibility-safe slice of workflow-event logging is now implemented in SQLite:
-  - generated `POST`, `Patch XML`, and `Market Info` previews append rows to `testing_events`
-  - success uploads append `success_ack` rows to `testing_events`
-  - generated rows now persist the same `correlation_id` and `message_id` values written into the XML
-  - success capture first resolves exact generated context by envelope IDs and only then falls back to the older latest-generated heuristic
-- The goal for the next slice remains targeted auditability for EUDAMED testing decisions and writes, not broad debug logging across the whole app.
-- Preferred future extension shape:
-  - structured application logs via `structlog`
-  - optional SQLAlchemy query tracing behind a disabled-by-default flag
-  - additional durable SQLite audit tables only if `testing_events` and current projections stop being sufficient
-- Future logging should stay narrowly scoped to:
-  - `has_successful_basic_udi_post`
-  - `has_successful_primary_udi_post`
-  - `posted_entries`
-  - `posted_parent_groups`
-  - writes to `testing_subjects`
-  - writes to `testing_events`
-  - writes to `reviewed_post_baselines`
-  - generation of `POST`, `PATCH`, and bulk preview/download artifacts
-  - recorded outcomes such as success, failure, accepted, and rejected
-- Logging should not default to capturing:
-  - every generic `SELECT`
-  - workbook-import internals
-  - full XML payload bodies
-  - full Playground response bodies
-  - routine Canonical / Canonical Validation read traffic
-- Proposed future feature flags:
-  - `EUDAMED_TESTING_AUDIT=true`
-  - `EUDAMED_TESTING_DEBUG_LOGS=false`
-  - `EUDAMED_TESTING_SQL_TRACE=false`
-- Still-optional future SQLite audit tables:
-  - `testing_query_audit`
-  - `testing_xml_run`
-  - `testing_xml_result`
-  - `testing_state_transition`
-- Best next safe increment:
-  - log the Basic UDI and Primary UDI existence checks
-  - log preview/download artifact creation at the application-log layer
-  - log recorded Playground outcomes and resulting state transitions beyond what `testing_events` already captures
-- Current targeted verification added in this session:
-  - backend regression coverage now explicitly verifies that single `POST` preview generation stores the same generated `correlation_id` and `message_id` values in:
-    - the rendered XML
-    - `testing_events.correlation_id`
-    - `testing_events.message_id`
-    - `testing_events.raw_event_json`
-- Likely implementation touchpoints:
-  - `backend/app/services/testing_state_store.py`
-  - `backend/app/services/xml_generation.py`
-  - any SQLite persistence layer that replaces remaining in-memory testing-state behavior
-
-### POST
-
-- Single `POST` no longer relies on a shared anchor panel.
-- It generates one registration `POST` for the next valid candidate in the selected family and variant.
-- Current implemented `POST` message-shape behavior is:
-  - if the parent `Basic UDI-DI` is not yet registered, emit parent-style `DEVICE.POST`
-  - that `DEVICE.POST` contains one `MDRBasicUDI` parent registration and one `MDRUDIDIData` child registration for the chosen candidate
-  - if the parent `Basic UDI-DI` is already registered, emit child-only `UDI_DI.POST`
-  - that `UDI_DI.POST` contains only the child `UDIDIData` payload and references the existing parent through `basicUDIIdentifier`
-- The current intended `POST` UX is:
-  - resolve the next available `Device UDI-DI` candidate for the selected family and variant
-  - if the parent `Basic UDI-DI` is already registered, present that candidate as a device registration under the existing parent
-  - do not present an arbitrary selected `POST` row if that exact `Device UDI-DI` is already registered
-  - if no further `Device UDI-DI` candidates remain, present an explicit no-candidate message rather than implying the wrong record can be posted
-- Current single `POST` selection rules are:
-  - if both parent `Basic UDI-DI` and child `UDI-DI` are already known, the record is skipped
-  - if the parent is known but the child is not, single `POST` should present that child as the next available `POST` candidate under the registered parent
-  - if neither parent nor child is known, that record may be offered as a genuine new registration candidate
-- Current single `POST` preview UI now:
-  - uses a dedicated full-width preview card
-  - includes:
-    - `Generate POST`
-    - `Validate Against XSD`
-    - `Download POST ZIP`
-    - `Upload Success XML`
-  - presents:
-    - preview status
-    - active view
-    - validation status
-    - schema target
-    - generated file name
-    - XML structure navigation
-    - highlighted raw XML preview
-- `POST` success XML upload is now part of the implemented workflow:
-  - upload uses `/api/xml/upload-success-xml`
-  - accepted message types:
-    - `DEVICE.POST`
-    - `UDI_DI.POST`
-  - the same route now also accepts multi-entity successful acknowledgements, including bulk child `UDI_DI.POST` success XML
-  - re-uploading the same acknowledgement should be idempotent rather than duplicating events
-  - successful `POST` acknowledgements should stamp tracked `latest_successful_version = 1`
-- Validates locally against the schema set.
-- Supports `POST` ZIP download.
-- The old combined `Post + Patch` baseline workspace is no longer the user-facing design and should be treated as replaced by `POST` plus `Patch XML`.
-
-### Patch XML
-
-Current implementation generates PATCH XML from one exact device record lineage.
-
-It now:
-
-- uses the current selected record identified by:
-  - `product_family`
-  - `product_variant`
-  - `catalogue_number`
-- treats that selected record as one exact child-device lineage, not as a general family-level PATCH request
-- anchors PATCH generation to one exact identity set:
-  - `catalogue_number`
-  - `Device UDI-DI`
-  - parent `Basic UDI-DI`
-  - latest accepted tracked state for that same device
-- requires the user to generate and review the baseline `POST` first for that same selected device record
-- also requires tracked successful Playground registration for that same device before a version `2` `PATCH` can be drafted
-- keeps the `Patch XML` workspace visible, but should block generation and download until that reviewed baseline `POST` exists in the current session
-- should support:
-  - `Equivalent First Patch`
-  - real first-update version `2` PATCH generation from accepted `POST`
-  - later version `3+` PATCH generation from latest accepted tracked state
-- current implementation derives scenario drafts from the latest successful device state resolved through the testing-state store, currently backed by `data/testing/testing-state.sqlite3`
-  - runtime app behavior should now treat SQLite as the active source of truth rather than auto-reading YAML when the store is empty
-  - current tests now seed temporary SQLite state from `data/testing/testing-state-seed.sql`
-  - scenario derivation falls back to the baseline first child `PATCH` only when no later accepted state has been recorded for that device
-- current scenario status:
-  - implemented and Playground-successful: `equivalent_first_patch`, `trade_name_edit`, `warning_add`, `storage_condition_edit`, `base_quantity_edit`
-  - implemented but not Playground-accepted: `status_code_edit`
-  - blocked by Playground business rules: `sterile_edit`, `latex_edit`
-  - present in the UI but still unimplemented / untested: `production_identifier_edit`, `sterilization_edit`, `reprocessed_edit`, `number_of_reuses_edit`, `mdn_codes_edit`
-- requires explicit user-supplied `PATCH` version input
-- current single `PATCH` preview UI now:
-  - uses a dedicated full-width preview card matching the single `POST` card language
-  - includes:
-    - `Generate Patch Scenario`
-    - `Validate Against XSD`
-    - `Download Patch Scenario ZIP`
-  - presents:
-    - preview status
-    - active view
-    - validation status
-    - schema target
-    - generated file name
-    - XML structure navigation
-    - highlighted raw XML preview
-  - no longer uses the earlier `Base Message` / `Derived Patch` toggle in the main preview
-  - now treats the primary preview as one derived PATCH preview path
-- shows in the scenario/config workspace:
-  - baseline-versus-draft business comparison
-  - draft readiness messaging
-  - generated XML change summary after preview
-- validates generated XML locally and supports download
-
-Current implemented limitation and wording note:
-
-- current single `PATCH` availability still depends on the SQLite-backed accepted-state model, not directly on workbook-declared `PATCH` rows
-- as of Saturday, August 22, 2026, this means some families/variants may show many workbook/canonical `PATCH` rows but zero PATCH-ready records in the current implemented design
-- current tracked count snapshot from SQLite-backed testing state:
-  - `17` tracked PATCH-base records overall
-  - `0` for `Echelon / Echelon`
-- this is an acknowledged mismatch between:
-  - workbook/import business classification
-  - SQLite-tracked accepted lineage used by the current PATCH gate
-- current design decision:
-  - do not redesign this solely because Playground may not reflect Production registrations
-  - revisit wording first
-  - revisit accepted-state import/promotion later as a distinct architecture decision
-
-Record-based meaning:
-
-- `Patch XML` should not silently switch between sibling devices within the same family and variant.
-- The chosen PATCH target should remain the same record from assessment through XML generation.
-- The UI may use family and variant to narrow the available records, but the actual PATCH lineage must resolve to one exact child device record before generation.
-- Version `2` PATCH should derive from the accepted baseline `POST` for that exact record.
-- Version `3+` PATCH should derive from the latest accepted tracked `PATCH` for that exact record.
-- Response handling should later update tracked state against that same exact record lineage.
-
-Important limitation:
-
-- reviewed baseline `POST` state is persisted in the testing-state SQLite store, not only in-memory
-- PATCH scenario promotion state such as `EUDAMED Candidate` versus `EUDAMED Accepted` still remains UI/application state rather than a broader workflow model
-- the testing-state store is SQLite-backed today and is expected to evolve within SQLite rather than be replaced by a different database platform
-- later scenario drafting still assumes an equivalent-first accepted `PATCH` baseline when no later accepted `PATCH` state has been recorded for that exact record
-- this is now an acknowledged design constraint to replace
-- `frontend/src/App.tsx` has improved visually but still contains substantial mode-specific branching
-- once single `POST` and single `PATCH` wording stabilise, refactor `frontend/src/App.tsx` by extracting shared preview/layout primitives rather than continuing to add inline mode-specific branches
-
-### Market Info
-
-- Uses the selected XML-ready record / shared testing anchor
-- Current UI now includes:
-  - a full-width `Market Info Edit` card above the preview card
-  - three selector controls:
-    - `Add country`
-    - `Remove country`
-    - `Original market`
-  - compact current/draft market summary tiles
-  - compact country chips with original-market emphasis
-- Generates one standalone `MARKET_INFO.PUT` message
-- Validates locally and supports download
-- Current version-handling assumption:
-  - use the current accepted device version as input context only
-  - do not automatically advance tracked PATCH/device version after successful `MARKET-INFO.PUT`
-  - record Market Info success state separately so the rule can be revised safely later if Production evidence shows version coupling
-- Current testing status:
-  - backend automated tests now cover the override-country preview/download path
-  - frontend has no automated UI test runner configured yet
-  - success-XML upload and SQLite persistence for `MARKET_INFO.PUT` are implemented
-  - broader Playground confirmation of the end-to-end `MARKET_INFO.PUT` workflow still remains limited relative to `POST` and `PATCH`
-
-### Bulk XML
-
-- `Single XML` is now removed from the user-facing workspace and should be treated as an internal preview capability only unless reintroduced deliberately.
-- `Bulk Basic UDI POST` now represents parent registration waves only.
-- `Bulk UDI-DI POST` now represents child registration waves only.
-- `Bulk PATCH` remains the bulk update mode.
-- Bulk modes do not use the single-device reviewed baseline gate used by the current single-device PATCH flow.
-- `Bulk PATCH` should continue to reuse the same per-device accepted-state lineage rules as single-device `Patch XML`.
-
-## Current PATCH Workflow
-
-1. Select product family, variant, and the XML-ready record to review.
-2. Open the baseline registration workspace and generate the baseline `POST`.
-3. Review the baseline `POST` generated from that same selected row.
-4. Open `Patch XML`.
-5. Confirm the parent catalogue number shown in `Patch XML` and confirm the baseline `POST` is marked reviewed.
-6. Choose one PATCH option:
-   - `Equivalent First Patch`
-   - first real version `2` update PATCH
-   - later version `3+` update PATCH
-7. Enter the intended `PATCH` version integer.
-8. Enter only the PATCH-specific change values.
-9. Review the before/after business summary.
-10. Generate the derived scenario `PATCH`.
-11. Compare:
-   - current accepted base state
-   - derived scenario `PATCH`
-12. Review local XSD validation and download if needed.
-
-## Agreed PATCH Design Direction
-
-- Version `1` remains the accepted registration `POST`.
-- The baseline registration workspace should generate `POST` only.
-- `Patch XML` should own all PATCH generation.
-- `Equivalent First Patch` should be an explicit PATCH option rather than being forced in the baseline workspace.
-- A version `2` `PATCH` should be allowed to be the first real update derived directly from the accepted `POST`.
-- That version `2` `PATCH` should match the accepted `POST` in all non-target fields.
-- Only the explicitly changed field or fields should differ between:
-  - accepted `POST`
-  - first real version `2` `PATCH`
-- Version `3+` `PATCH` messages should derive from the latest accepted tracked `PATCH` state for that device.
-- This means the long-term rule should become:
-  - version `2` base state: accepted `POST`
-  - version `3+` base state: latest accepted tracked `PATCH`
-- The current no-change equivalent version `2` `PATCH` should therefore be treated as an optional testing flow, not as the default or only PATCH flow.
-- Bulk registration should now be treated as explicit staged flows rather than one generic `Batch XML` mode.
-- The validated sequence is:
-  - `Bulk Basic UDI POST`
-  - `Bulk UDI-DI POST`
-  - `Bulk PATCH`
-- `Bulk Basic UDI POST` should create at most one new parent registration per `Basic UDI-DI` in a wave.
-- `Bulk UDI-DI POST` should register child devices only after the parent `Basic UDI-DI` has already been accepted.
-- `Bulk PATCH` should resolve the latest accepted state independently for each targeted child device lineage.
-
-## Bulk POST Design Direction
-
-- The old generic `Batch XML` concept is now superseded by explicit bulk modes with different regulatory behavior.
-- `Bulk Basic UDI POST` is the parent registration step.
-- `Bulk UDI-DI POST` is the child registration step.
-- `Bulk PATCH` comes only after both registration steps have been proven for the targeted device set.
-
-### Bulk Basic UDI POST
-
-- Purpose: register a new parent `Basic UDI-DI` once.
-- Service profile: `DEVICE.POST`.
-- Emission rule: one parent message per distinct `Basic UDI-DI`.
-- If several selected rows belong to the same new parent, only the first eligible row should generate the parent payload.
-- If that parent `Basic UDI-DI` already has a successful `DEVICE.POST` in tracked testing state, it should not generate any new parent payload.
-- The current clean message for that case is:
-  - `Parent Basic UDI-DI already exists for {family} / {variant}. Use Bulk UDI-DI POST to add child devices.`
-- The UI now needs to present readiness using unposted parent count, not total parent count.
-
-### Bulk UDI-DI POST
-
-- Purpose: register multiple `Device UDI-DI` records under an already accepted `Basic UDI-DI`.
-- Service profile: `UDI_DI.POST`.
-- Message shape: standalone child registration payload, not parent `DEVICE.POST`.
-- XML wrapper: `device:UDIDIData` with `xsi:type="udidi:MDRUDIDIDataType"`.
-- Parent linkage is carried through `basicUDIIdentifier`; the parent `MDRBasicUDI` block is not repeated in this flow.
-- If the parent `Basic UDI-DI` already exists, all selected eligible child rows should be included.
-- Child rows already known as successfully registered in tracked state must be excluded before XML generation.
-- The old prototype behavior that reserved the first row as a fallback parent seed is no longer the target model.
-- If the parent does not exist yet, this flow should stop and instruct the user to run `Bulk Basic UDI POST` first.
-- If no genuinely new child rows remain after tracked-state filtering, the UI should say so explicitly rather than generate duplicate child XML.
-- Bulk success XML upload is now implemented for this flow.
-- A successful `Epirus / Esprit` bulk child `UDI_DI.POST` wave of `50` devices was recorded on Sunday, August 23, 2026.
-- After that upload:
-  - the affected tracked testing subjects were stamped `post_success = 1`
-  - the affected tracked testing subjects were stamped `latest_successful_version = 1`
-  - bulk child-post eligibility for `Epirus / Esprit` dropped to `366`
-- A traced alias bug in `TestingStateStore` previously prevented family `Epirus` from matching stored testing rows under `Epirus / Esprit`; that bug is now fixed.
-- Current remaining check:
-  - confirm the Bulk `POST` UI visibly refreshes immediately after successful XML upload without requiring manual reload
-
-## Historical Playground Findings
-
-## Latest Playground Evidence
-
-- `Epirus / Esprit`
-  - single `DEVICE.POST` for `ESP22L1S` succeeded on Thursday, August 14, 2026
-  - single `UDI_DI.PATCH` version `2` trade-name update for `ESP22L1S` succeeded on Thursday, August 14, 2026
-- `Elite / Elite VT`
-  - first bulk child `UDI_DI.POST` wave of five devices had already been recorded as successful
-  - second bulk child `UDI_DI.POST` wave of five new devices also succeeded on Thursday, August 14, 2026
-  - bulk `UDI_DI.PATCH` equivalent-first wave across ten child devices succeeded on Thursday, August 14, 2026
-- `Echelon`
-  - `Echelon VAC` is not currently eligible for single `POST` because the parent lineage is already known in tracked state
-  - `Echelon VT` is not currently eligible for single `POST` because all validated rows are classified as `PATCH`
-- This flow has now been validated in Playground for five `Device UDI-DI` records under one accepted `Elite VT` `Basic UDI-DI`.
-
-### Bulk PATCH
-
-- Purpose: apply the same approved PATCH scenario across several already registered child devices.
-- Dependency: all targeted `Device UDI-DI` records must already exist in Playground.
-- Base-state rule: each child device must resolve its own latest accepted state before the next PATCH is derived.
-- Bulk PATCH therefore cannot rely on one shared wave baseline; it must behave as a per-device PATCH lineage operation executed in bulk.
-- Bulk `PATCH` now shares the newer preview-card shell used by the single workspaces and the bulk POST workspaces.
-- The next active testing objective is now to check the operation of `Bulk PATCH` after the recent bulk UI and success-upload changes.
-
-## Implemented Guardrails
-
-- Generated scenario `PATCH` preview/download now require `catalogue_number` in the request contract.
-- Backend generated-scenario preview/download resolve an exact XML-ready `POST` record for:
-  - family
-  - variant
-  - catalogue number
-- `Patch XML` scenario generation stays blocked unless the persisted reviewed baseline state matches the same:
-  - product family
-  - product variant
-  - catalogue number
-- The UI no longer allows scenario generation from a variant without a reviewed baseline pair.
-- Bulk parent existence is now resolved from successful tracked testing state via the testing-state store.
-- Bulk Basic UDI POST and Bulk UDI-DI POST router stops now return `400` rather than `404`.
-- Single `POST` now resolves and presents the next assessed candidate rather than relying on an arbitrary first XML-ready row.
-
-## Current UI Notes
-
-- The bulk summary cards for:
-  - `Bulk PATCH Summary`
-  - `Bulk UDI-DI POST Summary`
-  - `Bulk POST Summary`
-  now use a full-width multi-column layout so the cards expand across the available space rather than collapsing into a narrow content strip.
-- `Single XML` has been removed from the top XML mode selector.
-- `Bulk Basic UDI POST` currently shows:
-  - unposted parent count
-  - a readiness message when all parents already exist
-- The current expected message for `Elite / EliteVT` is:
-  - `All Basic UDI-DI parents for this variant already have successful parent DEVICE.POST entries. Use Bulk UDI-DI POST for additional child devices.`
-
-## Immediate Next Checks
-
-- verify whether Bulk `POST` visibly refreshes its workspace state immediately after successful XML upload
-- check the operation of `Bulk PATCH`
-- verify the current operation-assessment UI text for:
-  - `Bulk Basic UDI-DI POST`
-  - `Bulk DEVICE UDI-DI POST`
-  - `Bulk PATCH`
-- continue refining the plain-language readiness and blocking messages so they describe the actual record or cohort being assessed
-- design SQLite-backed replacement of the remaining YAML-driven testing-history reads before changing response-processing behavior
-- continue Playground testing for:
-  - record-based `PATCH`
-  - `Bulk PATCH`
-  - `Market Info`
-- keep all new successful or rejected Playground results reflected in:
-  - `data/testing/testing-state.sqlite3`
-  - `docs/eudamed-playground-test-report.md`
-
-## Current Scenario Scope
-
-Active generated scenarios:
-
-- `Equivalent First Patch`
-  - purpose: explicit version `2` baseline `UDI_DI.PATCH`
-  - values:
-    - `e:version = 2`
-    - no business-field delta
-  - example:
-    - accepted `POST` version `1`
-    - derived `PATCH` version `2`
-- `Trade Name Edit`
-  - target: `udidi:tradeNames`
-  - values:
-    - free text
-    - one replacement trade name value per generated scenario
-  - example:
-    - before: `ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS`
-    - after: `ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED`
-- `Critical Warnings`
-  - target: `udidi:criticalWarnings`
-  - values:
-    - controlled warning code
-    - optional comment
-    - `CW999` requires comment
-  - example:
-    - before: `CW010`
-    - after: `CW011`
-- `Storage Condition Edit`
-  - target: `udidi:storageHandlingConditions`
-  - values:
-    - one or more existing condition comments updated
-    - current implemented testing focus remains `SHC006` and `SHC007`
-  - example:
-    - before `SHC006`: `Minus 15C`
-    - after `SHC006`: `Store in a dry location`
-
-Additional UI-present but not yet implemented scenarios:
-
-- `Sterilization`
-- `Reprocessed`
-- `Number Of Reuses`
-- `MDN Codes`
-
-Implemented or partially implemented scenarios with caveats:
-
-- `Base Quantity`
-  - target: `udidi:baseQuantity`
-  - values:
-    - any positive integer
-  - examples:
-    - `1`
-    - `2`
-    - `10`
-- `Sterile`
-  - target: `udidi:sterile`
-  - values:
-    - `true`
-    - `false`
-  - example:
-    - before: `false`
-    - after: `true`
-- `Latex`
-  - target: `udidi:latex`
-  - values:
-    - `true`
-    - `false`
-  - example:
-    - before: `false`
-    - after: `true`
-- `Status Code`
-  - target: `udidi:status/commondi:code`
-  - values:
-    - `NOT_INTENDED_FOR_EU_MARKET`
-    - `ON_THE_MARKET`
-    - `NO_LONGER_PLACED_ON_THE_MARKET`
-  - example:
-    - before: `ON_THE_MARKET`
-    - after: `NO_LONGER_PLACED_ON_THE_MARKET`
-
-## Current XML Facts
-
-- Accepted testing baseline remains:
-  - `POST -> DEVICE.POST`
-  - `PATCH -> UDI_DI.PATCH`
-- The first confirmed accepted Playground baseline pair was proven on Sunday, August 9, 2026:
-  - `DEVICE.POST` -> `SUCCESS`
-  - `UDI_DI.PATCH` with `e:version = 2` -> `SUCCESS`
-- Current implementation:
-  - scenario-derived later `PATCH` payloads now use the latest successful tracked device state from the SQLite-backed testing-state store when available, falling back to the baseline first child `PATCH` otherwise
-- Agreed target direction:
-  - version `2` PATCH payloads should derive directly from the accepted `POST`
-  - version `3+` PATCH payloads should derive from the latest accepted tracked `PATCH`
-- This is intentional for the initial testing phase so scenario changes remain narrow and traceable against one reviewed baseline or one later accepted state.
-- Non-scenario fields should stay aligned with the current accepted state for that device lineage.
-- Expected scenario deltas are limited to:
-  - `e:version`
-  - the scenario-approved target field(s)
-- Agreed future-state rule:
-  - for version `2`, the chosen base should be the accepted `POST`
-  - for version `3+`, the chosen base should be the latest accepted tracked `PATCH`
-
-## Latest Confirmed Playground Execution
-
-- On Tuesday, August 11, 2026, `Elan / Elan IC / ELANIC22L1S` succeeded with a scenario-derived `UDI_DI.PATCH` for `Critical Warnings`.
-- Confirmed identifiers:
-  - transaction id `6aebefd6-4a73-47e4-96f1-23094c0a0167`
-  - submission id `06b987f7-4432-4780-9a31-c1fe12de3603`
-  - `UDI-DI` `05050649096501`
-- Confirmed business delta:
-  - `e:version = 4`
-  - critical warning changed from `CW010` to `CW011`
-  - retained trade name `ELANIC 22L CAT1 -EXT.FOOT PROSTHESIS UPDATED`
-- Catalogue number is currently represented in the XML as:
-  - `udidi:referenceNumber`
-
-## Latest Codebase Cleanup
-
-- Removed the obsolete fixture-era PATCH scenario tree under:
-  - `backend/tests/fixtures/xml_patch_scenarios`
-- Removed stale fixture-anchor fields from `RegisteredDeviceAnchor`.
-- Removed the unused combined baseline-pair download route and frontend client method:
-  - `/api/xml/download-post-patch-pair`
-- Active tests now rely on the current generated, SQLite-backed testing-state workflow, with historical test data seeded from `data/testing/testing-state-seed.sql`.
-
-## Verification Notes
-
-- Historical verification snapshots recorded above should be treated as dated evidence only.
-- Re-run current verification from the present worktree before relying on pass counts.
-- Latest current verification on Monday, August 31, 2026:
-  - full backend suite: `111 passed, 1 warning`
-  - frontend production build: `npm run build` passed
-- Recommended backend command from the current repo layout:
-  - `cd backend`
-  - `PYTHONPATH=. ../.venv/bin/pytest -q`
-- Recommended frontend command:
-  - `cd frontend`
-  - `npm run build`
-
-## Frontend Testing Position
-
-- The frontend currently has no configured test runner.
-- Current automated frontend verification is limited to:
-  - TypeScript compile
-  - Vite production build
-- Recommended future frontend stack:
-  - `vitest`
-  - `@testing-library/react`
-  - `@testing-library/user-event`
-  - `msw`
-  - later `playwright` for a very small number of end-to-end flows
-- Highest-value first frontend tests:
-  - `Patch XML` remains blocked until the baseline `POST` exists for the same selected record
-  - operation assessment cards render the correct status, reasons, and next action after family, variant, and operation selection
-  - single `POST` renders the assessed next candidate rather than an arbitrary XML-ready row
-  - PATCH version defaults to one greater than the latest successful tracked version
-  - trade name input seeds from latest successful tracked state rather than workbook row
-  - warning comment required only for `CW999`
-  - storage-condition scenario requires at least one changed condition
-
-## Proposed Database Direction
-
-- Excel workbooks remain the upstream source files.
-- SQLite is the current and planned application database for imported source state, testing state, and later canonical persistence.
-- The application should read runtime testing state, accepted device state, submission history, and later generation workflows from SQLite rather than directly from workbook files or YAML.
-
-### Minimal Proposed Schema
-
-#### Import Layer
-
-- `import_batch`
-  - `id`
-  - `source_type`
-  - `label`
-  - `imported_at`
-  - `imported_by`
-  - `notes`
-- `source_workbook`
-  - `id`
-  - `import_batch_id`
-  - `workbook_name`
-  - `file_path`
-  - `file_hash`
-  - `loaded_at`
-- `source_row`
-  - `id`
-  - `source_workbook_id`
-  - `sheet_name`
-  - `row_index`
-  - `product_family`
-  - `product_variant`
-  - `catalogue_number`
-  - `primary_udi_di`
-  - `submission_operation`
-  - `raw_payload_json`
-  - `canonical_status`
-  - `created_at`
-
-#### Canonical Device Identity
-
-- `device_subject`
-  - `id`
-  - `subject_key`
-  - `product_family`
-  - `product_variant`
-  - `catalogue_number`
-  - `primary_udi_di`
-  - `basic_udi_di`
-  - `current_source_row_id`
-  - `created_at`
-  - `updated_at`
-
-#### Current Accepted State
-
-- `device_current_state`
-  - `id`
-  - `device_subject_id`
-  - `current_version`
-  - `trade_name`
-  - `storage_conditions_json`
-  - `critical_warnings_json`
-  - `last_successful_submission_id`
-  - `updated_at`
-
-#### Submission And Testing History
-
-- `submission`
-  - `id`
-  - `device_subject_id`
-  - `source_row_id`
-  - `message_type`
-  - `scenario_id`
-  - `scenario_label`
-  - `version`
-  - `status`
-  - `environment`
-  - `transaction_id`
-  - `submission_id`
-  - `correlation_id`
-  - `message_id`
-  - `payload_created_at`
-  - `tested_at`
-  - `xml_file_name`
-  - `xml_payload`
-  - `zip_file_name`
-  - `notes`
-- `submission_change`
-  - `id`
-  - `submission_id`
-  - `field_name`
-  - `field_code`
-  - `before_value`
-  - `after_value`
-  - `change_kind`
-
-#### Optional Early Control Table
-
-- `device_test_flags`
-  - `device_subject_id`
-  - `post_success`
-  - `baseline_patch_success`
-  - `exclude_from_post_wave`
-  - `exclude_from_baseline_patch_wave`
-  - `updated_at`
-
-### Recommended Database Rules
-
-- Never update `source_row` in place.
-- Treat each workbook load as a new `import_batch`.
-- Update `device_current_state` only from successful accepted submissions.
-- Keep `submission` as the complete audit log.
-- Keep generated XML payloads in the database initially unless size becomes a problem later.
-
-### Suggested Migration Path From Today
-
-1. Keep workbook parsing as-is.
-2. Import parsed workbook rows into `source_row`.
-3. Build `device_subject` from the current row-level device identity.
-4. Move historical accepted-state snapshots into `device_current_state`.
-5. Move historical testing events into `submission` and `submission_change`.
-6. Switch the application to read current accepted state from the database rather than from any legacy file-based testing artifact.
-
-### Current Agreed Identity Direction
-
-- `device_subject` should become the single stable device-identity table for the application.
-- The current repo already links testing-state tables toward that identity model:
-  - `reviewed_post_baselines` already has `device_subject_id`
-  - `testing_subjects` already has `device_subject_id`
-  - the SQLite store backfills those links where possible on startup / schema ensure
-- The next relational cleanup step is to stop treating testing-state tables as parallel identity stores even though those linkage columns now exist.
-- Transitional matching should still use:
-  - `product_family`
-  - `product_variant`
-  - `catalogue_number`
-  - fallback `primary_udi_di` when needed
-- Steady-state application lookups should move from string matching to foreign-key joins once that linkage exists.
-
-### Next Database Steps
-
-1. Replace the remaining YAML-dependent testing-history reads with SQLite-backed reads tied to `device_subject` lineage.
-2. Reduce reviewed-baseline and testing-state lookups that still rely on text matching in favor of `device_subject_id` joins where practical.
-3. Shape a clearer submission / testing-history model in the main SQLite application database rather than leaving testing history as a parallel architecture concern.
-4. Expand canonical persistence tied to `device_subject` only after the testing-history lineage is stable.
-5. Only after the SQLite relational shape settles, introduce migration tooling if needed for controlled SQLite schema evolution.
-
-## Documentation Alignment
-
-The current docs now need to describe:
-
-- generated `Patch XML`
-- current exact-record lineage
-- reviewed baseline-pair gating
-- before/after comparison as a current feature, not a future idea
-- tracked-state scenario derivation for the initial testing phase
-
-Files refreshed in this pass:
-
-- `docs/session-handoff.md`
-- `docs/architecture-definition-draft.md`
-- `frontend/src/content/docs/xml-generation.md`
-- `frontend/src/content/docs/eudamed-testing-generation-ui.md`
-- `frontend/src/content/docs/eudamed-service-contract-findings.md`
-
-## Current Schema-Version Note
-
-- Local default message schema version is now `3.0.32`.
-- Previous repo default was `3.0.30`.
-- Local bundled `data/schemas/service/Message/MessageType.xsd` fixed value is also now `3.0.32`.
-- Previous bundled fixed value was `3.0.30`.
-- Optional testing override now exists:
-  - `EUDAMED_MANUFACTURER_SRN_OVERRIDE`
-  - intended for Playground actor alignment only
-  - should remain easy to remove or change later
-- Optional testing suppression now exists:
-  - `EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE`
-  - intended for Playground-only compatibility when the AR actor is not resolvable there
-  - should remain easy to remove or change later
-- Optional testing override now also exists:
-  - `EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE`
-  - intended to point XML generation at a Playground-valid AR SRN such as `DE-AR-000031681`
-  - preferred over suppression when EUDAMED business rules require an AR for the submitting manufacturer
-- Reason for temporary/default switch:
-  - actual Playground validation error `E-I-40000` on Sunday, August 9, 2026 required `m:Push@version="3.0.32"`
-- Public technical documentation observed during the same session still stated `v 3.0.30` for the published `XSD schemas.zip`.
-- Treat this as a controlled operational hotfix until the local schema pack is fully refreshed, the published documentation catches up, or a later EUDAMED validator change requires another version adjustment.
-
-## Still Missing
-
-- persistence for PATCH scenario status (`EUDAMED Candidate` / `EUDAMED Accepted`)
-- persistence for baseline-family acceptance state
-- broader SQLite persistence for accepted device state and submission / Playground testing history in the main application model
-- automatic promotion of accepted PATCH scenarios into `EUDAMED Generation`
-- hardening and test coverage for `Bulk PATCH`
-- broader Playground confirmation for `MARKET_INFO.PUT`
-- full manual feature-validation pass across all current workspaces against the current SQLite-backed design
-- broader scenario library beyond the current implemented PATCH scenarios
-- external confirmation that candidate scenarios are operationally accepted by EUDAMED
-- workbook-drift detection between the reviewed baseline pair and newer workbook state
-- any later decision on workbook-refreshed scenario PATCH regeneration
-
-## Production Cutover Direction
-
-- The current implemented eligibility model is intentionally Playground-centric:
-  - single `PATCH` still depends on locally tracked successful `POST` lineage in SQLite
-  - bulk `PATCH` still depends on locally tracked accepted-state lineage in SQLite
-  - this remains appropriate for controlled Playground proving
-- Production cutover should not keep that same restriction for workbook/reference rows already classified as `PATCH`.
-- Agreed production direction:
-  - any row classified as `POST` should remain eligible for `POST` under the current `POST` design
-  - any row classified as `PATCH` should be eligible for `PATCH` without requiring an application-generated prior `POST`
-  - this is especially important for families/variants whose source/reference model already assumes an existing registered lifecycle
-- Important distinction:
-  - this is a future Production cutover rule, not a reason to weaken the current Playground testing controls immediately
-  - the current Playground/testing implementation should continue to rely on SQLite-tracked accepted lineage until the Production cutover model is introduced deliberately
-- `PATCH` version handling at cutover will need a trusted source:
-  - preferred: retrieve the current version from EUDAMED before generating the next `PATCH`
-  - controlled fallback: use workbook/reference `Version` as an assumed accepted-state baseline where business ownership confirms that assumption
-  - last resort: require explicit user confirmation of the current version before generation
-- `MARKET-INFO.PUT` version handling at cutover should remain explicitly separate until verified:
-  - do not assume that a successful Market Info update increments the accepted device version
-  - use current accepted version as context if required by the operation
-  - persist Market Info outcomes separately from `PATCH` lineage unless EUDAMED evidence proves they share one version counter
-- This implies two distinct operating modes for later design:
-  - `Testing lineage mode`
-    - current behavior
-    - relies on locally tracked `POST` / `PATCH` success history in SQLite
-  - `Production assumed-registered mode`
-    - allows workbook/reference `PATCH` rows to proceed without an app-generated `POST`
-    - relies on trusted version state from EUDAMED or a controlled assumed baseline
-- `Echelon / Echelon` is the clearest example of why this matters:
-  - current source/reference classification marks it as `PATCH`
-  - current Playground-centric implementation therefore blocks both `POST` and `PATCH`
-  - Production cutover design should allow such `PATCH`-classified scopes to proceed as `PATCH` once version state is trustworthy
-- Treat this as an explicit architecture change for later implementation, not a minor UI tweak:
-  - it affects eligibility rules
-  - version-state sourcing
-  - SQLite state meaning
-  - later Production submission behavior
-
-## Open Work / Next Steps
-
-Focus next on consolidating the remaining testing architecture onto SQLite and extending it carefully:
-
-1. Review the current branch diff with the logging slice in mind:
-   - `backend/app/services/testing_state_store.py`
-   - `backend/app/services/testing_success_xml.py`
-   - `backend/app/services/xml_generation.py`
-   - `backend/app/services/xml_rendering.py`
-   - `backend/tests/test_workbook_import.py`
-2. Run the current verification baseline before changing the next schema slice:
-   - `python -m pytest -q backend/tests/test_echelon_xml_generation.py backend/tests/test_workbook_import.py`
-3. Validate the operator workflow manually in the app against the new correlation model:
-   - preview the same single-device `PATCH` twice with different versions
-   - upload the older success XML
-   - verify SQLite shows the acknowledged version/state rather than the newer preview state
-4. Do the same manual validation for `Market Info`:
-   - preview two different market-country drafts for the same device
-   - upload the older success XML
-   - verify accepted Market Info state and summary delta follow the acknowledged draft, not the newest preview
-5. Inspect `testing_events` directly in SQLite after those tests and confirm:
-   - repeated previews create multiple generated rows
-   - bulk rows carry shared wrapper `correlation_id` / `message_id`
-   - success rows keep `event_kind = success_ack`
-   - single `POST` generated rows persist the same envelope IDs visible in the preview XML
-6. Decide the next schema-cleanup slice before more UI work:
-   - whether to standardize `status` casing now or later
-   - whether to introduce `testing_batches` now or continue with only `batch_id`
-   - whether accepted POST state should become a stricter first-class snapshot everywhere rather than partially transitional
-7. Replace the remaining YAML-dependent testing-history reads with SQLite-backed reads once the current logging slice is accepted.
-8. Keep aligning testing history, reviewed baselines, and operation assessment around `device_subject` lineage.
-9. Reduce text-matched lineage resolution where `device_subject_id` joins are now available.
-10. Only after the testing-history model is stable, introduce controlled SQLite migration tooling if needed.
-11. Document and later implement a Production cutover mode where workbook/reference `PATCH` rows can proceed without locally generated `POST` lineage.
-12. Decide whether Production `PATCH` version state will come from live EUDAMED lookup, controlled source-version assumptions, or explicit operator confirmation.
-
-### SQLite Inspection Checklist
-
-Use these queries against `data/testing/testing-state.sqlite3` after manual preview/upload tests.
-
-Terminal form:
+Updated September 9, 2026. This document describes the implemented design and the remaining work. Historical Playground evidence is labelled separately; it must not be read as a live database inventory.
+
+## Repository And Delivery Context
+
+- Branch observed during this refresh: `feature/testing-batches-audit`.
+- Latest implementation commit: `355d910` — `Consolidate XML workflows and confirm review through ZIP downloads`.
+- The implementation is committed. This handoff refresh is a separate documentation change; use `git status --short` for subsequent worktree status.
+- The application prepares, validates and packages EUDAMED XML, then records manually uploaded Playground acknowledgements. It does not submit XML through EUDAMED M2M transport.
+- Retain the existing UI layout and buttons. Preserve distinct operation-specific rules rather than combining all registration and update flows into one generic batch mode.
+- SQLite remains the active application store. The next priority is operational verification and gradual relational identity cleanup, not replacing the database or restructuring the UI.
+
+Follow [AGENTS.md](../AGENTS.md) for collaboration requirements. The owner has explicitly approved the ZIP-review design described below; that decision is resolved.
+
+## XML Workspaces And Message Boundaries
+
+| Workflow | Current behavior |
+| --- | --- |
+| POST | Presents the next eligible device for the selected family/variant. Uses `DEVICE.POST` to seed an unregistered Basic UDI-DI; uses child-only `UDI_DI.POST` when that parent is already registered. Excludes already registered Device UDI-DIs. |
+| Patch XML | The single-device PATCH workspace. Assessment, baseline, scenario, download and acknowledgement refresh retain the exact selected catalogue/device identity. Generates `UDI_DI.PATCH`. |
+| Market Info | Generates standalone `MARKET_INFO.PUT` for a registered device. Country changes and Market Info versioning are separate from device PATCH lineage. |
+| Bulk UDI-DI POST | Generates child-only registration messages under accepted Basic UDI-DIs. Already registered children are excluded. The visible Bulk POST control selects this flow. |
+| Bulk PATCH | Applies one scenario to selected registered children, resolving each device's accepted state independently. Download resolves the records included by its generated preview, rather than silently restoring excluded records. |
+| Bulk Market Info | Applies an explicit target country list to selected registered children. Different accepted starting countries and versions are supported by both assessment and generation. Each device uses its own next Market Info version. |
+
+These are the six visible XML workspaces. Bulk Basic UDI POST remains a separate supported backend/API operation that generates parent registrations; its inaccessible frontend branch was removed. Do not restore that UI without a new owner request. The old generic Single XML frontend branch is also removed. Backend single-record and directly tested generic batch compatibility helpers remain; the generic batch helper functions are not decorated HTTP routes.
+
+Use **Basic UDI-DI** for the shared regulatory parent and **Device UDI-DI** for the device identifier. `primary_udi_di` is the existing internal/API field name for Device UDI-DI. Catalogue numbers identify source/operator selections, not the EUDAMED entity itself.
+
+Bulk scope controls support all eligible/posted devices, next 10, next 25, selected catalogue numbers and imported catalogue lists. Backend eligibility still governs the resulting selection. The configured batch limit defaults to 300; callers must respect the operation's count validation rather than assume arbitrary batch sizes are accepted.
+
+## Review, Generation And Acceptance
+
+The owner confirmed four rules, now implemented:
+
+1. Generating a preview is a check. It does not record review and does not require a previous ZIP download.
+2. Requesting a ZIP download confirms review of the exact contents successfully packaged for that download.
+3. Changing a draft afterward requires another ZIP download to record review of the changed contents. Earlier receipts remain historical evidence only.
+4. Only a successful EUDAMED acknowledgement advances accepted device or Market Info state.
+
+All eight ZIP download paths use `XmlGenerationService._build_and_record_package`: single POST, scenario PATCH, single Market Info, bulk Basic UDI POST, bulk UDI-DI POST, bulk PATCH, bulk Market Info and the generic batch compatibility helper. Raw XML-only downloads do not create ZIP-review receipts.
+
+The shared recorder stores review evidence in `generated_packages`:
+
+| Field | Meaning |
+| --- | --- |
+| `package_sha256` | Fingerprint of the exact ZIP returned by the download operation. |
+| `reviewed_at` | Review timestamp for successful preparation of an explicitly requested ZIP. |
+| `review_basis` | `zip_download` for these review receipts. |
+| `reviewed_members_json` | File names and SHA-256 hashes of every archive member, including the manifest. |
+| `manifest_json` | Operation, selection and scenario metadata supplied by that package workflow. |
+
+Package creation metadata alone does not prove review: `record_generated_package` defaults to `confirms_review=False`. The ZIP download helper explicitly opts in only after archive construction succeeds. Failed archive preparation records no receipt. XML bodies and ZIP archives are not copied into this metadata table; retain downloaded artifacts for later inspection.
+
+The three review columns are nullable and added through the existing SQLite schema-initialization mechanism. Existing package rows are not backfilled as reviewed. The legacy `reviewed_post_baselines` table remains a historical POST-download indicator, maintained after successful POST ZIP preparation. Neither it nor the compatibility assessment field `reviewed_post_baseline_present` proves review of a current PATCH draft.
+
+The optional reviewed-POST generation gate has been removed. Frontend readiness distinguishes **accepted baseline loaded** from review, and download feedback confirms review of that ZIP. No new review button or preview-as-review state is required. Accepted registration, version, scenario and unresolved Market Info rejection guardrails remain.
+
+## Accepted State And PATCH Lineage
+
+[accepted_state.py](../backend/app/services/accepted_state.py) is shared by XML generation and testing read models. It resolves accepted POST, device/PATCH and Market Info snapshots from SQLite, with compatibility handling for older records.
+
+- New POST generation contexts capture the complete `DeviceXmlRecord` projection, including nested storage conditions, warnings and market countries. A generated context becomes accepted only through the matching successful acknowledgement.
+- Version 2 PATCH derives from the accepted POST baseline. Equivalent First Patch changes the version without a business-field edit; a supported scenario can instead make its targeted first update.
+- Later scenario PATCHes use the latest tracked accepted PATCH fields over the accepted POST projection. Non-target fields should retain accepted values, not silently adopt later workbook edits.
+- Every PATCH repeats the separately resolved accepted Market Info country list. A later accepted Market Info update takes precedence over the original POST countries and source-workbook countries.
+- PATCH/Market Info baseline loading requests the accepted projection via `accepted_baseline=True`. Acknowledgement refresh reloads that baseline for the selected device.
+- Bulk PATCH uses the same per-device derivation path; it does not impose one shared accepted version on a cohort.
+
+Older accepted entries may have only partial snapshots or no snapshot. Compatibility fallback still exists for unavailable historical fields. The system cannot reconstruct data that was never recorded, and current workbook values must not be described as proven historical acceptance. Complete historical-state backfill is not finished.
+
+Current testing eligibility remains Playground-centric and relies on tracked successful registration. Workbook classification as `PATCH` alone does not establish a trusted accepted baseline for the controlled scenario workspace. Production handling of already registered devices without locally generated POST history is future design work.
+
+## Market Info Rules
+
+Market Info has its own accepted country snapshot and version. A successful `MARKET_INFO.PUT` does not advance the accepted device/PATCH version.
+
+- Shared country normalization resolves names/aliases to the supported country-code representation.
+- The next proposed Market Info version uses `max(accepted Market Info version, observed EUDAMED version floor) + 1`.
+- A version-scheme error may establish a higher observed floor. That floor prevents a stale follow-up version; it does not prove acceptance of proposed countries.
+- Single Market Info enforces the observed floor when validating the supplied version. Bulk Market Info derives the next version separately for every device.
+- Different accepted starting countries are not a bulk eligibility mismatch when one explicit target list is supplied. The earlier deferred mixed-baseline decision is resolved.
+- An unresolved `marketInfoLink` PATCH rejection blocks PATCH until a later successful Market Info acknowledgement is recorded for that device.
+- Accepted Market Info countries differing from workbook countries are not themselves a reason to block PATCH.
+
+Keep the selector-driven country editor and current/proposed country display consistent between single and bulk Market Info. Accepted state displayed after acknowledgement comes from SQLite, not the user's most recent unsent draft.
+
+## Acknowledgements And Event History
+
+The upload endpoint accepts single- and multi-entity acknowledgements for `DEVICE.POST`, `UDI_DI.POST`, `UDI_DI.PATCH` and `MARKET_INFO.PUT`, including success/error outcomes. Record every returned acknowledgement before generating a related follow-up operation.
+
+- Ordinary previews do not persist generated submission context. ZIP download paths record generated contexts using the envelope IDs in the packaged XML.
+- Generated event rows are append-only. Repeated downloads can create distinct generated events; merely previewing twice does not establish two submitted/accepted states.
+- Bulk Market Info download records each included device against the actual downloaded chunk's shared correlation/message IDs.
+- Success matching first tries subject, message type, correlation ID and message ID. It can then match the same correlation ID when the acknowledgement uses a different message ID.
+- An identified acknowledgement with no matching correlation does not attach to an arbitrary latest draft. The uncorrelated legacy fallback requires absent acknowledgement IDs and exactly one candidate generated event.
+- Duplicate acknowledgement imports are idempotent. Late/older successes remain in history without rolling newer accepted state back. Duplicate processing can repair missing projections where trustworthy generated context exists.
+- An acknowledgement may provide a tracked version without enough generated context to recover its payload. Do not invent an accepted snapshot from another draft.
+- Rejections record history and, where applicable, observed version evidence; they do not accept the rejected payload.
+
+`testing_events` retains legacy status values such as `GENERATED` and `SUCCESS`, with `event_kind` distinguishing generated context and acknowledgement events. Do not change casing or historical interpretation casually.
+
+## Readiness And Frontend State
+
+`OperationAssessmentService` owns operation-specific readiness. `/api/xml/operation-readiness` supplies per-record dashboard/registration flags using the same assessment rules. Assessment responses include status, blocking reasons, recommended action, eligible count, identity scope and supporting evidence.
+
+- Initial loading and acknowledgement refresh share [xmlAssessmentRequest.ts](../frontend/src/xmlAssessmentRequest.ts).
+- Upload completion checks operation, family, variant, catalogue and parent identity before applying results to the visible workspace. An old upload must not overwrite a newly selected device's state.
+- [useBulkPostedCohorts.ts](../frontend/src/useBulkPostedCohorts.ts) uses backend posted-parent and posted-device queries for Bulk PATCH and Market Info.
+- Workbook row-count estimates and parent sample-catalogue lists no longer substitute for actual eligible cohorts.
+- Family/identity normalization is shared through [identity.py](../backend/app/services/identity.py); text/alias matching still exists as a compatibility mechanism.
+
+Retain the current tabs, shared preview cards, XML structure navigation, before/after scenario comparisons and refresh feedback. Scenario input validation and preview availability are separate from ZIP review and EUDAMED acceptance.
+
+## PATCH Scenario Availability
+
+The enabled state in `frontend/src/App.tsx` and backend scenario guards are authoritative; an XML builder existing in the code does not mean the UI allows that scenario or EUDAMED accepts it.
+
+| Scenario | Current operator availability |
+| --- | --- |
+| Equivalent First Patch | Enabled; version 2 with no business-field edit. |
+| Trade Name Edit | Enabled. |
+| Critical Warnings | Enabled; controlled code, with a required comment for `CW999`. |
+| Storage Condition Edit | Enabled; existing condition comments, currently focused on `SHC006` and `SHC007`. |
+| Base Quantity | Enabled; positive integer. |
+| Status Code | Enabled for testing, with failure status recorded in the scenario configuration; do not describe it as universally accepted. |
+| Sterile; Latex | Disabled in the UI following Playground `ERR-DTX-UDI-031-033.02` rejection; bulk generation also blocks these scenarios. |
+| Production Identifier; Sterilization; Reprocessed; Number Of Reuses; MDN Codes | Listed as candidates but not enabled/implemented for the operator workflow. |
+
+Scenario-level labels such as candidate/accepted describe testing evidence for a scenario. They are not review receipts or proof that a particular generated device update was accepted.
+
+## SQLite And Source Data
+
+Default application database: `data/testing/testing-state.sqlite3`, overridable with `EUDAMED_TESTING_STATE_DB_PATH`. Backups default to `data/testing/backups`, with configurable retention. New tests use isolated databases and synthetic fixtures rather than altering application state.
+
+| Area | Implemented tables |
+| --- | --- |
+| Import/source identity | `import_batch`, `source_workbook`, `source_row`, `device_subject`, `device_identity_issue` |
+| Canonical projection | `canonical_device_record`, `canonical_field_value`, `canonical_projection_snapshot` |
+| Accepted testing projections and events | `testing_subjects`, `testing_events` |
+| Batch lineage and outcomes | `testing_batches`, `testing_batch_devices` |
+| ZIP generation/review and legacy history | `generated_packages`, `reviewed_post_baselines` |
+
+Workbooks remain upstream inputs. Import persists source rows, links device identities, records conflicts/drift and builds the canonical projection. XML testing services require the imported projection; direct workbook fallback remains in compatibility/non-import-required service paths. Re-import when source or mapping corrections must reach the persisted projection.
+
+The source status aliases `ON_THE_EU` and `ON_THE_EU_MARKET` normalize to `ON_THE_MARKET`. Completeness is not equivalent to XSD validity; inspect local message validation before Playground upload.
+
+Submission Data uses SQLite import/snapshot/monitoring information; it should not be described as a live direct-Excel inventory. Registration State and Testing Summary expose operational readiness and testing history. Batch history and its backfill service are implemented, not merely proposed schema.
+
+`device_subject` is the intended stable application identity. Testing subjects and legacy reviewed POST rows have `device_subject_id` links, but some resolution still uses family/variant/catalogue text and aliases. Existing compatibility fields such as `post_success`, `latest_successful_version` and `latest_successful_state_json` remain in use. Relational consolidation is incremental and incomplete.
+
+## Configuration And Local Validation
+
+- Backend baseline: Python 3.11; FastAPI/Pydantic with the current SQLite services. Frontend: React/TypeScript/Vite.
+- Configured message schema default: `EUDAMED_MESSAGE_SCHEMA_VERSION=3.0.32`. The bundled Message schema was aligned after the recorded August 9 Playground rejection of `3.0.30`. This describes repository configuration and recorded evidence, not a newly verified public EUDAMED release.
+- Testing actor controls: `EUDAMED_MANUFACTURER_SRN_OVERRIDE`, `EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE`, and `EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE`.
+- Actor overrides must match the actual Playground context; do not assume historical test SRNs remain appropriate for a different environment.
+- Do not implement upload/M2M transport or introduce production assumed-registration rules as incidental cleanup.
+
+## Recorded Playground Evidence
+
+Detailed execution evidence belongs in [eudamed-playground-test-report.md](eudamed-playground-test-report.md). The following findings were retained from earlier sessions; no fresh live Playground or application-database verification was performed during this documentation refresh.
+
+- August 9, 2026: a `DEVICE.POST` and an equivalent first `UDI_DI.PATCH` at version 2 succeeded after message-schema and actor alignment. This established the initial POST/version-1 and PATCH/version-2 testing sequence.
+- August 11, 2026: `Elan / Elan IC / ELANIC22L1S` succeeded with a critical-warning PATCH at version 4, changing `CW010` to `CW011` while retaining the previously accepted trade name.
+- Earlier EliteVT tests established successful child-only `UDI_DI.POST` waves and subsequent bulk PATCH under an accepted Basic UDI-DI. Epirus/Esprit child registrations also exposed the family-alias exclusion bug, which was corrected.
+- The Navigator/Javelin/Linx sequence recorded before the September 4 handoff established the Market Info safeguard: PATCH without repeated `marketInfos` was rejected; a Market Info update removing Austria accepted 29 of 30 rows, while `LINX22L1S` reported an existing version 2. A subsequent single Market Info version 3 succeeded, followed by a 31-device Linx Bulk PATCH success.
+- At that recorded point, `LINX22L1S` had Market Info version 3 and PATCH version 4. These are historical outcomes, not current inventory or guaranteed present eligibility.
+
+Previously recorded Playground action labels:
+
+| Message | Recorded Playground option |
+| --- | --- |
+| `DEVICE.POST` | Upload of Legacy / Regulation Device / SPP (Basic UDI and UDI-DI / Master UDI-DI) |
+| `UDI_DI.POST` | Upload of UDI-DI/Master UDI-DI for existing Basic UDI-DI |
+| `UDI_DI.PATCH` | Update of UDI-DI/Master UDI-DI |
+| `MARKET_INFO.PUT` | Update Market Information |
+
+Choose the action by service/operation rather than single versus bulk packaging. Retain the downloaded ZIP/XML and import the response before proceeding with dependent changes.
+
+## Verification And Next Work
+
+Last implementation verification recorded on September 9:
+
+- Full backend run: 147 tests passed.
+- Focused ZIP-review run: all 15 tests passed, including the accepted-state regression added while the full run was running; 148 distinct backend tests were exercised across those runs.
+- Frontend: all 11 Node-based tests passed. These exercise TypeScript helpers/hook behavior without a browser; they are not full browser interaction tests.
+- Production build passed at that point, with a Vite bundle-size warning. TypeScript unused-local/parameter checks are enabled.
+- Browser visual comparison and live Playground testing of the latest consolidation/review changes remain outstanding.
+
+Useful commands from the repository root:
 
 ```bash
-sqlite3 -header -column data/testing/testing-state.sqlite3
+.venv/bin/python -m pytest backend/tests -q
+npm --prefix frontend test
+npm --prefix frontend run build
+git diff --check
 ```
 
-1. Confirm repeated previews are append-only for one device:
+Documentation-only refresh verification: all 9 local links and `git diff --check` passed. The frontend production build passed without the previous bundle-size warning: removing superseded Markdown brought the bundled JavaScript below the 500 kB warning threshold. The Documentation tab imports this file, so its size affects that build. The backend suite was not rerun for this prose-only change.
 
-```sql
-SELECT
-    event_index,
-    message_type,
-    event_kind,
-    status,
-    version,
-    scenario_id,
-    correlation_id,
-    message_id,
-    payload_created_at
-FROM testing_events
-WHERE catalogue_number = 'ESP22L1S'
-  AND message_type IN ('UDI_DI.PATCH', 'MARKET_INFO.PUT')
-ORDER BY event_index;
-```
+Next priorities:
 
-2. Confirm the success row matched the exact generated envelope IDs:
+1. Manually verify previews, ZIP review feedback, draft edits, exact-device selection and acknowledgement refresh across the six visible workspaces, including navigation while an upload is in flight.
+2. In controlled Playground testing, verify retained countries in PATCH after Market Info changes, mixed-baseline bulk Market Info, mixed success/error responses, duplicate uploads and delayed older acknowledgements. Use downloaded payloads with recorded generation context; previews alone do not create that history.
+3. Review legacy accepted records with missing/partial snapshots before claiming complete source-drift protection. Choose a trusted recovery approach rather than filling historical acceptance from current workbook data.
+4. Gradually replace remaining text-based identity lookups with `device_subject_id` joins, preserving existing data and lineage. Broader canonical/submission persistence remains a separate design increment.
+5. Consider a production mode for externally registered/PATCH-classified devices only after trusted accepted-state/version sourcing is defined. Do not weaken current Playground guardrails to achieve it.
+6. Extend scenario coverage only with supporting validation and Playground evidence. Automated submission/M2M transport remains out of scope.
 
-```sql
-SELECT
-    event_index,
-    event_kind,
-    status,
-    version,
-    correlation_id,
-    message_id,
-    scenario_id,
-    base_version,
-    derived_version
-FROM testing_events
-WHERE catalogue_number = 'ESP22L1S'
-  AND message_type = 'UDI_DI.PATCH'
-ORDER BY event_index DESC
-LIMIT 5;
-```
+The removed frontend branches, unused clients/types/state, generic preview component, duplicate normalization and old reviewed-POST gate should not be recreated. Retain historical archives unless their recovery/retention purpose has been deliberately resolved.
 
-3. Confirm the accepted subject projection now reflects the acknowledged state:
+## Read-Only SQLite Checks
 
-```sql
-SELECT
-    product_family,
-    product_variant,
-    catalogue_number,
-    latest_successful_post_version,
-    latest_successful_patch_version,
-    latest_successful_market_info_version,
-    latest_successful_version,
-    latest_successful_message_type,
-    latest_tested_at
-FROM testing_subjects
-WHERE catalogue_number = 'ESP22L1S';
-```
-
-4. Inspect the stored before/after lineage payload for one acknowledged PATCH:
-
-```sql
-SELECT
-    event_index,
-    scenario_id,
-    base_message_type,
-    base_version,
-    derived_version,
-    state_before_json,
-    state_after_json,
-    delta_json
-FROM testing_events
-WHERE catalogue_number = 'ESP22L1S'
-  AND message_type = 'UDI_DI.PATCH'
-  AND event_kind = 'success_ack'
-ORDER BY event_index DESC
-LIMIT 1;
-```
-
-5. Confirm bulk-generated rows share the same wrapper envelope IDs:
-
-```sql
-SELECT
-    message_type,
-    operation_scope,
-    correlation_id,
-    message_id,
-    COUNT(*) AS subject_rows
-FROM testing_events
-WHERE operation_scope = 'bulk'
-  AND payload_created_at IS NOT NULL
-GROUP BY message_type, operation_scope, correlation_id, message_id
-ORDER BY subject_rows DESC, payload_created_at DESC;
-```
-
-6. If a stale-preview case is suspected, compare the newest generated rows to the latest success row for the same subject:
-
-```sql
-SELECT
-    event_index,
-    event_kind,
-    status,
-    version,
-    scenario_id,
-    correlation_id,
-    message_id
-FROM testing_events
-WHERE catalogue_number = 'ESP22L1S'
-  AND message_type = 'UDI_DI.PATCH'
-ORDER BY event_index DESC
-LIMIT 10;
-```
-
-Paste-ready terminal commands:
+Use the configured database path. These queries inspect history; they do not generate, review or accept anything. Review-column queries require the updated application's schema initialization to have run.
 
 ```bash
-sqlite3 -header -column data/testing/testing-state.sqlite3 "
-SELECT
-    event_index,
-    message_type,
-    event_kind,
-    status,
-    version,
-    scenario_id,
-    correlation_id,
-    message_id,
-    payload_created_at
-FROM testing_events
-WHERE catalogue_number = 'ESP22L1S'
-  AND message_type IN ('UDI_DI.PATCH', 'MARKET_INFO.PUT')
-ORDER BY event_index;
-"
-
-sqlite3 -header -column data/testing/testing-state.sqlite3 "
-SELECT
-    event_index,
-    event_kind,
-    status,
-    version,
-    correlation_id,
-    message_id,
-    scenario_id,
-    base_version,
-    derived_version
-FROM testing_events
-WHERE catalogue_number = 'ESP22L1S'
-  AND message_type = 'UDI_DI.PATCH'
-ORDER BY event_index DESC
-LIMIT 5;
-"
-
-sqlite3 -header -column data/testing/testing-state.sqlite3 "
-SELECT
-    product_family,
-    product_variant,
-    catalogue_number,
-    latest_successful_post_version,
-    latest_successful_patch_version,
-    latest_successful_market_info_version,
-    latest_successful_version,
-    latest_successful_message_type,
-    latest_tested_at
-FROM testing_subjects
-WHERE catalogue_number = 'ESP22L1S';
-"
-
-sqlite3 -header -column data/testing/testing-state.sqlite3 "
-SELECT
-    event_index,
-    scenario_id,
-    base_message_type,
-    base_version,
-    derived_version,
-    state_before_json,
-    state_after_json,
-    delta_json
-FROM testing_events
-WHERE catalogue_number = 'ESP22L1S'
-  AND message_type = 'UDI_DI.PATCH'
-  AND event_kind = 'success_ack'
-ORDER BY event_index DESC
-LIMIT 1;
-"
-
-sqlite3 -header -column data/testing/testing-state.sqlite3 "
-SELECT
-    message_type,
-    operation_scope,
-    correlation_id,
-    message_id,
-    COUNT(*) AS subject_rows
-FROM testing_events
-WHERE operation_scope = 'bulk'
-  AND payload_created_at IS NOT NULL
-GROUP BY message_type, operation_scope, correlation_id, message_id
-ORDER BY subject_rows DESC, payload_created_at DESC;
-"
-
-sqlite3 -header -column data/testing/testing-state.sqlite3 "
-SELECT
-    event_index,
-    event_kind,
-    status,
-    version,
-    scenario_id,
-    correlation_id,
-    message_id
-FROM testing_events
-WHERE catalogue_number = 'ESP22L1S'
-  AND message_type = 'UDI_DI.PATCH'
-ORDER BY event_index DESC
-LIMIT 10;
-"
+sqlite3 -readonly -header -column data/testing/testing-state.sqlite3
 ```
+
+```sql
+-- Exact ZIP review receipts; NULL review fields denote historical/unreviewed creation.
+SELECT id, created_at, flow, package_file_name, package_sha256,
+       reviewed_at, review_basis, reviewed_members_json
+FROM generated_packages
+ORDER BY id DESC LIMIT 10;
+
+-- Separate accepted device and Market Info versions; filter to the device under test.
+SELECT id, device_subject_id, product_family, product_variant, catalogue_number,
+       latest_successful_post_version, latest_successful_patch_version,
+       latest_successful_market_info_version, latest_observed_market_info_version
+FROM testing_subjects
+ORDER BY id DESC LIMIT 20;
+
+-- Download-generated context and acknowledgements, including batch/envelope lineage.
+SELECT subject_id, event_index, message_type, event_kind, status, version,
+       batch_id, scenario_id, correlation_id, message_id
+FROM testing_events
+ORDER BY id DESC LIMIT 30;
+```
+
+Implementation detail and regression scope: [XML workflow consolidation](code-consolidation-2026-09-09.md). The [SQLite event-logging proposal](sqlite-event-logging-schema-proposal.md) and [architecture draft](architecture-definition-draft.md) contain broader/historical design material; compare them with current code before treating proposed elements as missing features.
