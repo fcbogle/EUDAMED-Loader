@@ -1,0 +1,1041 @@
+{
+  "population": 1000,
+  "results": [
+    {
+      "flow": "single_post",
+      "count": 1,
+      "action": "preview",
+      "run": "cold",
+      "seconds": 0.053557,
+      "stages": {
+        "canonical_load": 0.040399,
+        "selection": 0.001285,
+        "accepted_state": 7e-06,
+        "projection": 3.8e-05,
+        "rendering": 0.000249,
+        "validation": 0.006936
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 1,
+        "accepted_state": 5,
+        "projection": 1,
+        "rendering": 2,
+        "validation": 1
+      },
+      "bytes": 5321
+    },
+    {
+      "flow": "single_post",
+      "count": 1,
+      "action": "preview",
+      "run": "warm",
+      "seconds": 0.041728,
+      "stages": {
+        "canonical_load": 0.036675,
+        "selection": 0.001281,
+        "accepted_state": 6e-06,
+        "projection": 3.7e-05,
+        "rendering": 0.000157,
+        "validation": 9.2e-05
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 1,
+        "accepted_state": 5,
+        "projection": 1,
+        "rendering": 2,
+        "validation": 1
+      },
+      "bytes": 5321
+    },
+    {
+      "flow": "single_post",
+      "count": 1,
+      "action": "zip",
+      "run": "cold",
+      "seconds": 0.060104,
+      "stages": {
+        "canonical_load": 0.0479,
+        "projection": 3.3e-05,
+        "accepted_state": 4e-06,
+        "rendering": 0.000172,
+        "audit_writes": 0.000736,
+        "validation": 0.006736,
+        "compression": 0.000282
+      },
+      "calls": {
+        "canonical_load": 1,
+        "projection": 1,
+        "accepted_state": 3,
+        "rendering": 2,
+        "audit_writes": 2,
+        "validation": 1,
+        "compression": 1
+      },
+      "bytes": 1594
+    },
+    {
+      "flow": "single_post",
+      "count": 1,
+      "action": "zip",
+      "run": "warm",
+      "seconds": 0.045966,
+      "stages": {
+        "canonical_load": 0.040746,
+        "projection": 3.2e-05,
+        "accepted_state": 5.2e-05,
+        "rendering": 0.000163,
+        "audit_writes": 0.000444,
+        "validation": 9.3e-05,
+        "compression": 0.000266
+      },
+      "calls": {
+        "canonical_load": 1,
+        "projection": 1,
+        "accepted_state": 3,
+        "rendering": 2,
+        "audit_writes": 2,
+        "validation": 1,
+        "compression": 1
+      },
+      "bytes": 1593
+    },
+    {
+      "flow": "basic_post",
+      "count": 10,
+      "action": "preview",
+      "run": "cold",
+      "seconds": 0.050993,
+      "stages": {
+        "canonical_load": 0.037536,
+        "selection": 0.001309,
+        "accepted_state": 6e-06,
+        "projection": 0.000162,
+        "rendering": 0.000849,
+        "validation": 0.006814
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 10,
+        "projection": 10,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 34078
+    },
+    {
+      "flow": "basic_post",
+      "count": 10,
+      "action": "preview",
+      "run": "warm",
+      "seconds": 0.042259,
+      "stages": {
+        "canonical_load": 0.035774,
+        "selection": 0.001256,
+        "accepted_state": 5e-06,
+        "projection": 0.000157,
+        "rendering": 0.00088,
+        "validation": 0.000239
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 10,
+        "projection": 10,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 34078
+    },
+    {
+      "flow": "basic_post",
+      "count": 10,
+      "action": "zip",
+      "run": "cold",
+      "seconds": 0.061897,
+      "stages": {
+        "canonical_load": 0.046811,
+        "selection": 0.001242,
+        "accepted_state": 5e-06,
+        "projection": 0.000146,
+        "rendering": 0.000767,
+        "validation": 0.00683,
+        "compression": 0.000443,
+        "audit_writes": 0.000895
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 10,
+        "projection": 10,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 11
+      },
+      "bytes": 2360
+    },
+    {
+      "flow": "basic_post",
+      "count": 10,
+      "action": "zip",
+      "run": "warm",
+      "seconds": 0.047733,
+      "stages": {
+        "canonical_load": 0.039503,
+        "selection": 0.001268,
+        "accepted_state": 5e-06,
+        "projection": 0.000155,
+        "rendering": 0.000826,
+        "validation": 0.000228,
+        "compression": 0.000436,
+        "audit_writes": 0.000765
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 10,
+        "projection": 10,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 11
+      },
+      "bytes": 2360
+    },
+    {
+      "flow": "basic_post",
+      "count": 50,
+      "action": "preview",
+      "run": "cold",
+      "seconds": 0.057779,
+      "stages": {
+        "canonical_load": 0.037767,
+        "selection": 0.001398,
+        "accepted_state": 1.8e-05,
+        "projection": 0.000683,
+        "rendering": 0.003712,
+        "validation": 0.007358
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 50,
+        "projection": 50,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 160078
+    },
+    {
+      "flow": "basic_post",
+      "count": 50,
+      "action": "preview",
+      "run": "warm",
+      "seconds": 0.049842,
+      "stages": {
+        "canonical_load": 0.036402,
+        "selection": 0.001397,
+        "accepted_state": 1.9e-05,
+        "projection": 0.000673,
+        "rendering": 0.00368,
+        "validation": 0.000811
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 50,
+        "projection": 50,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 160078
+    },
+    {
+      "flow": "basic_post",
+      "count": 50,
+      "action": "zip",
+      "run": "cold",
+      "seconds": 0.072244,
+      "stages": {
+        "canonical_load": 0.048161,
+        "selection": 0.001331,
+        "accepted_state": 2e-05,
+        "projection": 0.000671,
+        "rendering": 0.003637,
+        "validation": 0.007344,
+        "compression": 0.000838,
+        "audit_writes": 0.002458
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 50,
+        "projection": 50,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 51
+      },
+      "bytes": 4095
+    },
+    {
+      "flow": "basic_post",
+      "count": 50,
+      "action": "zip",
+      "run": "warm",
+      "seconds": 0.058551,
+      "stages": {
+        "canonical_load": 0.041154,
+        "selection": 0.001401,
+        "accepted_state": 1.8e-05,
+        "projection": 0.000687,
+        "rendering": 0.003753,
+        "validation": 0.000834,
+        "compression": 0.000874,
+        "audit_writes": 0.002142
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 50,
+        "projection": 50,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 51
+      },
+      "bytes": 4094
+    },
+    {
+      "flow": "basic_post",
+      "count": 100,
+      "action": "preview",
+      "run": "cold",
+      "seconds": 0.06922,
+      "stages": {
+        "canonical_load": 0.039435,
+        "selection": 0.001601,
+        "accepted_state": 3.8e-05,
+        "projection": 0.001338,
+        "rendering": 0.007527,
+        "validation": 0.008365
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 100,
+        "projection": 100,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 317585
+    },
+    {
+      "flow": "basic_post",
+      "count": 100,
+      "action": "preview",
+      "run": "warm",
+      "seconds": 0.061193,
+      "stages": {
+        "canonical_load": 0.03825,
+        "selection": 0.001595,
+        "accepted_state": 3.8e-05,
+        "projection": 0.001334,
+        "rendering": 0.007564,
+        "validation": 0.001578
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 100,
+        "projection": 100,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 317585
+    },
+    {
+      "flow": "basic_post",
+      "count": 100,
+      "action": "zip",
+      "run": "cold",
+      "seconds": 0.087052,
+      "stages": {
+        "canonical_load": 0.050344,
+        "selection": 0.001516,
+        "accepted_state": 3.5e-05,
+        "projection": 0.001332,
+        "rendering": 0.007565,
+        "validation": 0.008343,
+        "compression": 0.001379,
+        "audit_writes": 0.004677
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 100,
+        "projection": 100,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 101
+      },
+      "bytes": 6109
+    },
+    {
+      "flow": "basic_post",
+      "count": 100,
+      "action": "zip",
+      "run": "warm",
+      "seconds": 0.071199,
+      "stages": {
+        "canonical_load": 0.042064,
+        "selection": 0.001574,
+        "accepted_state": 3.7e-05,
+        "projection": 0.001358,
+        "rendering": 0.007549,
+        "validation": 0.001584,
+        "compression": 0.001341,
+        "audit_writes": 0.003957
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 100,
+        "projection": 100,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 101
+      },
+      "bytes": 6110
+    },
+    {
+      "flow": "udidi_post",
+      "count": 10,
+      "action": "preview",
+      "run": "cold",
+      "seconds": 0.049645,
+      "stages": {
+        "canonical_load": 0.03674,
+        "selection": 0.001306,
+        "accepted_state": 6e-06,
+        "projection": 0.00022,
+        "rendering": 0.000496,
+        "validation": 0.006651
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 11,
+        "projection": 20,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 20973
+    },
+    {
+      "flow": "udidi_post",
+      "count": 10,
+      "action": "preview",
+      "run": "warm",
+      "seconds": 0.04214,
+      "stages": {
+        "canonical_load": 0.035871,
+        "selection": 0.001303,
+        "accepted_state": 5e-06,
+        "projection": 0.00022,
+        "rendering": 0.000473,
+        "validation": 0.000145
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 11,
+        "projection": 20,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 20973
+    },
+    {
+      "flow": "udidi_post",
+      "count": 10,
+      "action": "zip",
+      "run": "cold",
+      "seconds": 0.060999,
+      "stages": {
+        "canonical_load": 0.046447,
+        "selection": 0.001234,
+        "accepted_state": 5e-06,
+        "projection": 0.000226,
+        "rendering": 0.000496,
+        "validation": 0.006709,
+        "compression": 0.000387,
+        "audit_writes": 0.000845
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 11,
+        "projection": 20,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 11
+      },
+      "bytes": 1991
+    },
+    {
+      "flow": "udidi_post",
+      "count": 10,
+      "action": "zip",
+      "run": "warm",
+      "seconds": 0.048393,
+      "stages": {
+        "canonical_load": 0.040398,
+        "selection": 0.001306,
+        "accepted_state": 5e-06,
+        "projection": 0.00023,
+        "rendering": 0.000476,
+        "validation": 0.000163,
+        "compression": 0.000425,
+        "audit_writes": 0.000713
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 11,
+        "projection": 20,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 11
+      },
+      "bytes": 1992
+    },
+    {
+      "flow": "udidi_post",
+      "count": 50,
+      "action": "preview",
+      "run": "cold",
+      "seconds": 0.056366,
+      "stages": {
+        "canonical_load": 0.03785,
+        "selection": 0.001435,
+        "accepted_state": 1.7e-05,
+        "projection": 0.001065,
+        "rendering": 0.002062,
+        "validation": 0.006993
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 51,
+        "projection": 100,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 94453
+    },
+    {
+      "flow": "udidi_post",
+      "count": 50,
+      "action": "preview",
+      "run": "warm",
+      "seconds": 0.048174,
+      "stages": {
+        "canonical_load": 0.036313,
+        "selection": 0.001372,
+        "accepted_state": 1.8e-05,
+        "projection": 0.001042,
+        "rendering": 0.002073,
+        "validation": 0.000468
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 51,
+        "projection": 100,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 94453
+    },
+    {
+      "flow": "udidi_post",
+      "count": 50,
+      "action": "zip",
+      "run": "cold",
+      "seconds": 0.069923,
+      "stages": {
+        "canonical_load": 0.047568,
+        "selection": 0.001334,
+        "accepted_state": 1.9e-05,
+        "projection": 0.001054,
+        "rendering": 0.002021,
+        "validation": 0.007014,
+        "compression": 0.000689,
+        "audit_writes": 0.002397
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 51,
+        "projection": 100,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 51
+      },
+      "bytes": 2985
+    },
+    {
+      "flow": "udidi_post",
+      "count": 50,
+      "action": "zip",
+      "run": "warm",
+      "seconds": 0.056804,
+      "stages": {
+        "canonical_load": 0.041199,
+        "selection": 0.001443,
+        "accepted_state": 1.8e-05,
+        "projection": 0.001088,
+        "rendering": 0.002079,
+        "validation": 0.000462,
+        "compression": 0.000694,
+        "audit_writes": 0.002083
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 51,
+        "projection": 100,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 51
+      },
+      "bytes": 2985
+    },
+    {
+      "flow": "udidi_post",
+      "count": 100,
+      "action": "preview",
+      "run": "cold",
+      "seconds": 0.065093,
+      "stages": {
+        "canonical_load": 0.03921,
+        "selection": 0.001572,
+        "accepted_state": 3.5e-05,
+        "projection": 0.002072,
+        "rendering": 0.004137,
+        "validation": 0.007545
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 101,
+        "projection": 200,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 186310
+    },
+    {
+      "flow": "udidi_post",
+      "count": 100,
+      "action": "preview",
+      "run": "warm",
+      "seconds": 0.057126,
+      "stages": {
+        "canonical_load": 0.038032,
+        "selection": 0.001595,
+        "accepted_state": 3.2e-05,
+        "projection": 0.002077,
+        "rendering": 0.004079,
+        "validation": 0.000856
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 101,
+        "projection": 200,
+        "rendering": 1,
+        "validation": 1
+      },
+      "bytes": 186310
+    },
+    {
+      "flow": "udidi_post",
+      "count": 100,
+      "action": "zip",
+      "run": "cold",
+      "seconds": 0.081952,
+      "stages": {
+        "canonical_load": 0.04949,
+        "selection": 0.001504,
+        "accepted_state": 3.6e-05,
+        "projection": 0.002469,
+        "rendering": 0.003979,
+        "validation": 0.007431,
+        "compression": 0.00105,
+        "audit_writes": 0.004493
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 101,
+        "projection": 200,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 101
+      },
+      "bytes": 4075
+    },
+    {
+      "flow": "udidi_post",
+      "count": 100,
+      "action": "zip",
+      "run": "warm",
+      "seconds": 0.06579,
+      "stages": {
+        "canonical_load": 0.040747,
+        "selection": 0.00155,
+        "accepted_state": 3.3e-05,
+        "projection": 0.002075,
+        "rendering": 0.004004,
+        "validation": 0.000862,
+        "compression": 0.001045,
+        "audit_writes": 0.003756
+      },
+      "calls": {
+        "canonical_load": 1,
+        "selection": 2,
+        "accepted_state": 101,
+        "projection": 200,
+        "rendering": 1,
+        "validation": 1,
+        "compression": 1,
+        "audit_writes": 101
+      },
+      "bytes": 4075
+    },
+    {
+      "flow": "patch",
+      "count": 10,
+      "action": "preview",
+      "run": "cold",
+      "seconds": 0.053889,
+      "stages": {
+        "canonical_load": 0.03659,
+        "accepted_state": 0.000741,
+        "selection": 0.0013,
+        "projection": 0.000311,
+        "rendering": 0.002334,
+        "validation": 0.0074
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 151,
+        "selection": 1,
+        "projection": 20,
+        "rendering": 41,
+        "validation": 21
+      },
+      "bytes": 21684
+    },
+    {
+      "flow": "patch",
+      "count": 10,
+      "action": "preview",
+      "run": "warm",
+      "seconds": 0.045575,
+      "stages": {
+        "canonical_load": 0.03561,
+        "accepted_state": 0.000678,
+        "selection": 0.001275,
+        "projection": 0.000308,
+        "rendering": 0.00228,
+        "validation": 0.000796
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 151,
+        "selection": 1,
+        "projection": 20,
+        "rendering": 41,
+        "validation": 21
+      },
+      "bytes": 21684
+    },
+    {
+      "flow": "patch",
+      "count": 10,
+      "action": "zip",
+      "run": "cold",
+      "seconds": 0.068633,
+      "stages": {
+        "canonical_load": 0.050244,
+        "accepted_state": 0.000693,
+        "selection": 0.001246,
+        "projection": 0.000309,
+        "rendering": 0.002285,
+        "validation": 0.007408,
+        "compression": 0.000396,
+        "audit_writes": 0.000684
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 151,
+        "selection": 1,
+        "projection": 20,
+        "rendering": 41,
+        "validation": 21,
+        "compression": 1,
+        "audit_writes": 11
+      },
+      "bytes": 2087
+    },
+    {
+      "flow": "patch",
+      "count": 10,
+      "action": "zip",
+      "run": "warm",
+      "seconds": 0.052249,
+      "stages": {
+        "canonical_load": 0.040562,
+        "accepted_state": 0.000742,
+        "selection": 0.001258,
+        "projection": 0.000314,
+        "rendering": 0.002256,
+        "validation": 0.000819,
+        "compression": 0.000457,
+        "audit_writes": 0.000675
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 151,
+        "selection": 1,
+        "projection": 20,
+        "rendering": 41,
+        "validation": 21,
+        "compression": 1,
+        "audit_writes": 11
+      },
+      "bytes": 2087
+    },
+    {
+      "flow": "patch",
+      "count": 50,
+      "action": "preview",
+      "run": "cold",
+      "seconds": 0.073297,
+      "stages": {
+        "canonical_load": 0.038374,
+        "accepted_state": 0.003646,
+        "selection": 0.001274,
+        "projection": 0.001462,
+        "rendering": 0.010661,
+        "validation": 0.010094
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 751,
+        "selection": 1,
+        "projection": 100,
+        "rendering": 201,
+        "validation": 101
+      },
+      "bytes": 97444
+    },
+    {
+      "flow": "patch",
+      "count": 50,
+      "action": "preview",
+      "run": "warm",
+      "seconds": 0.063839,
+      "stages": {
+        "canonical_load": 0.035943,
+        "accepted_state": 0.003135,
+        "selection": 0.001305,
+        "projection": 0.00145,
+        "rendering": 0.010689,
+        "validation": 0.003568
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 751,
+        "selection": 1,
+        "projection": 100,
+        "rendering": 201,
+        "validation": 101
+      },
+      "bytes": 97444
+    },
+    {
+      "flow": "patch",
+      "count": 50,
+      "action": "zip",
+      "run": "cold",
+      "seconds": 0.081835,
+      "stages": {
+        "canonical_load": 0.041972,
+        "accepted_state": 0.003885,
+        "selection": 0.001327,
+        "projection": 0.001539,
+        "rendering": 0.011031,
+        "validation": 0.010422,
+        "compression": 0.000745,
+        "audit_writes": 0.001887
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 751,
+        "selection": 1,
+        "projection": 100,
+        "rendering": 201,
+        "validation": 101,
+        "compression": 1,
+        "audit_writes": 51
+      },
+      "bytes": 3096
+    },
+    {
+      "flow": "patch",
+      "count": 50,
+      "action": "zip",
+      "run": "warm",
+      "seconds": 0.073692,
+      "stages": {
+        "canonical_load": 0.040892,
+        "accepted_state": 0.003469,
+        "selection": 0.001356,
+        "projection": 0.001534,
+        "rendering": 0.011082,
+        "validation": 0.003719,
+        "compression": 0.000735,
+        "audit_writes": 0.001928
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 751,
+        "selection": 1,
+        "projection": 100,
+        "rendering": 201,
+        "validation": 101,
+        "compression": 1,
+        "audit_writes": 51
+      },
+      "bytes": 3097
+    },
+    {
+      "flow": "patch",
+      "count": 100,
+      "action": "preview",
+      "run": "cold",
+      "seconds": 0.094433,
+      "stages": {
+        "canonical_load": 0.037002,
+        "accepted_state": 0.006254,
+        "selection": 0.001366,
+        "projection": 0.002902,
+        "rendering": 0.021456,
+        "validation": 0.013585
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 1501,
+        "selection": 1,
+        "projection": 200,
+        "rendering": 401,
+        "validation": 201
+      },
+      "bytes": 192151
+    },
+    {
+      "flow": "patch",
+      "count": 100,
+      "action": "preview",
+      "run": "warm",
+      "seconds": 0.107909,
+      "stages": {
+        "canonical_load": 0.035524,
+        "accepted_state": 0.026834,
+        "selection": 0.001372,
+        "projection": 0.002942,
+        "rendering": 0.021788,
+        "validation": 0.007109
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 1501,
+        "selection": 1,
+        "projection": 200,
+        "rendering": 401,
+        "validation": 201
+      },
+      "bytes": 192151
+    },
+    {
+      "flow": "patch",
+      "count": 100,
+      "action": "zip",
+      "run": "cold",
+      "seconds": 0.107233,
+      "stages": {
+        "canonical_load": 0.041474,
+        "accepted_state": 0.006561,
+        "selection": 0.001396,
+        "projection": 0.003034,
+        "rendering": 0.022493,
+        "validation": 0.014037,
+        "compression": 0.001104,
+        "audit_writes": 0.003436
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 1501,
+        "selection": 1,
+        "projection": 200,
+        "rendering": 401,
+        "validation": 201,
+        "compression": 1,
+        "audit_writes": 101
+      },
+      "bytes": 4207
+    },
+    {
+      "flow": "patch",
+      "count": 100,
+      "action": "zip",
+      "run": "warm",
+      "seconds": 0.099195,
+      "stages": {
+        "canonical_load": 0.039929,
+        "accepted_state": 0.006799,
+        "selection": 0.001351,
+        "projection": 0.003064,
+        "rendering": 0.021924,
+        "validation": 0.007297,
+        "compression": 0.001078,
+        "audit_writes": 0.003493
+      },
+      "calls": {
+        "canonical_load": 1,
+        "accepted_state": 1501,
+        "selection": 1,
+        "projection": 200,
+        "rendering": 401,
+        "validation": 201,
+        "compression": 1,
+        "audit_writes": 101
+      },
+      "bytes": 4206
+    }
+  ]
+}

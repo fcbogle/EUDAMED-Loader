@@ -7,13 +7,12 @@ from fastapi.encoders import jsonable_encoder
 from typing import Any
 from uuid import uuid4
 
+from app.services.xml_preparation import PreparedXmlBatch, xml_operation
 from app.services.identity import normalize_identity, normalized_family_candidates
 from app.config import get_settings
 from app.services.canonical_projection import (
     CanonicalValidationBundle,
-    CanonicalProjectionNoImportError,
     CanonicalProjectionService,
-    CanonicalProjectionUnavailableError,
 )
 from app.services.canonical_validation import CanonicalValidationService
 from app.services.xml_packaging import XmlPackageBuilder
@@ -75,6 +74,7 @@ class XmlGenerationService:
         manifest: dict[str, Any],
         flow: str,
         operation_scope: str,
+        generated_contexts: list[tuple[str, dict[str, Any]]] | None = None,
     ) -> tuple[str, bytes]:
         """Prepare a requested ZIP and record review of its exact contents.
 
@@ -86,20 +86,54 @@ class XmlGenerationService:
             members=members,
             manifest=manifest,
         )
-        self.testing_state_store.record_generated_package(
-            package_file_name=file_name,
-            flow=flow,
-            operation_scope=operation_scope,
-            product_family=self._stringify_optional(manifest.get("product_family")),
-            product_variant=self._stringify_optional(manifest.get("product_variant")),
-            catalogue_number=self._stringify_optional(manifest.get("catalogue_number")),
-            basic_udi_di=self._stringify_optional(manifest.get("basic_udi_di")),
-            members=members,
-            manifest=manifest,
-            package_bytes=zip_bytes,
-            confirms_review=True,
-        )
+        with self.testing_state_store.generation_scope(
+            product_family=manifest.get("product_family"), product_variant=manifest.get("product_variant"),
+        ):
+            for method_name, context in generated_contexts or []:
+                getattr(self.testing_state_store, method_name)(**context)
+            self.testing_state_store.record_generated_package(
+                package_file_name=file_name,
+                flow=flow,
+                operation_scope=operation_scope,
+                product_family=self._stringify_optional(manifest.get("product_family")),
+                product_variant=self._stringify_optional(manifest.get("product_variant")),
+                catalogue_number=self._stringify_optional(manifest.get("catalogue_number")),
+                basic_udi_di=self._stringify_optional(manifest.get("basic_udi_di")),
+                members=members,
+                manifest=manifest,
+                package_bytes=zip_bytes,
+                confirms_review=True,
+            )
         return file_name, zip_bytes
+
+    def _post_generation_context(self, record, *, correlation_id, message_id, message_type):
+        return dict(
+            product_family=record.product_family, product_variant=record.product_variant,
+            catalogue_number=record.catalogue_number, primary_udi_di=record.primary_udi_di,
+            basic_udi_di=record.basic_identifier_code, message_type=message_type,
+            accepted_post_state=self._post_state_snapshot_payload(record), correlation_id=correlation_id,
+            message_id=message_id, operation_scope="bulk",
+        )
+
+    def _download_prepared_batch(self, prepared: PreparedXmlBatch, *, mode: str, flow: str):
+        preview = prepared.preview
+        manifest = {
+            "mode": mode, "product_family": preview.product_family, "product_variant": preview.product_variant,
+            "requested_record_count": preview.requested_record_count,
+            "included_record_count": preview.included_record_count, "excluded_record_count": preview.excluded_record_count,
+            "records": [record.model_dump(mode="json") for record in preview.included_records],
+            "excluded_records": [record.model_dump(mode="json") for record in preview.excluded_records],
+            "chunks": [dict(sequence=chunk.sequence, file_name=chunk.file_name, record_count=chunk.record_count,
+                            valid=chunk.validation.valid) for chunk in preview.chunks],
+        }
+        if isinstance(preview, BulkPatchPreview):
+            manifest.update(basic_udi_di=preview.selected_basic_udi_di, eligible_child_records=preview.eligible_child_records,
+                            scenario_id=preview.scenario_id, scenario_label=preview.scenario_label)
+        members = [*prepared.members, ("excluded-records.json", json.dumps(manifest["excluded_records"], indent=2).encode("utf-8"))]
+        return self._build_and_record_package(
+            package_file_name=preview.package_file_name, members=members, manifest=manifest,
+            flow=flow, operation_scope="bulk", generated_contexts=prepared.contexts,
+        )
 
     @staticmethod
     def _patch_state_snapshot_payload(record: DeviceXmlRecord) -> dict[str, Any]:
@@ -145,10 +179,7 @@ class XmlGenerationService:
         }
 
     def _validation_bundle(self) -> CanonicalValidationBundle:
-        try:
-            return self.canonical_projection_service.latest_bundle(require_import=self.require_import)
-        except (CanonicalProjectionNoImportError, CanonicalProjectionUnavailableError) as exc:
-            raise ValueError(str(exc)) from exc
+        return self.selector._bundle()
 
     def generation_scope(self) -> XmlGenerationScopeBundle:
         bundle = self._validation_bundle()
@@ -697,6 +728,7 @@ class XmlGenerationService:
             f"No XML-ready POST candidate is currently available for {product_family} / {product_variant}."
         )
 
+    @xml_operation
     def preview_bulk_post(
         self,
         *,
@@ -705,6 +737,21 @@ class XmlGenerationService:
         record_count: int,
         chunk_sequence: int = 1,
     ) -> BulkPostPreview:
+        return self._prepare_bulk_post(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=record_count,
+            chunk_sequence=chunk_sequence,
+        ).preview
+
+    def _prepare_bulk_post(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        record_count: int,
+        chunk_sequence: int = 1,
+    ) -> PreparedXmlBatch:
         normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
         candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
             product_family=product_family,
@@ -733,6 +780,8 @@ class XmlGenerationService:
         total_chunks = len(record_chunks)
         chunk_summaries: list[BatchXmlChunkSummary] = []
         xml_chunks: list[tuple[int, list[CanonicalValidationRecord], bytes]] = []
+        members: list[tuple[str, bytes]] = []
+        contexts: list[tuple[str, dict[str, Any]]] = []
         for sequence, chunk_records in enumerate(record_chunks, start=1):
             xml_records = [self.projection_builder.build_device_record(record) for record in chunk_records]
             correlation_id, message_id = self._message_envelope_ids()
@@ -749,6 +798,10 @@ class XmlGenerationService:
                 sequence=sequence,
                 total_chunks=total_chunks,
             )
+            members.append((file_name, xml_bytes))
+            contexts.extend(("record_generated_post_context", self._post_generation_context(
+                record, correlation_id=correlation_id, message_id=message_id, message_type="DEVICE.POST",
+            )) for record in xml_records)
             xml_chunks.append((sequence, chunk_records, xml_bytes))
             chunk_summaries.append(
                 BatchXmlChunkSummary(
@@ -764,7 +817,7 @@ class XmlGenerationService:
             raise ValueError(f"Bulk POST chunk {chunk_sequence} is out of range. Valid chunks are 1 to {total_chunks}.")
         selected_sequence, selected_records, selected_xml_bytes = xml_chunks[chunk_sequence - 1]
         selected_summary = chunk_summaries[chunk_sequence - 1]
-        return BulkPostPreview(
+        preview = BulkPostPreview(
             product_family=product_family,
             product_variant=product_variant,
             requested_record_count=normalized_count,
@@ -786,6 +839,9 @@ class XmlGenerationService:
             chunks=chunk_summaries,
         )
 
+        return PreparedXmlBatch(preview=preview, members=members, contexts=contexts)
+
+    @xml_operation
     def download_bulk_post(
         self,
         *,
@@ -793,92 +849,14 @@ class XmlGenerationService:
         product_variant: str,
         record_count: int,
     ) -> tuple[str, bytes]:
-        preview = self.preview_bulk_post(
+        prepared = self._prepare_bulk_post(
             product_family=product_family,
             product_variant=product_variant,
             record_count=record_count,
         )
-        members: list[tuple[str, bytes]] = []
-        manifest_chunks = []
-        raw_candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
-            product_family=product_family,
-            product_variant=product_variant,
-            record_count=None,
-        )
-        raw_records, _, _ = self._deduplicate_bulk_basic_udi_posts(
-            product_family=product_family,
-            product_variant=product_variant,
-            records=raw_candidate_records,
-            excluded_records=excluded_records,
-        )
-        raw_records = raw_records[: preview.included_record_count]
-        record_chunks = self.selector.chunk_records(raw_records, self.settings.eudamed_max_batch_records)
-        total_chunks = len(record_chunks)
-        for sequence, chunk_records in enumerate(record_chunks, start=1):
-            file_name = self.package_builder.bulk_file_name(
-                product_family=product_family,
-                product_variant=product_variant,
-                flow="post",
-                sequence=sequence,
-                total_chunks=total_chunks,
-            )
-            xml_records = [self.projection_builder.build_device_record(record) for record in chunk_records]
-            correlation_id, message_id = self._message_envelope_ids()
-            xml_bytes = self.renderer.render_message_records(
-                xml_records,
-                correlation_id=correlation_id,
-                message_id=message_id,
-            )
-            for xml_record in xml_records:
-                self.testing_state_store.record_generated_post_context(
-                    product_family=xml_record.product_family,
-                    product_variant=xml_record.product_variant,
-                    catalogue_number=xml_record.catalogue_number,
-                    primary_udi_di=xml_record.primary_udi_di,
-                    basic_udi_di=xml_record.basic_identifier_code,
-                    message_type="DEVICE.POST",
-                    accepted_post_state=self._post_state_snapshot_payload(xml_record),
-                    correlation_id=correlation_id,
-                    message_id=message_id,
-                    operation_scope="bulk",
-                )
-            validation = self.xml_validation_service.validate_message(xml_bytes)
-            members.append((file_name, xml_bytes))
-            manifest_chunks.append(
-                {
-                    "sequence": sequence,
-                    "file_name": file_name,
-                    "record_count": len(chunk_records),
-                    "valid": validation.valid,
-                }
-            )
-        manifest = {
-            "mode": "bulk_post",
-            "product_family": product_family,
-            "product_variant": product_variant,
-            "requested_record_count": preview.requested_record_count,
-            "included_record_count": preview.included_record_count,
-            "excluded_record_count": preview.excluded_record_count,
-            "records": [record.model_dump(mode="json") for record in preview.included_records],
-            "excluded_records": [record.model_dump(mode="json") for record in preview.excluded_records],
-            "chunks": manifest_chunks,
-        }
-        members.append(
-            (
-                "excluded-records.json",
-                json.dumps([record.model_dump(mode="json") for record in preview.excluded_records], indent=2).encode(
-                    "utf-8"
-                ),
-            )
-        )
-        return self._build_and_record_package(
-            package_file_name=preview.package_file_name,
-            members=members,
-            manifest=manifest,
-            flow="bulk_basic_udi_post",
-            operation_scope="bulk",
-        )
+        return self._download_prepared_batch(prepared, mode="bulk_post", flow="bulk_basic_udi_post")
 
+    @xml_operation
     def preview_bulk_udidi_post(
         self,
         *,
@@ -888,6 +866,23 @@ class XmlGenerationService:
         selected_catalogue_numbers: list[str] | None = None,
         chunk_sequence: int = 1,
     ) -> BulkUdidiPostPreview:
+        return self._prepare_bulk_udidi_post(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=record_count,
+            chunk_sequence=chunk_sequence,
+            selected_catalogue_numbers=selected_catalogue_numbers,
+        ).preview
+
+    def _prepare_bulk_udidi_post(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        record_count: int,
+        selected_catalogue_numbers: list[str] | None = None,
+        chunk_sequence: int = 1,
+    ) -> PreparedXmlBatch:
         normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
         candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
             product_family=product_family,
@@ -911,6 +906,8 @@ class XmlGenerationService:
         total_chunks = len(record_chunks)
         chunk_summaries: list[BatchXmlChunkSummary] = []
         xml_chunks: list[tuple[int, list[CanonicalValidationRecord], bytes]] = []
+        members: list[tuple[str, bytes]] = []
+        contexts: list[tuple[str, dict[str, Any]]] = []
         for sequence, chunk_records in enumerate(record_chunks, start=1):
             xml_records = [
                 self.projection_builder.build_udidi_post_record(self.projection_builder.build_device_record(record))
@@ -930,6 +927,10 @@ class XmlGenerationService:
                 sequence=sequence,
                 total_chunks=total_chunks,
             )
+            members.append((file_name, xml_bytes))
+            contexts.extend(("record_generated_post_context", self._post_generation_context(
+                record, correlation_id=correlation_id, message_id=message_id, message_type="UDI_DI.POST",
+            )) for record in xml_records)
             xml_chunks.append((sequence, chunk_records, xml_bytes))
             chunk_summaries.append(
                 BatchXmlChunkSummary(
@@ -947,7 +948,7 @@ class XmlGenerationService:
 
         selected_sequence, selected_records, selected_xml_bytes = xml_chunks[chunk_sequence - 1]
         selected_summary = chunk_summaries[chunk_sequence - 1]
-        return BulkUdidiPostPreview(
+        preview = BulkUdidiPostPreview(
             product_family=product_family,
             product_variant=product_variant,
             requested_record_count=normalized_count,
@@ -971,6 +972,9 @@ class XmlGenerationService:
             chunks=chunk_summaries,
         )
 
+        return PreparedXmlBatch(preview=preview, members=members, contexts=contexts)
+
+    @xml_operation
     def download_bulk_udidi_post(
         self,
         *,
@@ -979,98 +983,15 @@ class XmlGenerationService:
         record_count: int,
         selected_catalogue_numbers: list[str] | None = None,
     ) -> tuple[str, bytes]:
-        preview = self.preview_bulk_udidi_post(
+        prepared = self._prepare_bulk_udidi_post(
             product_family=product_family,
             product_variant=product_variant,
             record_count=record_count,
             selected_catalogue_numbers=selected_catalogue_numbers,
         )
-        raw_candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
-            product_family=product_family,
-            product_variant=product_variant,
-            record_count=None,
-        )
-        raw_records, _, _ = self._bulk_udidi_post_candidates(
-            product_family=product_family,
-            product_variant=product_variant,
-            records=raw_candidate_records,
-            excluded_records=excluded_records,
-            selected_catalogue_numbers=selected_catalogue_numbers,
-        )
-        raw_records = raw_records[: preview.included_record_count]
+        return self._download_prepared_batch(prepared, mode="bulk_udidi_post", flow="bulk_udidi_post")
 
-        members: list[tuple[str, bytes]] = []
-        manifest_chunks = []
-        record_chunks = self.selector.chunk_records(raw_records, self.settings.eudamed_max_batch_records)
-        total_chunks = len(record_chunks)
-        for sequence, chunk_records in enumerate(record_chunks, start=1):
-            file_name = self.package_builder.bulk_file_name(
-                product_family=product_family,
-                product_variant=product_variant,
-                flow="udidi-post",
-                sequence=sequence,
-                total_chunks=total_chunks,
-            )
-            xml_records = [
-                self.projection_builder.build_udidi_post_record(self.projection_builder.build_device_record(record))
-                for record in chunk_records
-            ]
-            correlation_id, message_id = self._message_envelope_ids()
-            xml_bytes = self.renderer.render_message_records(
-                xml_records,
-                correlation_id=correlation_id,
-                message_id=message_id,
-            )
-            for xml_record in xml_records:
-                self.testing_state_store.record_generated_post_context(
-                    product_family=xml_record.product_family,
-                    product_variant=xml_record.product_variant,
-                    catalogue_number=xml_record.catalogue_number,
-                    primary_udi_di=xml_record.primary_udi_di,
-                    basic_udi_di=xml_record.basic_identifier_code,
-                    message_type="UDI_DI.POST",
-                    accepted_post_state=self._post_state_snapshot_payload(xml_record),
-                    correlation_id=correlation_id,
-                    message_id=message_id,
-                    operation_scope="bulk",
-                )
-            validation = self.xml_validation_service.validate_message(xml_bytes)
-            members.append((file_name, xml_bytes))
-            manifest_chunks.append(
-                {
-                    "sequence": sequence,
-                    "file_name": file_name,
-                    "record_count": len(chunk_records),
-                    "valid": validation.valid,
-                }
-            )
-        manifest = {
-            "mode": "bulk_udidi_post",
-            "product_family": product_family,
-            "product_variant": product_variant,
-            "requested_record_count": preview.requested_record_count,
-            "included_record_count": preview.included_record_count,
-            "excluded_record_count": preview.excluded_record_count,
-            "records": [record.model_dump(mode="json") for record in preview.included_records],
-            "excluded_records": [record.model_dump(mode="json") for record in preview.excluded_records],
-            "chunks": manifest_chunks,
-        }
-        members.append(
-            (
-                "excluded-records.json",
-                json.dumps([record.model_dump(mode="json") for record in preview.excluded_records], indent=2).encode(
-                    "utf-8"
-                ),
-            )
-        )
-        return self._build_and_record_package(
-            package_file_name=preview.package_file_name,
-            members=members,
-            manifest=manifest,
-            flow="bulk_udidi_post",
-            operation_scope="bulk",
-        )
-
+    @xml_operation
     def preview_bulk_patch(
         self,
         *,
@@ -1083,6 +1004,29 @@ class XmlGenerationService:
         selected_catalogue_numbers: list[str] | None = None,
         chunk_sequence: int = 1,
     ) -> BulkPatchPreview:
+        return self._prepare_bulk_patch(
+            product_family=product_family,
+            product_variant=product_variant,
+            record_count=record_count,
+            chunk_sequence=chunk_sequence,
+            selected_catalogue_numbers=selected_catalogue_numbers,
+            basic_udi_di=basic_udi_di,
+            scenario_id=scenario_id,
+            scenario_inputs=scenario_inputs,
+        ).preview
+
+    def _prepare_bulk_patch(
+        self,
+        *,
+        product_family: str,
+        product_variant: str,
+        basic_udi_di: str,
+        record_count: int,
+        scenario_id: str,
+        scenario_inputs: dict[str, Any] | None = None,
+        selected_catalogue_numbers: list[str] | None = None,
+        chunk_sequence: int = 1,
+    ) -> PreparedXmlBatch:
         normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
         excluded_records: list[BulkXmlExcludedRecord] = []
         candidate_records, eligible_child_records, missing_variant_records = self._bulk_patch_selected_records(
@@ -1216,6 +1160,8 @@ class XmlGenerationService:
         total_chunks = len(payload_chunks)
         chunk_summaries: list[BatchXmlChunkSummary] = []
         rendered_chunks: list[tuple[int, list[BulkXmlRecordSummary], bytes, XmlValidationResult, str]] = []
+        members: list[tuple[str, bytes]] = []
+        contexts: list[tuple[str, dict[str, Any]]] = []
         for sequence, chunk_payloads in enumerate(payload_chunks, start=1):
             correlation_id, message_id = self._message_envelope_ids()
             xml_bytes = self.renderer.render_batch_from_strings(
@@ -1231,6 +1177,10 @@ class XmlGenerationService:
                 sequence=sequence,
                 total_chunks=total_chunks,
             )
+            members.append((file_name, xml_bytes))
+            contexts.extend(("record_generated_patch_context", {
+                **context, "correlation_id": correlation_id, "message_id": message_id, "operation_scope": "bulk",
+            }) for _, _, context in chunk_payloads)
             chunk_records = [summary for summary, _, _ in chunk_payloads]
             rendered_chunks.append((sequence, chunk_records, xml_bytes, validation, file_name))
             chunk_summaries.append(
@@ -1248,7 +1198,7 @@ class XmlGenerationService:
         selected_sequence, selected_records, selected_xml_bytes, selected_validation, selected_file_name = rendered_chunks[
             chunk_sequence - 1
         ]
-        return BulkPatchPreview(
+        preview = BulkPatchPreview(
             product_family=product_family,
             product_variant=product_variant,
             selected_basic_udi_di=basic_udi_di,
@@ -1274,6 +1224,8 @@ class XmlGenerationService:
             excluded_records=excluded_records,
             chunks=chunk_summaries,
         )
+
+        return PreparedXmlBatch(preview=preview, members=members, contexts=contexts)
 
     def preview_bulk_market_info(
         self,
@@ -1506,6 +1458,7 @@ class XmlGenerationService:
             operation_scope="bulk",
         )
 
+    @xml_operation
     def download_bulk_patch(
         self,
         *,
@@ -1517,121 +1470,16 @@ class XmlGenerationService:
         scenario_inputs: dict[str, Any] | None = None,
         selected_catalogue_numbers: list[str] | None = None,
     ) -> tuple[str, bytes]:
-        preview = self.preview_bulk_patch(
+        prepared = self._prepare_bulk_patch(
             product_family=product_family,
             product_variant=product_variant,
-            basic_udi_di=basic_udi_di,
             record_count=record_count,
+            selected_catalogue_numbers=selected_catalogue_numbers,
+            basic_udi_di=basic_udi_di,
             scenario_id=scenario_id,
             scenario_inputs=scenario_inputs,
-            selected_catalogue_numbers=selected_catalogue_numbers,
         )
-        preview_catalogue_numbers = [
-            record.catalogue_number
-            for record in preview.included_records
-            if record.catalogue_number
-        ]
-        candidate_records, _, missing_variant_records = self._bulk_patch_selected_records(
-            product_family=product_family,
-            product_variant=product_variant,
-            basic_udi_di=basic_udi_di,
-            record_count=len(preview_catalogue_numbers),
-            selected_catalogue_numbers=preview_catalogue_numbers,
-        )
-        if not candidate_records and missing_variant_records:
-            raise ValueError(
-                "Selected posted devices are not currently XML-ready in canonical validation: "
-                + ", ".join(missing_variant_records)
-            )
-        if {record.catalogue_number for record in candidate_records} != set(preview_catalogue_numbers):
-            raise ValueError("Bulk PATCH download could not resolve the exact records from the generated preview.")
-        members: list[tuple[str, bytes]] = []
-        chunk_members = []
-        successful_catalogues = {record.catalogue_number for record in preview.included_records}
-        included_payloads: list[tuple[BulkXmlRecordSummary, GeneratedPatchScenarioPreview, dict[str, Any]]] = []
-        scenario_data = scenario_inputs or {}
-        for record in candidate_records:
-            if record.catalogue_number not in successful_catalogues:
-                continue
-            patch_state_resolution = self.testing_state_store.latest_successful_patch_state(
-                product_family=record.product_family,
-                product_variant=record.product_variant,
-                catalogue_number=record.catalogue_number or "",
-            )
-            if scenario_id == "equivalent_first_patch":
-                derived_version = "2"
-            else:
-                derived_version = "2" if not patch_state_resolution else str(int(patch_state_resolution.state.version) + 1)
-            scenario_preview, generated_context = self._build_generated_patch_preview(
-                product_family=record.product_family,
-                product_variant=record.product_variant,
-                catalogue_number=record.catalogue_number or "",
-                scenario_id=scenario_id,
-                patch_version=derived_version,
-                scenario_inputs=scenario_data,
-            )
-            summary = next(item for item in preview.included_records if item.catalogue_number == record.catalogue_number)
-            included_payloads.append((summary, scenario_preview, generated_context))
-        payload_chunks = [
-            included_payloads[index : index + self.settings.eudamed_max_batch_records]
-            for index in range(0, len(included_payloads), self.settings.eudamed_max_batch_records)
-        ]
-        total_chunks = len(payload_chunks)
-        for sequence, chunk_payloads in enumerate(payload_chunks, start=1):
-            correlation_id, message_id = self._message_envelope_ids()
-            xml_bytes = self.renderer.render_batch_from_strings(
-                [preview_item.derived_patch_xml for _, preview_item, _ in chunk_payloads],
-                correlation_id=correlation_id,
-                message_id=message_id,
-            )
-            for _, _, generated_context in chunk_payloads:
-                self.testing_state_store.record_generated_patch_context(
-                    **{
-                        **generated_context,
-                        "correlation_id": correlation_id,
-                        "message_id": message_id,
-                        "operation_scope": "bulk",
-                    }
-                )
-            file_name = self.package_builder.bulk_file_name(
-                product_family=product_family,
-                product_variant=product_variant,
-                flow=f"patch-{scenario_id.replace('_', '-')}",
-                sequence=sequence,
-                total_chunks=total_chunks,
-            )
-            members.append((file_name, xml_bytes))
-            chunk_members.append({"sequence": sequence, "file_name": file_name, "record_count": len(chunk_payloads)})
-        manifest = {
-            "mode": "bulk_patch",
-            "product_family": product_family,
-            "product_variant": product_variant,
-            "basic_udi_di": basic_udi_di,
-            "requested_record_count": preview.requested_record_count,
-            "eligible_child_records": preview.eligible_child_records,
-            "scenario_id": scenario_id,
-            "scenario_label": preview.scenario_label,
-            "included_record_count": preview.included_record_count,
-            "excluded_record_count": preview.excluded_record_count,
-            "records": [record.model_dump(mode="json") for record in preview.included_records],
-            "excluded_records": [record.model_dump(mode="json") for record in preview.excluded_records],
-            "chunks": chunk_members,
-        }
-        members.append(
-            (
-                "excluded-records.json",
-                json.dumps([record.model_dump(mode="json") for record in preview.excluded_records], indent=2).encode(
-                    "utf-8"
-                ),
-            )
-        )
-        return self._build_and_record_package(
-            package_file_name=preview.package_file_name,
-            members=members,
-            manifest=manifest,
-            flow="bulk_patch",
-            operation_scope="bulk",
-        )
+        return self._download_prepared_batch(prepared, mode="bulk_patch", flow="bulk_patch")
 
     def _build_generated_patch_preview(
         self,
@@ -1776,6 +1624,7 @@ class XmlGenerationService:
             "message_id": generated_message_id,
         }
 
+    @xml_operation
     def preview_generated_patch_scenario(
         self,
         *,
@@ -1803,6 +1652,7 @@ class XmlGenerationService:
             self.testing_state_store.record_generated_patch_context(**generated_context)
         return preview
 
+    @xml_operation
     def download_generated_patch_scenario(
         self,
         *,
@@ -1897,6 +1747,7 @@ class XmlGenerationService:
         )
         return preview.file_name, preview.xml.encode("utf-8")
 
+    @xml_operation
     def preview_post_registration(
         self,
         *,
@@ -1976,6 +1827,7 @@ class XmlGenerationService:
             post_validation=self.xml_validation_service.validate_message(post_xml_bytes),
         )
 
+    @xml_operation
     def preview_next_post_registration(
         self,
         *,
@@ -2546,6 +2398,7 @@ class XmlGenerationService:
             f"{self.package_builder._safe_catalogue_number(catalogue_number)}.xml"
         )
 
+    @xml_operation
     def download_post_package(
         self,
         *,

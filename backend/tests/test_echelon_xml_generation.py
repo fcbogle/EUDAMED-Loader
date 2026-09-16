@@ -1392,7 +1392,8 @@ def test_download_bulk_post_scans_full_variant_population_before_message_cap(mon
     )
 
     _assert_zip_review_recorded(downloaded_bytes)
-    assert requested_counts == [None, None]
+    # Scan the full variant once, then package that exact prepared selection.
+    assert requested_counts == [None]
 
 
 def test_preview_bulk_udidi_post_scans_full_variant_population_before_message_cap(monkeypatch) -> None:
@@ -1433,7 +1434,8 @@ def test_download_bulk_udidi_post_scans_full_variant_population_before_message_c
     )
 
     _assert_zip_review_recorded(downloaded_bytes)
-    assert requested_counts == [None, None]
+    # Scan the full variant once, then package that exact prepared selection.
+    assert requested_counts == [None]
 
 
 def test_post_record_selector_requires_exact_catalogue_number_for_variant_post_lineage() -> None:

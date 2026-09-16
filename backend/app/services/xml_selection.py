@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any
+
 from app.services.identity import normalize_identity, normalized_family_candidates
 from app.services.canonical_projection import (
     CanonicalProjectionNoImportError,
@@ -12,6 +16,7 @@ from app.validation_models import CanonicalValidationRecord
 
 class ValidationRecordSelector:
     def __init__(self, validation_service: CanonicalValidationService, *, require_import: bool = False) -> None:
+        self._request: ContextVar[dict[str, Any] | None] = ContextVar("xml_selection_request", default=None)
         self.validation_service = validation_service
         self.require_import = require_import
         self.projection_service = CanonicalProjectionService(validation_service=validation_service)
@@ -23,8 +28,7 @@ class ValidationRecordSelector:
         product_variant: str,
         catalogue_number: str,
     ) -> CanonicalValidationRecord:
-        bundle = self._bundle()
-        for record in bundle.records:
+        for record in self._catalogue_candidates(catalogue_number):
             if (
                 self._record_matches_family_variant(
                     record,
@@ -47,8 +51,7 @@ class ValidationRecordSelector:
         product_variant: str,
         catalogue_number: str,
     ) -> CanonicalValidationRecord:
-        bundle = self._bundle()
-        for record in bundle.records:
+        for record in self._catalogue_candidates(catalogue_number):
             if (
                 self._record_matches_family_variant(
                     record,
@@ -123,8 +126,38 @@ class ValidationRecordSelector:
             for index in range(0, len(records), max_records_per_file)
         ]
 
-    def _bundle(self):
+    @contextmanager
+    def request_scope(self, projection_service):
+        if self._request.get() is not None:
+            yield
+            return
+        token = self._request.set({"projection": projection_service})
         try:
-            return self.projection_service.latest_bundle(require_import=self.require_import)
+            yield
+        finally:
+            self._request.reset(token)
+
+    def _bundle(self):
+        request = self._request.get()
+        if request is not None and "bundle" in request:
+            return request["bundle"]
+        try:
+            projection = request["projection"] if request is not None else self.projection_service
+            bundle = projection.latest_bundle(require_import=self.require_import)
+            if request is not None:
+                request["bundle"] = bundle
+            return bundle
         except (CanonicalProjectionNoImportError, CanonicalProjectionUnavailableError) as exc:
             raise ValueError(str(exc)) from exc
+
+    def _catalogue_candidates(self, catalogue_number):
+        bundle = self._bundle()
+        request = self._request.get()
+        if request is None:
+            return bundle.records
+        if "catalogues" not in request:
+            lookup = {}
+            for record in bundle.records:
+                lookup.setdefault(record.catalogue_number, []).append(record)
+            request["catalogues"] = lookup
+        return request["catalogues"].get(catalogue_number, [])

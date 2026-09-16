@@ -9,7 +9,7 @@ Updated September 16, 2026. This document distinguishes implemented behavior, da
 - The implementation is committed. This handoff refresh is a separate documentation change; use `git status --short` for subsequent worktree status.
 - The application prepares, validates and packages EUDAMED XML, then records manually uploaded Playground acknowledgements. It does not submit XML through EUDAMED M2M transport.
 - Retain the existing UI layout and buttons. Preserve distinct operation-specific rules rather than combining all registration and update flows into one generic batch mode.
-- SQLite remains the active application store. Near-launch priorities include operational verification, bulk-generation performance and a trusted production baseline. Separate production deployment/import and performance optimisations described below are not yet implemented.
+- SQLite remains the active application store. Near-launch priorities include operational verification, bulk-generation performance and a trusted production baseline. Separate production deployment/import is not yet implemented. The first request-local XML performance improvements described below are implemented; real operator end-to-end timing remains to be measured.
 
 Follow [AGENTS.md](../AGENTS.md) for collaboration requirements. The owner has explicitly approved the ZIP-review design described below; that decision is resolved.
 
@@ -179,9 +179,9 @@ Local files live in `docs/xml_eudamed/`, now ignored and untracked; earlier Git 
 
 ## Bulk POST And Bulk PATCH Performance Direction
 
-The owner expects initial operational batches of about 100 devices. Investigate both preview and ZIP preparation/download, preserving the current UI and regulatory controls. No generation optimisation has yet been implemented; the readiness lookup improvement above is separate.
+The owner expects initial operational batches of about 100 devices. The approved first performance stage is implemented for single POST, Bulk Basic UDI POST, Bulk UDI-DI POST and Bulk PATCH, preserving the current UI and regulatory controls. See [benchmark method, timings and limitations](xml-generation-performance-2026-09-16.md).
 
-Code inspection found:
+Before the performance change, code inspection found:
 
 - Bulk PATCH calls `_build_generated_patch_preview` per device; its selector reloads the complete canonical bundle, reconstructing all imported records and summaries. It also renders/validates individual baseline and derived XML before batch assembly/validation.
 - `download_bulk_udidi_post` invokes its preview builder, then repeats selection, projection, rendering and validation for the actual archive. A displayed preview followed by download therefore renders the POST batch three times across those requests.
@@ -191,13 +191,15 @@ Code inspection found:
 
 Read-only measurement on September 16: fetching and reconstructing 8,423 canonical records took 4.277 seconds initially and 2.400 seconds on a repeat run (including 2.250/2.341 seconds for JSON decoding and model validation). This excludes additional summary construction and is not an end-to-end benchmark. It indicates why repeated whole-dataset loading can make 100-device PATCH generation take minutes; do not promise a speedup before measuring complete workflows.
 
-Proposed first implementation stage, subject to owner approval:
+Implemented first stage:
 
-1. Benchmark POST and PATCH at 10, 50 and 100 devices, timing selection/loading, accepted-state resolution, projection, rendering, validation, audit writes, compression, response transfer and frontend display separately. Use synthetic fixtures/isolated databases for tests, with cold/warm timings recorded.
-2. Load canonical data once per request and index selected identities; pass resolved records through bulk scenario calculation rather than reload the bundle per device. Keep reuse scoped to the request to avoid stale cross-request state.
-3. Share a prepared batch result within each request so XML, manifest, exclusions and generated contexts derive from the same selection and bytes. Remove the download's redundant preview build while retaining eligibility and exact-inclusion checks.
-4. Retrieve selected accepted states together and batch generation-context writes with explicit transaction/failure handling. Keep package receipts tied to successful archive preparation and the actual envelope IDs.
-5. Separate scenario calculation from presentation-only baseline previews. Retain required business checks and validation of final packaged XML; any reduction in validation passes requires review and regression evidence.
+1. Synthetic service benchmarks cover single POST and bulk sizes 10, 50 and 100, with separate preview/ZIP and XSD-cold/warm runs. Raw timing/call-count artifacts are linked in the report. Network transfer and browser display are not measured.
+2. Load canonical data once per operation request and index catalogue identities. Nested generation calls share that bundle; the next request reloads it.
+3. Operation-specific preparation returns one selected batch, validated XML members and matching generation contexts. Downloads package those same bytes rather than invoke preview and rebuild the batch.
+4. Prefetch family/variant acceptance subjects and registration flags in one SQLite snapshot. Commit generation events, batch membership and ZIP review evidence together. Validation, archive and audit failures leave no partial generation history; conflicting concurrent acceptance returns refresh/retry guidance.
+5. Preserve per-device baseline/derived PATCH validation and validate the final packaged batch. Separating presentation-only calculation is deferred; no additional validation reduction was made.
+
+On the 1,000-record simplified synthetic fixture, warm 100-device PATCH preview improved from about 4.804 to 0.108 seconds and ZIP preparation from 9.699 to 0.099 seconds. Bulk Basic UDI POST ZIP improved from 0.208 to 0.071 seconds; Bulk UDI-DI POST ZIP from 0.198 to 0.066 seconds. These are single local observations, not production latency promises. Single POST ZIP time was effectively unchanged at this scale.
 
 Cross-request reuse of a preview artifact for download is a later, separate decision. It requires expiry and invalidation for changed selection, scenario inputs, source/import state, accepted device/Market Info state and relevant configuration. Preview must never become review or acceptance merely because it is cached.
 
@@ -234,6 +236,8 @@ Choose the action by service/operation rather than single versus bulk packaging.
 
 ## Verification And Next Work
 
+September 16 performance-stage verification: the complete backend suite passed (175 tests, 238.90 seconds), all 28 frontend tests passed, and the production build passed with the existing bundle-size warning. The 25 new synthetic preparation regressions include HTTP response contracts and transaction rollback/concurrency checks. The performance report contains before/after service timings; live browser/network and representative imported-data measurements remain outstanding.
+
 September 16 correctness-fix verification: the complete backend suite passed (150 tests, 245.21 seconds), all 28 frontend Node tests passed, and the TypeScript/production build passed with the existing bundle-size warning. New regression coverage exercises missing latest accepted payloads, single/bulk PATCH blocking, duplicate-acknowledgement recovery, delayed previews in all six workspaces, changed inputs, overlapping requests and unmounting. These are automated checks; browser interaction and live Playground verification remain outstanding.
 
 Last implementation verification recorded on September 9:
@@ -261,7 +265,7 @@ Next priorities:
 2. In controlled Playground testing, verify retained countries in PATCH after Market Info changes, mixed-baseline bulk Market Info, mixed success/error responses, duplicate uploads and delayed older acknowledgements. Use downloaded payloads with recorded generation context; previews alone do not create that history.
 3. Review legacy accepted records with missing/partial snapshots before claiming complete source-drift protection. Choose a trusted recovery approach rather than filling historical acceptance from current workbook data.
 4. Gradually replace remaining text-based identity lookups with `device_subject_id` joins, preserving existing data and lineage. Broader canonical/submission persistence remains a separate design increment.
-5. Benchmark and implement the approved scope of Bulk POST/PATCH performance work described above before claiming 100-device launch performance. Implementation approval remains pending.
+5. Verify the implemented Bulk POST/PATCH performance work on a representative imported dataset and measure network/browser time before claiming 100-device launch performance.
 6. Confirm export scope, reconcile workbook identities and resolve unknown Market Info versions before implementing the separate production deployment and controlled baseline import. Preserve Playground guardrails.
 7. Extend scenario coverage only with supporting validation and Playground evidence. Automated submission/M2M transport remains out of scope.
 

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import hashlib
@@ -24,6 +27,7 @@ class PatchStateResolution:
 
 class TestingStateStore:
     def __init__(self) -> None:
+        self._generation: ContextVar[dict[str, Any] | None] = ContextVar("testing_generation_scope", default=None)
         self.settings = get_settings()
         self._ensure_database()
 
@@ -428,6 +432,9 @@ class TestingStateStore:
         product_variant: str,
         basic_udi_di: str,
     ) -> bool:
+        scope = self._generation_for(product_family, product_variant)
+        if scope is not None:
+            return self._normalize_identity(basic_udi_di) in scope['parents']
         family_clause, family_params = self._family_match_clause(product_family, table_name="testing_subjects")
         with self._connect() as connection:
             row = connection.execute(
@@ -461,6 +468,9 @@ class TestingStateStore:
         product_variant: str,
         primary_udi_di: str,
     ) -> bool:
+        scope = self._generation_for(product_family, product_variant)
+        if scope is not None:
+            return self._normalize_identity(primary_udi_di) in scope['children']
         family_clause, family_params = self._family_match_clause(product_family, table_name="testing_subjects")
         with self._connect() as connection:
             row = connection.execute(
@@ -1387,10 +1397,72 @@ class TestingStateStore:
             (acknowledgement_message_id, source_file_name, acknowledged_at, batch_id),
         )
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def generation_scope(self, *, product_family: str | None = None, product_variant: str | None = None):
+        """Snapshot acceptance once; commit all generation audit writes together.
+
+        A concurrent acknowledgement that prevents upgrading this snapshot to a
+        writer aborts the download rather than recording a stale package.
+        """
+        if self._generation.get() is not None:
+            yield
+            return
         connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
-        return connection
+        token = None
+        try:
+            connection.execute("BEGIN")
+            scope = {"connection": connection, "family": product_family, "variant": product_variant}
+            if product_family and product_variant:
+                clause, params = self._family_match_clause(product_family, table_name="testing_subjects")
+                rows = connection.execute(f"SELECT * FROM testing_subjects WHERE {clause} AND normalized_product_variant = ? ORDER BY id",
+                                          (*params, self._normalize_identity(product_variant))).fetchall()
+                scope["subjects"] = {}
+                for row in rows:
+                    scope["subjects"].setdefault(row["normalized_catalogue_number"], row)
+                successes = connection.execute(f"""
+                    SELECT testing_subjects.normalized_basic_udi_di, testing_subjects.normalized_primary_udi_di, event.message_type
+                    FROM testing_subjects JOIN testing_events event ON event.subject_id = testing_subjects.id
+                    WHERE {clause} AND normalized_product_variant = ? AND event.status = 'SUCCESS'
+                    GROUP BY testing_subjects.id, event.message_type
+                """, (*params, self._normalize_identity(product_variant))).fetchall()
+                scope["parents"] = {row[0] for row in successes if row[2] == 'DEVICE.POST'}
+                scope["children"] = {row[1] for row in successes if row[2] in ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH')}
+            token = self._generation.set(scope)
+            yield
+            connection.commit()
+        except sqlite3.OperationalError as exc:
+            connection.rollback()
+            if 'locked' in str(exc).lower() or 'busy' in str(exc).lower():
+                raise ValueError("Testing state changed or is busy during XML preparation. Refresh and retry the operation.") from exc
+            raise
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            if token is not None:
+                self._generation.reset(token)
+            connection.close()
+
+    def _generation_for(self, product_family, product_variant):
+        scope = self._generation.get()
+        if scope and 'subjects' in scope and scope['family'] == product_family and scope['variant'] == product_variant:
+            return scope
+        return None
+
+    @contextmanager
+    def _connect(self):
+        scope = self._generation.get()
+        if scope is not None:
+            yield scope['connection']
+            return
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def _latest_successful_patch_scenario_id(self, subject_id: int) -> str | None:
         with self._connect() as connection:
@@ -1422,6 +1494,9 @@ class TestingStateStore:
         product_variant: str,
         catalogue_number: str,
     ) -> sqlite3.Row | None:
+        scope = self._generation_for(product_family, product_variant)
+        if scope is not None:
+            return scope['subjects'].get(self._normalize_identity(catalogue_number))
         family_clause, family_params = self._family_match_clause(product_family, table_name="testing_subjects")
         with self._connect() as connection:
             return connection.execute(
