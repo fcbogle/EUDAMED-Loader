@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { api } from "./api";
 import type { XmlMode } from "./useXmlOperationAssessment";
 import type {
@@ -36,6 +37,8 @@ type BulkParentGroup = {
 type SetValue<T> = (value: T) => void;
 
 type UseXmlPreviewGenerationArgs = {
+  previewSelectionKey: string;
+  acceptedStateToken: object;
   xmlMode: XmlMode;
   selectedXmlFamilySummary: XmlFamilySelection | null;
   selectedXmlVariantSummary: XmlVariantSelection | null;
@@ -76,7 +79,30 @@ type UseXmlPreviewGenerationArgs = {
 };
 
 export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
+  const scopeKey = JSON.stringify([
+    args.previewSelectionKey, args.xmlMode,
+    args.selectedXmlFamilySummary?.product_family, args.selectedXmlVariantSummary?.product_variant,
+    args.selectedPairRequestArgs, args.selectedMarketInfoRequestArgs,
+    args.selectedPatchScenarioId, args.patchVersionInput, args.normalizedMarketInfoVersion,
+    args.currentPatchScenarioInputs(), args.currentMarketInfoScenarioInputs(),
+    args.normalizedBulkMarketInfoScenarioItems, args.effectiveBulkUdidiPostCatalogueNumbers,
+    args.selectedBulkPatchParentGroup?.basic_udi_di, args.selectedBulkMarketInfoParentGroup?.basic_udi_di,
+    args.selectedXmlChunkSequence,
+  ]);
+  const scope = useRef({ key: scopeKey, acceptedState: args.acceptedStateToken, revision: 0 });
+  if (scope.current.key !== scopeKey || scope.current.acceptedState !== args.acceptedStateToken) {
+    scope.current = { key: scopeKey, acceptedState: args.acceptedStateToken, revision: scope.current.revision + 1 };
+  }
+  const requestId = useRef(0);
+  useEffect(() => {
+    args.setIsGeneratingXml(false);
+  }, [scopeKey, args.acceptedStateToken, args.setIsGeneratingXml]);
+  useEffect(() => () => { requestId.current += 1; }, []);
+
   async function generateXmlPreview(): Promise<void> {
+    const revision = scope.current.revision;
+    const id = ++requestId.current;
+    const isCurrent = () => id === requestId.current && revision === scope.current.revision;
     const {
       xmlMode,
       selectedXmlFamilySummary,
@@ -122,6 +148,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
           selectedXmlFamilySummary.product_family,
           selectedXmlVariantSummary.product_variant,
         );
+        if (!isCurrent()) return;
         setXmlPairPreview(preview);
       } else if (xmlMode === "marketInfo") {
         if (!selectedMarketInfoRequestArgs) return;
@@ -132,6 +159,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
           normalizedMarketInfoVersion,
           currentMarketInfoScenarioInputs(),
         );
+        if (!isCurrent()) return;
         setXmlMarketInfoPreview(preview);
       } else if (xmlMode === "patch") {
         if (!selectedPairRequestArgs) return;
@@ -143,6 +171,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
           patchVersionInput,
           currentPatchScenarioInputs(),
         );
+        if (!isCurrent()) return;
         setXmlPatchPreview(preview);
       } else if (xmlMode === "bulkUdidiPost") {
         if (!selectedXmlFamilySummary || !selectedXmlVariantSummary) return;
@@ -154,6 +183,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
           selectedXmlChunkSequence,
           effectiveBulkUdidiPostCatalogueNumbers,
         );
+        if (!isCurrent()) return;
         setXmlBulkUdidiPostPreview(preview);
         setXmlActionMessage(
           `Bulk UDI-DI POST preview generated for ${selectedXmlFamilySummary.product_family} / ${selectedXmlVariantSummary.product_variant}, chunk ${preview.selected_chunk_sequence}.`,
@@ -167,6 +197,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
           return;
         }
         const catalogueNumbers = await resolveBulkMarketInfoCatalogueNumbers();
+        if (!isCurrent()) return;
         if (catalogueNumbers.length < 1) {
           setError("No posted devices are currently selected for Bulk Market Info.");
           setXmlActionMessage("Bulk Market Info is not ready: no posted devices are currently selected.");
@@ -181,6 +212,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
           catalogueNumbers,
           selectedXmlChunkSequence,
         );
+        if (!isCurrent()) return;
         setXmlBulkMarketInfoPreview(preview);
         setXmlActionMessage(
           `Bulk Market Info preview generated for ${selectedXmlFamilySummary.product_family} / ${selectedXmlVariantSummary.product_variant} / ${selectedBulkMarketInfoParentGroup.basic_udi_di}.`,
@@ -194,6 +226,7 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
           return;
         }
         const catalogueNumbers = await resolveBulkPatchCatalogueNumbers();
+        if (!isCurrent()) return;
         if (catalogueNumbers.length < 1) {
           setError("No posted devices are currently selected for Bulk PATCH.");
           setXmlActionMessage("Bulk PATCH is not ready: no posted devices are currently selected.");
@@ -210,17 +243,19 @@ export function useXmlPreviewGeneration(args: UseXmlPreviewGenerationArgs) {
           catalogueNumbers,
           selectedXmlChunkSequence,
         );
+        if (!isCurrent()) return;
         setXmlBulkPatchPreview(preview);
         setXmlActionMessage(
           `Bulk PATCH preview generated for ${selectedXmlFamilySummary.product_family} / ${selectedXmlVariantSummary.product_variant} / ${selectedBulkPatchParentGroup.basic_udi_di}.`,
         );
       }
     } catch (requestError) {
+      if (!isCurrent()) return;
       const message = requestError instanceof Error ? requestError.message : "Failed to generate XML preview.";
       setError(message);
       setXmlActionMessage(message);
     } finally {
-      setIsGeneratingXml(false);
+      if (isCurrent()) setIsGeneratingXml(false);
     }
   }
 

@@ -3834,3 +3834,81 @@ def test_dashboard_readiness_uses_the_operation_assessment_rules(
     assert after["child_post_ready"] is True
     assert after["post_ready"] == (service._assess_single_post_record(bundle.records[0]).status == "available")
     assert after["patch_ready"] == (service._assess_single_patch_record(bundle.records[0]).status == "available")
+
+
+@pytest.mark.parametrize("message_type", ["UDI_DI.PATCH", "MARKET_INFO.PUT"])
+def test_newer_acceptance_blocks_stale_baseline_until_matching_context_is_recovered(
+    isolated_workbook_import_db: Path, monkeypatch: pytest.MonkeyPatch, message_type: str,
+) -> None:
+    from app.services.operation_assessment import OperationAssessmentService
+
+    service = XmlGenerationService()
+    store = service.testing_state_store
+    identity = dict(product_family="Family A", product_variant="Variant A", catalogue_number="CAT-001")
+    store.record_generated_post_context(
+        **identity, primary_udi_di="111111", basic_udi_di="BASIC-1", message_type="UDI_DI.POST",
+        accepted_post_state=service._post_state_snapshot_payload(_synthetic_xml_record()),
+        correlation_id="post", message_id="post-message",
+    )
+    success = TestingSuccessXmlService()
+    success.record_success_xml(xml_bytes=_synthetic_ack("UDI_DI.POST", "1", "post"))
+
+    def generate(version: str) -> None:
+        common = dict(**identity, primary_udi_di="111111", basic_udi_di="BASIC-1",
+                      correlation_id=f"update-{version}", message_id=f"generated-{version}")
+        if message_type == "UDI_DI.PATCH":
+            store.record_generated_patch_context(
+                **common, patch_version=version, scenario_id="trade_name_edit", scenario_label="Trade name",
+                base_message_type="POST", base_version="1", accepted_state_source="accepted_post",
+                changed_fields=[], state_before={"version": "1"},
+                latest_successful_state={"version": version, "trade_name": f"Accepted v{version}"},
+            )
+        else:
+            store.record_generated_market_info_context(
+                **common, market_info_version=version, baseline_market_countries=[],
+                market_countries=[{"country": "IE" if version == "3" else "DE", "original_placed_on_market": True}],
+            )
+
+    generate("2")
+    success.record_success_xml(xml_bytes=_synthetic_ack(message_type, "2", "update-2"))
+    success.record_success_xml(xml_bytes=_synthetic_ack(message_type, "3", "update-3"))
+    reason = store.patch_baseline_unavailable_reason(**identity)
+    assert reason and "version 3" in reason and "no matching" in reason
+    summaries = TestingReadModelService().list_subject_summaries(product_family="Family A", product_variant="Variant A")
+    if message_type == "UDI_DI.PATCH":
+        assert store.latest_successful_patch_state(**identity) is None
+        assert summaries[0].current_patch_state is None
+    else:
+        assert store.latest_successful_market_info_state(**identity) is None
+    for version in ("2", "3", "4"):
+        with pytest.raises(ValueError, match="no matching"):
+            service.preview_generated_patch_scenario(
+                **identity, scenario_id="trade_name_edit", patch_version=version,
+                scenario_inputs={"new_trade_name": "New draft"},
+            )
+    assessment = OperationAssessmentService()
+    monkeypatch.setattr(assessment.xml_service, "_bulk_record_summary", lambda record: SimpleNamespace(basic_udi_di="BASIC-1"))
+    result = assessment._assess_single_patch_record(SimpleNamespace(**identity, primary_udi_di="111111"))
+    assert result.status == "blocked"
+    assert reason in result.blocking_reasons
+
+    record = SimpleNamespace(**identity, primary_udi_di="111111")
+    monkeypatch.setattr(service, "_bulk_patch_selected_records", lambda **kwargs: ([record], 1, []))
+    for action in (service.preview_bulk_patch, service.download_bulk_patch):
+        with pytest.raises(ValueError, match="No eligible records"):
+            action(product_family="Family A", product_variant="Variant A", basic_udi_di="BASIC-1",
+                   record_count=1, scenario_id="trade_name_edit", scenario_inputs={"new_trade_name": "Draft"})
+
+    # Recover context, then re-import the very same acknowledgement (idempotent event).
+    generate("3")
+    result = success.record_success_xml(xml_bytes=_synthetic_ack(message_type, "3", "update-3"))
+    assert result.duplicate_event
+    assert store.patch_baseline_unavailable_reason(**identity) is None
+    if message_type == "UDI_DI.PATCH":
+        assert store.latest_successful_patch_state(**identity).state.version == "3"
+        assert store.latest_successful_patch_state(**identity).state.trade_name == "Accepted v3"
+    else:
+        assert store.latest_successful_market_info_state(**identity)["market_countries"][0]["country"] == "IE"
+    # A late old acknowledgement must not undo the repaired latest acceptance.
+    success.record_success_xml(xml_bytes=_synthetic_ack(message_type, "2", "update-2"))
+    assert store.patch_baseline_unavailable_reason(**identity) is None

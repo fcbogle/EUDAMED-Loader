@@ -759,6 +759,12 @@ class OperationAssessmentService:
             "market_info_change_reason": market_info_change_reason,
         }
         blocking_reasons: list[str] = []
+        baseline_reason = self.testing_state_store.patch_baseline_unavailable_reason(
+            product_family=record.product_family, product_variant=record.product_variant,
+            catalogue_number=record.catalogue_number or "",
+        )
+        if baseline_reason:
+            blocking_reasons.append(baseline_reason)
         if not tracked_registration_known:
             blocking_reasons.append(
                 "This device does not yet have a tracked successful Playground registration, so PATCH cannot be generated."

@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 import lxml.etree as ET
 
 from app.models import SuccessXmlUploadResult
+from app.services.accepted_state import json_state, state_matches_version
 from app.services.testing_state_store import TestingStateStore
 
 MESSAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1"
@@ -165,9 +166,12 @@ class TestingSuccessXmlService:
         matched = self._generated_event_row(
             connection, subject_id=subject_id, message_type=acknowledgement.message_type,
             correlation_id=acknowledgement.correlation_id, message_id=acknowledgement.message_id,
-            columns="version",
+            columns="version, state_after_json, raw_event_json",
         )
         incoming_version = acknowledgement.entity_version or (matched["version"] if matched else None)
+        # A correlated draft with a different version is not this acceptance's payload.
+        if matched is not None and acknowledgement.entity_version and str(matched["version"]) != acknowledgement.entity_version:
+            matched = None
         current_version = current[version_column] if current else None
         current_state = current[state_column] if current else None
         if current and acknowledgement.message_type == "UDI_DI.PATCH":
@@ -176,17 +180,10 @@ class TestingSuccessXmlService:
         if incoming_version and current_version:
             if int(incoming_version) < int(current_version):
                 return  # Keep the historical event without rolling back the accepted projection.
-            if int(incoming_version) == int(current_version) and current_state:
+            if int(incoming_version) == int(current_version) and state_matches_version(json_state(current_state), current_version):
                 return
         if acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"}:
-            generated_row = self._generated_event_row(
-                connection,
-                subject_id=subject_id,
-                message_type=acknowledgement.message_type,
-                correlation_id=acknowledgement.correlation_id,
-                message_id=acknowledgement.message_id,
-                columns="version, state_after_json",
-            )
+            generated_row = matched
             latest_post_state_json = (
                 self.store._optional_string(generated_row["state_after_json"])
                 if generated_row is not None
@@ -224,14 +221,7 @@ class TestingSuccessXmlService:
             )
             return
         if acknowledgement.message_type == "UDI_DI.PATCH":
-            generated_row = self._generated_event_row(
-                connection,
-                subject_id=subject_id,
-                message_type=acknowledgement.message_type,
-                correlation_id=acknowledgement.correlation_id,
-                message_id=acknowledgement.message_id,
-                columns="version, state_after_json",
-            )
+            generated_row = matched
             patch_version = (
                 self.store._optional_string(generated_row["version"])
                 if generated_row is not None
@@ -275,14 +265,7 @@ class TestingSuccessXmlService:
 
         version = acknowledgement.entity_version
         market_info_state_json: str | None = None
-        generated_row = self._generated_event_row(
-            connection,
-            subject_id=subject_id,
-            message_type="MARKET_INFO.PUT",
-            correlation_id=acknowledgement.correlation_id,
-            message_id=acknowledgement.message_id,
-            columns="version, raw_event_json",
-        )
+        generated_row = matched
         if generated_row is not None:
             version = self.store._optional_string(generated_row["version"]) or version
             generated_raw_json = self.store._optional_string(generated_row["raw_event_json"])

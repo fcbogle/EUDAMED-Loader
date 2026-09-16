@@ -3396,6 +3396,14 @@ export function App() {
   }
 
   const { generateXmlPreview, downloadXmlRecord } = useXmlPreviewGeneration({
+    previewSelectionKey: JSON.stringify([
+      activeTab, selectedXmlRecordKey,
+      bulkPatchScopeMode, effectiveBulkPatchCatalogueNumbers, selectedBulkPatchCatalogueNumbers,
+      bulkPatchImportedMatchedCatalogueNumbers,
+      bulkMarketInfoScopeMode, effectiveBulkMarketInfoCatalogueNumbers, selectedBulkMarketInfoCatalogueNumbers,
+      bulkMarketInfoImportedMatchedCatalogueNumbers,
+    ]),
+    acceptedStateToken: testingSubjectSummaries,
     xmlMode,
     selectedXmlFamilySummary,
     selectedXmlVariantSummary,

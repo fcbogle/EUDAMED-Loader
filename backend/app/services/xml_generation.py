@@ -1142,6 +1142,16 @@ class XmlGenerationService:
                 )
             )
         for record in candidate_records:
+            baseline_reason = self.testing_state_store.patch_baseline_unavailable_reason(
+                product_family=record.product_family, product_variant=record.product_variant,
+                catalogue_number=record.catalogue_number or "",
+            )
+            if baseline_reason:
+                excluded_records.append(BulkXmlExcludedRecord(
+                    catalogue_number=record.catalogue_number, primary_udi_di=record.primary_udi_di,
+                    reason_code="accepted_baseline_unavailable", reason_message=baseline_reason,
+                ))
+                continue
             market_info_change_reason = self._bulk_patch_market_info_change_reason(record=record)
             if market_info_change_reason:
                 excluded_records.append(
@@ -1635,6 +1645,11 @@ class XmlGenerationService:
         correlation_id: str | None = None,
         message_id: str | None = None,
     ) -> tuple[GeneratedPatchScenarioPreview, dict[str, Any]]:
+        baseline_reason = self.testing_state_store.patch_baseline_unavailable_reason(
+            product_family=product_family, product_variant=product_variant, catalogue_number=catalogue_number,
+        )
+        if baseline_reason:
+            raise ValueError(baseline_reason)
         scenario_data = scenario_inputs or {}
         post_source_record = self.selector.find_post_record(
             product_family=product_family,

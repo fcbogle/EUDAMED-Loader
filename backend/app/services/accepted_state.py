@@ -40,16 +40,25 @@ def accepted_post_state(connection: sqlite3.Connection, subject: sqlite3.Row) ->
 
 
 def accepted_device_state(connection: sqlite3.Connection, subject: sqlite3.Row) -> dict[str, Any] | None:
-    return (json_state(subject['latest_successful_patch_state_json'])
+    state = (json_state(subject['latest_successful_patch_state_json'])
             or json_state(subject['latest_successful_state_json'])
             or accepted_post_state(connection, subject))
+    versions = [subject[key] for key in ('latest_successful_version', 'latest_successful_patch_version')
+                if key in subject.keys() and subject[key]]
+    return state if all(state_matches_version(state, version) for version in versions) else None
+
+
+def state_matches_version(state: dict[str, Any] | None, version: object) -> bool:
+    """Historical payloads must not masquerade as a newer accepted version."""
+    return state is not None and (not version or str(state.get('version')) == str(version))
 
 
 def accepted_market_state(connection: sqlite3.Connection, subject: sqlite3.Row) -> dict[str, Any] | None:
     state = json_state(subject['latest_successful_market_info_state_json'])
     if state is not None:
-        return state
+        return state if state_matches_version(state, subject['latest_successful_market_info_version']) else None
     post = accepted_post_state(connection, subject)
     if post is not None and isinstance(post.get('market_countries'), list):
-        return {'version': '1', 'market_countries': post['market_countries']}
+        state = {'version': '1', 'market_countries': post['market_countries']}
+        return state if state_matches_version(state, subject['latest_successful_market_info_version']) else None
     return None

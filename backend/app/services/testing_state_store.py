@@ -115,6 +115,27 @@ class TestingStateStore:
                     product_variant=product_variant, catalogue_number=catalogue_number,
                 )
 
+    def patch_baseline_unavailable_reason(
+        self, *, product_family: str, product_variant: str, catalogue_number: str,
+    ) -> str | None:
+        row = self._subject_row(product_family=product_family, product_variant=product_variant,
+                                catalogue_number=catalogue_number)
+        if row is None:
+            return None
+        with self._connect() as connection:
+            # Preserve legacy POST-only compatibility, but never fall back across
+            # a known accepted update whose payload cannot be recovered.
+            device_version = row['latest_successful_patch_version'] or row['latest_successful_version']
+            if device_version and int(device_version) > 1 and accepted_device_state(connection, row) is None:
+                return (f"Accepted device version {device_version} has no matching payload snapshot. "
+                        "Restore its matching generation context and re-import the acknowledgement before generating PATCH.")
+            market_version = row['latest_successful_market_info_version']
+            if market_version and accepted_market_state(connection, row) is None:
+                return (f"Accepted Market Info version {market_version} has no matching country snapshot. "
+                        "Restore its matching generation context and re-import the acknowledgement, or complete a new "
+                        "Market Info update before generating PATCH.")
+        return None
+
     def latest_successful_patch_state(
         self,
         *,

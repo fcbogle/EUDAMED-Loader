@@ -1,15 +1,15 @@
 # Session Handoff
 
-Updated September 9, 2026. This document describes the implemented design and the remaining work. Historical Playground evidence is labelled separately; it must not be read as a live database inventory.
+Updated September 16, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
 ## Repository And Delivery Context
 
 - Branch observed during this refresh: `feature/testing-batches-audit`.
-- Latest implementation commit: `355d910` — `Consolidate XML workflows and confirm review through ZIP downloads`.
+- Latest commit observed: `2e33964`; the recent commits cover registration readiness, documentation refresh and exclusion of local production exports. `355d910` introduced the XML consolidation and ZIP-review rules.
 - The implementation is committed. This handoff refresh is a separate documentation change; use `git status --short` for subsequent worktree status.
 - The application prepares, validates and packages EUDAMED XML, then records manually uploaded Playground acknowledgements. It does not submit XML through EUDAMED M2M transport.
 - Retain the existing UI layout and buttons. Preserve distinct operation-specific rules rather than combining all registration and update flows into one generic batch mode.
-- SQLite remains the active application store. The next priority is operational verification and gradual relational identity cleanup, not replacing the database or restructuring the UI.
+- SQLite remains the active application store. Near-launch priorities include operational verification, bulk-generation performance and a trusted production baseline. Separate production deployment/import and performance optimisations described below are not yet implemented.
 
 Follow [AGENTS.md](../AGENTS.md) for collaboration requirements. The owner has explicitly approved the ZIP-review design described below; that decision is resolved.
 
@@ -70,6 +70,8 @@ The optional reviewed-POST generation gate has been removed. Frontend readiness 
 
 Older accepted entries may have only partial snapshots or no snapshot. Compatibility fallback still exists for unavailable historical fields. The system cannot reconstruct data that was never recorded, and current workbook values must not be described as proven historical acceptance. Complete historical-state backfill is not finished.
 
+September 16 review fixes: when a newer accepted device or Market Info version has no matching payload snapshot, historical snapshots remain stored but are not exposed as the current accepted state. Single PATCH readiness and generation block; Bulk PATCH excludes affected devices. Restore matching generation context and re-import the acknowledgement to repair the snapshot, or complete a new Market Info update when only the country baseline is missing. A same-version duplicate acknowledgement can repair a stale snapshot without duplicating the acknowledgement event. Legacy POST-only fallback remains supported.
+
 Current testing eligibility remains Playground-centric and relies on tracked successful registration. Workbook classification as `PATCH` alone does not establish a trusted accepted baseline for the controlled scenario workspace. Production handling of already registered devices without locally generated POST history is future design work.
 
 ## Market Info Rules
@@ -107,9 +109,11 @@ The upload endpoint accepts single- and multi-entity acknowledgements for `DEVIC
 
 - Initial loading and acknowledgement refresh share [xmlAssessmentRequest.ts](../frontend/src/xmlAssessmentRequest.ts).
 - Upload completion checks operation, family, variant, catalogue and parent identity before applying results to the visible workspace. An old upload must not overwrite a newly selected device's state.
+- Preview completion also checks selection, operation, scenario inputs, versions, chunk and accepted-state refresh. Changed scope, overlapping requests and unmounting invalidate older responses, errors and completion updates, including when the operator returns to the original selection.
 - [useBulkPostedCohorts.ts](../frontend/src/useBulkPostedCohorts.ts) uses backend posted-parent and posted-device queries for Bulk PATCH and Market Info.
 - Workbook row-count estimates and parent sample-catalogue lists no longer substitute for actual eligible cohorts.
 - Family/identity normalization is shared through [identity.py](../backend/app/services/identity.py); text/alias matching still exists as a compatibility mechanism.
+- Registration State now distinguishes loading/unavailable assessments from genuinely blocked operations, surfaces readiness errors and suppresses misleading counts while readiness is unavailable. Device lookups are indexed by variant/catalogue, retaining family-alias matching. This fixes the earlier all-Blocked display during pending/failed readiness requests without changing eligibility rules; browser confirmation remains outstanding.
 
 Retain the current tabs, shared preview cards, XML structure navigation, before/after scenario comparisons and refresh feedback. Scenario input validation and preview availability are separate from ZIP review and EUDAMED acceptance.
 
@@ -150,6 +154,55 @@ Submission Data uses SQLite import/snapshot/monitoring information; it should no
 
 `device_subject` is the intended stable application identity. Testing subjects and legacy reviewed POST rows have `device_subject_id` links, but some resolution still uses family/variant/catalogue text and aliases. Existing compatibility fields such as `post_success`, `latest_successful_version` and `latest_successful_state_json` remain in use. Relational consolidation is incremental and incomplete.
 
+## Workbook Classification And Production Direction
+
+The current `BasicUDIs.xlsx` uses two sheets: `Upload(BasicUDI not registered)` maps to POST and `Update(BasicUDI registered)` maps to PATCH. `BasicUdiReferenceService` matches source worksheet names to Device Model and propagates the classification to child rows. Source version markers 1/2 are also assigned by this sheet mapping; they are not verified production versions. The older single-sheet format reads explicit Operation/Version columns. Some field provenance labels still name those older columns.
+
+Parent registration does not prove child registration. Workbook POST/PATCH labels express source intent; accepted EUDAMED device identity/state must govern production eligibility. Workbooks supply proposed data, not proof of acceptance.
+
+The agreed production direction is separate Test/Playground and Production deployments of one codebase, with separate databases, actor configuration, artifacts and audit history, and clear environment labels. This is a design direction, not an implemented environment split. Do not copy Playground successes into production acceptance.
+
+Establish Production through a controlled, reviewed import/reconciliation of complete production exports: preserve originals, validate scope/pagination/encoding, match UDI-DI plus issuing entity and parent links, then store accepted fields, separate parent/device/Market Info versions, country lists, dates and provenance. Confirm registered parents without children are covered too. Missing identities in an unverified export remain unknown. Imports must not overwrite newer acceptance or silently preserve stale pending packages. Export reconciliation is a dated snapshot, not continuous synchronization; M2M remains deferred. Imported acceptance needs its own explicit provenance path, not fabricated POST acknowledgements.
+
+### Recorded Production Export Review — September 2026
+
+Local files live in `docs/xml_eudamed/`, now ignored and untracked; earlier Git commits still contain them. No registration-state import was performed.
+
+- September 11 export: 15 files, 360 distinct Device UDI-DIs, 30 distinct Basic UDI-DIs, all registered, manufacturer `UK-MF-000048777`.
+- Pages 0–6 contain 50 devices each; page 7 contains 10. All eight declared populated pages are present, with no duplicate device identities. Pages 8–14 are empty responses beyond the result set. The earlier example used 20 records/page and declared 18 pages; the newer export uses 50/page.
+- Complete for the returned query, subject to confirmation of its filters and the production portal inventory. This does not prove coverage of all registered parents without children.
+- Device versions: 17 at v1, 316 at v2, 27 at v3. Market Info: 354 at v1, three at v2, three missing explicit version/state. All devices contain country lists.
+- Missing Market Info metadata: `05050649091223` (`p239443`), `05050649091216` (`P239143`), `05050649091162` (`P019267`), under `5050649COMPACTSAKLM3`, in `APP-DTX-000103955.xml`. Each lists Germany with original-placement true. Preserve unknown versions; absence does not prove no prior changes or invalid registration.
+- `APP-DTX-000103944.xml` and `APP-DTX-000103948.xml` declare UTF-8 but contain Windows-1252 apostrophes. Inspection used an explicit encoding override without changing originals. Controlled import must handle and report this explicitly.
+- Export schema is 3.0.30; outgoing configuration is 3.0.32. Import compatibility must be verified separately. Production actor configuration must not inherit the earlier Playground SRN `UK-MF-000033261`.
+- Comparison with stored workbook import 4, dated September 3: 2,529 distinct PATCH-classified canonical devices, all Echelon. Only four export identities match that PATCH set; one matches POST (`EVAC22L1S`, production device v2); 355 have no matching imported canonical identity. Conversely, 2,525 PATCH identities are absent from the export. These are dated identity-reconciliation findings, not proof those devices are unregistered. Assurance-team confirmation of scope and classification is outstanding.
+
+## Bulk POST And Bulk PATCH Performance Direction
+
+The owner expects initial operational batches of about 100 devices. Investigate both preview and ZIP preparation/download, preserving the current UI and regulatory controls. No generation optimisation has yet been implemented; the readiness lookup improvement above is separate.
+
+Code inspection found:
+
+- Bulk PATCH calls `_build_generated_patch_preview` per device; its selector reloads the complete canonical bundle, reconstructing all imported records and summaries. It also renders/validates individual baseline and derived XML before batch assembly/validation.
+- `download_bulk_udidi_post` invokes its preview builder, then repeats selection, projection, rendering and validation for the actual archive. A displayed preview followed by download therefore renders the POST batch three times across those requests.
+- `download_bulk_patch` similarly invokes bulk preview, then resolves selected records and builds device scenarios again before final batch rendering.
+- Generation contexts are written using separate per-device database transactions; accepted-state reads are also repeated.
+- XSD compilation is already cached by `XmlValidationService._message_schema`. ZIP compression and network transfer have not been identified as dominant costs.
+
+Read-only measurement on September 16: fetching and reconstructing 8,423 canonical records took 4.277 seconds initially and 2.400 seconds on a repeat run (including 2.250/2.341 seconds for JSON decoding and model validation). This excludes additional summary construction and is not an end-to-end benchmark. It indicates why repeated whole-dataset loading can make 100-device PATCH generation take minutes; do not promise a speedup before measuring complete workflows.
+
+Proposed first implementation stage, subject to owner approval:
+
+1. Benchmark POST and PATCH at 10, 50 and 100 devices, timing selection/loading, accepted-state resolution, projection, rendering, validation, audit writes, compression, response transfer and frontend display separately. Use synthetic fixtures/isolated databases for tests, with cold/warm timings recorded.
+2. Load canonical data once per request and index selected identities; pass resolved records through bulk scenario calculation rather than reload the bundle per device. Keep reuse scoped to the request to avoid stale cross-request state.
+3. Share a prepared batch result within each request so XML, manifest, exclusions and generated contexts derive from the same selection and bytes. Remove the download's redundant preview build while retaining eligibility and exact-inclusion checks.
+4. Retrieve selected accepted states together and batch generation-context writes with explicit transaction/failure handling. Keep package receipts tied to successful archive preparation and the actual envelope IDs.
+5. Separate scenario calculation from presentation-only baseline previews. Retain required business checks and validation of final packaged XML; any reduction in validation passes requires review and regression evidence.
+
+Cross-request reuse of a preview artifact for download is a later, separate decision. It requires expiry and invalidation for changed selection, scenario inputs, source/import state, accepted device/Market Info state and relevant configuration. Preview must never become review or acceptance merely because it is cached.
+
+Acceptance criteria: unchanged operation eligibility, per-device next versions, retained accepted countries after Market Info changes, exclusions, acknowledgement correlation and ZIP-review semantics; meaningful regression tests for drift and failures; measured preview/ZIP improvements for both 100-device POST and PATCH batches. No database-platform migration, background-job system, new UI workflow or M2M implementation is implied.
+
 ## Configuration And Local Validation
 
 - Backend baseline: Python 3.11; FastAPI/Pydantic with the current SQLite services. Frontend: React/TypeScript/Vite.
@@ -181,6 +234,8 @@ Choose the action by service/operation rather than single versus bulk packaging.
 
 ## Verification And Next Work
 
+September 16 correctness-fix verification: the complete backend suite passed (150 tests, 245.21 seconds), all 28 frontend Node tests passed, and the TypeScript/production build passed with the existing bundle-size warning. New regression coverage exercises missing latest accepted payloads, single/bulk PATCH blocking, duplicate-acknowledgement recovery, delayed previews in all six workspaces, changed inputs, overlapping requests and unmounting. These are automated checks; browser interaction and live Playground verification remain outstanding.
+
 Last implementation verification recorded on September 9:
 
 - Full backend run: 147 tests passed.
@@ -198,7 +253,7 @@ npm --prefix frontend run build
 git diff --check
 ```
 
-Documentation-only refresh verification: all 9 local links and `git diff --check` passed. The frontend production build passed without the previous bundle-size warning: removing superseded Markdown brought the bundled JavaScript below the 500 kB warning threshold. The Documentation tab imports this file, so its size affects that build. The backend suite was not rerun for this prose-only change.
+Subsequent readiness-fix verification: all 11 frontend tests and the production build passed, then below the 500 kB warning threshold. These tests are not browser confirmation. September 16 documentation verification: all nine local links resolved and `git diff --check` passed. The frontend build passed, but embedded documentation growth brought the JavaScript bundle to approximately 503.5 kB, restoring Vite's 500 kB warning. This is a bundle-size warning, not an XML-generation timing measurement. Backend tests were not rerun for this prose-only change.
 
 Next priorities:
 
@@ -206,8 +261,9 @@ Next priorities:
 2. In controlled Playground testing, verify retained countries in PATCH after Market Info changes, mixed-baseline bulk Market Info, mixed success/error responses, duplicate uploads and delayed older acknowledgements. Use downloaded payloads with recorded generation context; previews alone do not create that history.
 3. Review legacy accepted records with missing/partial snapshots before claiming complete source-drift protection. Choose a trusted recovery approach rather than filling historical acceptance from current workbook data.
 4. Gradually replace remaining text-based identity lookups with `device_subject_id` joins, preserving existing data and lineage. Broader canonical/submission persistence remains a separate design increment.
-5. Consider a production mode for externally registered/PATCH-classified devices only after trusted accepted-state/version sourcing is defined. Do not weaken current Playground guardrails to achieve it.
-6. Extend scenario coverage only with supporting validation and Playground evidence. Automated submission/M2M transport remains out of scope.
+5. Benchmark and implement the approved scope of Bulk POST/PATCH performance work described above before claiming 100-device launch performance. Implementation approval remains pending.
+6. Confirm export scope, reconcile workbook identities and resolve unknown Market Info versions before implementing the separate production deployment and controlled baseline import. Preserve Playground guardrails.
+7. Extend scenario coverage only with supporting validation and Playground evidence. Automated submission/M2M transport remains out of scope.
 
 The removed frontend branches, unused clients/types/state, generic preview component, duplicate normalization and old reviewed-POST gate should not be recreated. Retain historical archives unless their recovery/retention purpose has been deliberately resolved.
 
