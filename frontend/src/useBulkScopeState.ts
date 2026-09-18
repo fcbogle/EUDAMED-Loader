@@ -7,8 +7,10 @@ export type BulkScopeMode =
   | "selected_catalogue_numbers"
   | "import_catalogue_list";
 
-function useScopeSelectionState() {
-  const [scopeMode, setScopeMode] = useState<BulkScopeMode>("all_posted");
+export type BulkPostScopeMode = BulkScopeMode | "next_100";
+
+function useScopeSelectionState<ExtraScopeMode extends string = never>() {
+  const [scopeMode, setScopeMode] = useState<BulkScopeMode | ExtraScopeMode>("all_posted");
   const [catalogueNumbers, setCatalogueNumbers] = useState<string[]>([]);
   const [catalogueFilter, setCatalogueFilter] = useState<string>("");
   const [importText, setImportText] = useState<string>("");
@@ -28,7 +30,7 @@ function useScopeSelectionState() {
 export function useBulkScopeState() {
   const patch = useScopeSelectionState();
   const marketInfo = useScopeSelectionState();
-  const udidiPost = useScopeSelectionState();
+  const udidiPost = useScopeSelectionState<"next_100">();
 
   return { patch, marketInfo, udidiPost };
 }

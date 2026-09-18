@@ -1,12 +1,11 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import type { XmlValidationResult } from "../types";
+import type { BulkPostScopeMode } from "../useBulkScopeState";
 
 import { XmlAssessmentCard } from "./XmlAssessmentCard";
 import { XmlStatusStrip } from "./XmlStatusStrip";
 import { XmlWorkspaceHeader } from "./XmlWorkspaceHeader";
-
-type BulkPostScopeMode = "all_posted" | "next_10" | "next_25" | "selected_catalogue_numbers" | "import_catalogue_list";
 
 type BulkPostSelectableEntry = {
   catalogue_number: string;
@@ -126,6 +125,7 @@ export function BulkPostWorkspace({
                     <option value="all_posted">All eligible devices</option>
                     <option value="next_10">Next 10 devices</option>
                     <option value="next_25">Next 25 devices</option>
+                    <option value="next_100">Next 100 records</option>
                     <option value="selected_catalogue_numbers">Select catalogue numbers</option>
                     <option value="import_catalogue_list">Import catalogue list</option>
                   </select>

@@ -1757,9 +1757,11 @@ export function App() {
         ? bulkUdidiPostCatalogueNumbers.slice(0, 10)
         : bulkUdidiPostScopeMode === "next_25"
           ? bulkUdidiPostCatalogueNumbers.slice(0, 25)
-          : bulkUdidiPostScopeMode === "selected_catalogue_numbers"
-            ? selectedBulkUdidiPostCatalogueNumbers.filter((catalogueNumber) => bulkUdidiPostCatalogueNumberSet.has(catalogueNumber))
-            : bulkUdidiPostImportedMatchedCatalogueNumbers;
+          : bulkUdidiPostScopeMode === "next_100"
+            ? bulkUdidiPostCatalogueNumbers.slice(0, 100)
+            : bulkUdidiPostScopeMode === "selected_catalogue_numbers"
+              ? selectedBulkUdidiPostCatalogueNumbers.filter((catalogueNumber) => bulkUdidiPostCatalogueNumberSet.has(catalogueNumber))
+              : bulkUdidiPostImportedMatchedCatalogueNumbers;
   const displayedBulkPatchParentOptions = bulkPatchPostedParents;
   const selectedBulkPatchParentGroup =
     displayedBulkPatchParentOptions.find((group) => group.basic_udi_di === selectedBulkPatchBasicUdiDi) ??

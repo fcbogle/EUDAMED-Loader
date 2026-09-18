@@ -1,0 +1,49 @@
+Basic UDI-DI,Issuing entity,Workbook model / export model if absent,Workbook sheet,Workbook row,XML parent state,Exported distinct child count,XML model names,Evidence files
+5050649ECHELONVACNL,GS1,Echelon VAC,Upload(BasicUDI not registered),2,REGISTERED,1,Echelon VAC,APP-DTX-000103944.xml
+5050649ELANXG,GS1,Elan,Upload(BasicUDI not registered),3,Not found in export,0,,
+5050649ELANICNM,GS1,Elan IC,Upload(BasicUDI not registered),4,Not found in export,0,,
+5050649ELITEBLADESZ,GS1,Elite Blade,Upload(BasicUDI not registered),5,Not found in export,0,,
+5050649ELITE2PX,GS1,Elite2,Upload(BasicUDI not registered),6,Not found in export,0,,
+5050649ELITEVTV4,GS1,EliteVT,Upload(BasicUDI not registered),7,Not found in export,0,,
+5050649EPIRUSUH,GS1,Epirus,Upload(BasicUDI not registered),8,Not found in export,0,,
+5050649ESPRITVZ,GS1,Esprit,Upload(BasicUDI not registered),9,Not found in export,0,,
+5050649SKTADAPTSLS,GS1,Socket Adaptors,Upload(BasicUDI not registered),10,Not found in export,0,,
+5050649STRUCADAPTSA7,GS1,Structural Adaptors,Upload(BasicUDI not registered),11,Not found in export,0,,
+5050649JAVELINTY,GS1,Javelin,Upload(BasicUDI not registered),12,Not found in export,0,,
+5050649LINX2G,GS1,Linx,Upload(BasicUDI not registered),13,Not found in export,0,,
+5050649NAVIGATORGP,GS1,Navigator,Upload(BasicUDI not registered),14,Not found in export,0,,
+5050649SOCKETLOCKSYK,GS1,Socket Locks,Upload(BasicUDI not registered),15,Not found in export,0,,
+5050649SOCKETVALVESZG,GS1,Socket Valves,Upload(BasicUDI not registered),16,Not found in export,0,,
+5050649LINXPAPPAND2T,GS1,Linx Programming App Android,Upload(BasicUDI not registered),17,Not found in export,0,,
+5050649LINXPAPPIOS54,GS1,Linx Programming App iOS,Upload(BasicUDI not registered),18,Not found in export,0,,
+5050649O3PAPPAND5P,GS1,Orion3 Programming App Android,Upload(BasicUDI not registered),19,Not found in export,0,,
+5050649O3PAPPIOS7Y,GS1,Orion3 Programming App iOS,Upload(BasicUDI not registered),20,Not found in export,0,,
+5050649ECHELONVT6Y,GS1,Echelon VT,Update(BasicUDI registered),2,REGISTERED,1,Echelon VT,APP-DTX-000103944.xml
+5050649ECHELONER59,GS1,Echelon ER,Update(BasicUDI registered),3,REGISTERED,1,Echelon ER,APP-DTX-000103944.xml
+5050649ECHELONMV,GS1,Echelon,Update(BasicUDI registered),4,REGISTERED,2,Echelon,APP-DTX-000103944.xml
+5050649ELITEBLADEVT9W,GS1,Elite BladeVT,Update(BasicUDI registered),5,REGISTERED,8,Elite BladeVT,APP-DTX-000103945.xml
+5050649ESKBU,GS1,ESK+,Update(BasicUDI registered),6,REGISTERED,17,ESK+,APP-DTX-000103949.xml; APP-DTX-000103955.xml
+5050649AQUALIMBTFX7,GS1,Aqualimb TF,Update(BasicUDI registered),7,REGISTERED,13,Aqualimb TF,APP-DTX-000103948.xml
+5050649AQUALIMBTTY3,GS1,Aqualimb TT,Update(BasicUDI registered),8,REGISTERED,12,Aqualimb TT,APP-DTX-000103946.xml
+5050649AVALONK2Y4,GS1,AvalonK2,Update(BasicUDI registered),9,REGISTERED,36,AvalonK2,APP-DTX-000103953.xml
+5050649AVALONK2VACJ3,GS1,AvalonK2VAC,Update(BasicUDI registered),10,REGISTERED,28,AvalonVAC,APP-DTX-000103945.xml; APP-DTX-000103946.xml
+5050649BLADEXTMF,GS1,BladeXT,Update(BasicUDI registered),11,REGISTERED,18,BladeXT,APP-DTX-000103945.xml
+5050649BMK2W8,GS1,BMK2,Update(BasicUDI registered),12,REGISTERED,3,BMK2,APP-DTX-000103951.xml; APP-DTX-000103955.xml
+5050649COMPACTSAKLM3,GS1,Compact SAKL,Update(BasicUDI registered),13,REGISTERED,5,Compact SAKL,APP-DTX-000103944.xml; APP-DTX-000103955.xml
+5050649KX06V2NB,GS1,KX06,Update(BasicUDI registered),14,REGISTERED,6,KX06,APP-DTX-000103948.xml; APP-DTX-000103949.xml
+5050649MERCURYYB,GS1,Mercury,Update(BasicUDI registered),15,REGISTERED,13,Mercury,APP-DTX-000103948.xml
+5050649MINIBLADEXTJL,GS1,Mini BladeXT,Update(BasicUDI registered),16,REGISTERED,6,Mini BladeXT,APP-DTX-000103953.xml; APP-DTX-000103955.xml
+5050649MULTIFLEXSTD9X,GS1,Multiflex,Update(BasicUDI registered),17,REGISTERED,26,Multiflex,APP-DTX-000103946.xml
+5050649MULTIFLEXANKLEHN,GS1,Multiflex Ankle ,Update(BasicUDI registered),18,REGISTERED,22,Multiflex Ankle,APP-DTX-000103946.xml; APP-DTX-000103948.xml
+5050649ORION3W7,GS1,Orion3,Update(BasicUDI registered),19,REGISTERED,3,ORION3 EXTERNAL KNEE PROSTHESIS,APP-DTX-000103945.xml
+5050649SMARTIP2Q,GS1,SmartIP,Update(BasicUDI registered),20,REGISTERED,4,SmartIP,APP-DTX-000103944.xml
+5050649SUPERSACHWC,GS1,Super SACH,Update(BasicUDI registered),21,REGISTERED,14,SuperSACH,APP-DTX-000103951.xml; APP-DTX-000103953.xml
+5050649TECTUSVT,GS1,Tectus,Update(BasicUDI registered),22,REGISTERED,5,Tectus,APP-DTX-000103944.xml
+5050649DIGITALHEALTH4D,GS1,Blatchford App,Update(BasicUDI registered),23,REGISTERED,1,Blatchford App,APP-DTX-000103944.xml
+5050649TTPRO3L,GS1,TT Pro,Update(BasicUDI registered),24,REGISTERED,15,TT Pro,APP-DTX-000103944.xml
+5050649SARJ,GS1,Silcare Active,Update(BasicUDI registered),25,REGISTERED,20,Silcare Active,APP-DTX-000103949.xml
+5050649SWSW,GS1,Silcare Walk,Update(BasicUDI registered),26,REGISTERED,20,Silcare Walk,APP-DTX-000103951.xml
+5050649SBABT,GS1,Silcare Breathe Active,Update(BasicUDI registered),27,REGISTERED,20,Silcare Breathe Active,APP-DTX-000103949.xml; APP-DTX-000103951.xml
+5050649SBWD7,GS1,Silcare Breathe Walk,Update(BasicUDI registered),28,REGISTERED,20,Silcare Breathe Walk,APP-DTX-000103951.xml
+5050649AVIORU8,GS1,Avior,Update(BasicUDI registered),29,REGISTERED,18,Avior,APP-DTX-000103944.xml
+5050649CHILD4BARKNEEH4,GS1,Child’s 4-Bar Knee,Absent from workbook,,REGISTERED,2,,APP-DTX-000103948.xml
