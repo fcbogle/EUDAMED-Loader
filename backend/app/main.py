@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
+from app.config import get_settings, validate_schema_package
 from app.routers import canonical, normalization, profiling, schemas, xml_generation
 from app.services.workbook_import import WorkbookImportService
 
@@ -36,9 +36,12 @@ app.include_router(xml_generation.router, prefix="/api")
 @app.on_event("startup")
 def log_testing_state_context() -> None:
     settings = get_settings()
+    validate_schema_package(settings)
     service = WorkbookImportService()
     logger.warning(
-        "Testing state database path: %s | import batches: %s | backup dir: %s",
+        "Environment: %s | XML schema: %s | database: %s | import batches: %s | backup dir: %s",
+        settings.environment,
+        settings.eudamed_message_schema_version,
         settings.testing_state_db_path,
         service.import_batch_count(),
         settings.testing_state_backup_dir,
@@ -48,3 +51,9 @@ def log_testing_state_context() -> None:
 @app.get("/health")
 def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/environment")
+def environment_context() -> dict[str, str]:
+    """Expose the active target without disclosing actor settings or storage paths."""
+    return {"environment": get_settings().environment}

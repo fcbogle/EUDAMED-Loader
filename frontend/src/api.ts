@@ -120,6 +120,11 @@ export type RecordReadiness = {
 };
 
 export const api = {
+  async environment(signal?: AbortSignal): Promise<{ environment: string }> {
+    const response = await fetch(`${API_ROOT}/environment`, { signal });
+    if (!response.ok) throw new ApiError(await readErrorMessage(response), response.status);
+    return response.json();
+  },
   bulkPatchPostedParents: (productFamily: string, productVariant: string) =>
     sendJson<BulkPatchPostedParentsResponse>("/xml/bulk-patch-posted-parents", "POST", {
       product_family: productFamily,

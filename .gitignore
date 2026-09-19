@@ -23,3 +23,10 @@ data/testing/backups/
 
 # Local EUDAMED production exports
 /docs/xml_eudamed/
+
+# Local environment profiles and isolated production state
+.env.dev
+.env.prod
+.env.*.local
+data/prod/
+data/dev/artifacts/

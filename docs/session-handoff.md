@@ -160,7 +160,7 @@ The current `BasicUDIs.xlsx` uses two sheets: `Upload(BasicUDI not registered)` 
 
 Parent registration does not prove child registration. Workbook POST/PATCH labels express source intent; accepted EUDAMED device identity/state must govern production eligibility. Workbooks supply proposed data, not proof of acceptance.
 
-The agreed production direction is separate Test/Playground and Production deployments of one codebase, with separate databases, actor configuration, artifacts and audit history, and clear environment labels. This is a design direction, not an implemented environment split. Do not copy Playground successes into production acceptance.
+The current environment is now called **Dev** (targeting Playground). September 19 configuration work adds separate Dev/Prod startup profiles in one codebase: `.env.dev` and `.env.prod`, explicit schema selection, isolated storage paths and startup checks. Run `python -m app.run --environment dev --check-config` from `backend/` for read-only validation. Dev retains its existing database and source paths; Prod requires explicit configuration and actor identities. See [environment profiles](environment-profiles.md). UI labels, controlled production database initialization/import and full generation verification against both profiles remain pending. No production database or acceptance data was created. Do not copy Playground successes into production acceptance.
 
 Establish Production through a controlled, reviewed import/reconciliation of complete production exports: preserve originals, validate scope/pagination/encoding, match UDI-DI plus issuing entity and parent links, then store accepted fields, separate parent/device/Market Info versions, country lists, dates and provenance. Confirm registered parents without children are covered too. Missing identities in an unverified export remain unknown. Imports must not overwrite newer acceptance or silently preserve stale pending packages. Export reconciliation is a dated snapshot, not continuous synchronization; M2M remains deferred. Imported acceptance needs its own explicit provenance path, not fabricated POST acknowledgements.
 
@@ -208,7 +208,7 @@ Acceptance criteria: unchanged operation eligibility, per-device next versions, 
 ## Configuration And Local Validation
 
 - Backend baseline: Python 3.11; FastAPI/Pydantic with the current SQLite services. Frontend: React/TypeScript/Vite.
-- Configured message schema default: `EUDAMED_MESSAGE_SCHEMA_VERSION=3.0.32`. The bundled Message schema was aligned after the recorded August 9 Playground rejection of `3.0.30`. This describes repository configuration and recorded evidence, not a newly verified public EUDAMED release.
+- Dev uses `data/schema_profiles/dev-3.0.32-derived` and message version 3.0.32. This preserves the historical 3.0.30-derived bundle whose Message schema version was edited after the August 9 Playground rejection; it is not an official 3.0.32 package. Prod uses the downloaded official `data/schema_profiles/prod-3.0.30`. Both packages compile; four files differ. Provenance, file hashes and the comparison are recorded in [schema profile documentation](../data/schema_profiles/README.md). The legacy `data/schemas` directory is retained but is no longer the default.
 - Testing actor controls: `EUDAMED_MANUFACTURER_SRN_OVERRIDE`, `EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE`, and `EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE`.
 - Actor overrides must match the actual Playground context; do not assume historical test SRNs remain appropriate for a different environment.
 - Do not implement upload/M2M transport or introduce production assumed-registration rules as incidental cleanup.
@@ -301,3 +301,5 @@ ORDER BY id DESC LIMIT 30;
 ```
 
 Implementation detail and regression scope: [XML workflow consolidation](code-consolidation-2026-09-09.md). The [SQLite event-logging proposal](sqlite-event-logging-schema-proposal.md) and [architecture draft](architecture-definition-draft.md) contain broader/historical design material; compare them with current code before treating proposed elements as missing features.
+
+September 19 environment-profile verification: full backend suite 199 passed in 239.30 seconds; the focused profile suite subsequently passed 25 tests including an additional real-package Prod check that created no database or directories. Configuration is implemented; UI labelling and production baseline import remain pending.

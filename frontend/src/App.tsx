@@ -20,6 +20,8 @@ import { RegistrationStateWorkspace } from "./components/RegistrationStateWorksp
 import { SubmissionBatchHistory } from "./components/SubmissionBatchHistory";
 import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
+import { EnvironmentBanner } from "./components/EnvironmentBanner";
+import { DeviceModelSelector } from "./components/DeviceModelSelector";
 import { XmlValidationStack } from "./components/XmlValidationStack";
 import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
 import eudamedServiceContractFindingsDocumentation from "./content/docs/eudamed-service-contract-findings.md?raw";
@@ -1655,6 +1657,26 @@ export function App() {
   const xmlValidationRecords = canonicalValidationRecords;
   const xmlReadyRecords = xmlValidationRecords.filter((record) => record.xml_readiness.status === "complete");
   const xmlBlockedRecords = xmlValidationRecords.filter((record) => record.xml_readiness.status !== "complete");
+  const xmlModelOptions = useMemo(() => {
+    const parents = new Map<string, Set<string>>();
+    for (const record of xmlValidationRecords) {
+      const key = JSON.stringify([record.product_family, record.product_variant]);
+      const basic = basicUdiDiForRecord(record);
+      if (basic) {
+        const values = parents.get(key) ?? new Set<string>();
+        values.add(basic);
+        parents.set(key, values);
+      }
+    }
+    return validationVariantSummaries.map(summary => ({
+      family: summary.product_family,
+      variant: summary.product_variant,
+      basicUdiDis: [...(parents.get(JSON.stringify([summary.product_family, summary.product_variant])) ?? [])].sort(),
+      total: summary.total_records,
+      ready: summary.xml_ready_records,
+      blocked: summary.xml_blocked_records,
+    })).sort((a, b) => a.variant.localeCompare(b.variant) || a.family.localeCompare(b.family));
+  }, [xmlValidationRecords, validationVariantSummaries]);
   const xmlFamilySummaries = validationFamilySummaries;
   const selectedXmlFamilySummary =
     xmlFamilySummaries.find((summary) => summary.product_family === selectedXmlFamily) ?? xmlFamilySummaries[0] ?? null;
@@ -3447,6 +3469,7 @@ export function App() {
 
   return (
     <main className="app-shell">
+      <EnvironmentBanner />
       <nav className="top-nav">
         <div className="brand-block">
           <span className="brand-kicker">Regulatory Data Preparation</span>
@@ -4589,68 +4612,15 @@ export function App() {
             );
           })()}
 
-          <section className="content-grid validation-layout xml-selection-grid">
-            <div className="panel validation-equal-panel validation-summary-panel">
-              <div className="section-heading">
-                <div>
-                  <span className="section-kicker">Step 1</span>
-                  <h2>Select Product Family</h2>
-                </div>
-              </div>
-              <p className="panel-copy">Start by selecting the product family whose XML-ready variants you want to inspect.</p>
-              <div className="draft-list">
-                {xmlFamilySummaries.map((summary) => {
-                  const isSelected = summary.product_family === selectedXmlFamilySummary?.product_family;
-                  return (
-                    <button
-                      key={summary.product_family}
-                      className={isSelected ? "sheet-card active validation-sample-card" : "sheet-card validation-sample-card"}
-                      type="button"
-                      onClick={() => setSelectedXmlFamily(summary.product_family)}
-                    >
-                      <span className="sheet-title">{summary.product_family}</span>
-                      <small>
-                        {summary.variant_count} variants · {summary.total_records} rows
-                      </small>
-                      <small>
-                        XML {summary.xml_ready_records} ready · {summary.xml_blocked_records} blocked
-                      </small>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="panel validation-equal-panel validation-blockers-panel">
-              <div className="section-heading">
-                <div>
-                  <span className="section-kicker">Step 2</span>
-                  <h2>Select Product Variant</h2>
-                </div>
-              </div>
-              <p className="panel-copy">Choose one variant inside the selected family.</p>
-              <div className="draft-list">
-                {selectedXmlVariantSummaries.map((summary) => {
-                  const isSelected = summary.product_variant === selectedXmlVariantSummary?.product_variant;
-                  return (
-                    <button
-                      key={summary.product_variant}
-                      className={isSelected ? "sheet-card active validation-sample-card" : "sheet-card validation-sample-card"}
-                      type="button"
-                      onClick={() => setSelectedXmlVariant(summary.product_variant)}
-                    >
-                      <span className="sheet-title">{summary.product_variant}</span>
-                      <small>
-                        {summary.submission_operation ?? "N/A"} · {summary.total_records} rows
-                      </small>
-                      <small>
-                        XML {summary.xml_ready_records} ready · {summary.xml_blocked_records} blocked
-                      </small>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
+          <DeviceModelSelector
+            options={xmlModelOptions}
+            selectedFamily={selectedXmlFamilySummary?.product_family ?? null}
+            selectedVariant={selectedXmlVariantSummary?.product_variant ?? null}
+            onSelect={(family, variant) => {
+              setSelectedXmlFamily(family);
+              setSelectedXmlVariant(variant);
+            }}
+          />
 
           <section className="panel xml-full-workspace-panel">
             <div className="section-heading">

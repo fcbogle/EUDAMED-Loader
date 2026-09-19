@@ -18,7 +18,7 @@ def test_default_settings_use_project_local_data_dirs(monkeypatch) -> None:
     project_root = Path(__file__).resolve().parents[2]
 
     assert settings.excel_dir == project_root / "data" / "source_excel"
-    assert settings.schema_dir == project_root / "data" / "schemas"
+    assert settings.schema_dir == project_root / "data/schema_profiles/dev-3.0.32-derived"
     assert settings.basic_udi_reference_dir == project_root / "data" / "basic_udi_reference"
     assert settings.basic_udi_reference_workbook == project_root / "data" / "basic_udi_reference" / "BasicUDIs.xlsx"
     assert settings.legacy_basic_udi_reference_workbook == (

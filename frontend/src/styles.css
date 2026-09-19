@@ -2626,20 +2626,21 @@ a.ghost-button:visited {
   overflow: auto;
 }
 
-.xml-selection-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: stretch;
-}
-
-.xml-selection-grid .validation-equal-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: visible;
-}
-
-.xml-selection-grid .draft-list {
-  overflow: visible;
+.device-model-selector { min-width: 0; }
+.xml-scope-selected { margin: 0 0 12px; overflow-wrap: anywhere; }
+.xml-scope-count { margin: 8px 0; font-size: 0.85rem; color: #526273; }
+.device-model-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 12px; align-items: end; }
+.device-model-filters input, .device-model-filters select { width: 100%; min-width: 0; }
+.device-model-results { max-height: 24rem; overflow: auto; scrollbar-gutter: stable; }
+.device-model-table { width: 100%; border-collapse: collapse; }
+.device-model-table th { position: sticky; top: 0; background: #f3f7f8; z-index: 1; text-align: left; }
+.device-model-table th, .device-model-table td { padding: 12px; border-bottom: 1px solid #d5dce3; }
+.device-model-table tbody tr { cursor: pointer; }
+.device-model-table tbody tr:hover { background: #eaf2f4; }
+.device-model-table button:focus-visible { outline: 3px solid #007c91; outline-offset: 3px; }
+@media (max-width: 760px) {
+  .device-model-filters { grid-template-columns: minmax(0, 1fr); }
+  .device-model-table { min-width: 650px; }
 }
 
 .selected-table-row {
@@ -3884,4 +3885,26 @@ a.ghost-button:visited {
   .schema-groups {
     grid-template-columns: 1fr;
   }
+}
+
+/* Shared by every application workspace; target is supplied by the backend. */
+.environment-banner {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 22px;
+  padding: 14px 22px; margin-bottom: 16px; border-radius: 12px;
+  background: #f4f0e8; color: #45351b; border: 1px solid #d5c6a8;
+  box-shadow: 0 4px 14px rgba(0, 42, 58, 0.12);
+}
+.environment-banner.dev { background: #fff0ee; color: #70242b; border-color: #e7a7ac; }
+.environment-banner.prod { background: #004494; color: white; border-color: #003776; }
+.environment-ribbon { font-size: 1rem; font-weight: 800; letter-spacing: 0.08em; padding: 8px 16px; background: #e0cfae; transform: rotate(-3deg); }
+.environment-banner.dev .environment-ribbon { background: #b83e4a; color: white; }
+.environment-banner.prod .environment-ribbon { background: white; color: #004494; }
+.environment-banner > div { display: grid; gap: 3px; }
+.environment-banner strong { font-size: 1.1rem; }
+.environment-banner > div > span { font-size: 0.85rem; }
+.environment-banner button { margin-left: auto; }
+@media (max-width: 600px) {
+  .environment-banner { gap: 12px; padding: 12px; flex-wrap: wrap; }
+  .environment-ribbon { font-size: 0.8rem; padding: 6px 10px; }
 }

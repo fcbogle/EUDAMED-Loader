@@ -17,14 +17,15 @@ Analysis-first scaffold for reviewing source Excel workbooks, Basic UDI referenc
 - `frontend/` React/Vite UI
 - `config/normalization/` normalization rules
 - `config/canonical_mapping/` review artifacts
-- `data/schemas/` local XSD pack
+- `data/schema_profiles/` separate Prod and Dev XSD bundles and provenance
+- `data/schemas/` preserved legacy XSD pack
 - `docs/` reports and XML samples
 
 ## Run Backend
 
 ```bash
 cd backend
-../.venv/bin/python -m uvicorn app.main:app --reload
+../.venv/bin/python -m app.run --environment dev --reload
 ```
 
 ## Run Frontend
@@ -37,6 +38,11 @@ npm run dev
 
 ## Environment Overrides
 
+- `EUDAMED_ENVIRONMENT` (`dev` or `prod`, selected at startup)
+- `EUDAMED_ENV_FILE` (optional explicit profile file)
 - `EUDAMED_EXCEL_DIR`
 - `EUDAMED_SCHEMA_DIR`
 - `EUDAMED_BASIC_UDI_REFERENCE_DIR`
+
+See [Dev and Prod configuration](docs/environment-profiles.md) for profile files,
+read-only configuration checks, storage isolation and current production limitations.
