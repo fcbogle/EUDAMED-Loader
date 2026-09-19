@@ -1,3 +1,5 @@
+import { matchesModelSearch } from "./modelSearch";
+import { DeviceModelFilter, mergeModelOptions } from "./components/DeviceModelFilter";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBulkPostedCohorts } from "./useBulkPostedCohorts";
 
@@ -814,6 +816,7 @@ export function App() {
   const [canonicalReview, setCanonicalReview] = useState<CanonicalReviewBundle | null>(null);
   const [canonicalValidation, setCanonicalValidation] = useState<CanonicalValidationBundle | null>(null);
   const [selectedValidationRecordKey, setSelectedValidationRecordKey] = useState<string | null>(null);
+  const [validationModelSearch, setValidationModelSearch] = useState("");
   const [selectedValidationFamily, setSelectedValidationFamily] = useState<string>("");
   const [selectedValidationVariant, setSelectedValidationVariant] = useState<string>("");
   const [selectedValidationReviewTab, setSelectedValidationReviewTab] = useState<ValidationReviewTab>("sourceSheetBasicUdi");
@@ -826,6 +829,7 @@ export function App() {
   const [selectedRegistrationStateStatus, setSelectedRegistrationStateStatus] = useState<string>("");
   const [registrationStateSearch, setRegistrationStateSearch] = useState<string>("");
   const [registrationStateActionableOnly, setRegistrationStateActionableOnly] = useState<boolean>(false);
+  const [testingSummarySearch, setTestingSummarySearch] = useState("");
   const [selectedTestingSummaryFamily, setSelectedTestingSummaryFamily] = useState<string>("");
   const [selectedTestingSummaryVariant, setSelectedTestingSummaryVariant] = useState<string>("");
   const [testingSubjectSummaries, setTestingSubjectSummaries] = useState<TestingSubjectReadModelSummary[]>([]);
@@ -1300,7 +1304,8 @@ export function App() {
     const variantRecords = (canonicalValidation?.records ?? []).filter(
       (record) =>
         (!selectedValidationFamily || record.product_family === selectedValidationFamily) &&
-        (!selectedValidationVariant || record.product_variant === selectedValidationVariant),
+        (!selectedValidationVariant || record.product_variant === selectedValidationVariant) &&
+        matchesModelSearch(validationModelSearch, record.product_family, record.product_variant, basicUdiDiForRecord(record)),
     );
     if (!variantRecords.length) {
       return;
@@ -1312,7 +1317,7 @@ export function App() {
       return;
     }
     setSelectedValidationRecordKey(variantRecords[0]?.catalogue_number ?? null);
-  }, [canonicalValidation, selectedValidationFamily, selectedValidationVariant, selectedValidationRecordKey]);
+  }, [canonicalValidation, selectedValidationFamily, selectedValidationVariant, selectedValidationRecordKey, validationModelSearch]);
 
   useEffect(() => {
     if (!canonicalValidation?.family_summaries.length) {
@@ -1454,29 +1459,6 @@ export function App() {
   const canonicalValidationRecords = canonicalValidation?.records ?? [];
   const validationFamilySummaries = canonicalValidation?.family_summaries ?? [];
   const validationVariantSummaries = canonicalValidation?.variant_summaries ?? [];
-  const deviceSubjectFamilyOptions = (
-    Array.from(
-      new Set(
-        deviceSubjects
-          .map((subject) => subject.product_family)
-          .filter((family): family is string => Boolean(family)),
-      ),
-    )
-  ).sort((left, right) => left.localeCompare(right));
-  const deviceSubjectVariantOptions = (
-    Array.from(
-      new Set(
-        deviceSubjects
-          .filter(
-            (subject) =>
-              (!selectedDeviceSubjectFamily || subject.product_family === selectedDeviceSubjectFamily) &&
-              subject.product_variant,
-          )
-          .map((subject) => subject.product_variant)
-          .filter((variant): variant is string => Boolean(variant)),
-      ),
-    )
-  ).sort((left, right) => left.localeCompare(right));
   const selectedFamilySummary =
     (selectedValidationFamily
       ? validationFamilySummaries.find((summary) => summary.product_family === selectedValidationFamily) ?? null
@@ -1491,7 +1473,8 @@ export function App() {
   const selectedVariantRecords = canonicalValidationRecords.filter(
     (record) =>
       (!selectedValidationFamily || record.product_family === selectedValidationFamily) &&
-      (!selectedValidationVariant || record.product_variant === selectedValidationVariant),
+      (!selectedValidationVariant || record.product_variant === selectedValidationVariant) &&
+        matchesModelSearch(validationModelSearch, record.product_family, record.product_variant, basicUdiDiForRecord(record)),
   );
   const sampleValidationRecords = selectedVariantRecords.slice(0, 8);
   const selectedValidationRecord =
@@ -1500,22 +1483,22 @@ export function App() {
     sampleValidationRecords[0] ??
     selectedVariantRecords[0] ??
     null;
-  const selectedValidationScopeRows =
+  const selectedValidationScopeRows = validationModelSearch.trim() ? selectedVariantRecords.length :
     selectedVariantSummary?.total_records ??
     selectedFamilySummary?.total_records ??
     canonicalValidation?.validation_subset_records ??
     0;
-  const selectedValidationReadyRows =
+  const selectedValidationReadyRows = validationModelSearch.trim() ? selectedVariantRecords.filter(record => !record.blockers.length).length :
     selectedVariantSummary?.ready_records ??
     selectedFamilySummary?.ready_records ??
     canonicalValidation?.ready_records ??
     0;
-  const selectedValidationBlockedRows =
+  const selectedValidationBlockedRows = validationModelSearch.trim() ? selectedVariantRecords.filter(record => record.blockers.length > 0).length :
     selectedVariantSummary?.blocked_records ??
     selectedFamilySummary?.blocked_records ??
     canonicalValidation?.blocked_records ??
     0;
-  const selectedValidationXmlReadyRows =
+  const selectedValidationXmlReadyRows = validationModelSearch.trim() ? selectedVariantRecords.filter(record => !record.xml_blockers.length).length :
     selectedVariantSummary?.xml_ready_records ??
     selectedFamilySummary?.xml_ready_records ??
     canonicalValidation?.xml_ready_records ??
@@ -1677,6 +1660,13 @@ export function App() {
       blocked: summary.xml_blocked_records,
     })).sort((a, b) => a.variant.localeCompare(b.variant) || a.family.localeCompare(b.family));
   }, [xmlValidationRecords, validationVariantSummaries]);
+  const deviceSubjectModelOptions = mergeModelOptions([
+    ...deviceSubjects.map(subject => ({
+      family: subject.product_family ?? "",
+      variant: subject.product_variant ?? "",
+      basicUdiDis: xmlModelOptions.find(model => model.family === subject.product_family && model.variant === subject.product_variant)?.basicUdiDis ?? [],
+    })),
+  ]);
   const xmlFamilySummaries = validationFamilySummaries;
   const selectedXmlFamilySummary =
     xmlFamilySummaries.find((summary) => summary.product_family === selectedXmlFamily) ?? xmlFamilySummaries[0] ?? null;
@@ -1835,16 +1825,6 @@ export function App() {
   const bulkMarketInfoImportedNotFoundCatalogueNumbers = bulkMarketInfoImportedCatalogueNumbers.filter(
     (catalogueNumber) => !bulkMarketInfoPostedCatalogueSet.has(catalogueNumber),
   );
-  const registrationStateFamilyOptions = canonicalValidation?.family_summaries.map((summary) => summary.product_family) ?? [];
-  const registrationStateVariantOptions = Array.from(
-    new Set(
-      (canonicalValidation?.variant_summaries ?? [])
-        .filter((summary) =>
-          selectedRegistrationStateFamily ? summary.product_family === selectedRegistrationStateFamily : false,
-        )
-        .map((summary) => summary.product_variant),
-    ),
-  );
   const registrationStateStatusOptions = [
     "POST ready",
     "Child POST ready",
@@ -1855,15 +1835,20 @@ export function App() {
     "Loading",
     "Unavailable",
   ];
-  const testingSummaryFamilyOptions = canonicalValidation?.family_summaries.map((summary) => summary.product_family) ?? [];
-  const testingSummaryVariantOptions = Array.from(
-    new Set(
-      (canonicalValidation?.variant_summaries ?? [])
-        .filter((summary) => (selectedTestingSummaryFamily ? summary.product_family === selectedTestingSummaryFamily : false))
-        .map((summary) => summary.product_variant),
-    ),
-  );
-  const testingSummaryXmlReadyPostRecords = xmlReadyRecords.filter((record) => {
+  const searchedTestingSubjects = testingSummarySubjectSummaries.filter(subject =>
+    matchesModelSearch(testingSummarySearch, subject.product_family, subject.product_variant, subject.basic_udi_di));
+  const searchedTestingEvents = testingSummaryEvents.filter(event =>
+    matchesModelSearch(testingSummarySearch, event.product_family, event.product_variant, event.basic_udi_di));
+  const searchedTestingRecords = xmlReadyRecords.filter(record =>
+    matchesModelSearch(testingSummarySearch, record.product_family, record.product_variant, basicUdiDiForRecord(record)));
+  const searchedTestingWorkspaceSummary = testingSummarySearch.trim() && testingSummaryWorkspaceSummary ? {
+    ...testingSummaryWorkspaceSummary,
+    successful_device_post_count: searchedTestingEvents.filter(event => event.status === "SUCCESS" && event.message_type === "DEVICE.POST").length,
+    successful_child_post_count: searchedTestingEvents.filter(event => event.status === "SUCCESS" && event.message_type === "UDI_DI.POST").length,
+    successful_patch_count: searchedTestingEvents.filter(event => event.status === "SUCCESS" && event.message_type === "UDI_DI.PATCH").length,
+    latest_tested_at: searchedTestingEvents.map(event => event.tested_at).filter((date): date is string => Boolean(date)).sort().reverse()[0] ?? null,
+  } : testingSummaryWorkspaceSummary;
+  const testingSummaryXmlReadyPostRecords = searchedTestingRecords.filter((record) => {
     if ((record.submission_operation ?? "").toUpperCase() !== "POST") {
       return false;
     }
@@ -1876,13 +1861,13 @@ export function App() {
     return true;
   });
   const testingSummarySuccessfulPrimaryUdiSet = new Set(
-    testingSummarySubjectSummaries
+    searchedTestingSubjects
       .filter((summary) => summary.has_successful_device_post || summary.has_successful_child_post_or_patch || summary.post_success)
       .map((summary) => (summary.primary_udi_di ?? "").trim().toLowerCase())
       .filter((value): value is string => Boolean(value)),
   );
   const testingSummaryRegisteredBasicUdiSet = new Set(
-    testingSummarySubjectSummaries
+    searchedTestingSubjects
       .filter((summary) => summary.post_success && summary.basic_udi_di)
       .map((summary) => summary.basic_udi_di as string),
   );
@@ -1899,18 +1884,21 @@ export function App() {
       testingSummaryRegisteredBasicUdiSet.has(basicUdiDi)
     );
   }).length;
-  const testingSummaryPatchReadyCount = testingSummarySubjectSummaries.filter((summary) => readinessForRecord(summary)?.patch_ready).length;
+  const testingSummaryPatchReadyCount = searchedTestingSubjects.filter((summary) => readinessForRecord(summary)?.patch_ready).length;
   const testingSummaryRows = (canonicalValidation?.variant_summaries ?? [])
     .filter((summary) => (selectedTestingSummaryFamily ? summary.product_family === selectedTestingSummaryFamily : true))
     .filter((summary) => (selectedTestingSummaryVariant ? summary.product_variant === selectedTestingSummaryVariant : true))
+    .filter(summary => matchesModelSearch(testingSummarySearch, summary.product_family, summary.product_variant,
+      ...xmlModelOptions.filter(model => model.family === summary.product_family && model.variant === summary.product_variant).flatMap(model => model.basicUdiDis),
+      ...testingSummarySubjectSummaries.filter(subject => familyLabelsOverlap(subject.product_family, summary.product_family) && subject.product_variant === summary.product_variant).map(subject => subject.basic_udi_di)))
     .map((summary) => {
-      const matchingRecords = xmlReadyRecords.filter(
+      const matchingRecords = searchedTestingRecords.filter(
         (record) =>
           familyLabelsOverlap(record.product_family, summary.product_family) &&
           record.product_variant === summary.product_variant &&
           (record.submission_operation ?? "").toUpperCase() === "POST",
       );
-      const matchingSubjects = testingSummarySubjectSummaries.filter(
+      const matchingSubjects = searchedTestingSubjects.filter(
         (subject) => familyLabelsOverlap(subject.product_family, summary.product_family) && subject.product_variant === summary.product_variant,
       );
       const rowRegisteredBasicUdiSet = new Set(
@@ -2187,20 +2175,20 @@ export function App() {
   const testingSummaryMetrics = [
     {
       label: "Parent POST",
-      value: `${testingSummaryWorkspaceSummary?.successful_device_post_count ?? 0}`,
-      detail: "successful",
+      value: `${searchedTestingWorkspaceSummary?.successful_device_post_count ?? 0}`,
+      detail: testingSummarySearch.trim() && testingSummaryEvents.length >= 10000 ? "successful (loaded events only)" : "successful",
       className: "summary-card-kpi-post",
     },
     {
       label: "Child POST",
-      value: `${testingSummaryWorkspaceSummary?.successful_child_post_count ?? 0}`,
-      detail: "successful",
+      value: `${searchedTestingWorkspaceSummary?.successful_child_post_count ?? 0}`,
+      detail: testingSummarySearch.trim() && testingSummaryEvents.length >= 10000 ? "successful (loaded events only)" : "successful",
       className: "summary-card-kpi-post",
     },
     {
       label: "PATCH",
-      value: `${testingSummaryWorkspaceSummary?.successful_patch_count ?? 0}`,
-      detail: "successful",
+      value: `${searchedTestingWorkspaceSummary?.successful_patch_count ?? 0}`,
+      detail: testingSummarySearch.trim() && testingSummaryEvents.length >= 10000 ? "successful (loaded events only)" : "successful",
       className: "summary-card-kpi-patch",
     },
     {
@@ -2219,11 +2207,11 @@ export function App() {
       detail: "available",
     },
   ];
-  const testingSummaryRecentSubjects = [...testingSummarySubjectSummaries]
+  const testingSummaryRecentSubjects = [...searchedTestingSubjects]
     .filter((summary) => Boolean(summary.latest_tested_at))
     .sort((left, right) => (right.latest_tested_at ?? "").localeCompare(left.latest_tested_at ?? ""))
     .slice(0, 5);
-  const testingSummaryEventRows = testingSummaryEvents.map((event) => ({
+  const testingSummaryEventRows = searchedTestingEvents.map((event) => ({
     key: `${event.id}`,
     testedAt: event.tested_at ?? "Not recorded",
     productFamily: event.product_family ?? "Not resolved",
@@ -3364,6 +3352,7 @@ export function App() {
     return order[left.match_status] - order[right.match_status];
   });
   const selectedValidationVariantMappings = orderedVariantMappings.filter((mapping) => {
+    if (!matchesModelSearch(validationModelSearch, workbookFamilyLabel(mapping.workbook), mapping.device_model, mapping.basic_udi_di)) return false;
     if (selectedVariantSummary) {
       return (
         mapping.workbook === selectedVariantSummary.source_workbook &&
@@ -3717,7 +3706,7 @@ export function App() {
               EUDAMED Activity
             </button>
           </section>
-          {submissionDataTab === "activity" ? <SubmissionBatchHistory /> : null}
+          {submissionDataTab === "activity" ? <SubmissionBatchHistory modelOptions={xmlModelOptions} /> : null}
           {submissionDataTab === "snapshot" ? (
             <>
           {!isLoadingWorkbookImportMonitoring && !hasWorkbookImportSnapshot && !workbookImportSummaryError ? (
@@ -3790,35 +3779,8 @@ export function App() {
           <section className="panel device-subject-summary-panel">
             <div className="device-subject-filter-column">
               <span className="section-kicker">Device Subjects</span>
-              <label className="read-model-filter-control">
-                <span>Family</span>
-                <select
-                  value={selectedDeviceSubjectFamily}
-                  onChange={(event) => setSelectedDeviceSubjectFamily(event.target.value)}
-                >
-                  <option value="">All families</option>
-                  {deviceSubjectFamilyOptions.map((family) => (
-                    <option key={family} value={family}>
-                      {family}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="read-model-filter-control">
-                <span>Variant</span>
-                <select
-                  value={selectedDeviceSubjectVariant}
-                  onChange={(event) => setSelectedDeviceSubjectVariant(event.target.value)}
-                  disabled={!deviceSubjectVariantOptions.length}
-                >
-                  <option value="">All variants</option>
-                  {deviceSubjectVariantOptions.map((variant) => (
-                    <option key={variant} value={variant}>
-                      {variant}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <DeviceModelFilter options={deviceSubjectModelOptions} family={selectedDeviceSubjectFamily} variant={selectedDeviceSubjectVariant}
+                onChange={(family, variant) => { setSelectedDeviceSubjectFamily(family); setSelectedDeviceSubjectVariant(variant); }} />
             </div>
             <div className="device-subject-detail-column">
               <div className="device-subject-summary-head">
@@ -4106,35 +4068,13 @@ export function App() {
           <section className="panel device-subject-summary-panel validation-selection-panel">
             <div className="device-subject-filter-column">
               <span className="section-kicker">Canonical Model</span>
-              <label className="read-model-filter-control">
-                <span>Family</span>
-                <select
-                  value={selectedValidationFamily}
-                  onChange={(event) => setSelectedValidationFamily(event.target.value)}
-                >
-                  <option value="">All families</option>
-                  {validationFamilySummaries.map((summary) => (
-                    <option key={summary.product_family} value={summary.product_family}>
-                      {summary.product_family}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="read-model-filter-control">
-                <span>Variant</span>
-                <select
-                  value={selectedValidationVariant}
-                  onChange={(event) => setSelectedValidationVariant(event.target.value)}
-                  disabled={!selectedFamilyVariantSummaries.length}
-                >
-                  <option value="">All variants</option>
-                  {selectedFamilyVariantSummaries.map((summary) => (
-                    <option key={summary.product_variant} value={summary.product_variant}>
-                      {summary.product_variant}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <DeviceModelFilter options={xmlModelOptions} family={selectedValidationFamily} variant={selectedValidationVariant}
+                searchQuery={validationModelSearch}
+                onSearchChange={(query) => {
+                  setValidationModelSearch(query);
+                  if (query.trim()) { setSelectedValidationFamily(""); setSelectedValidationVariant(""); }
+                }}
+                onChange={(family, variant) => { setSelectedValidationFamily(family); setSelectedValidationVariant(variant); }} />
             </div>
             <div className="device-subject-detail-column">
               <div className="device-subject-summary-head">
@@ -4423,7 +4363,7 @@ export function App() {
                 </div>
               </div>
             ) : (
-              <p className="panel-copy">No rows are currently available for the selected family and variant.</p>
+              <p className="panel-copy">No rows match the selected device model and search.</p>
             )}
           </section>
 
@@ -5424,20 +5364,21 @@ export function App() {
           <TestingSummaryWorkspace
             isLoading={isLoadingTestingSummary}
             error={testingSummaryError}
+            searchText={testingSummarySearch}
+            onSearchChange={setTestingSummarySearch}
             selectedFamily={selectedTestingSummaryFamily}
             selectedVariant={selectedTestingSummaryVariant}
-            familyOptions={testingSummaryFamilyOptions}
-            variantOptions={testingSummaryVariantOptions}
-            onFamilyChange={(value) => {
-              setSelectedTestingSummaryFamily(value);
-              setSelectedTestingSummaryVariant("");
+            modelOptions={xmlModelOptions}
+            onModelChange={(family, variant) => {
+              setSelectedTestingSummaryFamily(family);
+              setSelectedTestingSummaryVariant(variant);
             }}
-            onVariantChange={setSelectedTestingSummaryVariant}
             onClearFilters={() => {
+              setTestingSummarySearch("");
               setSelectedTestingSummaryFamily("");
               setSelectedTestingSummaryVariant("");
             }}
-            workspaceSummary={testingSummaryWorkspaceSummary}
+            workspaceSummary={searchedTestingWorkspaceSummary}
             metrics={testingSummaryMetrics}
             rows={testingSummaryRows}
             eventRows={testingSummaryEventRows}
@@ -5461,18 +5402,16 @@ export function App() {
             selectedStatus={selectedRegistrationStateStatus}
             searchText={registrationStateSearch}
             actionableOnly={registrationStateActionableOnly}
-            familyOptions={registrationStateFamilyOptions}
-            variantOptions={registrationStateVariantOptions}
+            modelOptions={xmlModelOptions}
             statusOptions={registrationStateStatusOptions}
             metrics={isLoadingReadiness || readinessError
               ? registrationStateMetrics.map((metric) => ({ ...metric, value: "—" }))
               : registrationStateMetrics}
             rows={registrationStateRows}
-            onFamilyChange={(value) => {
-              setSelectedRegistrationStateFamily(value);
-              setSelectedRegistrationStateVariant("");
+            onModelChange={(family, variant) => {
+              setSelectedRegistrationStateFamily(family);
+              setSelectedRegistrationStateVariant(variant);
             }}
-            onVariantChange={setSelectedRegistrationStateVariant}
             onStatusChange={setSelectedRegistrationStateStatus}
             onSearchChange={setRegistrationStateSearch}
             onActionableOnlyChange={setRegistrationStateActionableOnly}

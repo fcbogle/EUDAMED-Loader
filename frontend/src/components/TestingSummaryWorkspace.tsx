@@ -1,3 +1,4 @@
+import { DeviceModelFilter, type ModelFilterOption } from "./DeviceModelFilter";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import type { TestingSubjectReadModelSummary, TestingWorkspaceSummary } from "../types";
@@ -48,12 +49,12 @@ type TestingEventRow = {
 type TestingSummaryWorkspaceProps = {
   isLoading: boolean;
   error: string | null;
+  searchText: string;
+  onSearchChange: (query: string) => void;
   selectedFamily: string;
   selectedVariant: string;
-  familyOptions: string[];
-  variantOptions: string[];
-  onFamilyChange: (value: string) => void;
-  onVariantChange: (value: string) => void;
+  modelOptions: ModelFilterOption[];
+  onModelChange: (family: string, variant: string) => void;
   onClearFilters: () => void;
   workspaceSummary: TestingWorkspaceSummary | null;
   metrics: TestingMetric[];
@@ -90,12 +91,12 @@ function recentActivityLabel(summary: TestingSubjectReadModelSummary): string {
 export function TestingSummaryWorkspace({
   isLoading,
   error,
+  searchText,
+  onSearchChange,
   selectedFamily,
   selectedVariant,
-  familyOptions,
-  variantOptions,
-  onFamilyChange,
-  onVariantChange,
+  modelOptions,
+  onModelChange,
   onClearFilters,
   workspaceSummary,
   metrics,
@@ -109,7 +110,7 @@ export function TestingSummaryWorkspace({
   useEffect(() => {
     setEventPage(1);
     setExpandedEventKey(null);
-  }, [selectedFamily, selectedVariant]);
+  }, [selectedFamily, selectedVariant, searchText]);
   const totalEventPages = Math.max(1, Math.ceil(eventRows.length / eventPageSize));
   const currentEventPage = Math.min(eventPage, totalEventPages);
   const pagedEventRows = useMemo(() => {
@@ -121,46 +122,18 @@ export function TestingSummaryWorkspace({
 
   return (
     <section className="tab-stack">
-      <section className="panel testing-summary-panel">
+      <section className="panel testing-summary-panel testing-summary-search-panel">
         <div className="section-heading section-heading-spread">
           <div>
             <span className="section-kicker">Playground State</span>
             <h2>Testing Summary</h2>
           </div>
           <div className="testing-summary-filter-row">
-            <label className="read-model-filter-control testing-summary-filter-control" htmlFor="testing-summary-family">
-              <span>Family</span>
-              <select
-                id="testing-summary-family"
-                className="rule-select"
-                value={selectedFamily}
-                onChange={(event) => onFamilyChange(event.target.value)}
-              >
-                <option value="">All families</option>
-                {familyOptions.map((family) => (
-                  <option key={family} value={family}>
-                    {family}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="read-model-filter-control testing-summary-filter-control" htmlFor="testing-summary-variant">
-              <span>Variant</span>
-              <select
-                id="testing-summary-variant"
-                className="rule-select"
-                value={selectedVariant}
-                onChange={(event) => onVariantChange(event.target.value)}
-                disabled={!selectedFamily && variantOptions.length === 0}
-              >
-                <option value="">{selectedFamily ? "All variants" : "Select family first"}</option>
-                {variantOptions.map((variant) => (
-                  <option key={variant} value={variant}>
-                    {variant}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <DeviceModelFilter options={modelOptions} family={selectedFamily} variant={selectedVariant} onChange={onModelChange}
+              searchQuery={searchText} onSearchChange={(query) => {
+                if (query.trim()) onModelChange("", "");
+                onSearchChange(query);
+              }} />
             <button className="ghost-button testing-summary-clear-button" type="button" onClick={onClearFilters}>
               Clear filters
             </button>
@@ -169,7 +142,7 @@ export function TestingSummaryWorkspace({
 
         <div className="testing-summary-scope-row">
           <span className="status-pill ok compact">
-            {selectedFamily ? (selectedVariant ? `${selectedFamily} / ${selectedVariant}` : selectedFamily) : "All families"}
+            {selectedFamily ? (selectedVariant ? `${selectedFamily} / ${selectedVariant}` : selectedFamily) : "All models"}
           </span>
           <span className="status-pill ok compact">SQLite live</span>
           {workspaceSummary?.latest_tested_at ? (

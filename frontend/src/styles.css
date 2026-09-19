@@ -3889,7 +3889,6 @@ a.ghost-button:visited {
 
 /* Shared by every application workspace; target is supplied by the backend. */
 .environment-banner {
-  position: sticky; top: 0; z-index: 50;
   display: flex; align-items: center; gap: 22px;
   padding: 14px 22px; margin-bottom: 16px; border-radius: 12px;
   background: #f4f0e8; color: #45351b; border: 1px solid #d5c6a8;
@@ -3907,4 +3906,110 @@ a.ghost-button:visited {
 @media (max-width: 600px) {
   .environment-banner { gap: 12px; padding: 12px; flex-wrap: wrap; }
   .environment-ribbon { font-size: 0.8rem; padding: 6px 10px; }
+}
+
+/* Shared model filters select a complete family/variant scope. */
+.device-model-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+.device-model-filter > .read-model-filter-control {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.device-model-filter :is(input, select) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(76, 111, 122, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #002a3a;
+  font: inherit;
+}
+.device-model-filter-search-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  font-size: 0.82rem;
+  color: #355864;
+}
+.activity-filter-bar > .device-model-filter { flex: 2 1 440px; }
+.testing-summary-filter-row > .device-model-filter { flex: 1 1 440px; }
+
+/* Keep registration controls fixed while search feedback appears below them. */
+.registration-state-panel > .section-heading-spread {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.registration-state-filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr) auto auto;
+  align-items: start;
+  width: 100%;
+}
+.registration-state-filter-row > .device-model-filter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto minmax(38px, auto);
+  align-items: start;
+}
+.registration-state-filter-row .device-model-filter-search-status {
+  grid-column: 1 / -1;
+}
+.registration-state-filter-row > .read-model-filter-control {
+  min-width: 0;
+}
+.registration-state-filter-row > .registration-state-toggle,
+.registration-state-filter-row > .testing-summary-clear-button {
+  align-self: start;
+  margin-top: 24px;
+}
+@media (max-width: 1000px) {
+  .registration-state-filter-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .registration-state-filter-row > .device-model-filter { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) {
+  .registration-state-filter-row { grid-template-columns: minmax(0, 1fr); }
+  .registration-state-filter-row > .device-model-filter {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(38px, auto);
+  }
+  .registration-state-filter-row > .registration-state-toggle,
+  .registration-state-filter-row > .testing-summary-clear-button { margin-top: 0; }
+}
+
+.testing-summary-search-panel > .section-heading-spread {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.testing-summary-search-panel .testing-summary-filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+.testing-summary-search-panel .testing-summary-filter-row > .device-model-filter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto minmax(38px, auto);
+  align-items: start;
+}
+.testing-summary-search-panel .device-model-filter-search-status { grid-column: 1 / -1; }
+.testing-summary-search-panel .testing-summary-filter-row > button { margin-top: 24px; }
+@media (max-width: 600px) {
+  .testing-summary-search-panel .testing-summary-filter-row { grid-template-columns: minmax(0, 1fr); }
+  .testing-summary-search-panel .testing-summary-filter-row > .device-model-filter {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(38px, auto);
+  }
+  .testing-summary-search-panel .testing-summary-filter-row > button { margin-top: 0; }
 }

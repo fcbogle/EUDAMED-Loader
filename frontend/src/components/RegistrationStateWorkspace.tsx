@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import { DeviceModelFilter, type ModelFilterOption } from "./DeviceModelFilter";
 
 type RegistrationStateMetric = {
   label: string;
@@ -33,13 +33,11 @@ type RegistrationStateWorkspaceProps = {
   selectedStatus: string;
   searchText: string;
   actionableOnly: boolean;
-  familyOptions: string[];
-  variantOptions: string[];
+  modelOptions: ModelFilterOption[];
   statusOptions: string[];
   metrics: RegistrationStateMetric[];
   rows: RegistrationStateRow[];
-  onFamilyChange: (value: string) => void;
-  onVariantChange: (value: string) => void;
+  onModelChange: (family: string, variant: string) => void;
   onStatusChange: (value: string) => void;
   onSearchChange: (value: string) => void;
   onActionableOnlyChange: (checked: boolean) => void;
@@ -54,13 +52,11 @@ export function RegistrationStateWorkspace({
   selectedStatus,
   searchText,
   actionableOnly,
-  familyOptions,
-  variantOptions,
+  modelOptions,
   statusOptions,
   metrics,
   rows,
-  onFamilyChange,
-  onVariantChange,
+  onModelChange,
   onStatusChange,
   onSearchChange,
   onActionableOnlyChange,
@@ -75,39 +71,17 @@ export function RegistrationStateWorkspace({
             <h2>Registration State</h2>
           </div>
           <div className="testing-summary-filter-row registration-state-filter-row">
-            <label className="read-model-filter-control testing-summary-filter-control" htmlFor="registration-state-family">
-              <span>Family</span>
-              <select
-                id="registration-state-family"
-                className="rule-select"
-                value={selectedFamily}
-                onChange={(event) => onFamilyChange(event.target.value)}
-              >
-                <option value="">All families</option>
-                {familyOptions.map((family) => (
-                  <option key={family} value={family}>
-                    {family}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="read-model-filter-control testing-summary-filter-control" htmlFor="registration-state-variant">
-              <span>Variant</span>
-              <select
-                id="registration-state-variant"
-                className="rule-select"
-                value={selectedVariant}
-                onChange={(event) => onVariantChange(event.target.value)}
-                disabled={!selectedFamily && variantOptions.length === 0}
-              >
-                <option value="">{selectedFamily ? "All variants" : "Select family first"}</option>
-                {variantOptions.map((variant) => (
-                  <option key={variant} value={variant}>
-                    {variant}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <DeviceModelFilter
+              options={modelOptions}
+              family={selectedFamily}
+              variant={selectedVariant}
+              onChange={onModelChange}
+              searchQuery={searchText}
+              onSearchChange={(query) => {
+                if (query.trim()) onModelChange("", "");
+                onSearchChange(query);
+              }}
+            />
             <label className="read-model-filter-control testing-summary-filter-control" htmlFor="registration-state-status">
               <span>Status</span>
               <select
@@ -123,17 +97,6 @@ export function RegistrationStateWorkspace({
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="read-model-filter-control testing-summary-filter-control" htmlFor="registration-state-search">
-              <span>Search</span>
-              <input
-                id="registration-state-search"
-                className="text-input"
-                type="search"
-                value={searchText}
-                placeholder="Basic UDI-DI or variant"
-                onChange={(event: ChangeEvent<HTMLInputElement>) => onSearchChange(event.target.value)}
-              />
             </label>
             <label className="registration-state-toggle" htmlFor="registration-state-actionable">
               <input
@@ -152,7 +115,7 @@ export function RegistrationStateWorkspace({
 
         <div className="testing-summary-scope-row">
           <span className="status-pill ok compact">
-            {selectedFamily ? (selectedVariant ? `${selectedFamily} / ${selectedVariant}` : selectedFamily) : "All families"}
+            {selectedFamily ? (selectedVariant ? `${selectedFamily} / ${selectedVariant}` : selectedFamily) : "All models"}
           </span>
           <span className="status-pill ok compact">SQLite live</span>
           <span className="testing-summary-latest">

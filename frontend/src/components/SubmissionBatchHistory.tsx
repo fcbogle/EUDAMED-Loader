@@ -1,3 +1,4 @@
+import { DeviceModelFilter, mergeModelOptions, type ModelFilterOption } from "./DeviceModelFilter";
 import { Fragment, useEffect, useState } from "react";
 
 import { api } from "../api";
@@ -33,7 +34,7 @@ function statusLabel(batch: TestingBatchReadModelEntry): string {
   return "Generated";
 }
 
-export function SubmissionBatchHistory() {
+export function SubmissionBatchHistory({ modelOptions }: { modelOptions: ModelFilterOption[] }) {
   const [filters, setFilters] = useState({ product_family: "", product_variant: "", basic_udi_di: "", catalogue_numbers: "", date_from: "", date_to: "", message_type: "", status: "" });
   const [appliedFilters, setAppliedFilters] = useState(filters);
   const [batches, setBatches] = useState<TestingBatchReadModelEntry[]>([]);
@@ -78,15 +79,10 @@ export function SubmissionBatchHistory() {
     };
   }, [appliedFilters, page]);
 
-  const familyOptions = Array.from(new Set(filterOptionBatches.map((batch) => batch.product_family).filter(Boolean))).sort();
-  const variantOptions = Array.from(
-    new Set(
-      filterOptionBatches
-        .filter((batch) => batch.product_family === filters.product_family)
-        .map((batch) => batch.product_variant)
-        .filter(Boolean),
-    ),
-  ).sort();
+  const availableModels = mergeModelOptions([
+    ...modelOptions,
+    ...filterOptionBatches.map(batch => ({ family: batch.product_family ?? "", variant: batch.product_variant ?? "", basicUdiDis: batch.basic_udi_di ? [batch.basic_udi_di] : [] })),
+  ]);
 
   function toggleDetail(batchId: string): void {
     if (expandedBatchId === batchId) {
@@ -138,20 +134,8 @@ export function SubmissionBatchHistory() {
           What do you want to find? Search EUDAMED transactions by Basic UDI-DI, product family, variant, catalogue number, date, or operation.
         </p>
         <form className="activity-filter-bar" onSubmit={(event) => { event.preventDefault(); applyFilters(); }}>
-          <label className="read-model-filter-control activity-filter-control">
-            <span>Family</span>
-            <select aria-label="Product family" value={filters.product_family} onChange={(event) => setFilters({ ...filters, product_family: event.target.value, product_variant: "" })}>
-              <option value="">All product families</option>
-              {familyOptions.map((family) => <option key={family} value={family ?? ""}>{family}</option>)}
-            </select>
-          </label>
-          <label className="read-model-filter-control activity-filter-control">
-            <span>Variant</span>
-            <select aria-label="Product variant" value={filters.product_variant} onChange={(event) => setFilters({ ...filters, product_variant: event.target.value })} disabled={!filters.product_family}>
-              <option value="">{filters.product_family ? "All variants" : "Select family first"}</option>
-              {variantOptions.map((variant) => <option key={variant} value={variant ?? ""}>{variant}</option>)}
-            </select>
-          </label>
+          <DeviceModelFilter options={availableModels} family={filters.product_family} variant={filters.product_variant}
+            onChange={(family, variant) => setFilters({ ...filters, product_family: family, product_variant: variant })} />
           <label className="read-model-filter-control activity-filter-control">
             <span>Basic UDI-DI</span>
             <input aria-label="Basic UDI-DI" placeholder="Enter Basic UDI-DI" value={filters.basic_udi_di} onChange={(event) => setFilters({ ...filters, basic_udi_di: event.target.value })} />
