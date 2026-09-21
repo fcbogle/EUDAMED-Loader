@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings, validate_schema_package
+from app.config import PROJECT_ROOT, get_settings, validate_schema_package
 from app.routers import canonical, normalization, profiling, schemas, xml_generation
 from app.services.workbook_import import WorkbookImportService
 
@@ -56,4 +56,13 @@ def healthcheck() -> dict[str, str]:
 @app.get("/api/environment")
 def environment_context() -> dict[str, str]:
     """Expose the active target without disclosing actor settings or storage paths."""
-    return {"environment": get_settings().environment}
+    settings = get_settings()
+    packages = {
+        (PROJECT_ROOT / "data/schema_profiles/dev-3.0.32-derived").resolve(): "Derived package",
+        (PROJECT_ROOT / "data/schema_profiles/prod-3.0.30").resolve(): "Official package",
+    }
+    return {
+        "environment": settings.environment,
+        "message_schema_version": settings.eudamed_message_schema_version,
+        "schema_package": packages.get(settings.schema_dir.resolve(), "Custom package"),
+    }

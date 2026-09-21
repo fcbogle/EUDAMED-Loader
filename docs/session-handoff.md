@@ -1,14 +1,14 @@
 # Session Handoff
 
-Updated September 16, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated September 19, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
 ## Repository And Delivery Context
 
 - Branch observed during this refresh: `feature/testing-batches-audit`.
-- Latest commit observed: `2e33964`; the recent commits cover registration readiness, documentation refresh and exclusion of local production exports. `355d910` introduced the XML consolidation and ZIP-review rules.
+- Latest implementation commit observed: `61e368c` — `fix: align model searches across review workspaces`. `355d910` introduced the earlier XML consolidation and ZIP-review rules.
 - The implementation is committed. This handoff refresh is a separate documentation change; use `git status --short` for subsequent worktree status.
 - The application prepares, validates and packages EUDAMED XML, then records manually uploaded Playground acknowledgements. It does not submit XML through EUDAMED M2M transport.
-- Retain the existing UI layout and buttons. Preserve distinct operation-specific rules rather than combining all registration and update flows into one generic batch mode.
+- The owner approved a combined Device Model selector and aligned review filters. Preserve distinct operation-specific rules and exact-device selection when evolving these controls.
 - SQLite remains the active application store. Near-launch priorities include operational verification, bulk-generation performance and a trusted production baseline. Separate production deployment/import is not yet implemented. The first request-local XML performance improvements described below are implemented; real operator end-to-end timing remains to be measured.
 
 Follow [AGENTS.md](../AGENTS.md) for collaboration requirements. The owner has explicitly approved the ZIP-review design described below; that decision is resolved.
@@ -28,7 +28,36 @@ These are the six visible XML workspaces. Bulk Basic UDI POST remains a separate
 
 Use **Basic UDI-DI** for the shared regulatory parent and **Device UDI-DI** for the device identifier. `primary_udi_di` is the existing internal/API field name for Device UDI-DI. Catalogue numbers identify source/operator selections, not the EUDAMED entity itself.
 
-Bulk scope controls support all eligible/posted devices, next 10, next 25, selected catalogue numbers and imported catalogue lists. Backend eligibility still governs the resulting selection. The configured batch limit defaults to 300; callers must respect the operation's count validation rather than assume arbitrary batch sizes are accepted.
+Bulk scope controls support all eligible/posted devices, next 10, next 25, selected catalogue numbers and imported catalogue lists. Bulk UDI-DI POST additionally supports **Next 100 records**; do not assume that option exists in every bulk operation. Backend eligibility still governs the resulting selection. The configured batch limit defaults to 300; callers must respect the operation's count validation rather than assume arbitrary batch sizes are accepted.
+
+## September 19 UI Changes And Current Handoff
+
+The owner plans further manual testing followed by sending the reconciliation workbook and Questions tab to Quality. Treat the application as ready for final testing and Quality review, not as evidence of an approved production release. Source currency, missing workbook data, production registration discrepancies and the accepted baseline still need confirmation.
+
+### Device Model Selection
+
+- [DeviceModelSelector.tsx](../frontend/src/components/DeviceModelSelector.tsx) replaces the two-stage family-then-variant panels in all six XML workspaces: Single POST, Single PATCH, Bulk POST, Bulk PATCH, Single Market Info and Bulk Market Info.
+- Each row is one existing family/variant pair, labelled by model, with family, available Basic UDI-DIs, device count and XML-ready/blocked counts. Select a model directly, including Echelon VAC, without first selecting Echelon. The list scrolls and offers text search plus an optional family filter.
+- Searching the XML selector narrows its choices; it does not silently change the active generation scope. Select a row to change scope. Family/variant fields, API parameters, canonical mappings and database identities remain intact; no database migration or new model entity was introduced.
+- [DeviceModelFilter.tsx](../frontend/src/components/DeviceModelFilter.tsx) supplies combined model selection with **All models** in Device Subjects, Canonical Model, Registration State, Testing Summary and EUDAMED Activity. Same-name models in different families remain distinct.
+
+### Live Review Searches
+
+- Canonical Model search now filters Source Sheet to Basic UDI, the selected record shown in Canonical Mapping, and scope counts. It searches family/model/Basic UDI-DI, rather than just narrowing the dropdown. Canonical Mapping remains a field view of the selected matching record, not a list of every matching child.
+- Registration State has one live search instead of two competing search boxes. Rows and summary counts follow the search; status and actionable-only filters continue to apply.
+- Testing Summary search filters model rows, success/readiness counts, recent successful testing and testing events. Changing search resets event pagination and expanded event detail. Recent subjects are filtered before choosing the latest five.
+- In these three review screens, entering nonblank search clears an older family/variant selection so it cannot hide another model's matches. Selecting a model clears search; clear/reset restores the appropriate unsearched scope. Matching ignores case and surrounding whitespace and supports partial identifiers. No match produces empty results.
+- Device Subjects and EUDAMED Activity still use search to narrow model choices; choosing a model applies its family/variant pair. Activity retains its Apply filters step and independent Basic UDI-DI filter. Do not describe every search box as live result filtering.
+- Registration Footprint and Testing Summary use stable grid layouts with reserved search-feedback space. Browser verification remains necessary at desktop and narrow widths.
+- Testing Summary subject/event requests retain their existing 10,000-item limits. Searched success counts derive from loaded successful events; the UI labels them as loaded-event-only when that limit is reached. This is not unlimited server-side search or proof of complete historical coverage.
+
+### Environment Banner
+
+[EnvironmentBanner.tsx](../frontend/src/components/EnvironmentBanner.tsx) appears at the top of every application page. It reads `GET /api/environment` from the connected backend: Dev displays **PLAY / EUDAMED Playground**, Prod displays **PRODUCTION / EUDAMED Production**. Pending or failed lookup stays **UNCONFIRMED**, with Retry on failure; it does not guess the environment from the browser build. The endpoint returns the profile name, configured message schema version and package label without exposing actor settings or storage paths. The banner shows the schema version prominently alongside Derived package (the bundled Dev profile), Official package (the bundled Prod profile), or Custom package (other paths). These labels describe configured package provenance, not an EUDAMED recommendation or runtime integrity certification.
+
+The banner **scrolls with the page**. Sticky positioning was deliberately removed at the owner's request. It is an indicator, not an environment switch or proof of data provenance. Frontend API wiring still uses `http://localhost:8000/api`; deployment-specific frontend routing remains work to confirm before release.
+
+Frontend-only edits normally need a browser refresh under Vite Dev, not a backend restart. Changes to backend profile configuration require restarting the backend with the intended profile.
 
 ## Review, Generation And Acceptance
 
@@ -160,9 +189,34 @@ The current `BasicUDIs.xlsx` uses two sheets: `Upload(BasicUDI not registered)` 
 
 Parent registration does not prove child registration. Workbook POST/PATCH labels express source intent; accepted EUDAMED device identity/state must govern production eligibility. Workbooks supply proposed data, not proof of acceptance.
 
-The current environment is now called **Dev** (targeting Playground). September 19 configuration work adds separate Dev/Prod startup profiles in one codebase: `.env.dev` and `.env.prod`, explicit schema selection, isolated storage paths and startup checks. Run `python -m app.run --environment dev --check-config` from `backend/` for read-only validation. Dev retains its existing database and source paths; Prod requires explicit configuration and actor identities. See [environment profiles](environment-profiles.md). UI labels, controlled production database initialization/import and full generation verification against both profiles remain pending. No production database or acceptance data was created. Do not copy Playground successes into production acceptance.
+The current environment is now called **Dev** (targeting Playground). September 19 configuration work adds separate Dev/Prod startup profiles in one codebase: `.env.dev` and `.env.prod`, explicit schema selection, isolated storage paths and startup checks. Run `python -m app.run --environment dev --check-config` from `backend/` for read-only validation. Dev retains its existing database and source paths; Prod requires explicit configuration and actor identities. See [environment profiles](environment-profiles.md). UI environment labels are implemented. Controlled production database initialization/import and full generation verification against both profiles remain pending. No production database or acceptance data was created. Do not copy Playground successes into production acceptance.
 
 Establish Production through a controlled, reviewed import/reconciliation of complete production exports: preserve originals, validate scope/pagination/encoding, match UDI-DI plus issuing entity and parent links, then store accepted fields, separate parent/device/Market Info versions, country lists, dates and provenance. Confirm registered parents without children are covered too. Missing identities in an unverified export remain unknown. Imports must not overwrite newer acceptance or silently preserve stale pending packages. Export reconciliation is a dated snapshot, not continuous synchronization; M2M remains deferred. Imported acceptance needs its own explicit provenance path, not fabricated POST acknowledgements.
+
+### Production Hold And Incremental Loader Direction
+
+The owner has decided to wait for Quality to confirm the master workbook structure before creating the Production environment or database. The proposed frontend-only Production preview was cancelled before any changes were made. Dev remains available for testing. Do not initialize Production or copy the Dev database as part of loader planning.
+
+After workbook confirmation, design a reusable incremental loader for subsequent workbooks using the same structure. The requested watermark should identify successfully imported device identities and row content, not simply the last Excel row number: rows can be reordered, inserted or moved between sheets.
+
+Proposed import contract, to be finalized with the owner before implementation:
+
+| Row classification | Proposed action |
+| --- | --- |
+| New device identity | Propose adding the device. |
+| Existing identity with unchanged content | Skip; repeated imports must not create duplicates. |
+| Existing identity with changed content | Present differences for review before updating proposed source data. |
+| Duplicate or conflicting identity | Block affected rows and report the conflict. |
+| Previously imported identity absent from the workbook | Report the absence; do not automatically delete the device. |
+
+- Identify parents by Basic UDI-DI plus issuing entity, and children by Device UDI-DI plus issuing entity. Validate each child's parent assignment; catalogue numbers and Excel row positions are provenance, not the import identity.
+- Record the workbook fingerprint, sheet/row provenance, device identity, normalized row-content fingerprint and import batch for each successful import. Define normalization and fingerprint rules against the Quality-approved structure so formatting or row order does not masquerade as a device change.
+- Commit imported data and its watermark together. Failed imports must not advance the watermark. Reimporting identical content must be idempotent. Decide whether valid rows can be committed alongside blocked rows, and document retry behavior, before implementation.
+- Proposed operator flow: upload workbook, validate, review differences, confirm import, then download the results report.
+- Workbook imports update proposed source/canonical data only. They must not overwrite accepted EUDAMED registration, device/PATCH versions or Market Info state. Establishing the trusted Production accepted baseline remains a separate reconciliation/import responsibility.
+- Extend the existing SQLite import batches, source lineage and stable device identity where suitable; first assess what the current importer already supports. This direction does not authorize a replacement database, a new canonical model or an implemented loader yet.
+
+Next sequence: obtain Quality's workbook-structure confirmation; review loader mapping, identity, validation, watermark and transaction rules with the owner; implement and verify with synthetic fixtures; then agree controlled Production initialization and baseline population.
 
 ### Recorded Production Export Review — September 2026
 
@@ -174,7 +228,7 @@ Local files live in `docs/xml_eudamed/`, now ignored and untracked; earlier Git 
 - Device versions: 17 at v1, 316 at v2, 27 at v3. Market Info: 354 at v1, three at v2, three missing explicit version/state. All devices contain country lists.
 - Missing Market Info metadata: `05050649091223` (`p239443`), `05050649091216` (`P239143`), `05050649091162` (`P019267`), under `5050649COMPACTSAKLM3`, in `APP-DTX-000103955.xml`. Each lists Germany with original-placement true. Preserve unknown versions; absence does not prove no prior changes or invalid registration.
 - `APP-DTX-000103944.xml` and `APP-DTX-000103948.xml` declare UTF-8 but contain Windows-1252 apostrophes. Inspection used an explicit encoding override without changing originals. Controlled import must handle and report this explicitly.
-- Export schema is 3.0.30; outgoing configuration is 3.0.32. Import compatibility must be verified separately. Production actor configuration must not inherit the earlier Playground SRN `UK-MF-000033261`.
+- Export schema is 3.0.30; outgoing Dev configuration is 3.0.32 and Prod configuration is 3.0.30. Import compatibility must be verified separately. Production actor configuration must not inherit the earlier Playground SRN `UK-MF-000033261`.
 - Comparison with stored workbook import 4, dated September 3: 2,529 distinct PATCH-classified canonical devices, all Echelon. Only four export identities match that PATCH set; one matches POST (`EVAC22L1S`, production device v2); 355 have no matching imported canonical identity. Conversely, 2,525 PATCH identities are absent from the export. These are dated identity-reconciliation findings, not proof those devices are unregistered. Assurance-team confirmation of scope and classification is outstanding.
 
 ## Bulk POST And Bulk PATCH Performance Direction
@@ -236,6 +290,11 @@ Choose the action by service/operation rather than single versus bulk packaging.
 
 ## Verification And Next Work
 
+Latest September 19 UI verification: **48 frontend Node tests passed** and the TypeScript/Vite build passed. Coverage includes model pair selection, Basic UDI search, clearing/resetting scopes, environment lookup and event-pagination reset. These are component/helper/hook checks, not full browser end-to-end tests. The existing Vite warning for a JavaScript chunk over 500 kB remains. Removing banner stickiness was a subsequent CSS-only edit checked with `git diff --check`. No new full backend run was performed for these frontend changes.
+
+Environment work previously passed the full backend suite (199 tests, 239.30 seconds); the focused profile suite subsequently passed 25 tests, and the banner/profile focused run passed 27. Keep those dated results distinct from the latest frontend run.
+
+
 September 16 performance-stage verification: the complete backend suite passed (175 tests, 238.90 seconds), all 28 frontend tests passed, and the production build passed with the existing bundle-size warning. The 25 new synthetic preparation regressions include HTTP response contracts and transaction rollback/concurrency checks. The performance report contains before/after service timings; live browser/network and representative imported-data measurements remain outstanding.
 
 September 16 correctness-fix verification: the complete backend suite passed (150 tests, 245.21 seconds), all 28 frontend Node tests passed, and the TypeScript/production build passed with the existing bundle-size warning. New regression coverage exercises missing latest accepted payloads, single/bulk PATCH blocking, duplicate-acknowledgement recovery, delayed previews in all six workspaces, changed inputs, overlapping requests and unmounting. These are automated checks; browser interaction and live Playground verification remain outstanding.
@@ -261,7 +320,7 @@ Subsequent readiness-fix verification: all 11 frontend tests and the production 
 
 Next priorities:
 
-1. Manually verify previews, ZIP review feedback, draft edits, exact-device selection and acknowledgement refresh across the six visible workspaces, including navigation while an upload is in flight.
+1. Verify model search/selection across all six XML operations and the review screens, unmatched Basic UDI-DIs, reset, recent testing/event pagination, stable controls and the non-sticky environment banner. Then manually verify previews, ZIP review feedback, draft edits, exact-device selection and acknowledgement refresh across the six visible workspaces, including navigation while an upload is in flight.
 2. In controlled Playground testing, verify retained countries in PATCH after Market Info changes, mixed-baseline bulk Market Info, mixed success/error responses, duplicate uploads and delayed older acknowledgements. Use downloaded payloads with recorded generation context; previews alone do not create that history.
 3. Review legacy accepted records with missing/partial snapshots before claiming complete source-drift protection. Choose a trusted recovery approach rather than filling historical acceptance from current workbook data.
 4. Gradually replace remaining text-based identity lookups with `device_subject_id` joins, preserving existing data and lineage. Broader canonical/submission persistence remains a separate design increment.
@@ -302,4 +361,4 @@ ORDER BY id DESC LIMIT 30;
 
 Implementation detail and regression scope: [XML workflow consolidation](code-consolidation-2026-09-09.md). The [SQLite event-logging proposal](sqlite-event-logging-schema-proposal.md) and [architecture draft](architecture-definition-draft.md) contain broader/historical design material; compare them with current code before treating proposed elements as missing features.
 
-September 19 environment-profile verification: full backend suite 199 passed in 239.30 seconds; the focused profile suite subsequently passed 25 tests including an additional real-package Prod check that created no database or directories. Configuration is implemented; UI labelling and production baseline import remain pending.
+September 19 environment-profile verification: full backend suite 199 passed in 239.30 seconds; the focused profile suite subsequently passed 25 tests including an additional real-package Prod check that created no database or directories. Configuration and UI labelling are implemented; controlled production baseline import remains pending.

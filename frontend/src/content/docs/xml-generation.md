@@ -28,20 +28,23 @@ These modes are intentionally separate because they represent different regulato
 
 ## Current Selection Model
 
-The current XML workflows are assessment-first rather than record-pick-first.
+The XML workflows use a single `Device Model` selector. Each model represents an existing Product Family / Product Variant pair; for example, `Echelon VAC` can be selected directly without first selecting `Echelon`.
 
 The usual flow is:
 
-1. select `Product Family`
-2. select `Product Variant`
-3. let the backend assess the current tracked operational state
-4. generate only the next valid XML candidate for that operation
+1. Find a model by name, family or Basic UDI-DI; optionally narrow the list by family.
+2. Select the `Device Model` row to set the family and variant together. Searching the list alone does not change the active selection.
+3. Let the backend assess the tracked operational state for the selected model and operation.
+4. Choose any operation-specific device, parent or bulk scope, then generate XML for the eligible selection. Single POST resolves the next eligible candidate; PATCH and Market Info preserve the selected device and its accepted lineage.
 
-This is important because the next valid operation may differ depending on tracked state:
+This selector is shared by Single POST, Single PATCH, Single Market Info, Bulk POST, Bulk PATCH and Bulk Market Info. It changes the selection UI, not the underlying family/variant fields or database structure.
+
+Backend assessment still determines eligibility:
 
 - a `POST` may need to seed a new Basic UDI-DI parent registration
-- a `POST` may instead be the next available child Device UDI-DI registration
-- a `PATCH` may only be available if the device has tracked accepted lineage
+- a `POST` may instead register the next eligible child Device UDI-DI under an accepted parent
+- a `PATCH` requires the selected device's tracked accepted lineage
+- Market Info and bulk operations retain their own registration, version and scope rules
 
 ## Current Supported Outputs
 

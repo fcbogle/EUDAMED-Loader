@@ -4013,3 +4013,22 @@ a.ghost-button:visited {
   }
   .testing-summary-search-panel .testing-summary-filter-row > button { margin-top: 0; }
 }
+
+.environment-banner { flex-wrap: wrap; }
+.environment-banner .environment-schema {
+  margin-left: auto;
+  padding: 8px 16px;
+  border-left: 1px solid currentColor;
+  gap: 2px;
+}
+.environment-banner .environment-schema strong { font-size: 1.35rem; line-height: 1.2; }
+.environment-banner .environment-schema > span { font-size: 0.8rem; }
+@media (max-width: 600px) {
+  .environment-banner .environment-schema {
+    margin-left: 0;
+    width: 100%;
+    padding: 10px 0 0;
+    border-left: 0;
+    border-top: 1px solid currentColor;
+  }
+}

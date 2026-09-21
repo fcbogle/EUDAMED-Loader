@@ -2,7 +2,7 @@
 
 ## Document Status And Purpose
 
-Updated September 9, 2026 against implementation commit `355d910` — `Consolidate XML workflows and confirm review through ZIP downloads` — and the current [session handoff](session-handoff.md).
+Updated September 19, 2026 against implementation commit `61e368c` — `fix: align model searches across review workspaces` — and the current [session handoff](session-handoff.md).
 
 This document describes the application's architecture, responsibilities, state transitions and design boundaries. Implemented behavior is distinguished from future production and transport proposals. The handoff contains session continuity and verification details; the [Playground test report](eudamed-playground-test-report.md) contains execution evidence. Historical Playground findings do not establish current production registration state.
 
@@ -41,7 +41,7 @@ The six visible XML workspaces are:
 
 Bulk Basic UDI POST remains a separate supported backend/API operation. Its inaccessible frontend branch was removed, as was the old generic Single XML frontend branch. Backend single-record endpoints and directly tested generic batch compatibility helpers remain; those generic batch helper functions are not decorated HTTP routes. The former Post + Patch baseline-pair workspace is obsolete.
 
-Out of scope for the current implementation are direct EUDAMED upload, AS4/eDelivery/M2M transport, automatic response polling, production reconciliation and the final production submission/audit model. Existing package/event history is implemented evidence, but should not be described as a complete production audit solution.
+Out of scope for the current implementation are direct EUDAMED upload, AS4/eDelivery/M2M transport, automatic response polling, automated production baseline reconciliation/import and the final production submission/audit model. Existing package/event history is implemented evidence, but should not be described as a complete production audit solution.
 
 ## Stakeholders And Responsibilities
 
@@ -66,7 +66,7 @@ These are responsibility assignments, not a claim that application role-based ac
 6. Derive PATCH from accepted device state and retain the separately accepted Market Info countries.
 7. Preview generation is a check; ZIP download confirms review of the packaged contents; only a successful acknowledgement advances accepted state.
 8. Preserve immutable historical evidence while preventing old acknowledgements from rolling back newer accepted projections.
-9. Retain the current UI layout and controls; remove unused branches rather than restoring unsupported operator paths.
+9. Use direct Device Model selection over existing family/variant identity, while preserving operation-specific controls and exact-device context.
 10. Evolve the existing SQLite model incrementally, without silently reinterpreting historical data.
 
 ## Application And Logical Architecture
@@ -174,7 +174,7 @@ The three nullable review columns are added through existing schema initializati
 
 ### POST And Child Registration
 
-Single POST is assessment-first: the family/variant selection resolves the next eligible candidate, avoiding already registered Device UDI-DIs. An unregistered Basic UDI-DI requires a parent seed using `DEVICE.POST`; subsequent child-only registration uses `UDI_DI.POST` and references that parent through `basicUDIIdentifier`.
+Single POST is assessment-first: the Device Model selection (an existing family/variant pair) resolves the next eligible candidate, avoiding already registered Device UDI-DIs. An unregistered Basic UDI-DI requires a parent seed using `DEVICE.POST`; subsequent child-only registration uses `UDI_DI.POST` and references that parent through `basicUDIIdentifier`.
 
 Bulk Basic UDI POST keeps parent registration separate at the backend/API boundary. Bulk UDI-DI POST includes eligible unregistered children under accepted parents. A source row or reviewed ZIP does not establish parent/child registration success.
 
@@ -239,9 +239,41 @@ Retain the existing assessment cards, scenario editors, preview cards, metadata/
 
 Submission Data reads SQLite import/snapshot/monitoring information; it is not a live direct-Excel inventory. Registration State and Testing Summary consume operational readiness and history. `App.tsx` remains substantial, but the removed Single XML/Bulk Basic UDI UI branches, unused clients/types/state and generic preview component are no longer current risks to remove again.
 
+### Model Selection And Search Contract
+
+The shared [DeviceModelSelector](../frontend/src/components/DeviceModelSelector.tsx) replaces hierarchical family/variant selection across the six visible XML operations. One row selects the complete pair; the row shows model, family, available Basic UDI-DIs, device count and XML-ready/blocked counts. A scrollable list, optional family filter and name/identifier search accommodate a larger production catalogue. Searching choices does not change generation scope until a row is selected.
+
+The current selection flow is:
+
+1. Find a model by name, family or Basic UDI-DI, with an optional family filter.
+2. Select one Device Model row to set family and variant together.
+3. Let backend assessment determine eligibility for that model and operation.
+4. Choose any required device, parent or bulk scope and generate the eligible XML. Single POST resolves the next eligible candidate; PATCH and Market Info preserve the selected device's accepted lineage.
+
+The UI model is a presentation of the existing family/variant pair, not a new canonical entity. Database fields, API scope, parent/device identifiers and accepted-state lineage remain unchanged. A pair may expose multiple Basic UDI-DIs; model selection does not replace operation-specific parent or exact-device selection.
+
+[DeviceModelFilter](../frontend/src/components/DeviceModelFilter.tsx) provides combined selection and an All models option in Device Subjects, Canonical Model, Registration State, Testing Summary and EUDAMED Activity. Canonical Model, Registration State and Testing Summary connect a controlled search to their displayed data. Typing clears older model scope, model selection clears the query, and unmatched searches show empty results. The other two workspaces use search to narrow choices; Activity retains explicit filter application.
+
+Canonical search scopes source-sheet mappings, record selection and counts; Canonical Mapping displays the selected matching record's fields. Registration search scopes rows and metrics alongside status/actionable filters. Testing Summary scopes rows, counts, recent subjects and event history, resetting event pagination and expanded detail when search changes. Matching is case-insensitive with trimmed partial identifiers. Search-feedback space is reserved in the Registration Footprint and Testing Summary filter grids.
+
+Testing Summary still loads at most 10,000 subjects and 10,000 events per request. Search filters loaded data; searched success metrics count matching successful events and disclose the loaded-event limit when reached. This does not introduce unlimited server-side history search.
+
+### Environment Identity And Schema Profiles
+
+One codebase supports Dev (Playground) and Prod through explicit backend startup selection and isolated `.env.dev` / `.env.prod` configuration. Process settings take precedence over the selected file; dotenv loading does not mutate process state. Prod never silently loads the legacy Dev `.env`. See [environment profiles](environment-profiles.md) for startup commands, configuration precedence and storage/actor checks.
+
+| Profile | Schema bundle | Message version |
+| --- | --- | --- |
+| Dev | `data/schema_profiles/dev-3.0.32-derived` | 3.0.32; derived from the historical 3.0.30 bundle, not an official 3.0.32 distribution. |
+| Prod | `data/schema_profiles/prod-3.0.30` | Official downloaded 3.0.30 package. |
+
+Startup validates the selected message constraint and compiles the schema before database-backed services start. Prod requires explicit actor/source/storage settings, isolated writable paths and a separate SQLite database. The SQLite schema design remains shared. Profile support does not initialize an approved production baseline, migrate acceptance from Dev or provide EUDAMED transport. Read-only `--check-config` supports configuration review without creating a database.
+
+The shared [EnvironmentBanner](../frontend/src/components/EnvironmentBanner.tsx) obtains the active profile from `GET /api/environment`. It shows PLAY / EUDAMED Playground for Dev and PRODUCTION / EUDAMED Production for Prod, with the backend-configured message schema version and package provenance alongside. Known bundled schema paths are labelled Derived package or Official package; other paths are labelled Custom package. Labels are not a runtime integrity certification or a claim of EUDAMED recommendation. Loading/errors remain unconfirmed, with retry after failure. It appears above every workspace and scrolls normally with the page, as requested by the owner. This is a backend-profile indicator, not an environment selector or validation of database contents. The frontend currently targets `http://localhost:8000/api`; deployment-specific routing still needs configuration.
+
 ## Configuration, Evidence And Verification
 
-The repository defaults to Python 3.11, message schema `3.0.32` and a configurable batch limit of 300. XML testing services use the imported canonical projection; compatibility/non-import-required service paths can still use workbook fallback.
+The repository uses Python 3.11, profile-selected message schemas (Dev `3.0.32`, Prod `3.0.30`) and a configurable batch limit of 300. Bulk UDI-DI POST also offers Next 100 records for operator selection. XML testing services use the imported canonical projection; compatibility/non-import-required service paths can still use workbook fallback.
 
 Testing actor configuration includes `EUDAMED_MANUFACTURER_SRN_OVERRIDE`, `EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE` and `EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE`. These controls must match the actual testing environment. The message-schema default reflects the recorded August 9 Playground requirement and bundled local schema; it is not a newly verified public EUDAMED release claim.
 
@@ -254,14 +286,14 @@ Last implementation verification recorded on September 9:
 - Frontend: 11 Node-based TypeScript/helper/hook tests passed through `npm --prefix frontend test`.
 - Production builds include TypeScript unused-local/parameter checks. These tests are not full browser interaction or visual-comparison tests.
 
-The preceding handoff refresh reduced bundled Markdown enough to remove the Vite bundle-size warning. Recheck the production build when editing imported documentation. This architecture refresh validates its links, diff and frontend build; the backend suite is not rerun merely for prose changes.
+Latest September 19 frontend verification passed all 48 tests and the TypeScript/Vite build, with the existing chunk-size warning above 500 kB. The environment-profile full backend run passed 199 tests in 239.30 seconds; later focused profile/banner checks passed 27 tests. Banner scrolling was a subsequent CSS-only change. Manual browser and live EUDAMED checks remain separate. Recheck the production build when editing imported documentation. This architecture refresh validates its links, diff and frontend build; the backend suite is not rerun merely for prose changes.
 
 ## Current Constraints And Remaining Risks
 
 - Playground state and production registration truth may differ. Source classification, ZIP review and local XSD validity are not substitutes for accepted regulatory evidence.
 - Legacy partial/missing snapshots limit historical reconstruction and source-drift protection. Trusted recovery needs deliberate design.
 - Some identity resolution still uses strings/aliases alongside `device_subject_id` links. Cleanup must preserve source and event lineage.
-- Per-device bulk derivation may be expensive for larger selections. Measure representative workloads before changing generation or snapshot semantics.
+- Request-local generation preparation and batched state writes are implemented for POST/bulk POST/bulk PATCH; see the [performance report](xml-generation-performance-2026-09-16.md). Representative browser/network measurements remain necessary; synthetic timings are not production guarantees.
 - The latest consolidation and ZIP-review changes still need manual browser and controlled Playground verification.
 - Artifact hashes identify reviewed contents but do not provide archive recovery. Operators must retain ZIP/XML artifacts; broader retention/replay controls are not complete.
 - `App.tsx` can benefit from further bounded extraction, but existing workflow layout and controls should remain stable.
@@ -272,6 +304,10 @@ The preceding handoff refresh reduced bundled Markdown enough to remove the Vite
 The next implementation priorities are operational verification, trusted handling of legacy accepted-state gaps and gradual migration from text matching to stable device-subject joins. Batch tables, accepted-state snapshots, package review receipts and assessment contracts are already implemented; they are not prerequisites still waiting to be built.
 
 Broader canonical/submission persistence, richer scenario intent and replay tooling should be separate increments. Additional dependencies or generic workflow abstractions are not implied by this documentation update.
+
+### Quality Review And Production Baseline
+
+The reconciliation workbook and its Questions tab support Quality review of source currency, missing workbooks/data and production XML evidence. These are review artifacts, not an implemented production database import. A device absent from supplied XML remains registration-unconfirmed unless export completeness and scope establish otherwise. The owner plans final manual testing before sending the workbook/questions to Quality; this is not production release approval. Controlled initialization/import and generation verification against both profiles remain outstanding.
 
 ### Future Production Eligibility
 
@@ -287,4 +323,4 @@ Market Info remains a separate state/version domain in the current design. Produ
 
 Only after the manual workflow and state model are proven should the project design automated submission, polling, retries, reconciliation, production security and support ownership. Formal availability/performance requirements, deployment topology, artifact retention, audit expectations and access-control responsibilities still need stakeholder input.
 
-The current architecture decisions are settled for this delivery slice: SQLite remains active; parent/child/update flows remain distinct; backend assessment owns readiness; accepted snapshots govern derivation where available; ZIP download confirms exact-artifact review; acknowledgement reconciliation alone changes accepted state; and the existing visible UI is retained.
+The current architecture decisions are settled for this delivery slice: SQLite remains active; parent/child/update flows remain distinct; backend assessment owns readiness; accepted snapshots govern derivation where available; ZIP download confirms exact-artifact review; acknowledgement reconciliation alone changes accepted state; and model selection preserves the underlying family/variant and exact-device identities.

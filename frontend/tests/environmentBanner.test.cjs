@@ -20,10 +20,12 @@ function harness(response) {
 }
 for (const [environment, label] of [['dev','EUDAMED Playground'],['prod','EUDAMED Production']]) {
   test(`banner uses backend ${environment} identity after starting unconfirmed`, async () => {
-    const h=harness(() => Promise.resolve({environment}));
+    const h=harness(() => Promise.resolve({environment, message_schema_version: environment === "dev" ? "3.0.32" : "3.0.30", schema_package: environment === "dev" ? "Derived package" : "Official package"}));
     assert.match(h.render(), /UNCONFIRMED/);
     const cleanup=h.mount(); await new Promise(setImmediate);
-    assert.ok(h.render().includes(label)); assert.ok(!h.render().includes('UNCONFIRMED')); cleanup();
+    assert.ok(h.render().includes(label));
+    assert.ok(h.render().includes(environment === 'dev' ? '3.0.32' : '3.0.30'));
+    assert.ok(h.render().includes(environment === 'dev' ? 'Derived package' : 'Official package')); assert.ok(!h.render().includes('UNCONFIRMED')); cleanup();
   });
 }
 for (const response of [() => Promise.resolve({environment:'invalid'}), () => Promise.reject(new Error('offline'))]) {
@@ -33,3 +35,11 @@ for (const response of [() => Promise.resolve({environment:'invalid'}), () => Pr
     assert.ok(!text.includes('EUDAMED Production'));assert.ok(!text.includes('EUDAMED Playground'));cleanup();
   });
 }
+
+test('older backend does not cause the banner to invent schema details', async () => {
+  const h = harness(() => Promise.resolve({ environment: 'dev' }));
+  h.render(); const cleanup = h.mount(); await new Promise(setImmediate);
+  assert.match(h.render(), /Package unconfirmed/);
+  assert.ok(!h.render().includes('3.0.32'));
+  cleanup();
+});
