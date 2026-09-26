@@ -2,6 +2,37 @@
 
 Updated September 19, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+
+## September 25 — Catalogue Selection Dialog And Javelin Checkpoint
+
+Bulk POST, Bulk PATCH and Bulk Market Info now use a shared `CatalogueSelection`
+dialog for **Select catalogue numbers**. Choose **Select devices**, search by
+catalogue number or Device UDI-DI, tick devices, then **Apply selection** to return
+to a compact count and **Edit selection** button. The list appears immediately and
+scrolls inside the dialog. Search preserves hidden selections; **Show selected
+only** and **Clear selection** are available. Cancel, Escape and the close button
+discard draft changes. Existing presets and catalogue-list import remain available;
+no custom numeric count was added.
+
+Selections remain independent between operations, clear on model/parent changes,
+and are filtered against available entries. Applying a changed selection feeds the
+existing preview invalidation and backend eligibility checks. No registration rules,
+XML generation, database schema or accepted-state logic changed.
+
+Verification: 53 frontend Node tests passed, including four new synthetic selection
+interaction tests; TypeScript/Vite production build passed with the existing >500 kB
+bundle warning. These are hook/control tests, not a browser accessibility or visual
+verification. Manually check desktop/mobile layout, keyboard focus and selection in
+all three workspaces. The next operator exercise is selecting five additional
+Javelin children through the new Bulk POST dialog.
+
+Read-only Dev database check confirmed **10 distinct registered Javelin children**
+under `5050649JAVELINTY`: `JAV22L1S` from `DEVICE.POST`, plus nine children from
+`UDI_DI.POST`. All ten have matching generated/accepted full snapshots at device
+version 1, linked device identities, and Market Info resolving from the accepted POST
+to version 1 with 25 countries. 456 imported Javelin devices remain without recorded
+POST success. This is a dated local checkpoint, not a live Playground inventory.
+
 ## Repository And Delivery Context
 
 - Branch observed during this refresh: `feature/testing-batches-audit`.

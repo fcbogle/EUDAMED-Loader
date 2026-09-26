@@ -1,3 +1,4 @@
+import { CatalogueSelection } from "./CatalogueSelection";
 import type { Dispatch, SetStateAction } from "react";
 
 import type { BulkPatchPostedEntry, BulkPatchPostedParentGroup, CriticalWarningCodeOption, XmlValidationResult } from "../types";
@@ -22,9 +23,6 @@ type BulkPatchWorkspaceProps = {
   bulkPatchScopeMode: BulkPatchScopeMode;
   onScopeModeChange: (value: BulkPatchScopeMode) => void;
   bulkPatchPostedEntries: BulkPatchPostedEntry[];
-  bulkPatchCatalogueFilter: string;
-  onBulkPatchCatalogueFilterChange: (value: string) => void;
-  bulkPatchFilteredPostedEntries: BulkPatchPostedEntry[];
   selectedBulkPatchCatalogueNumbers: string[];
   setSelectedBulkPatchCatalogueNumbers: Dispatch<SetStateAction<string[]>>;
   bulkPatchImportText: string;
@@ -71,9 +69,6 @@ export function BulkPatchWorkspace({
   bulkPatchScopeMode,
   onScopeModeChange,
   bulkPatchPostedEntries,
-  bulkPatchCatalogueFilter,
-  onBulkPatchCatalogueFilterChange,
-  bulkPatchFilteredPostedEntries,
   selectedBulkPatchCatalogueNumbers,
   setSelectedBulkPatchCatalogueNumbers,
   bulkPatchImportText,
@@ -193,51 +188,13 @@ export function BulkPatchWorkspace({
                   <p className="panel-copy">Apply this PATCH to the next 25 posted Device UDI-DI records under the selected Basic UDI-DI.</p>
                 ) : null}
                 {bulkPatchScopeMode === "selected_catalogue_numbers" ? (
-                  <>
-                    <label className="field-label" htmlFor="xml-bulk-patch-catalogue-filter">
-                      Catalogue number filter
-                    </label>
-                    <input
-                      id="xml-bulk-patch-catalogue-filter"
-                      className="rule-select patch-select"
-                      type="text"
-                      placeholder={bulkPatchPostedEntries.length > 10 ? "Search posted catalogue numbers" : "Optional filter"}
-                      value={bulkPatchCatalogueFilter}
-                      onChange={(event) => onBulkPatchCatalogueFilterChange(event.target.value)}
-                    />
-                    {bulkPatchPostedEntries.length > 10 && !bulkPatchCatalogueFilter.trim() ? (
-                      <p className="panel-copy">Many posted devices are available. Enter a catalogue number filter to choose a subset.</p>
-                    ) : bulkPatchFilteredPostedEntries.length === 0 ? (
-                      <p className="panel-copy bulk-selection-empty-state">No posted catalogue numbers match this filter.</p>
-                    ) : (
-                      <div className="bulk-posted-grid">
-                        {bulkPatchFilteredPostedEntries.map((entry, index) => {
-                          const catalogueNumber = entry.catalogue_number ?? "";
-                          const isSelected = selectedBulkPatchCatalogueNumbers.includes(catalogueNumber);
-                          return (
-                            <label className="roadmap-item compact-structured-item bulk-selection-card" key={`${catalogueNumber}-${index}`}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => {
-                                  setSelectedBulkPatchCatalogueNumbers((current) =>
-                                    current.includes(catalogueNumber)
-                                      ? current.filter((value) => value !== catalogueNumber)
-                                      : [...current, catalogueNumber],
-                                  );
-                                }}
-                              />
-                              <span>
-                                <strong>{catalogueNumber || entry.primary_udi_di || "Unknown device"}</strong>
-                                <p>{entry.primary_udi_di ?? "Device UDI-DI pending"}</p>
-                                <p>Current version {entry.latest_version ?? "1"}</p>
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </>
+                  <CatalogueSelection
+                    key={`${familyVariantLabel}|${selectedBulkPatchParentGroup?.basic_udi_di}`}
+                    label={familyVariantLabel}
+                    entries={bulkPatchPostedEntries.map(entry => ({ ...entry, detail: `Current version ${entry.latest_version ?? "Unconfirmed"}` }))}
+                    selected={selectedBulkPatchCatalogueNumbers}
+                    onApply={values => setSelectedBulkPatchCatalogueNumbers(values)}
+                  />
                 ) : null}
                 {bulkPatchScopeMode === "import_catalogue_list" ? (
                   <>

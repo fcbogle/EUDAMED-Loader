@@ -1,3 +1,4 @@
+import { CatalogueSelection } from "./CatalogueSelection";
 import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -31,9 +32,6 @@ type BulkMarketInfoWorkspaceProps = {
   bulkMarketInfoScopeMode: BulkMarketInfoScopeMode;
   onScopeModeChange: (value: BulkMarketInfoScopeMode) => void;
   bulkMarketInfoPostedEntries: BulkPatchPostedEntry[];
-  bulkMarketInfoCatalogueFilter: string;
-  onBulkMarketInfoCatalogueFilterChange: (value: string) => void;
-  bulkMarketInfoFilteredPostedEntries: BulkPatchPostedEntry[];
   selectedBulkMarketInfoCatalogueNumbers: string[];
   setSelectedBulkMarketInfoCatalogueNumbers: Dispatch<SetStateAction<string[]>>;
   bulkMarketInfoImportText: string;
@@ -64,9 +62,6 @@ export function BulkMarketInfoWorkspace({
   bulkMarketInfoScopeMode,
   onScopeModeChange,
   bulkMarketInfoPostedEntries,
-  bulkMarketInfoCatalogueFilter,
-  onBulkMarketInfoCatalogueFilterChange,
-  bulkMarketInfoFilteredPostedEntries,
   selectedBulkMarketInfoCatalogueNumbers,
   setSelectedBulkMarketInfoCatalogueNumbers,
   bulkMarketInfoImportText,
@@ -246,47 +241,14 @@ export function BulkMarketInfoWorkspace({
                 </div>
 
                 {bulkMarketInfoScopeMode === "selected_catalogue_numbers" ? (
-                  <>
-                    <label className="field-label" htmlFor="xml-bulk-market-info-catalogue-filter">
-                      Catalogue number filter
-                    </label>
-                    <input
-                      id="xml-bulk-market-info-catalogue-filter"
-                      className="rule-select patch-select"
-                      type="text"
-                      placeholder={bulkMarketInfoPostedEntries.length > 10 ? "Search posted catalogue numbers" : "Optional filter"}
-                      value={bulkMarketInfoCatalogueFilter}
-                      onChange={(event) => onBulkMarketInfoCatalogueFilterChange(event.target.value)}
-                    />
-                    <div className="bulk-posted-grid">
-                      {bulkMarketInfoFilteredPostedEntries.map((entry, index) => {
-                        const catalogueNumber = entry.catalogue_number ?? "";
-                        const isSelected = selectedBulkMarketInfoCatalogueNumbers.includes(catalogueNumber);
-                        return (
-                          <label className="roadmap-item compact-structured-item bulk-selection-card" key={`${catalogueNumber}-${index}`}>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {
-                                setSelectedBulkMarketInfoCatalogueNumbers((current) =>
-                                  current.includes(catalogueNumber)
-                                    ? current.filter((value) => value !== catalogueNumber)
-                                    : [...current, catalogueNumber],
-                                );
-                              }}
-                            />
-                            <span>
-                              <strong>{catalogueNumber || entry.primary_udi_di || "Unknown device"}</strong>
-                              <p>{entry.primary_udi_di ?? "Device UDI-DI pending"}</p>
-                              <p>Market Info v{entry.latest_market_info_version ?? "0"}</p>
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </>
+                  <CatalogueSelection
+                    key={`${familyVariantLabel}|${selectedBulkMarketInfoParentGroup?.basic_udi_di}`}
+                    label={familyVariantLabel}
+                    entries={bulkMarketInfoPostedEntries.map(entry => ({ ...entry, detail: `Market Info version ${entry.latest_market_info_version ?? "Unconfirmed"}` }))}
+                    selected={selectedBulkMarketInfoCatalogueNumbers}
+                    onApply={values => setSelectedBulkMarketInfoCatalogueNumbers(values)}
+                  />
                 ) : null}
-
                 {bulkMarketInfoScopeMode === "import_catalogue_list" ? (
                   <>
                     <label className="field-label" htmlFor="xml-bulk-market-info-import-list">

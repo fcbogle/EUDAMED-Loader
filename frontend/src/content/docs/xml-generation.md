@@ -117,3 +117,17 @@ Success capture updates SQLite-backed operational state, including latest succes
 The current XML layer is tied directly to the operational state model.
 
 It is therefore no longer accurate to describe XML generation as a stateless preview utility. Candidate resolution, version lineage, remaining counts, and next available actions all depend on the tracked SQLite state.
+
+## Selecting Catalogue Numbers In Bulk Workspaces
+
+For Bulk POST, Bulk PATCH or Bulk Market Info, choose **Select catalogue numbers**
+and click **Select devices**. A dialog shows the available device list immediately.
+Search by catalogue number or Device UDI-DI, tick the required devices, and use
+**Show selected only** to review the selection. Filtering does not remove checked
+items. The list scrolls within the dialog.
+
+Click **Apply selection** to save and return to the XML workspace. Its compact
+summary shows the selected count; **Edit selection** reopens the dialog. Cancel,
+Escape or the close button discards edits. **Clear selection** takes effect only
+when applied. Changing model or parent clears the selection. Review a fresh preview
+after applying changes, then download the ZIP before submitting its XML.

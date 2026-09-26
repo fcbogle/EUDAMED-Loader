@@ -1,3 +1,4 @@
+import { CatalogueSelection } from "./CatalogueSelection";
 import type { Dispatch, SetStateAction } from "react";
 
 import type { XmlValidationResult } from "../types";
@@ -27,9 +28,6 @@ type BulkPostWorkspaceProps = {
   bulkUdidiPostScopeMode?: BulkPostScopeMode;
   onBulkUdidiPostScopeModeChange?: (value: BulkPostScopeMode) => void;
   bulkUdidiPostEntries?: BulkPostSelectableEntry[];
-  bulkUdidiPostCatalogueFilter?: string;
-  onBulkUdidiPostCatalogueFilterChange?: (value: string) => void;
-  bulkUdidiPostFilteredEntries?: BulkPostSelectableEntry[];
   selectedBulkUdidiPostCatalogueNumbers?: string[];
   setSelectedBulkUdidiPostCatalogueNumbers?: Dispatch<SetStateAction<string[]>>;
   bulkUdidiPostImportText?: string;
@@ -59,9 +57,6 @@ export function BulkPostWorkspace({
   bulkUdidiPostScopeMode,
   onBulkUdidiPostScopeModeChange,
   bulkUdidiPostEntries = [],
-  bulkUdidiPostCatalogueFilter = "",
-  onBulkUdidiPostCatalogueFilterChange,
-  bulkUdidiPostFilteredEntries = [],
   selectedBulkUdidiPostCatalogueNumbers = [],
   setSelectedBulkUdidiPostCatalogueNumbers,
   bulkUdidiPostImportText = "",
@@ -130,51 +125,15 @@ export function BulkPostWorkspace({
                     <option value="import_catalogue_list">Import catalogue list</option>
                   </select>
                   {bulkUdidiPostScopeMode === "selected_catalogue_numbers" ? (
-                    <>
-                      <label className="field-label" htmlFor="xml-bulk-udidi-post-catalogue-filter">
-                        Catalogue number filter
-                      </label>
-                      <input
-                        id="xml-bulk-udidi-post-catalogue-filter"
-                        className="rule-select patch-select"
-                        type="text"
-                        placeholder={bulkUdidiPostEntries.length > 10 ? "Search eligible catalogue numbers" : "Optional filter"}
-                        value={bulkUdidiPostCatalogueFilter}
-                        onChange={(event) => onBulkUdidiPostCatalogueFilterChange?.(event.target.value)}
-                      />
-                      {bulkUdidiPostEntries.length > 10 && !bulkUdidiPostCatalogueFilter.trim() ? (
-                        <p className="panel-copy">Many eligible devices are available. Enter a catalogue number filter to choose a subset.</p>
-                      ) : bulkUdidiPostFilteredEntries.length === 0 ? (
-                        <p className="panel-copy bulk-selection-empty-state">No eligible catalogue numbers match this filter.</p>
-                      ) : (
-                        <div className="bulk-posted-grid">
-                          {bulkUdidiPostFilteredEntries.map((entry) => {
-                            const isSelected = selectedBulkUdidiPostCatalogueNumbers.includes(entry.catalogue_number);
-                            return (
-                              <label className="roadmap-item compact-structured-item bulk-selection-card" key={entry.catalogue_number}>
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => {
-                                    setSelectedBulkUdidiPostCatalogueNumbers?.((current) =>
-                                      current.includes(entry.catalogue_number)
-                                        ? current.filter((value) => value !== entry.catalogue_number)
-                                        : [...current, entry.catalogue_number],
-                                    );
-                                  }}
-                                />
-                                <span>
-                                  <strong>{entry.catalogue_number}</strong>
-                                  <p>{entry.primary_udi_di ?? "Device UDI-DI pending"}</p>
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </>
-                  ) : null}
-                  {bulkUdidiPostScopeMode === "import_catalogue_list" ? (
+                  <CatalogueSelection
+                    key={familyVariantLabel}
+                    label={familyVariantLabel}
+                    entries={bulkUdidiPostEntries}
+                    selected={selectedBulkUdidiPostCatalogueNumbers}
+                    onApply={values => setSelectedBulkUdidiPostCatalogueNumbers?.(values)}
+                  />
+                ) : null}
+                {bulkUdidiPostScopeMode === "import_catalogue_list" ? (
                     <>
                       <label className="field-label" htmlFor="xml-bulk-udidi-post-import-list">
                         Catalogue numbers

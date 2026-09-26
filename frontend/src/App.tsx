@@ -890,8 +890,6 @@ export function App() {
       setScopeMode: setBulkPatchScopeMode,
       catalogueNumbers: selectedBulkPatchCatalogueNumbers,
       setCatalogueNumbers: setSelectedBulkPatchCatalogueNumbers,
-      catalogueFilter: bulkPatchCatalogueFilter,
-      setCatalogueFilter: setBulkPatchCatalogueFilter,
       importText: bulkPatchImportText,
       setImportText: setBulkPatchImportText,
     },
@@ -900,8 +898,6 @@ export function App() {
       setScopeMode: setBulkMarketInfoScopeMode,
       catalogueNumbers: selectedBulkMarketInfoCatalogueNumbers,
       setCatalogueNumbers: setSelectedBulkMarketInfoCatalogueNumbers,
-      catalogueFilter: bulkMarketInfoCatalogueFilter,
-      setCatalogueFilter: setBulkMarketInfoCatalogueFilter,
       importText: bulkMarketInfoImportText,
       setImportText: setBulkMarketInfoImportText,
     },
@@ -910,8 +906,6 @@ export function App() {
       setScopeMode: setBulkUdidiPostScopeMode,
       catalogueNumbers: selectedBulkUdidiPostCatalogueNumbers,
       setCatalogueNumbers: setSelectedBulkUdidiPostCatalogueNumbers,
-      catalogueFilter: bulkUdidiPostCatalogueFilter,
-      setCatalogueFilter: setBulkUdidiPostCatalogueFilter,
       importText: bulkUdidiPostImportText,
       setImportText: setBulkUdidiPostImportText,
     },
@@ -1759,9 +1753,6 @@ export function App() {
   const bulkUdidiPostImportedMatchedCatalogueNumbers = bulkUdidiPostImportedCatalogueNumbers.filter((catalogueNumber) =>
     bulkUdidiPostCatalogueNumberSet.has(catalogueNumber),
   );
-  const bulkUdidiPostFilteredEntries = bulkUdidiPostEntries.filter((entry) =>
-    !bulkUdidiPostCatalogueFilter.trim() || entry.catalogue_number.toLowerCase().includes(bulkUdidiPostCatalogueFilter.trim().toLowerCase()),
-  );
   const effectiveBulkUdidiPostCatalogueNumbers =
     bulkUdidiPostScopeMode === "all_posted"
       ? bulkUdidiPostCatalogueNumbers
@@ -1793,12 +1784,6 @@ export function App() {
     .filter((catalogueNumber): catalogueNumber is string => Boolean(catalogueNumber));
   const bulkPatchPostedCatalogueSet = new Set(bulkPatchPostedCatalogueNumbers);
   const bulkMarketInfoPostedCatalogueSet = new Set(bulkMarketInfoPostedCatalogueNumbers);
-  const bulkPatchFilteredPostedEntries =
-    bulkPatchScopeMode !== "selected_catalogue_numbers" || !bulkPatchCatalogueFilter.trim()
-      ? bulkPatchPostedEntries
-      : bulkPatchPostedEntries.filter((entry) =>
-          (entry.catalogue_number ?? "").toLowerCase().includes(bulkPatchCatalogueFilter.trim().toLowerCase()),
-        );
   const bulkPatchImportedCatalogueNumbers = parseCatalogueNumberList(bulkPatchImportText);
   const bulkPatchImportedMatchedEntries = bulkPatchPostedEntries.filter(
     (entry) => entry.catalogue_number && bulkPatchImportedCatalogueNumbers.includes(entry.catalogue_number),
@@ -1809,12 +1794,6 @@ export function App() {
   const bulkPatchImportedNotFoundCatalogueNumbers = bulkPatchImportedCatalogueNumbers.filter(
     (catalogueNumber) => !bulkPatchPostedCatalogueSet.has(catalogueNumber),
   );
-  const bulkMarketInfoFilteredPostedEntries =
-    bulkMarketInfoScopeMode !== "selected_catalogue_numbers" || !bulkMarketInfoCatalogueFilter.trim()
-      ? bulkMarketInfoPostedEntries
-      : bulkMarketInfoPostedEntries.filter((entry) =>
-          (entry.catalogue_number ?? "").toLowerCase().includes(bulkMarketInfoCatalogueFilter.trim().toLowerCase()),
-        );
   const bulkMarketInfoImportedCatalogueNumbers = parseCatalogueNumberList(bulkMarketInfoImportText);
   const bulkMarketInfoImportedMatchedEntries = bulkMarketInfoPostedEntries.filter(
     (entry) => entry.catalogue_number && bulkMarketInfoImportedCatalogueNumbers.includes(entry.catalogue_number),
@@ -2633,19 +2612,17 @@ export function App() {
     selectedTestingSummaryVariant,
   ]);
   useEffect(() => {
+    setSelectedBulkPatchCatalogueNumbers([]);
     if (!selectedBulkPatchParentGroup) {
-      setSelectedBulkPatchCatalogueNumbers([]);
       return;
     }
-    setBulkPatchCatalogueFilter("");
     setBulkPatchImportText("");
   }, [selectedBulkPatchParentGroup?.basic_udi_di]);
   useEffect(() => {
+    setSelectedBulkMarketInfoCatalogueNumbers([]);
     if (!selectedBulkMarketInfoParentGroup) {
-      setSelectedBulkMarketInfoCatalogueNumbers([]);
       return;
     }
-    setBulkMarketInfoCatalogueFilter("");
     setBulkMarketInfoImportText("");
   }, [selectedBulkMarketInfoParentGroup?.basic_udi_di]);
   useEffect(() => {
@@ -2662,6 +2639,17 @@ export function App() {
     }
     setSelectedBulkMarketInfoCatalogueNumbers(filtered);
   }, [bulkMarketInfoPostedCatalogueNumbers.join("|")]);
+  useEffect(() => {
+    setSelectedBulkUdidiPostCatalogueNumbers([]);
+    setSelectedBulkPatchCatalogueNumbers([]);
+    setSelectedBulkMarketInfoCatalogueNumbers([]);
+  }, [selectedXmlFamily, selectedXmlVariant]);
+  useEffect(() => {
+    setSelectedBulkUdidiPostCatalogueNumbers(current => {
+      const filtered = current.filter(value => bulkUdidiPostCatalogueNumberSet.has(value));
+      return filtered.length === current.length ? current : filtered;
+    });
+  }, [bulkUdidiPostCatalogueNumbers.join("|")]);
   const selectedPatchScenario =
     PATCH_SCENARIOS.find((scenario) => scenario.id === selectedPatchScenarioId) ?? PATCH_SCENARIOS[0];
   const selectedPatchScenarioStatus = patchScenarioStatuses[selectedPatchScenario.id];
@@ -5165,9 +5153,6 @@ export function App() {
                         setXmlBulkPatchPreview(null);
                       }}
                       bulkPatchPostedEntries={bulkPatchPostedEntries}
-                      bulkPatchCatalogueFilter={bulkPatchCatalogueFilter}
-                      onBulkPatchCatalogueFilterChange={setBulkPatchCatalogueFilter}
-                      bulkPatchFilteredPostedEntries={bulkPatchFilteredPostedEntries}
                       selectedBulkPatchCatalogueNumbers={selectedBulkPatchCatalogueNumbers}
                       setSelectedBulkPatchCatalogueNumbers={setSelectedBulkPatchCatalogueNumbers}
                       bulkPatchImportText={bulkPatchImportText}
@@ -5227,9 +5212,6 @@ export function App() {
                         setXmlBulkMarketInfoPreview(null);
                       }}
                       bulkMarketInfoPostedEntries={bulkMarketInfoPostedEntries}
-                      bulkMarketInfoCatalogueFilter={bulkMarketInfoCatalogueFilter}
-                      onBulkMarketInfoCatalogueFilterChange={setBulkMarketInfoCatalogueFilter}
-                      bulkMarketInfoFilteredPostedEntries={bulkMarketInfoFilteredPostedEntries}
                       selectedBulkMarketInfoCatalogueNumbers={selectedBulkMarketInfoCatalogueNumbers}
                       setSelectedBulkMarketInfoCatalogueNumbers={setSelectedBulkMarketInfoCatalogueNumbers}
                       bulkMarketInfoImportText={bulkMarketInfoImportText}
@@ -5308,9 +5290,6 @@ export function App() {
                       setSelectedXmlChunkSequence(1);
                     }}
                     bulkUdidiPostEntries={bulkUdidiPostEntries}
-                    bulkUdidiPostCatalogueFilter={bulkUdidiPostCatalogueFilter}
-                    onBulkUdidiPostCatalogueFilterChange={setBulkUdidiPostCatalogueFilter}
-                    bulkUdidiPostFilteredEntries={bulkUdidiPostFilteredEntries}
                     selectedBulkUdidiPostCatalogueNumbers={selectedBulkUdidiPostCatalogueNumbers}
                     setSelectedBulkUdidiPostCatalogueNumbers={setSelectedBulkUdidiPostCatalogueNumbers}
                     bulkUdidiPostImportText={bulkUdidiPostImportText}
