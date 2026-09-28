@@ -1,14 +1,17 @@
 """Request-local XML preparation; no artifacts survive an operation call."""
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from app.xml_models import BulkPostPreview, BulkUdidiPostPreview, BulkPatchPreview
 
 
+PreviewT = TypeVar("PreviewT", BulkPostPreview, BulkUdidiPostPreview, BulkPatchPreview)
+
+
 @dataclass
-class PreparedXmlBatch:
-    preview: BulkPostPreview | BulkUdidiPostPreview | BulkPatchPreview
+class PreparedXmlBatch(Generic[PreviewT]):
+    preview: PreviewT
     members: list[tuple[str, bytes]]
     contexts: list[tuple[str, dict[str, Any]]]
 

@@ -213,7 +213,7 @@ class TestingReadModelService:
                       FROM testing_events event
                       WHERE event.subject_id = ts.id
                         AND event.status = 'SUCCESS'
-                        AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH')
+                        AND event.message_type IN ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH')
                   )
                 ORDER BY ts.catalogue_number
                 """,

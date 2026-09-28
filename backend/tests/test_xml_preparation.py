@@ -229,3 +229,54 @@ def test_http_preview_and_download_keep_existing_response_contract(factory, monk
         assert '.zip' in response.headers['content-disposition']
         with ZipFile(BytesIO(response.content)) as archive:
             assert 'manifest.json' in archive.namelist()
+
+
+@pytest.mark.parametrize('count', [1, 3])
+def test_bulk_candidates_include_device_post_seed_in_selection_and_patch_archive(factory, count):
+    from app.services.operation_assessment import OperationAssessmentService
+    from app.services.testing_read_model import TestingReadModelService
+
+    service, records = factory('patch', count)
+    seed = records[0].catalogue_number
+    with service.testing_state_store._connect() as connection:
+        connection.execute("""UPDATE testing_events SET message_type='DEVICE.POST'
+            WHERE subject_id=(SELECT id FROM testing_subjects WHERE catalogue_number=?)""", (seed,))
+    scope = dict(product_family='Synthetic', product_variant='Synthetic', basic_udi_di='BASICSHARED')
+    expected = {record.catalogue_number for record in records}
+    groups = service.testing_state_store.posted_parent_groups(
+        product_family='Synthetic', product_variant='Synthetic')
+    assert groups == [dict(basic_udi_di='BASICSHARED', posted_child_count=count,
+                           sample_catalogue_numbers=[record.catalogue_number for record in records])]
+    assert {row['catalogue_number'] for row in service.testing_state_store.posted_entries(**scope)} == expected
+    entries = TestingReadModelService().bulk_patch_posted_entries(**scope)
+    assert {row['catalogue_number'] for row in entries} == expected
+    assert all(row['current_state']['version'] == '1' for row in entries)
+    assessment = OperationAssessmentService()
+    assessment.xml_service = service
+    assessment.testing_state_store = service.testing_state_store
+    assert assessment.assess_bulk_patch(**scope).eligible_record_count == count
+    assert assessment.assess_bulk_market_info(**scope).eligible_record_count == count
+    preview = operation(service, 'patch', 'preview', count)
+    assert {row.catalogue_number for row in preview.included_records} == expected
+    _, archive = operation(service, 'patch', 'zip', count)
+    with ZipFile(BytesIO(archive)) as package:
+        manifest = json.loads(package.read('manifest.json'))
+        assert {row['catalogue_number'] for row in manifest['records']} == expected
+        assert all(row['derived_version'] == '2' for row in manifest['records'])
+
+
+@pytest.mark.parametrize('message_type,status', [
+    ('DEVICE.POST', 'GENERATED'), ('DEVICE.POST', 'ERROR'), ('BASIC_UDI.POST', 'SUCCESS'),
+])
+def test_bulk_candidates_still_require_successful_device_registration(factory, message_type, status):
+    from app.services.testing_read_model import TestingReadModelService
+
+    service, _ = factory('patch', 1)
+    with service.testing_state_store._connect() as connection:
+        # Even a legacy post_success flag cannot substitute for device success evidence.
+        connection.execute('UPDATE testing_events SET message_type=?, status=?', (message_type, status))
+    scope = dict(product_family='Synthetic', product_variant='Synthetic', basic_udi_di='BASICSHARED')
+    assert service.testing_state_store.posted_entries(**scope) == []
+    assert service.testing_state_store.posted_parent_groups(
+        product_family='Synthetic', product_variant='Synthetic') == []
+    assert TestingReadModelService().bulk_patch_posted_entries(**scope) == []

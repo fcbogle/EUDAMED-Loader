@@ -1,7 +1,33 @@
 # Session Handoff
 
-Updated September 19, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated September 28, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+
+## September 28 — Javelin Registration And Bulk Candidate Fix
+
+Read-only Dev database verification found 15 distinct successfully registered
+Javelin devices under `5050649JAVELINTY`: one `DEVICE.POST` seed (`JAV22L1S`),
+a nine-device `UDI_DI.POST` batch and a five-device `UDI_DI.POST` batch, all
+acknowledged on September 25. All 15 have accepted POST version 1 and no recorded
+successful PATCH at this checkpoint. The final five are `JAV22L6S`, `JAV22L6SD`,
+`JAV22L7S`, `JAV22L7SD` and `JAV22L8S`; the additional-five registration exercise
+below is complete.
+
+The owner approved correcting bulk candidate queries that excluded the seed until
+it had a successful `UDI_DI.PATCH`. Successful `DEVICE.POST` now qualifies alongside
+`UDI_DI.POST` and `UDI_DI.PATCH` in parent counts, sample catalogues, selection and
+the UI read model. These queries serve both Bulk PATCH and Bulk Market Info.
+Existing accepted-baseline, XML-readiness and Market Info safeguards still apply;
+no application data migration is required.
+
+Verification: all 208 backend tests passed (246.68 seconds), including five new
+synthetic bulk-candidate cases. The corrected filter returned 15 distinct Javelin
+devices in a read-only Dev query. Browser verification remains outstanding.
+
+The planned operator sequence is storage-condition Bulk PATCH, Bulk Market Info,
+then trade-name Bulk PATCH for the same 15 devices, importing each acknowledgement
+before the next operation. Verify the final PATCH retains the accepted storage
+change and updated countries. These operations are planned, not recorded successes.
 
 ## September 25 — Catalogue Selection Dialog And Javelin Checkpoint
 

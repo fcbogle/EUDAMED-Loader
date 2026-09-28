@@ -751,7 +751,7 @@ class XmlGenerationService:
         product_variant: str,
         record_count: int,
         chunk_sequence: int = 1,
-    ) -> PreparedXmlBatch:
+    ) -> PreparedXmlBatch[BulkPostPreview]:
         normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
         candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
             product_family=product_family,
@@ -882,7 +882,7 @@ class XmlGenerationService:
         record_count: int,
         selected_catalogue_numbers: list[str] | None = None,
         chunk_sequence: int = 1,
-    ) -> PreparedXmlBatch:
+    ) -> PreparedXmlBatch[BulkUdidiPostPreview]:
         normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
         candidate_records, excluded_records, _ = self._variant_post_records_with_exclusions(
             product_family=product_family,
@@ -1026,7 +1026,7 @@ class XmlGenerationService:
         scenario_inputs: dict[str, Any] | None = None,
         selected_catalogue_numbers: list[str] | None = None,
         chunk_sequence: int = 1,
-    ) -> PreparedXmlBatch:
+    ) -> PreparedXmlBatch[BulkPatchPreview]:
         normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
         excluded_records: list[BulkXmlExcludedRecord] = []
         candidate_records, eligible_child_records, missing_variant_records = self._bulk_patch_selected_records(

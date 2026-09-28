@@ -330,7 +330,7 @@ class TestingStateStore:
                       FROM testing_events event
                       WHERE event.subject_id = testing_subjects.id
                         AND event.status = 'SUCCESS'
-                        AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH')
+                        AND event.message_type IN ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH')
                   )
                 ORDER BY id
                 """,
@@ -373,7 +373,7 @@ class TestingStateStore:
                       FROM testing_events event
                       WHERE event.subject_id = testing_subjects.id
                         AND event.status = 'SUCCESS'
-                        AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH')
+                        AND event.message_type IN ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH')
                   )
                 GROUP BY basic_udi_di
                 ORDER BY MIN(id)
@@ -401,7 +401,7 @@ class TestingStateStore:
                           FROM testing_events event
                           WHERE event.subject_id = testing_subjects.id
                             AND event.status = 'SUCCESS'
-                            AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH')
+                            AND event.message_type IN ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH')
                       )
                     ORDER BY id
                     LIMIT 10
