@@ -3,7 +3,7 @@ import { api } from "../api";
 
 type EnvironmentContext = { environment: "dev" | "prod"; message_schema_version?: string; schema_package?: string };
 
-export function EnvironmentBanner() {
+export function EnvironmentBanner({ onEnvironmentChange }: { onEnvironmentChange?: (environment: "dev" | "prod" | null) => void } = {}) {
   const [context, setEnvironment] = useState<EnvironmentContext | null>(null);
   const environment = context?.environment;
   const [failed, setFailed] = useState(false);
@@ -14,14 +14,18 @@ export function EnvironmentBanner() {
     const timeout = window.setTimeout(() => controller.abort(), 10000);
     setFailed(false);
     setEnvironment(null);
+    onEnvironmentChange?.(null);
     api.environment(controller.signal).then(result => {
       if (result.environment !== "dev" && result.environment !== "prod") throw new Error("Unknown environment");
-      if (!cancelled) setEnvironment({ ...result, environment: result.environment });
+      if (!cancelled) {
+        setEnvironment({ ...result, environment: result.environment });
+        onEnvironmentChange?.(result.environment);
+      }
     }).catch(() => {
       if (!cancelled) setFailed(true);
     }).finally(() => window.clearTimeout(timeout));
     return () => { cancelled = true; controller.abort(); window.clearTimeout(timeout); };
-  }, [attempt]);
+  }, [attempt, onEnvironmentChange]);
   return (
     <aside className={`environment-banner ${environment ?? "unknown"}`} aria-label="Application environment">
       <span className="environment-ribbon">{environment === "dev" ? "PLAY" : environment === "prod" ? "PRODUCTION" : "UNCONFIRMED"}</span>

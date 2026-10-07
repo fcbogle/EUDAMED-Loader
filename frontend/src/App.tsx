@@ -795,6 +795,10 @@ function workbookFamilyLabel(workbookName: string): string {
 }
 
 export function App() {
+  const [activeEnvironment, setActiveEnvironment] = useState<"dev" | "prod" | null>(null);
+  const workspaceActivity = activeEnvironment === "prod" ? "Submission" : activeEnvironment === "dev" ? "Testing" : "EUDAMED";
+  const xmlWorkspaceLabel = activeEnvironment === null ? "EUDAMED Workspace" : `EUDAMED ${workspaceActivity}`;
+  const summaryWorkspaceLabel = `${workspaceActivity} Summary`;
   const [recordReadiness, setRecordReadiness] = useState<RecordReadiness[]>([]);
   const [isLoadingReadiness, setIsLoadingReadiness] = useState(true);
   const [readinessError, setReadinessError] = useState<string | null>(null);
@@ -3446,7 +3450,7 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <EnvironmentBanner />
+      <EnvironmentBanner onEnvironmentChange={setActiveEnvironment} />
       <nav className="top-nav">
         <div className="brand-block">
           <span className="brand-kicker">Regulatory Data Preparation</span>
@@ -3485,21 +3489,21 @@ export function App() {
             </div>
           </div>
           <div className="nav-group">
-            <span className="nav-group-label">Testing Workspaces</span>
+            <span className="nav-group-label">{workspaceActivity} Workspaces</span>
             <div className="nav-group-buttons">
               <button
                 className={activeTab === "xml" ? "nav-link active nav-link-primary" : "nav-link nav-link-primary"}
                 type="button"
                 onClick={() => setActiveTab("xml")}
               >
-                EUDAMED Testing
+                {xmlWorkspaceLabel}
               </button>
               <button
                 className={activeTab === "testingSummary" ? "nav-link active" : "nav-link"}
                 type="button"
                 onClick={() => setActiveTab("testingSummary")}
               >
-                Testing Summary
+                {summaryWorkspaceLabel}
               </button>
             </div>
           </div>
@@ -3540,19 +3544,23 @@ export function App() {
           ) : null}
           {activeTab === "xml" ? (
             <>
-              <p className="eyebrow">EUDAMED Testing</p>
-              <h1>EUDAMED Testing Workspace</h1>
+              <p className="eyebrow">{xmlWorkspaceLabel}</p>
+              <h1>{activeEnvironment === null ? xmlWorkspaceLabel : `${xmlWorkspaceLabel} Workspace`}</h1>
               <p className="hero-copy">
-                Assess availability, generate POST, PATCH, and bulk XML, validate locally, and prepare controlled Playground test files.
+                {activeEnvironment === "prod"
+                  ? "Assess availability, generate POST, PATCH, and bulk XML, validate locally, and prepare controlled EUDAMED submission files."
+                  : activeEnvironment === "dev"
+                    ? "Assess availability, generate POST, PATCH, and bulk XML, validate locally, and prepare controlled Playground test files."
+                    : "Assess availability, generate POST, PATCH, and bulk XML, and validate locally."}
               </p>
             </>
           ) : null}
           {activeTab === "testingSummary" ? (
             <>
-              <p className="eyebrow">Testing Summary</p>
-              <h1>EUDAMED Testing Snapshot</h1>
+              <p className="eyebrow">{summaryWorkspaceLabel}</p>
+              <h1>{activeEnvironment === null ? "EUDAMED Snapshot" : `EUDAMED ${workspaceActivity} Snapshot`}</h1>
               <p className="hero-copy">
-                Review recorded testing outcomes, Basic UDI-DI registration status, and the next available POST and PATCH actions.
+                Review recorded {activeEnvironment === "prod" ? "submission" : activeEnvironment === "dev" ? "testing" : "operation"} outcomes, Basic UDI-DI registration status, and the next available POST and PATCH actions.
               </p>
             </>
           ) : null}
@@ -5341,6 +5349,8 @@ export function App() {
           )
         ) : (
           <TestingSummaryWorkspace
+            title={summaryWorkspaceLabel}
+            stateLabel={activeEnvironment === "prod" ? "Production State" : activeEnvironment === "dev" ? "Playground State" : "EUDAMED State"}
             isLoading={isLoadingTestingSummary}
             error={testingSummaryError}
             searchText={testingSummarySearch}

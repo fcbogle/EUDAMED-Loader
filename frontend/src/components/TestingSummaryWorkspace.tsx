@@ -47,6 +47,8 @@ type TestingEventRow = {
 };
 
 type TestingSummaryWorkspaceProps = {
+  title: string;
+  stateLabel: string;
   isLoading: boolean;
   error: string | null;
   searchText: string;
@@ -89,6 +91,8 @@ function recentActivityLabel(summary: TestingSubjectReadModelSummary): string {
 }
 
 export function TestingSummaryWorkspace({
+  title,
+  stateLabel,
   isLoading,
   error,
   searchText,
@@ -125,8 +129,8 @@ export function TestingSummaryWorkspace({
       <section className="panel testing-summary-panel testing-summary-search-panel">
         <div className="section-heading section-heading-spread">
           <div>
-            <span className="section-kicker">Playground State</span>
-            <h2>Testing Summary</h2>
+            <span className="section-kicker">{stateLabel}</span>
+            <h2>{title}</h2>
           </div>
           <div className="testing-summary-filter-row">
             <DeviceModelFilter options={modelOptions} family={selectedFamily} variant={selectedVariant} onChange={onModelChange}
