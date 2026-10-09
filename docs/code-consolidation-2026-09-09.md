@@ -1,5 +1,10 @@
 # XML workflow consolidation — September 9, 2026
 
+Historical implementation checkpoint, reviewed 9 October 2026. Later identity,
+cohort, selection and count changes are recorded in [session-handoff.md](session-handoff.md).
+Successful acknowledgements remain the implemented accepted-state path; supporting
+exported Production baselines is proposed, not implemented.
+
 ## Scope and retained behavior
 
 This implementation addresses the frontend-to-backend audit while retaining the six visible XML workspaces: POST, Patch XML, Market Info, Bulk UDI-DI POST, Bulk PATCH, and Bulk Market Info. Bulk Basic UDI POST remains a separate supported backend operation; its inaccessible frontend branch has been removed. SQLite, the canonical model, scenario choices, and manual Playground workflow remain in place.

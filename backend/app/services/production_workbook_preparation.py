@@ -314,7 +314,7 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
             c.alignment = Alignment(wrap_text=True, vertical="top")
         for i, column in enumerate(sheet_columns[name], 1):
             sheet.column_dimensions[get_column_letter(i)].width = 45 if column in ("Review Reasons", "Template Sources") else 24
-    rows, issues = [], []
+    rows, issues, optional_url_notes = [], [], []
     for key in sorted(set(proposed) | set(accepted)):
         sources, registered = proposed.get(key, []), accepted.get(key, [])
         reasons = list(dict.fromkeys(reason for s in sources + registered for reason in s["reasons"]))
@@ -352,7 +352,11 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
         for field in parent_columns:
             value = _text(row.get("Proposed Parent: " + field))
             if field.startswith("URL for additional information") and value.casefold() == "not available yet":
-                reasons.append("Parent information URL unavailable; confirm optional-field handling")
+                # Optional missing URLs are omitted, not imported as literal placeholder URLs.
+                # The original value remains in parent_reference_entries in the audit.
+                row["Proposed Parent: " + field] = None
+                optional_url_notes.append({"device_type": row["Device Type"],
+                                           "parent": row.get("Proposed Basic UDI-DI"), "key": key})
             if field.startswith("Member States where device") and refs and (not value or "?" in value):
                 reasons.append("Proposed parent market countries missing or tentative")
         if registered:
@@ -417,11 +421,10 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
                       f"Markets: {'; '.join(countries)}. First placement: {countries[0]}.",
                       "Applied to proposed output; source workbook and accepted XML unchanged", parent=parent_key[1])
     grouped_optional: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for note in optional_url_notes:
+        grouped_optional[(note["device_type"], note["parent"])].append(note)
     for issue in issues:
-        optional = [r for r in issue["reasons"] if r.startswith("Parent information URL")]
-        if optional:
-            grouped_optional[(issue["device_type"], issue["parent"])].append(issue)
-        other = [r for r in issue["reasons"] if r not in optional]
+        other = issue["reasons"]
         if other:
             details = "; ".join(other)
             issuer, code = issue["key"].split(":", 1)
@@ -439,9 +442,11 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
                           identifier=issue["key"], parent=issue["parent"] or "",
                           location=f"{issue['tab']} row {issue['row']}")
     for (kind, parent), group in sorted(grouped_optional.items()):
-        summary_entry("Optional-field exception", kind, len(group),
-                      'Parent information URL contains "Not available yet"; this is not a URL.',
-                      "Supply URL or agree omission of the optional field; not a registration-status failure", parent=parent)
+        flagged_keys = {tuple(r["key"]) for r in rows if r["review_reasons"]}
+        eligible = sum(tuple(note["key"]) not in flagged_keys for note in group)
+        summary_entry("Included with optional URL omitted", kind, len(group),
+                      'Unavailable optional information URL omitted; original "Not available yet" retained in audit.',
+                      f"Owner-approved inclusion: {eligible} rows eligible. Optional URL is not an exception.", parent=parent)
     removed = []
     if previous:
         previous_groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
@@ -457,6 +462,23 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
                           "Confirm intentional exclusion; absence does not delete accepted database state",
                           catalogue=catalogue, identifier=":".join(old_key),
                           parent=sources[0]["parent"][1] if sources[0]["parent"] else "")
+        # Keep outstanding scope notes visible on subsequent preparations.
+        known_removed = {tuple(r["key"]) for r in removed}
+        for prior_removed in previous.get("removed_template_identities", []):
+            old_key = tuple(prior_removed["key"])
+            if old_key in proposed or old_key in known_removed:
+                continue
+            removed.append(prior_removed)
+            known_removed.add(old_key)
+            old_entry = next((e for e in previous.get("summary_entries", [])
+                              if e["Category"] == "Removed from current templates"
+                              and e["UDI-DI / Issuer"] == ":".join(old_key)), None)
+            if old_entry:
+                summary_entries.append(dict(old_entry))
+            else:
+                summary_entry("Removed from current templates", "Previously reported scope exclusion", 1,
+                              "Identity remains absent from current templates.", "Confirm intentional exclusion",
+                              catalogue=prior_removed["catalogue"], identifier=":".join(old_key))
     for meta in export_files:
         if meta["encoding_override"]:
             summary_entry("Recorded encoding override", meta["file"], meta["devices"], meta["encoding_override"],
@@ -486,8 +508,10 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
             if index == 1:
                 cell.font = Font(bold=True, color="FFFFFF")
                 cell.fill = PatternFill("solid", fgColor="244062")
-            elif summary_entries[index - 2]["Category"] in ("Device exception", "Optional-field exception", "Removed from current templates"):
+            elif summary_entries[index - 2]["Category"] in ("Device exception", "Removed from current templates"):
                 cell.fill = PatternFill("solid", fgColor="FFF2CC")
+            elif summary_entries[index - 2]["Category"] == "Included with optional URL omitted":
+                cell.fill = PatternFill("solid", fgColor="E2EFDA")
         summary_sheet.row_dimensions[index].height = 60 if index > 1 else 30
     summary["removed_template_identities"] = len(removed)
     audit = {"format_version": 1, "prepared_at": extracted, "purpose": "Workbook preparation; not database import",

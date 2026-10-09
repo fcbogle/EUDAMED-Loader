@@ -1,5 +1,20 @@
 # EUDAMED Playground Test Report
 
+## Evidence status — reviewed 9 October 2026
+
+Detailed executions below are historical evidence, not current live inventory.
+Later Navigator/Javelin/Linx Market Info/PATCH findings and September Javelin
+registration checkpoints are recorded in [session-handoff.md](session-handoff.md).
+At the September 28 checkpoint, 15 Javelin children had successful registration
+acknowledgements; the planned subsequent bulk sequence was not recorded as complete.
+No new Playground execution is asserted by this documentation sweep.
+
+Descriptions of missing accepted-state persistence refer to the software at the
+original test time. The current implementation persists accepted snapshots and
+uses version/correlation guards; see [architecture](architecture-definition-draft.md).
+All actor/version findings are environment-specific historical observations,
+not Production configuration instructions or current service recommendations.
+
 ## Purpose
 
 This document records EUDAMED Playground testing performed from the application and captures the specific records, XML message types, outcomes, and operational findings.
@@ -239,7 +254,7 @@ Retained prior accepted state:
 Notes:
 
 - This is the second confirmed real scenario-derived `PATCH` accepted in Playground for the same tested subject.
-- Because the application does not yet persist accepted Playground state, the generated XML repeated the already accepted `SHC006` value explicitly while introducing the new `SHC007` change at version `4`.
+- At this test checkpoint, the application did not yet persist accepted Playground state, so the generated XML repeated the already accepted `SHC006` value explicitly while introducing the new `SHC007` change at version `4`.
 
 #### Device B: `Elan` / `Elan IC` / `ELANIC22L1S`
 

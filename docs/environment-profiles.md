@@ -2,8 +2,9 @@
 
 Implemented 19 September 2026: explicit startup profile selection, separate storage
 configuration, and checks before services open SQLite. The current environment is
-**Dev**, targeting Playground. UI environment labels and the controlled production
-baseline importer are later work.
+**Dev**, targeting Playground. UI environment labels are implemented through
+`GET /api/environment` and the shared EnvironmentBanner. The controlled Production
+baseline importer remains design work. Documentation reviewed 9 October 2026.
 
 ## Select a profile at startup
 
@@ -99,9 +100,16 @@ copied Playground data into a different database file or validate SRNs against E
 
 ## Production preparation remains separate
 
-No `.env.prod`, production source workbooks, production database or acceptance data
-were created. The blank actor fields in `.env.prod.example` intentionally prevent
-it from passing validation unchanged.
+The September profile implementation did not create a Production database or
+import acceptance data. Production preparation inputs have since been supplied:
+`data/prod/template/` (including the updated parent reference),
+`data/prod/eudamed_xml/` and generated outputs in `data/prod/import_file/`. See
+[preparation instructions](production-import-preparation.md) and the
+[importer design](production-importer-design.md). These preparation paths do not
+automatically change application profile settings or select a different importer.
+The table above records existing configuration/example paths, not the proposed
+prepared-workbook importer paths. The blank actor fields in `.env.prod.example`
+intentionally prevent it from passing validation unchanged.
 
 Do not copy the Dev database to Prod. The existing normal startup still initializes
 SQLite through application services, so use **`--check-config`** for profile review
@@ -111,16 +119,22 @@ of the existing initialization versus migration path remain separate work.
 Before running a Prod instance, prepare its approved source files and its own copy
 of normalization rules, then implement/rehearse the production accepted-baseline
 import. Passing the configuration check does not mean sources are complete or that
-production workflows are approved. Separate frontend wiring, visible environment
-labels, artifact provenance and generation regression coverage against both schema
-profiles are also pending.
+production workflows are approved. The visible environment banner is implemented; environment-selected import UI,
+imported-baseline provenance and full workflow regression coverage against both
+schema profiles remain pending. Starting Prod currently does not enable the
+prepared-workbook importer. Use the read-only configuration check while that
+feature is designed and tested.
 
 The Dev package is explicitly a **3.0.30-derived bundle with a 3.0.32 message
 constraint**, not an official 3.0.32 release. See
 [`data/schema_profiles/README.md`](../data/schema_profiles/README.md) for provenance
 and the four-file comparison with the downloaded official Production bundle.
 
-## Verification
+## Verification — September 19 checkpoint
+
+These are historical profile-test results; latest complete and focused runs are
+recorded in [session-handoff.md](session-handoff.md).
+
 
 - Full backend suite: 199 passed in 239.30 seconds.
 - After adding one further real-package Prod configuration smoke test, the focused

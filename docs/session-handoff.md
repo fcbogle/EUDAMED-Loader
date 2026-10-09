@@ -2,7 +2,94 @@
 
 Updated October 9, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
-## October 9 — Updated Production Inputs And Summary Workbook
+## October 9 — Complete Documentation Collection In UI
+
+All 17 Markdown files under `docs`, including report/sample notes and the index,
+are now available through the existing Documentation workspace alongside its
+previous frontend guides. Sidebar groups distinguish Production preparation/import
+design, configuration/publishing and historical reports/proposals. Markdown is
+imported directly from the files, avoiding a second maintained copy. This changes
+document availability only; importer and Production startup behavior are unchanged.
+
+## October 9 — Documentation Sweep And Production Start Readiness
+
+Reviewed every Markdown document under `docs`, including report/sample subfolders.
+Updated the workbook contract to implemented three-tab preparation, current paths,
+50-row parent reference, approved markets/optional URL inclusion, 10,028 eligible
+and six skipped rows. Added historical-status notes to old identity/schema/test
+proposals, refreshed Market Info parity, environment and aggregate-count descriptions,
+and aligned architecture links and verification checkpoints. Earlier dated evidence
+is retained; superseded counts/instructions do not describe current behavior.
+
+The current local workbook/audit pair remains
+`production-import-20261009-114955-299236`; older preparation pairs are no longer
+present. Fixed-name replacement is agreed but not implemented. See
+[documentation index](README.md) for current guides versus historical evidence.
+
+Starting Production does not enable the prepared-workbook importer: the current
+run route still invokes the raw-template service. Use `--environment prod --check-config` for read-only configuration review. Next: agree the importer draft,
+implement/rehearse with synthetic isolated databases, verify Upload Success XML
+and accepted-state progression, run regression checks, then agree first local
+Production initialization and reviewed import. No Production startup/import or
+application implementation change was performed in this documentation sweep.
+
+Verification: all local Markdown links resolved across the 17 documents,
+`git diff --check` passed and the frontend TypeScript/Vite build passed. The
+existing >500 kB bundle warning remains; backend tests were not rerun for prose-only
+changes. Earlier application/preparation test results remain dated evidence below.
+
+## October 9 — Production Importer Design Draft
+
+The owner requested design work. [Production importer design](production-importer-design.md)
+records the agreed same-schema/same-workflow direction, profile-selected importers,
+No-only filter, optional URL inclusion, configured current workbook/audit pair and
+reused Submission Data controls. It proposes a read-only assessment followed by
+confirmation, atomic existing-table persistence and explicit exported-baseline
+events rather than fabricated successful uploads.
+
+Code inspection found that current registration/cohort queries require successful
+POST/PATCH acknowledgement events and PATCH branches assume local POST/PATCH history.
+Shared evidence resolution must also support trustworthy imported current snapshots
+while preserving Upload Success XML behaviour and distinguishing operation successes
+from imported registrations. The draft identifies those integration points and
+end-to-end regression requirements.
+
+Configured-file UI flow, baseline event vocabulary and first-release additive
+repeat-import policy are proposed for owner review. Fixed-name pair preparation
+is agreed but not implemented; current artifacts still have dated filenames.
+No importer/schema/runtime changes or Production database initialization were made
+in this design step. Next: agree the concrete design before implementation.
+
+## October 9 — Optional URL Inclusion And Prod Import Decisions
+
+The owner confirmed that unavailable optional information URLs must not exclude
+Elan MAX / MAX Liners / MAX Sleeves. A new workbook records the inclusion in
+Summary, clears the optional-only review flags and leaves those URL fields blank.
+Original placeholder values remain in the audit; no source file was changed.
+
+- [Current workbook](../data/prod/import_file/production-import-20261009-114955-299236.xlsx).
+- [Current audit](../data/prod/import_file/production-import-20261009-114955-299236.audit.json).
+- All 940 affected rows have Review Required = No. Summary groups them as Included
+  with optional URL omitted, rather than exceptions. Market choices are unchanged.
+- To Register: 9,672 No / two Yes. Registered: 356 No / four Yes.
+- Under the owner's filter, 10,028 rows are eligible and six are skipped.
+  The exceptions are EP-FSR, EP-MSR, catalogue 330130 and three Compact SAKL devices.
+- The 29 prior scope exclusions remain on Summary for later confirmation.
+
+The owner also confirmed that Prod should reuse Dev's tested database schema and
+application workflows, including Upload Success XML, with isolated Production
+storage. Dev continues to import raw templates; Prod will import the prepared
+workbook and only rows marked Review Required = No. The Production database importer
+is not implemented yet. Export provenance must remain explicit without fabricated
+success acknowledgements; detailed adaptation and repeat-import behavior remain
+to agree before implementation.
+
+Sixteen focused tests passed. Reopening the saved workbook checked inclusion of
+all 940 rows, six remaining exceptions, retained scope notes and input/output hashes.
+Output creation uses new dated filenames. Earlier Summary-generation counts
+below are historical and do not describe the current import eligibility.
+
+## October 9 — Updated Production Inputs And First Summary Workbook
 
 The owner supplied revised templates and `BasicUDIs 9th October.xlsx` in
 `data/prod/template/`. Every current template row has an explicit parent in the
@@ -14,9 +101,10 @@ The owner authorized a new workbook with a Summary tab. The preparation utility
 excludes the selected parent reference from device-template scanning, records
 approved proposed-market overrides and reports exceptions and prior scope removals.
 
-- [Current workbook](../data/prod/import_file/production-import-20261009-112246-846943.xlsx).
-- [Current audit](../data/prod/import_file/production-import-20261009-112246-846943.audit.json).
-- Tabs: To Register, Registered, Summary. Earlier artifacts remain intact.
+- Historical workbook: `production-import-20261009-112246-846943.xlsx`.
+- Historical audit: `production-import-20261009-112246-846943.audit.json`.
+- Tabs: To Register, Registered, Summary. This pair and the initial pair below
+  are no longer present locally; the newer optional-URL pair supersedes them.
 - 9,681 template rows / 9,679 distinct identities; To Register 9,674;
   Registered 360; five overlaps; 10,034 distinct output identities.
 - Six device exceptions remain: EP-FSR/EP-MSR parent and EMDN conflicts, catalogue
@@ -35,8 +123,9 @@ identity consistency, countries on all 940 rows, Summary exception totals,
 source/output hashes and preservation of the previous workbook. No source input
 was changed and no Production SQLite database was initialized or imported.
 
-Next: review Summary, resolve the six device exceptions, agree optional URL
-handling and confirm exclusions. Production database import/provenance,
+Next at that checkpoint: review Summary, resolve the six device exceptions, agree
+optional URL handling and confirm exclusions. Optional URL inclusion is now approved;
+the six exceptions will be skipped under the agreed import filter. Production database import/provenance,
 canonical coverage and XML readiness still require separate agreement/checks.
 See [current run instructions](production-import-preparation.md). The initial
 preparation checkpoint below is historical evidence.
@@ -54,10 +143,10 @@ values, separate versions, nested structures and every source occurrence. It
 does not initialize/import Production SQLite or change canonical/XML rules.
 See [preparation instructions and review findings](production-import-preparation.md).
 
-First generated artifacts (local, ignored by Git; retain together):
+First generated artifacts (historical filenames, now absent locally):
 
-- [Production import workbook](../data/prod/import_file/production-import-20261009-071907-589408.xlsx).
-- [Companion source/audit JSON](../data/prod/import_file/production-import-20261009-071907-589408.audit.json).
+- Workbook: `production-import-20261009-071907-589408.xlsx`.
+- Audit: `production-import-20261009-071907-589408.audit.json`.
 - [Workbook design and deferred database-import contract](production-import-workbook-design.md).
 
 The utility uses timestamped output names and never overwrites an earlier output.
@@ -165,8 +254,8 @@ POST success. This is a dated local checkpoint, not a live Playground inventory.
 ## Repository And Delivery Context
 
 - Branch observed during this refresh: `feature/testing-batches-audit`.
-- Latest implementation commit observed: `61e368c` — `fix: align model searches across review workspaces`. `355d910` introduced the earlier XML consolidation and ZIP-review rules.
-- The implementation is committed. This handoff refresh is a separate documentation change; use `git status --short` for subsequent worktree status.
+- Latest implementation commit observed at the October 9 sweep: `bbf5570` — `feat: prepare production import workbook with exception summary`. `355d910` introduced the earlier XML consolidation and ZIP-review rules.
+- Optional-URL preparation updates, the importer draft and this documentation sweep have working-tree changes. Use `git status --short` for current status; do not assume all described work is committed.
 - The application prepares, validates and packages EUDAMED XML, then records manually uploaded Playground acknowledgements. It does not submit XML through EUDAMED M2M transport.
 - The owner approved a combined Device Model selector and aligned review filters. Preserve distinct operation-specific rules and exact-device selection when evolving these controls.
 - SQLite remains the active application store. Near-launch priorities include operational verification, bulk-generation performance and a trusted production baseline. Separate production deployment/import is not yet implemented. The first request-local XML performance improvements described below are implemented; real operator end-to-end timing remains to be measured.
@@ -345,7 +434,7 @@ Submission Data uses SQLite import/snapshot/monitoring information; it should no
 
 ## Workbook Classification And Production Direction
 
-The current `BasicUDIs.xlsx` uses two sheets: `Upload(BasicUDI not registered)` maps to POST and `Update(BasicUDI registered)` maps to PATCH. `BasicUdiReferenceService` matches source worksheet names to Device Model and propagates the classification to child rows. Source version markers 1/2 are also assigned by this sheet mapping; they are not verified production versions. The older single-sheet format reads explicit Operation/Version columns. Some field provenance labels still name those older columns.
+Dev's configured `data/basic_udi_reference/BasicUDIs.xlsx` uses two sheets: `Upload(BasicUDI not registered)` maps to POST and `Update(BasicUDI registered)` maps to PATCH. `BasicUdiReferenceService` matches source worksheet names to Device Model and propagates the classification to child rows. Source version markers 1/2 are also assigned by this sheet mapping; they are not verified production versions. The older single-sheet format reads explicit Operation/Version columns. Some field provenance labels still name those older columns.
 
 Parent registration does not prove child registration. Workbook POST/PATCH labels express source intent; accepted EUDAMED device identity/state must govern production eligibility. Workbooks supply proposed data, not proof of acceptance.
 
@@ -357,7 +446,11 @@ Establish Production through a controlled, reviewed import/reconciliation of com
 
 Historical planning checkpoint: the October 9 section above records the supplied
 folders, approved parent reference and implemented preparation utility. Its current
-next step supersedes the wait-for-folder instructions in this dated section.
+decisions supersede the wait-for-folder instructions, two-tab-only layout, optional
+Summary proposal and dated-retention preference below. Summary is implemented;
+a single current pair is agreed but its replacement mechanism remains pending.
+The remainder of this section records the October 8 discussion, not instructions
+to pause current design work.
 
 The owner proposes a reusable utility package to prepare the Production import
 workbook from the supplied template XMLs, template workbooks and EUDAMED XML
@@ -483,7 +576,7 @@ this direction does not itself initialize or import Production.
 
 ### Production Hold And Incremental Loader Direction
 
-Earlier planning placed Production creation on hold pending Quality confirmation of the master workbook structure. The owner has now supplied the inputs and the first preparation workbook is generated, as recorded in the October 9 section. The current next step is workbook/issue review and agreement of the production database-import contract. The proposed frontend-only Production preview was cancelled before any changes were made. Dev remains available for testing. Do not initialize Production or copy the Dev database as part of loader planning.
+Earlier planning placed Production creation on hold pending Quality confirmation of the master workbook structure. Updated inputs and the current three-tab workbook are now prepared. The October 9 importer draft is ready for owner review, with No-only import and optional URL inclusion agreed. Configured-file assessment/confirmation and the additive repeat-import policy remain proposals. The table below is historical loader direction; consult the newer draft for the proposed initial application flow. The proposed frontend-only Production preview was cancelled before any changes were made. Dev remains available for testing. Do not initialize Production or copy the Dev database as part of loader planning.
 
 After workbook confirmation, design a reusable incremental loader for subsequent workbooks using the same structure. The requested watermark should identify successfully imported device identities and row content, not simply the last Excel row number: rows can be reordered, inserted or moved between sheets.
 
@@ -578,7 +671,13 @@ Choose the action by service/operation rather than single versus bulk packaging.
 
 ## Verification And Next Work
 
-Latest September 19 UI verification: **48 frontend Node tests passed** and the TypeScript/Vite build passed. Coverage includes model pair selection, Basic UDI search, clearing/resetting scopes, environment lookup and event-pagination reset. These are component/helper/hook checks, not full browser end-to-end tests. The existing Vite warning for a JavaScript chunk over 500 kB remains. Removing banner stickiness was a subsequent CSS-only edit checked with `git diff --check`. No new full backend run was performed for these frontend changes.
+Latest complete run on October 9, before preparation additions: 238 Python tests
+passed in 248.66 seconds, 62 frontend tests passed and the TypeScript/Vite build
+passed. Latest preparation changes passed 16 focused tests and saved-output/hash
+checks. Older totals below remain dated checkpoints; the importer is not yet built.
+
+
+Historical September 19 UI verification: **48 frontend Node tests passed** and the TypeScript/Vite build passed. Coverage includes model pair selection, Basic UDI search, clearing/resetting scopes, environment lookup and event-pagination reset. These are component/helper/hook checks, not full browser end-to-end tests. The existing Vite warning for a JavaScript chunk over 500 kB remains. Removing banner stickiness was a subsequent CSS-only edit checked with `git diff --check`. No new full backend run was performed for these frontend changes.
 
 Environment work previously passed the full backend suite (199 tests, 239.30 seconds); the focused profile suite subsequently passed 25 tests, and the banner/profile focused run passed 27. Keep those dated results distinct from the latest frontend run.
 
@@ -598,7 +697,7 @@ Last implementation verification recorded on September 9:
 Useful commands from the repository root:
 
 ```bash
-.venv/bin/python -m pytest backend/tests -q
+.venv/bin/python -m pytest backend/tests tests -q -ra
 npm --prefix frontend test
 npm --prefix frontend run build
 git diff --check
@@ -613,7 +712,7 @@ Next priorities:
 3. Review legacy accepted records with missing/partial snapshots before claiming complete source-drift protection. Choose a trusted recovery approach rather than filling historical acceptance from current workbook data.
 4. Gradually replace remaining text-based identity lookups with `device_subject_id` joins, preserving existing data and lineage. Broader canonical/submission persistence remains a separate design increment.
 5. Verify the implemented Bulk POST/PATCH performance work on a representative imported dataset and measure network/browser time before claiming 100-device launch performance.
-6. Confirm export scope, reconcile workbook identities and resolve unknown Market Info versions before implementing the separate production deployment and controlled baseline import. Preserve Playground guardrails.
+6. Review the October 9 Production importer design, implement the agreed No-only filter and existing-schema baseline adapter, preserve all eligible source identities with visible XML readiness blockers, and verify Upload Success XML before controlled Production initialization. Six device exceptions are deferred; 29 template exclusions still need scope confirmation. Preserve Dev behavior.
 7. Extend scenario coverage only with supporting validation and Playground evidence. Automated submission/M2M transport remains out of scope.
 
 The removed frontend branches, unused clients/types/state, generic preview component, duplicate normalization and old reviewed-POST gate should not be recreated. Retain historical archives unless their recovery/retention purpose has been deliberately resolved.

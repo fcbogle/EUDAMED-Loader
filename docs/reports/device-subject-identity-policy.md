@@ -1,5 +1,22 @@
 # Device Subject Identity Policy
 
+## Historical policy status — reviewed 9 October 2026
+
+The original proposal below predates the current identity resolver. Dev import now
+classifies matches using primary UDI-DI or fallback labels, records explicit
+identity issues/drift, and links source rows to device subjects. Source/device read
+paths and reviewed/testing device-subject links exist. The original Current Import
+Behavior, limitations and next-step sections are historical, not a description of
+an unchanged simple upsert. Consult
+[workbook_import.py](../../backend/app/services/workbook_import.py) and the
+[current handoff](../session-handoff.md) before modifying identity logic.
+
+Production preparation reconciles issuer plus UDI-DI (parent issuer plus Basic
+UDI-DI). That issuer-aware contract must not be reduced to a bare code or catalogue
+match. Application importer adaptation is still proposed in the
+[Production importer design](../production-importer-design.md); this document does
+not authorize changing Dev matching behavior or the database model.
+
 ## Purpose
 
 This document defines the next database-design step for workbook import identity handling:

@@ -1,16 +1,19 @@
 # XML Samples
 
-Stable sample artifacts for review.
+Historical sample artifacts for review; documentation reviewed 9 October 2026.
+They are not authoritative current accepted-state baselines.
 
 ## Included Files
 
 - `echelon-post-ECVT22L11S.xml`
-  - current `DEVICE.POST` sample
+  - illustrative `DEVICE.POST` sample
 - `echelon-patch-EC22L1S.xml`
-  - current `UDI_DI.PATCH` sample
+  - illustrative `UDI_DI.PATCH` sample
 
 ## Notes
 
 - samples may lag behind the latest renderer and should be regenerated after XML-profile changes
-- the paired POST/PATCH test path keeps `marketInfos` identical between the equivalent records
+- these historical examples do not prescribe the current PATCH workflow; current
+  PATCH uses the selected device's accepted baseline and latest accepted Market Info
+  countries, as described in [the handoff](../session-handoff.md)
 - local schema validity does not guarantee live EUDAMED service acceptance

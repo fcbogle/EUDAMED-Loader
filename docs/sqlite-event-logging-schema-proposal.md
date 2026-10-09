@@ -2,6 +2,21 @@
 
 Date: 2026-08-31
 
+## Historical proposal status — reviewed 9 October 2026
+
+The proposal below preserves the original design discussion; it is not current
+DDL or an outstanding implementation checklist. Existing code now includes
+explicit event lineage fields, separate accepted POST/PATCH/Market Info snapshots,
+`testing_batches` / `testing_batch_devices`, device-subject links, generated package
+metadata and ZIP review receipts. Compatibility columns remain in use. Current
+writers use uppercase GENERATED/SUCCESS/ERROR statuses with generated/success_ack/
+error_ack event kinds; the proposed lowercase status migration was not adopted.
+Reviewed POST rows are history, not a PATCH readiness gate. See the
+[architecture](architecture-definition-draft.md) and [handoff](session-handoff.md)
+for implemented behavior. The [Production importer design](production-importer-design.md)
+proposes exported-baseline evidence using the existing schema; it is not implemented.
+The SQL and open decisions below must not be applied as a migration plan.
+
 ## Purpose
 
 Define the next SQLite schema shape for operational workflow logging so the application can:

@@ -2,7 +2,7 @@
 
 ## Document Status And Purpose
 
-Updated September 19, 2026 against implementation commit `61e368c` — `fix: align model searches across review workspaces` — and the current [session handoff](session-handoff.md).
+Reviewed and updated 9 October 2026 against current source and the [session handoff](session-handoff.md). The latest observed commit is `bbf5570` — `feat: prepare production import workbook with exception summary`; subsequent optional-URL preparation changes and the importer design are in the working tree. Use Git status for current commit/worktree state.
 
 This document describes the application's architecture, responsibilities, state transitions and design boundaries. Implemented behavior is distinguished from future production and transport proposals. The handoff contains session continuity and verification details; the [Playground test report](eudamed-playground-test-report.md) contains execution evidence. Historical Playground findings do not establish current production registration state.
 
@@ -256,7 +256,7 @@ The UI model is a presentation of the existing family/variant pair, not a new ca
 
 Canonical search scopes source-sheet mappings, record selection and counts; Canonical Mapping displays the selected matching record's fields. Registration search scopes rows and metrics alongside status/actionable filters. Testing Summary scopes rows, counts, recent subjects and event history, resetting event pagination and expanded detail when search changes. Matching is case-insensitive with trimmed partial identifiers. Search-feedback space is reserved in the Registration Footprint and Testing Summary filter grids.
 
-Testing Summary still loads at most 10,000 subjects and 10,000 events per request. Search filters loaded data; searched success metrics count matching successful events and disclose the loaded-event limit when reached. This does not introduce unlimited server-side history search.
+Detailed Testing Summary lists still load at most 10,000 subjects/events per request and disclose the history limit. Registration State and Testing Summary / Submission Summary aggregate counts now use the uncapped `POST /api/xml/registration-summary` SQLite calculation, with identity reconciliation, filtering and snapshot consistency checks. Repeated operation successes do not increase distinct registered-device totals. Devices without matched acceptance evidence remain unknown in the current implementation. See [registration counts](registration-counts.md) for scope and exceptions; the history list limit does not cap those aggregates.
 
 ### Environment Identity And Schema Profiles
 
@@ -279,14 +279,14 @@ Testing actor configuration includes `EUDAMED_MANUFACTURER_SRN_OVERRIDE`, `EUDAM
 
 Earlier Navigator/Javelin/Linx testing established the Market Info/PATCH reconciliation safeguards: the recorded sequence included 29 Market Info successes and one version error, a successful corrective single Market Info version 3, and a subsequent 31-device bulk PATCH success. Detailed subject IDs and action labels belong in the test report/handoff; those historical results do not prove current inventory or live environment behavior.
 
-Last implementation verification recorded on September 9:
+Historical implementation verification recorded on September 9:
 
 - Full backend suite: 147 tests passed.
 - Focused ZIP-review run: 15 tests passed, including an additional accepted-state regression added during the full run; 148 distinct backend tests were exercised across the runs.
 - Frontend: 11 Node-based TypeScript/helper/hook tests passed through `npm --prefix frontend test`.
 - Production builds include TypeScript unused-local/parameter checks. These tests are not full browser interaction or visual-comparison tests.
 
-Latest September 19 frontend verification passed all 48 tests and the TypeScript/Vite build, with the existing chunk-size warning above 500 kB. The environment-profile full backend run passed 199 tests in 239.30 seconds; later focused profile/banner checks passed 27 tests. Banner scrolling was a subsequent CSS-only change. Manual browser and live EUDAMED checks remain separate. Recheck the production build when editing imported documentation. This architecture refresh validates its links, diff and frontend build; the backend suite is not rerun merely for prose changes.
+Historical September 19 frontend verification passed all 48 tests and the TypeScript/Vite build, with the existing chunk-size warning above 500 kB. The environment-profile full backend run passed 199 tests in 239.30 seconds; later focused profile/banner checks passed 27 tests. Banner scrolling was a subsequent CSS-only change. Manual browser and live EUDAMED checks remain separate. Recheck the production build when editing imported documentation. The October 9 complete Python run passed 238 tests in 248.66 seconds; all 62 frontend tests and the TypeScript/Vite build passed. That run preceded preparation additions. The latest preparation checkpoint passed 16 focused tests and saved-output/hash checks. Those dated results do not represent a new full-suite run for this documentation sweep.
 
 ## Current Constraints And Remaining Risks
 
@@ -307,7 +307,11 @@ Broader canonical/submission persistence, richer scenario intent and replay tool
 
 ### Quality Review And Production Baseline
 
-The reconciliation workbook and its Questions tab support Quality review of source currency, missing workbooks/data and production XML evidence. These are review artifacts, not an implemented production database import. A device absent from supplied XML remains registration-unconfirmed unless export completeness and scope establish otherwise. The owner plans final manual testing before sending the workbook/questions to Quality; this is not production release approval. Controlled initialization/import and generation verification against both profiles remain outstanding.
+The earlier reconciliation workbook and Questions tab remain historical Quality-review artifacts. Production preparation is now implemented using updated templates/reference in `data/prod/template/` and exports in `data/prod/eudamed_xml/`. The three-tab prepared workbook separates To Register, Registered and Summary, retaining proposed and accepted values with a companion source/hash audit. For these supplied inputs the owner approved template-only classification as Not registered; that decision has not yet changed application registration counts.
+
+The current workbook has 10,034 identities: 10,028 eligible under the No-only review filter and six skipped. All 940 Elan MAX / MAX Liner/Sleeve rows are included with optional URLs omitted and approved markets. Summary retains six device exceptions and 29 removed-template scope notes. See the [workbook contract](production-import-workbook-design.md) and [preparation instructions](production-import-preparation.md).
+
+The [Production importer design](production-importer-design.md) preserves Dev raw-template import, proposes backend-profile selection of the prepared-workbook importer, reuses the same SQLite structure and UI, and requires exported accepted-baseline evidence compatible with Upload Success XML. Assessment/confirmation, imported event vocabulary and additive retry handling remain proposals for owner review. Fixed-name workbook/audit preparation is agreed but unimplemented. No Production importer or controlled database population is complete; workflow regression verification against both profiles remains outstanding.
 
 ### Future Production Eligibility
 
@@ -315,7 +319,7 @@ The current testing mode relies on recorded registration and accepted lineage. A
 
 Workbook/reference classification as PATCH is context, not sufficient proof of accepted state. POST classification also does not bypass existing-registration checks. The production transition must preserve duplicate-registration prevention and the distinction between proposed and accepted data.
 
-Candidate sources for production version/state resolution are live EUDAMED lookup, controlled authoritative source records and explicitly confirmed operator evidence. Their authority, freshness and reconciliation rules require a separate decision; none is an implemented transport capability today.
+The selected initial baseline source is the supplied Production export snapshot, reconciled into the prepared workbook with explicit provenance. Its application persistence and evidence-resolution adapter remain unimplemented. Live lookup, later authoritative records and operator evidence would require separate authority/freshness decisions; no transport capability is implemented today.
 
 Market Info remains a separate state/version domain in the current design. Production contract validation must establish any required differences before implementation rather than assuming coupling with PATCH.
 

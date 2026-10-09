@@ -1,5 +1,10 @@
 # XML preparation performance — September 16, 2026
 
+Historical benchmark, reviewed 9 October 2026. Timings below remain the original
+synthetic observations; no new performance run was performed in this documentation
+sweep. Current implementation and verification checkpoints are in
+[session-handoff.md](session-handoff.md).
+
 Implemented request-local preparation for single POST, Bulk Basic UDI POST, Bulk UDI-DI POST and Bulk PATCH. Baseline: commit `66e3851`; after: the performance changes in this worktree. No UI, database schema, transport or cross-request cache changes.
 
 ## Method and limits

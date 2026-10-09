@@ -15,11 +15,12 @@ From the repository root:
   --parent-market-override 'GS1:5050649ELANACTIVENG=Germany' \
   --parent-market-override 'GS1:5050649MAXLINER5K=Germany,France' \
   --parent-market-override 'GS1:5050649MAXSLEEVEM7=Germany,France' \
-  --previous-audit data/prod/import_file/production-import-20261009-071907-589408.audit.json
+  --previous-audit data/prod/import_file/production-import-20261009-114955-299236.audit.json
 ```
 
 The two explicit overrides are needed for the supplied September 11 export set,
-whose declared encoding fails for those files. Other XML errors fail preparation;
+whose files declare UTF-8 but contain Windows-1252 apostrophes. The overrides
+change how those two files are read, not their contents. Other XML errors fail preparation;
 there is no automatic encoding fallback. Original files remain unchanged.
 
 Default locations:
@@ -36,20 +37,52 @@ Override paths with `--template-dir`, `--xml-dir`, `--parent-reference` and
 Each run creates a new `.xlsx` and matching `.audit.json`. Retain them together
 with the original inputs. Outputs and production inputs are ignored by Git.
 
+The owner has agreed to one current `production-import.xlsx` /
+`production-import.audit.json` pair in this output directory. Fixed-name staged
+replacement and lock handling are **not implemented**; the command above still
+creates a new dated pair. The [workbook contract](production-import-workbook-design.md)
+describes implemented preparation, while the
+[Production importer design](production-importer-design.md) remains proposed.
+
 The parent reference is excluded from device-template scanning even when stored
 in the same folder. Approved market overrides apply to proposed output only; the
 first listed country is first placement. Original parent values remain in the
 audit and source file. No override changes exported accepted countries.
 
-## Refreshed preparation
+## Current optional URL policy and import eligibility
+
+The owner approved inclusion of all 940 Elan MAX / MAX Liners / MAX Sleeves rows
+despite missing optional information URLs. The utility omits `Not available yet`
+from prepared URL fields, preserving the source value in the audit. Optional URLs
+do not set Review Required. Summary records Included with optional URL omitted,
+grouped by parent; independent conflicts still retain their review flags.
+
+Current [workbook](../data/prod/import_file/production-import-20261009-114955-299236.xlsx)
+and [audit](../data/prod/import_file/production-import-20261009-114955-299236.audit.json):
+
+- To Register: 9,672 Review Required = No; two Yes.
+- Registered: 356 No; four Yes.
+- Under the owner's No-only import rule, 10,028 eligible rows and six skipped rows.
+- All 940 optional-URL rows included, countries as previously approved; six
+  independent device exceptions and 29 prior scope exclusions remain on Summary.
+
+Scope-removal notes carry forward on subsequent preparations while the affected
+identities remain absent; restored identities are removed from those notes.
+Sixteen tests passed. Saved-output checks verified all 940 inclusion flags,
+Summary entries, counts and source/output hashes. Outputs use new dated filenames.
+The actual Prod database importer is still pending; these are eligibility counts,
+not completed database imports.
+
+## Refreshed preparation — first Summary workbook (historical)
 
 The owner supplied updated templates and BasicUDIs and approved Germany for
 Elan MAX, Germany/France for MAX Liners and MAX Sleeves, with Germany first
 placement. The owner also requested a Summary tab.
 
-The refreshed [workbook](../data/prod/import_file/production-import-20261009-112246-846943.xlsx)
-and [audit](../data/prod/import_file/production-import-20261009-112246-846943.audit.json)
-retain the earlier artifacts. Counts:
+Historical filenames: `production-import-20261009-112246-846943.xlsx` and
+`production-import-20261009-112246-846943.audit.json`. This pair is no longer present
+in the local output directory at the October 9 documentation sweep. The counts
+below describe that checkpoint, not the current optional-URL policy:
 
 - 9,681 template rows; 9,679 distinct template identities; every current template
   row has an explicit parent identifier present in the 50-row parent reference.
@@ -65,7 +98,7 @@ retain the earlier artifacts. Counts:
   fabric-stocking accessories, two Glide Socks and catalogue 405815. All are listed
   on Summary for scope confirmation; their missing data was not repaired.
 
-Sixteen synthetic tests passed, including same-folder parent exclusion, approved
+At that checkpoint, sixteen synthetic tests passed, including same-folder parent exclusion, approved
 countries, audit preservation, Summary exceptions and prior-removal reporting.
 Saved-output checks cover tab/count/identity consistency, country choices across
 all 940 affected rows, Summary totals, input/output hashes and preservation of
@@ -99,9 +132,10 @@ name. Missing/ambiguous parents are flagged. Reference values are proposed data;
 the reference workbook's Upload/Update sheet names do not establish accepted state.
 
 Summary contains counts, approved settings, individual device exceptions with
-data-row locations, grouped optional URL issues, removed identities relative to
-the previous audit, encoding provenance and later checks. Removal reporting does
-not delete database state. Optional URL issues do not change known registration.
+data-row locations, grouped optional URL inclusion notes, removed identities
+relative to the previous audit, encoding provenance and later checks. Removal
+reporting does not delete database state. Missing optional URLs do not create
+review exceptions or change known registration.
 
 Conflicting template values are left blank in the combined proposed cell, with
 all alternatives preserved in the audit. Conflicting template-only identities
@@ -116,7 +150,7 @@ This utility supports the supplied MDR PullResponse layout; broader device-type
 support requires separate evidence and implementation. It does not certify XSD
 validity, GTIN check digits, complete production inventory or generation readiness.
 
-## First preparation results
+## First preparation results — historical
 
 - Eight template workbooks: 9,710 source rows and 9,708 distinct identities.
 - Fifteen export files: 360 distinct Registered devices, including five template
@@ -140,6 +174,7 @@ the reference workbook. Unknown Market Info versions remain blank.
 
 Verification: 11 synthetic tests passed. The generated workbook was reopened and
 checked for correct tabs/counts, unique identities, text identifiers, matching
-review counts, workbook hash and unchanged input hashes. The initial workbook is
-a review artifact. Resolve these issues and agree the persistence/provenance
-contract before implementing or running the Production database import.
+review counts, workbook hash and unchanged input hashes. The initial workbook was
+a review artifact. Its missing-parent findings were superseded by updated inputs
+and its 974 review count is not current. Consult the current eligibility section
+above and the importer design before implementing or running database import.

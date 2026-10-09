@@ -1,5 +1,11 @@
 # Registration counts
 
+Reviewed 9 October 2026 against the current service. This describes implemented
+acknowledgement-based counts. The prepared Production workbook has 10,028 eligible
+rows and six skipped rows, but has not been imported and does not change these
+counts. Imported-baseline and confirmed template-only classification support is
+proposed in [production-importer-design.md](production-importer-design.md).
+
 Registration State and Testing Summary / Submission Summary now share
 `POST /api/xml/registration-summary`. The response is calculated over the complete
 SQLite snapshot for the latest import, not capped frontend subject or event lists.

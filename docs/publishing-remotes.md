@@ -1,5 +1,9 @@
 # Publishing to the business repository and GitHub
 
+Reviewed 9 October 2026 against `scripts/publish-remotes.sh` and its Python
+implementation. This procedure publishes committed code; ignored Production
+inputs/workbook/audit files are not repository backups.
+
 Work in the original **EudamedUploader** checkout. Commit once, then run:
 
 ```bash

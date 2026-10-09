@@ -244,14 +244,18 @@ def test_approved_countries_replace_tentative_proposed_values_and_preserve_sourc
     result = prepare_workbook(**inputs, parent_market_overrides={("GS1", "PARENT"): ["Germany", "France"]})
     row = read_rows(result["workbook"], "To Register")[0]
     assert row["Proposed Parent: Member States where device is or is to be made available on the market:"] == "Germany; France"
-    assert "market countries missing" not in row["Review Reasons"]
-    assert "URL unavailable" in row["Review Reasons"]
+    assert row["Review Required"] == "No"
+    assert row["Review Reasons"] is None
+    assert row["Proposed Parent: URL for additional information (as electronic instructions for use):"] is None
     assert inputs["parent_reference"].read_bytes() == before
     audit = json.loads(Path(result["audit"]).read_text())
     assert audit["parent_reference_entries"][0]["fields"]["Member States where device is or is to be made available on the market:"] == "France?"
     entries = read_rows(result["workbook"], "Summary")
     assert any(r["Category"] == "Approved setting" and "First placement: Germany" in r["Details"] for r in entries)
-    assert next(r for r in entries if r["Category"] == "Optional-field exception")["Affected Rows"] == 2
+    note = next(r for r in entries if r["Category"] == "Included with optional URL omitted")
+    assert note["Affected Rows"] == 2
+    assert "2 rows eligible" in note["Action / Status"]
+    assert not any(r["Category"] == "Optional-field exception" for r in entries)
 
 
 def test_summary_retains_missing_market_exception_and_prior_removed_device(inputs):
@@ -269,6 +273,9 @@ def test_summary_retains_missing_market_exception_and_prior_removed_device(input
     assert "Market Info" in exception["Details"]
     assert exception["Data Location"] == "Registered row 2"
     assert result["removed_template_identities"] == 1
+    rerun = prepare_workbook(**inputs, previous_audit=Path(result["audit"]))
+    assert rerun["removed_template_identities"] == 1
+    assert any(r["Category"] == "Removed from current templates" for r in read_rows(rerun["workbook"], "Summary"))
 
 
 def test_unknown_parent_override_fails_before_output(inputs):

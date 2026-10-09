@@ -6,6 +6,21 @@ import { useBulkPostedCohorts } from "./useBulkPostedCohorts";
 import { ApiError, api, type RecordReadiness } from "./api";
 import architectureDefinitionDocumentation from "../../docs/architecture-definition-draft.md?raw";
 import sessionHandoffDocumentation from "../../docs/session-handoff.md?raw";
+import documentationIndexDocumentation from "../../docs/README.md?raw";
+import environmentProfilesDocumentation from "../../docs/environment-profiles.md?raw";
+import productionWorkbookContractDocumentation from "../../docs/production-import-workbook-design.md?raw";
+import productionPreparationDocumentation from "../../docs/production-import-preparation.md?raw";
+import productionImporterDesignDocumentation from "../../docs/production-importer-design.md?raw";
+import registrationCountsDocumentation from "../../docs/registration-counts.md?raw";
+import marketInfoParityDocumentation from "../../docs/market-info-parity-checklist.md?raw";
+import publishingRemotesDocumentation from "../../docs/publishing-remotes.md?raw";
+import playgroundTestReportDocumentation from "../../docs/eudamed-playground-test-report.md?raw";
+import basicUdiComparisonDocumentation from "../../docs/basic-udi-registration-comparison-2026-09-18.md?raw";
+import codeConsolidationDocumentation from "../../docs/code-consolidation-2026-09-09.md?raw";
+import xmlPerformanceDocumentation from "../../docs/xml-generation-performance-2026-09-16.md?raw";
+import sqliteProposalDocumentation from "../../docs/sqlite-event-logging-schema-proposal.md?raw";
+import identityPolicyDocumentation from "../../docs/reports/device-subject-identity-policy.md?raw";
+import xmlSamplesDocumentation from "../../docs/xml_samples/README.md?raw";
 import architecturePositionDocumentation from "./content/docs/architecture-position.md?raw";
 import { BulkMarketInfoWorkspace } from "./components/BulkMarketInfoWorkspace";
 import { BulkMarketInfoPreviewPanel } from "./components/BulkMarketInfoPreviewPanel";
@@ -460,13 +475,29 @@ type DocumentationSection = {
     | "roadmap"
     | "projectStructure"
     | "sessionHandoff"
-    | "softwareEngineeringPatterns";
+    | "softwareEngineeringPatterns"
+    | "documentationIndex"
+    | "environmentProfiles"
+    | "productionWorkbookContract"
+    | "productionPreparation"
+    | "productionImporterDesign"
+    | "registrationCounts"
+    | "marketInfoParity"
+    | "publishingRemotes"
+    | "playgroundTestReport"
+    | "basicUdiComparison"
+    | "codeConsolidation"
+    | "xmlPerformance"
+    | "sqliteProposal"
+    | "identityPolicy"
+    | "xmlSamples";
+
   title: string;
   markdown: string;
 };
 
 type DocumentationGroup = {
-  id: "project" | "dataCanonical" | "xmlService" | "verification";
+  id: "project" | "dataCanonical" | "xmlService" | "verification" | "production" | "operations" | "historical";
   title: string;
   sectionIds: DocumentationSection["id"][];
 };
@@ -892,6 +923,81 @@ export function App() {
   const [isLoadingCanonicalValidation, setIsLoadingCanonicalValidation] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
+      id: "documentationIndex",
+      title: "Documentation Index",
+      markdown: documentationIndexDocumentation,
+    },
+    {
+      id: "environmentProfiles",
+      title: "Dev and Prod Configuration",
+      markdown: environmentProfilesDocumentation,
+    },
+    {
+      id: "productionWorkbookContract",
+      title: "Production Workbook Contract",
+      markdown: productionWorkbookContractDocumentation,
+    },
+    {
+      id: "productionPreparation",
+      title: "Production Workbook Preparation",
+      markdown: productionPreparationDocumentation,
+    },
+    {
+      id: "productionImporterDesign",
+      title: "Production Importer Design (Draft)",
+      markdown: productionImporterDesignDocumentation,
+    },
+    {
+      id: "registrationCounts",
+      title: "Registration Counts",
+      markdown: registrationCountsDocumentation,
+    },
+    {
+      id: "marketInfoParity",
+      title: "Market Info Parity and Verification",
+      markdown: marketInfoParityDocumentation,
+    },
+    {
+      id: "publishingRemotes",
+      title: "Publishing to Business and GitHub",
+      markdown: publishingRemotesDocumentation,
+    },
+    {
+      id: "playgroundTestReport",
+      title: "Playground Test Report (Historical)",
+      markdown: playgroundTestReportDocumentation,
+    },
+    {
+      id: "basicUdiComparison",
+      title: "Basic UDI Comparison — September 18",
+      markdown: basicUdiComparisonDocumentation,
+    },
+    {
+      id: "codeConsolidation",
+      title: "XML Consolidation — September 9",
+      markdown: codeConsolidationDocumentation,
+    },
+    {
+      id: "xmlPerformance",
+      title: "XML Performance — September 16",
+      markdown: xmlPerformanceDocumentation,
+    },
+    {
+      id: "sqliteProposal",
+      title: "SQLite Event Logging (Historical Proposal)",
+      markdown: sqliteProposalDocumentation,
+    },
+    {
+      id: "identityPolicy",
+      title: "Device Identity Policy (Historical Proposal)",
+      markdown: identityPolicyDocumentation,
+    },
+    {
+      id: "xmlSamples",
+      title: "XML Sample Notes (Historical)",
+      markdown: xmlSamplesDocumentation,
+    },
+    {
       id: "projectStructure",
       title: "Project Overview",
       markdown: projectStructureDocumentation,
@@ -966,7 +1072,7 @@ export function App() {
     {
       id: "project",
       title: "Project",
-      sectionIds: ["projectStructure", "architectureDefinition", "sessionHandoff", "architecturePosition", "roadmap"],
+      sectionIds: ["documentationIndex", "projectStructure", "architectureDefinition", "sessionHandoff", "architecturePosition", "roadmap"],
     },
     {
       id: "dataCanonical",
@@ -981,7 +1087,22 @@ export function App() {
     {
       id: "verification",
       title: "Verification And Decision Support",
-      sectionIds: ["testingScenarios", "softwareEngineeringPatterns"],
+      sectionIds: ["registrationCounts", "marketInfoParity", "testingScenarios", "softwareEngineeringPatterns"],
+    },
+    {
+      id: "production",
+      title: "Production Preparation And Import Design",
+      sectionIds: ["productionWorkbookContract", "productionPreparation", "productionImporterDesign"],
+    },
+    {
+      id: "operations",
+      title: "Configuration And Publishing",
+      sectionIds: ["environmentProfiles", "publishingRemotes"],
+    },
+    {
+      id: "historical",
+      title: "Historical Reports And Proposals",
+      sectionIds: ["playgroundTestReport", "basicUdiComparison", "codeConsolidation", "xmlPerformance", "sqliteProposal", "identityPolicy", "xmlSamples"],
     },
   ];
   const selectedDocumentationSection =
@@ -5058,8 +5179,8 @@ export function App() {
                 </div>
               </div>
               <p className="panel-copy">
-                Jump between the primary workflow stages and the new cross-cutting reference docs that explain how the
-                application is structured.
+                Browse workflow guides, Production preparation and importer design, configuration, and historical reports.
+                Drafts and historical evidence are labelled separately from implemented behavior.
               </p>
               <div className="documentation-toc">
                 {documentationGroups.map((group) => (

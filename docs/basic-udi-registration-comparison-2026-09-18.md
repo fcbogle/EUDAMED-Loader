@@ -1,5 +1,10 @@
 # Basic UDI-DI registration comparison — 18 September 2026
 
+Historical comparison using the September reference and export inputs; its 47-parent
+reference counts are unchanged evidence. The current Production parent reference
+has 50 rows and lives in `data/prod/template/BasicUDIs 9th October.xlsx`. Current
+preparation uses `data/prod/eudamed_xml/`. See [current preparation](production-import-preparation.md).
+
 Compared `data/basic_udi_reference/BasicUDIs.xlsx` with the 15 XML files in `docs/xml_eudamed/`, exported on 11 September 2026. Matching uses Basic UDI-DI code plus issuing entity (GS1), not model name. Registration evidence is the explicit `MDRBasicUDI/state` value `REGISTERED`.
 
 | Workbook classification | Distinct Basic UDI-DIs | Registered in XML | Not found in XML |
