@@ -20,6 +20,7 @@ import type {
   TestingBatchPage,
   TestingEventReadModelEntry,
   TestingWorkspaceSummary,
+  RegistrationSummary,
   WorkbookImportRunResponse,
   WorkbookImportSnapshotSummary,
   SuccessXmlUploadResult,
@@ -136,6 +137,8 @@ export const api = {
       product_variant: productVariant,
       basic_udi_di: basicUdiDi,
     }),
+  registrationSummary: (params: { product_family?: string; product_variant?: string; search?: string; status?: string; actionable_only?: boolean }) =>
+    sendJson<RegistrationSummary>("/xml/registration-summary", "POST", params),
   operationReadiness: () => getJson<RecordReadiness[]>("/xml/operation-readiness"),
   latestWorkbookImportSummary: () => getJson<WorkbookImportSnapshotSummary>("/workbook-imports/latest/summary"),
   workbookImportSchemaSummary: () => getJson<DatabaseSchemaSummary>("/workbook-imports/schema-summary"),

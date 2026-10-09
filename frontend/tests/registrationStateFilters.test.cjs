@@ -11,7 +11,7 @@ function harness() {
   } }).outputText;
   const module = { exports: {} };
   const Filter = () => null;
-  new Function('require', 'module', 'exports', output)(name => name === './DeviceModelFilter'
+  new Function('require', 'module', 'exports', output)(name => name === './RegistrationCountSummary' ? { RegistrationCountSummary: () => null } : name === './DeviceModelFilter'
     ? { DeviceModelFilter: Filter } : require(name), module, module.exports);
   const state = { family: 'Family A', variant: 'Model A', query: '' };
   function render() {

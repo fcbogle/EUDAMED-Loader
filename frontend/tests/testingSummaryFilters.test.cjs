@@ -12,7 +12,7 @@ function harness() {
   const module = { exports: {} };
   const Filter = () => null;
   const effects = []; 
-  new Function('require', 'module', 'exports', output)(name => name === './DeviceModelFilter'
+  new Function('require', 'module', 'exports', output)(name => name === './RegistrationCountSummary' ? { RegistrationCountSummary: () => null } : name === './DeviceModelFilter'
     ? { DeviceModelFilter: Filter } : name === 'react' ? { useState: value => [value, () => {}], useEffect: (fn, deps) => effects.push(deps), useMemo: fn => fn(), Fragment: Symbol.for('react.fragment') } : require(name), module, module.exports);
   const state = { family: 'Family A', variant: 'Model A', query: '' };
   function render() {

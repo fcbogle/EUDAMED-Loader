@@ -20,6 +20,7 @@ import { PatchScenarioCard } from "./components/PatchScenarioCard";
 import { PostPreviewPanel } from "./components/PostPreviewPanel";
 import { RegistrationStateWorkspace } from "./components/RegistrationStateWorkspace";
 import { SubmissionBatchHistory } from "./components/SubmissionBatchHistory";
+import type { RegistrationSummary } from "./types";
 import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
 import { EnvironmentBanner } from "./components/EnvironmentBanner";
@@ -160,63 +161,6 @@ function familyLabelsOverlap(left: string | null | undefined, right: string | nu
   const leftVariants = familyLabelVariants(left);
   const rightVariants = familyLabelVariants(right);
   return leftVariants.some((variant) => rightVariants.includes(variant));
-}
-
-function resolveTestingSummaryLatestOperationLabel(subjects: TestingSubjectReadModelSummary[]): string {
-  const latestSubject = subjects.reduce<TestingSubjectReadModelSummary | null>((currentLatest, candidate) => {
-    if (!currentLatest) {
-      return candidate;
-    }
-    const currentTimestamp = currentLatest.latest_tested_at ?? "";
-    const candidateTimestamp = candidate.latest_tested_at ?? "";
-    if (candidateTimestamp > currentTimestamp) {
-      return candidate;
-    }
-    if (candidateTimestamp < currentTimestamp) {
-      return currentLatest;
-    }
-    return Number(candidate.id) > Number(currentLatest.id) ? candidate : currentLatest;
-  }, null);
-  if (!latestSubject) {
-    return "No success";
-  }
-  if (latestSubject.latest_success_message_type === "MARKET_INFO.PUT") {
-    return latestSubject.latest_successful_market_info_version
-      ? `Market Info · market v${latestSubject.latest_successful_market_info_version}`
-      : "Market Info";
-  }
-  if (latestSubject.latest_success_message_type === "UDI_DI.PATCH") {
-    return latestSubject.latest_successful_version ? `PATCH · v${latestSubject.latest_successful_version}` : "PATCH";
-  }
-  if (latestSubject.latest_success_message_type === "DEVICE.POST") {
-    return "Parent POST · v1";
-  }
-  if (latestSubject.latest_success_message_type === "UDI_DI.POST") {
-    return "Child POST · v1";
-  }
-  if (latestSubject.latest_successful_version) {
-    return `v${latestSubject.latest_successful_version}`;
-  }
-  return "Recorded";
-}
-
-function resolveTestingSummaryLatestPatchLabel(subjects: TestingSubjectReadModelSummary[]): string {
-  const latestPatchVersion = subjects.reduce((max, subject) => {
-    const versionNumber = Number(subject.latest_successful_version ?? "0");
-    return Number.isFinite(versionNumber) && versionNumber > max ? versionNumber : max;
-  }, 0);
-  return latestPatchVersion > 0 ? `v${latestPatchVersion}` : "v-";
-}
-
-function resolveTestingSummaryLatestMarketInfoLabel(subjects: TestingSubjectReadModelSummary[]): string {
-  const latestMarketInfoVersion = subjects.reduce((max, subject) => {
-    const versionNumber = Number(subject.latest_successful_market_info_version ?? "0");
-    return Number.isFinite(versionNumber) && versionNumber > max ? versionNumber : max;
-  }, 0);
-  if (latestMarketInfoVersion > 0) {
-    return `market v${latestMarketInfoVersion}`;
-  }
-  return subjects.some((subject) => subject.latest_success_message_type === "MARKET_INFO.PUT") ? "Recorded" : "v-";
 }
 
 function resolveTestingEventOperationLabel(event: TestingEventReadModelEntry): string {
@@ -795,6 +739,10 @@ function workbookFamilyLabel(workbookName: string): string {
 }
 
 export function App() {
+  const [registrationSummary, setRegistrationSummary] = useState<RegistrationSummary | null>(null);
+  const [registrationSummaryError, setRegistrationSummaryError] = useState<string | null>(null);
+  const [isLoadingRegistrationSummary, setIsLoadingRegistrationSummary] = useState(false);
+  const [registrationSummaryRefresh, setRegistrationSummaryRefresh] = useState(0);
   const [activeEnvironment, setActiveEnvironment] = useState<"dev" | "prod" | null>(null);
   const workspaceActivity = activeEnvironment === "prod" ? "Submission" : activeEnvironment === "dev" ? "Testing" : "EUDAMED";
   const xmlWorkspaceLabel = activeEnvironment === null ? "EUDAMED Workspace" : `EUDAMED ${workspaceActivity}`;
@@ -1815,381 +1763,38 @@ export function App() {
     "Market Info ready",
     "Mixed",
     "Blocked",
-    "Loading",
-    "Unavailable",
   ];
   const searchedTestingSubjects = testingSummarySubjectSummaries.filter(subject =>
     matchesModelSearch(testingSummarySearch, subject.product_family, subject.product_variant, subject.basic_udi_di));
   const searchedTestingEvents = testingSummaryEvents.filter(event =>
     matchesModelSearch(testingSummarySearch, event.product_family, event.product_variant, event.basic_udi_di));
-  const searchedTestingRecords = xmlReadyRecords.filter(record =>
-    matchesModelSearch(testingSummarySearch, record.product_family, record.product_variant, basicUdiDiForRecord(record)));
-  const searchedTestingWorkspaceSummary = testingSummarySearch.trim() && testingSummaryWorkspaceSummary ? {
-    ...testingSummaryWorkspaceSummary,
-    successful_device_post_count: searchedTestingEvents.filter(event => event.status === "SUCCESS" && event.message_type === "DEVICE.POST").length,
-    successful_child_post_count: searchedTestingEvents.filter(event => event.status === "SUCCESS" && event.message_type === "UDI_DI.POST").length,
-    successful_patch_count: searchedTestingEvents.filter(event => event.status === "SUCCESS" && event.message_type === "UDI_DI.PATCH").length,
-    latest_tested_at: searchedTestingEvents.map(event => event.tested_at).filter((date): date is string => Boolean(date)).sort().reverse()[0] ?? null,
-  } : testingSummaryWorkspaceSummary;
-  const testingSummaryXmlReadyPostRecords = searchedTestingRecords.filter((record) => {
-    if ((record.submission_operation ?? "").toUpperCase() !== "POST") {
-      return false;
-    }
-    if (selectedTestingSummaryFamily && !familyLabelsOverlap(record.product_family, selectedTestingSummaryFamily)) {
-      return false;
-    }
-    if (selectedTestingSummaryVariant && record.product_variant !== selectedTestingSummaryVariant) {
-      return false;
-    }
-    return true;
-  });
-  const testingSummarySuccessfulPrimaryUdiSet = new Set(
-    searchedTestingSubjects
-      .filter((summary) => summary.has_successful_device_post || summary.has_successful_child_post_or_patch || summary.post_success)
-      .map((summary) => (summary.primary_udi_di ?? "").trim().toLowerCase())
-      .filter((value): value is string => Boolean(value)),
-  );
-  const testingSummaryRegisteredBasicUdiSet = new Set(
-    searchedTestingSubjects
-      .filter((summary) => summary.post_success && summary.basic_udi_di)
-      .map((summary) => summary.basic_udi_di as string),
-  );
-  const testingSummaryAvailablePostCount = testingSummaryXmlReadyPostRecords.filter((record) => {
-    const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
-    return primaryUdiDi ? !testingSummarySuccessfulPrimaryUdiSet.has(primaryUdiDi) : true;
-  }).length;
-  const testingSummaryAvailableBulkPostCount = testingSummaryXmlReadyPostRecords.filter((record) => {
-    const primaryUdiDi = (record.primary_udi_di ?? "").trim().toLowerCase();
-    const basicUdiDi = basicUdiDiForRecord(record);
-    return (
-      typeof basicUdiDi === "string" &&
-      (!primaryUdiDi || !testingSummarySuccessfulPrimaryUdiSet.has(primaryUdiDi)) &&
-      testingSummaryRegisteredBasicUdiSet.has(basicUdiDi)
-    );
-  }).length;
-  const testingSummaryPatchReadyCount = searchedTestingSubjects.filter((summary) => readinessForRecord(summary)?.patch_ready).length;
-  const testingSummaryRows = (canonicalValidation?.variant_summaries ?? [])
-    .filter((summary) => (selectedTestingSummaryFamily ? summary.product_family === selectedTestingSummaryFamily : true))
-    .filter((summary) => (selectedTestingSummaryVariant ? summary.product_variant === selectedTestingSummaryVariant : true))
-    .filter(summary => matchesModelSearch(testingSummarySearch, summary.product_family, summary.product_variant,
-      ...xmlModelOptions.filter(model => model.family === summary.product_family && model.variant === summary.product_variant).flatMap(model => model.basicUdiDis),
-      ...testingSummarySubjectSummaries.filter(subject => familyLabelsOverlap(subject.product_family, summary.product_family) && subject.product_variant === summary.product_variant).map(subject => subject.basic_udi_di)))
-    .map((summary) => {
-      const matchingRecords = searchedTestingRecords.filter(
-        (record) =>
-          familyLabelsOverlap(record.product_family, summary.product_family) &&
-          record.product_variant === summary.product_variant &&
-          (record.submission_operation ?? "").toUpperCase() === "POST",
-      );
-      const matchingSubjects = searchedTestingSubjects.filter(
-        (subject) => familyLabelsOverlap(subject.product_family, summary.product_family) && subject.product_variant === summary.product_variant,
-      );
-      const rowRegisteredBasicUdiSet = new Set(
-        matchingSubjects
-          .filter((subject) => subject.post_success && subject.basic_udi_di)
-          .map((subject) => subject.basic_udi_di as string),
-      );
-      const rowBasicUdiCodes = Array.from(
-        new Set(
-          [
-            ...matchingSubjects.map((subject) => subject.basic_udi_di),
-            ...matchingRecords.map((record) => basicUdiDiForRecord(record)),
-          ].filter((value): value is string => Boolean(value)),
-        ),
-      );
-      const availableChildPostCount = matchingRecords.filter((record) => readinessForRecord(record)?.child_post_ready).length;
-      const patchReadyCount = matchingSubjects.filter(
-        (subject) => readinessForRecord(subject)?.patch_ready,
-      ).length;
-      const patchCompletedCount = matchingSubjects.filter((subject) => Number(subject.latest_successful_version ?? "0") > 1).length;
-      const availablePostCount = matchingRecords.filter((record) => readinessForRecord(record)?.post_ready).length;
-      const parentRegisteredCount = rowRegisteredBasicUdiSet.size;
-      const successfulChildPostCount = matchingSubjects.filter((subject) => subject.has_successful_child_post_or_patch).length;
-      const marketInfoReadyCount = matchingSubjects.filter(
-        (subject) =>
-          readinessForRecord(subject)?.market_info_ready,
-      ).length;
-      const marketInfoCompletedCount = matchingSubjects.filter(
-        (subject) =>
-          Boolean(subject.latest_successful_market_info_version) || subject.latest_success_message_type === "MARKET_INFO.PUT",
-      ).length;
-      const statusLabel =
-        patchReadyCount > 0
-          ? "PATCH ready"
-          : availablePostCount > 0
-            ? "POST ready"
-            : parentRegisteredCount > 0
-              ? "In progress"
-              : "Blocked";
-      const statusClassName =
-        patchReadyCount > 0 || availablePostCount > 0
-          ? "status-pill ok compact"
-          : parentRegisteredCount > 0
-            ? "status-pill warn compact"
-            : "status-pill danger compact";
-      return {
-        key: `${summary.product_family}::${summary.product_variant}`,
-        productFamily: summary.product_family,
-        productVariant: summary.product_variant,
-        basicUdiDiLabel:
-          rowBasicUdiCodes.length === 1
-            ? rowBasicUdiCodes[0]
-            : rowBasicUdiCodes.length > 1
-              ? `${rowBasicUdiCodes.length} tracked parents`
-              : "Not resolved",
-        parentRegistered: parentRegisteredCount > 0,
-        parentRegisteredCount,
-        successfulChildPostCount,
-        availableChildPostCount,
-        patchReadyCount,
-        patchCompletedCount,
-        marketInfoReadyCount,
-        marketInfoCompletedCount,
-        latestPatchLabel: resolveTestingSummaryLatestPatchLabel(matchingSubjects),
-        latestMarketInfoLabel: resolveTestingSummaryLatestMarketInfoLabel(matchingSubjects),
-        statusLabel,
-        statusClassName,
-      };
-    })
-    .sort((left, right) => {
-      const familyCompare = left.productFamily.localeCompare(right.productFamily);
-      return familyCompare !== 0 ? familyCompare : left.productVariant.localeCompare(right.productVariant);
-    });
-  const registrationStateRows = Array.from(
-    ((): Map<
-      string,
-      {
-        productFamily: string;
-        productVariant: string;
-        basicUdiDi: string;
-        records: typeof xmlReadyRecords;
-        subjects: TestingSubjectReadModelSummary[];
-      }
-    > => {
-      const grouped = new Map<
-        string,
-        {
-          productFamily: string;
-          productVariant: string;
-          basicUdiDi: string;
-          records: typeof xmlReadyRecords;
-          subjects: TestingSubjectReadModelSummary[];
-        }
-      >();
-      const includeFamily = (family: string | null | undefined) =>
-        !selectedRegistrationStateFamily || familyLabelsOverlap(family, selectedRegistrationStateFamily);
-      const includeVariant = (variant: string | null | undefined) =>
-        !selectedRegistrationStateVariant || variant === selectedRegistrationStateVariant;
-      for (const record of xmlReadyRecords) {
-        if ((record.submission_operation ?? "").toUpperCase() !== "POST") {
-          continue;
-        }
-        if (!includeFamily(record.product_family) || !includeVariant(record.product_variant)) {
-          continue;
-        }
-        const basicUdiDi = basicUdiDiForRecord(record);
-        if (!basicUdiDi) {
-          continue;
-        }
-        const key = `${record.product_family}::${record.product_variant}::${basicUdiDi}`;
-        const group = grouped.get(key) ?? {
-          productFamily: record.product_family,
-          productVariant: record.product_variant,
-          basicUdiDi,
-          records: [],
-          subjects: [],
-        };
-        group.records.push(record);
-        grouped.set(key, group);
-      }
-      for (const subject of testingSummarySubjectSummaries) {
-        if (!includeFamily(subject.product_family) || !includeVariant(subject.product_variant)) {
-          continue;
-        }
-        const basicUdiDi = (subject.basic_udi_di ?? "").trim();
-        if (!basicUdiDi) {
-          continue;
-        }
-        const key = `${subject.product_family}::${subject.product_variant}::${basicUdiDi}`;
-        const group = grouped.get(key) ?? {
-          productFamily: subject.product_family ?? "Not resolved",
-          productVariant: subject.product_variant ?? "Not resolved",
-          basicUdiDi,
-          records: [],
-          subjects: [],
-        };
-        group.subjects.push(subject);
-        grouped.set(key, group);
-      }
-      return grouped;
-    })().values(),
-  )
-    .map((group) => {
-      const availableRecords = group.records.filter((record) => readinessForRecord(record)?.post_ready);
-      const parentRegistered = group.subjects.some((subject) => subject.post_success);
-      const patchReadyCount = group.subjects.filter(
-        (subject) => readinessForRecord(subject)?.patch_ready,
-      ).length;
-      const marketInfoReadyCount = group.subjects.filter(
-        (subject) =>
-          readinessForRecord(subject)?.market_info_ready,
-      ).length;
-      const seedPostCount = parentRegistered ? 0 : availableRecords.length > 0 ? 1 : 0;
-      const childPostCount = parentRegistered ? availableRecords.length : 0;
-      const actionableModeCount = [seedPostCount > 0, childPostCount > 0, patchReadyCount > 0, marketInfoReadyCount > 0].filter(Boolean).length;
-      let statusLabel = "Blocked";
-      let statusClassName = "status-pill danger compact";
-      if (actionableModeCount > 1) {
-        statusLabel = "Mixed";
-        statusClassName = "status-pill warn compact";
-      } else if (seedPostCount > 0) {
-        statusLabel = "POST ready";
-        statusClassName = "status-pill ok compact";
-      } else if (childPostCount > 0) {
-        statusLabel = "Child POST ready";
-        statusClassName = "status-pill ok compact";
-      } else if (patchReadyCount > 0) {
-        statusLabel = "PATCH ready";
-        statusClassName = "status-pill ok compact";
-      } else if (marketInfoReadyCount > 0) {
-        statusLabel = "Market Info ready";
-        statusClassName = "status-pill ok compact";
-      }
-      const latestLabel = resolveTestingSummaryLatestOperationLabel(group.subjects);
-      const readinessMissing = actionableModeCount === 0 &&
-        [...group.records, ...group.subjects].some((record) => !readinessForRecord(record));
-      if (isLoadingReadiness) {
-        statusLabel = "Loading";
-        statusClassName = "status-pill warn compact";
-      } else if (readinessError || readinessMissing) {
-        statusLabel = "Unavailable";
-        statusClassName = "status-pill warn compact";
-      }
-      const nextActionLabel =
-        isLoadingReadiness ? "Checking readiness" : readinessError || readinessMissing ? "Readiness unavailable" :
-        seedPostCount > 0
-          ? "Register Basic UDI-DI"
-          : childPostCount > 0
-            ? "Run child POST"
-            : patchReadyCount > 0
-              ? "Run PATCH"
-              : marketInfoReadyCount > 0
-                ? "Run Market Info"
-                : "No action";
-      return {
-        key: `${group.productFamily}::${group.productVariant}::${group.basicUdiDi}`,
-        productFamily: group.productFamily,
-        productVariant: group.productVariant,
-        basicUdiDiLabel: group.basicUdiDi,
-        parentStatusLabel: parentRegistered ? "Registered" : "Not registered",
-        parentStatusClassName: parentRegistered ? "status-pill ok compact" : "status-pill warn compact",
-        seedPostCount,
-        eligibleChildDeviceCount: availableRecords.length,
-        childPostCount,
-        patchCount: patchReadyCount,
-        marketInfoCount: marketInfoReadyCount,
-        latestLabel,
-        nextActionLabel,
-        statusLabel,
-        statusClassName,
-        actionableCount: seedPostCount + childPostCount + patchReadyCount + marketInfoReadyCount,
-      };
-    })
-    .filter((row) => (selectedRegistrationStateStatus ? row.statusLabel === selectedRegistrationStateStatus : true))
-    .filter((row) => (registrationStateActionableOnly ? row.actionableCount > 0 : true))
-    .filter((row) => {
-      const query = registrationStateSearch.trim().toLowerCase();
-      if (!query) {
-        return true;
-      }
-      return (
-        row.productFamily.toLowerCase().includes(query) ||
-        row.productVariant.toLowerCase().includes(query) ||
-        row.basicUdiDiLabel.toLowerCase().includes(query) ||
-        row.nextActionLabel.toLowerCase().includes(query)
-      );
-    })
-    .sort((left, right) => {
-      const familyCompare = left.productFamily.localeCompare(right.productFamily);
-      if (familyCompare !== 0) {
-        return familyCompare;
-      }
-      const variantCompare = left.productVariant.localeCompare(right.productVariant);
-      if (variantCompare !== 0) {
-        return variantCompare;
-      }
-      return left.basicUdiDiLabel.localeCompare(right.basicUdiDiLabel);
-    });
-  const registrationStateMetrics = [
-    {
-      label: "Parent groups",
-      value: `${registrationStateRows.length}`,
-      detail: "in scope",
-    },
-    {
-      label: "Seed POST",
-      value: `${registrationStateRows.reduce((total, row) => total + row.seedPostCount, 0)}`,
-      detail: "next parent actions",
-      className: "summary-card-kpi-post",
-    },
-    {
-      label: "Child POST",
-      value: `${registrationStateRows.reduce((total, row) => total + row.childPostCount, 0)}`,
-      detail: "available",
-      className: "summary-card-kpi-post",
-    },
-    {
-      label: "PATCH",
-      value: `${registrationStateRows.reduce((total, row) => total + row.patchCount, 0)}`,
-      detail: "ready",
-      className: "summary-card-kpi-patch",
-    },
-    {
-      label: "Market Info",
-      value: `${registrationStateRows.reduce((total, row) => total + row.marketInfoCount, 0)}`,
-      detail: "ready",
-    },
-    {
-      label: "Parents registered",
-      value: `${registrationStateRows.filter((row) => row.parentStatusLabel === "Registered").length}`,
-      detail: "tracked",
-    },
-  ];
-  const testingSummaryMetrics = [
-    {
-      label: "Parent POST",
-      value: `${searchedTestingWorkspaceSummary?.successful_device_post_count ?? 0}`,
-      detail: testingSummarySearch.trim() && testingSummaryEvents.length >= 10000 ? "successful (loaded events only)" : "successful",
-      className: "summary-card-kpi-post",
-    },
-    {
-      label: "Child POST",
-      value: `${searchedTestingWorkspaceSummary?.successful_child_post_count ?? 0}`,
-      detail: testingSummarySearch.trim() && testingSummaryEvents.length >= 10000 ? "successful (loaded events only)" : "successful",
-      className: "summary-card-kpi-post",
-    },
-    {
-      label: "PATCH",
-      value: `${searchedTestingWorkspaceSummary?.successful_patch_count ?? 0}`,
-      detail: testingSummarySearch.trim() && testingSummaryEvents.length >= 10000 ? "successful (loaded events only)" : "successful",
-      className: "summary-card-kpi-patch",
-    },
-    {
-      label: "POST Ready",
-      value: `${testingSummaryAvailablePostCount}`,
-      detail: "available",
-    },
-    {
-      label: "PATCH Ready",
-      value: `${testingSummaryPatchReadyCount}`,
-      detail: "available",
-    },
-    {
-      label: "Bulk Child POST",
-      value: `${testingSummaryAvailableBulkPostCount}`,
-      detail: "available",
-    },
-  ];
+  const searchedTestingWorkspaceSummary = testingSummaryWorkspaceSummary;
+  const summaryGroups = registrationSummary?.groups ?? [];
+  const testingSummaryRows = summaryGroups.map(group => ({
+    key: group.key, productFamily: group.product_family, productVariant: group.product_variant,
+    basicUdiDiLabel: group.parent_issuing_entity ? `${group.parent_issuing_entity}: ${group.basic_udi_di}` : group.basic_udi_di, parentRegistered: group.parent_registered,
+    parentRegisteredCount: Number(group.parent_registered), successfulChildPostCount: group.registered_devices,
+    availableChildPostCount: group.child_post_ready, patchReadyCount: group.patch_ready,
+    patchCompletedCount: group.patch_completed, marketInfoReadyCount: group.market_info_ready,
+    marketInfoCompletedCount: group.market_info_completed,
+    latestPatchLabel: group.latest_patch_version ? `v${group.latest_patch_version}` : group.patch_completed ? "Version unavailable" : "No accepted PATCH",
+    latestMarketInfoLabel: group.latest_market_info_version ? `v${group.latest_market_info_version}` : group.market_info_completed ? "Version unavailable" : "No accepted update",
+    statusLabel: group.status, statusClassName: "status-pill compact",
+  }));
+  const registrationStateRows = summaryGroups.map(group => ({
+    key: group.key, productFamily: group.product_family, productVariant: group.product_variant,
+    basicUdiDiLabel: group.parent_issuing_entity ? `${group.parent_issuing_entity}: ${group.basic_udi_di}` : group.basic_udi_di,
+    parentStatusLabel: group.parent_registered ? "Registered" : "Unknown",
+    parentStatusClassName: group.parent_registered ? "status-pill ok compact" : "status-pill warn compact",
+    seedPostCount: group.parent_post_ready ? 1 : 0,
+    eligibleChildDeviceCount: group.post_ready, childPostCount: group.child_post_ready,
+    patchCount: group.patch_ready, marketInfoCount: group.market_info_ready,
+    totalDevices: group.total_devices, registeredDevices: group.registered_devices, unknownDevices: group.unknown_devices,
+    latestLabel: group.latest_acceptance_at ?? "No matched acceptance",
+    nextActionLabel: group.unknown_devices > 0 ? "Confirm registration status before POST" :
+      group.patch_ready > 0 ? "Review PATCH" : group.market_info_ready > 0 ? "Review Market Info" : "No action",
+    statusLabel: group.status, statusClassName: "status-pill compact",
+  }));
   const testingSummaryRecentSubjects = [...searchedTestingSubjects]
     .filter((summary) => Boolean(summary.latest_tested_at))
     .sort((left, right) => (right.latest_tested_at ?? "").localeCompare(left.latest_tested_at ?? ""))
@@ -2615,6 +2220,29 @@ export function App() {
     selectedTestingSummaryFamily,
     selectedTestingSummaryVariant,
   ]);
+  useEffect(() => {
+    if (activeTab !== "testingSummary" && activeTab !== "registrationState") return;
+    let cancelled = false;
+    const registration = activeTab === "registrationState";
+    setRegistrationSummary(null);
+    setRegistrationSummaryError(null);
+    setIsLoadingRegistrationSummary(true);
+    const timer = window.setTimeout(() => {
+      api.registrationSummary({
+      product_family: (registration ? selectedRegistrationStateFamily : selectedTestingSummaryFamily) || undefined,
+      product_variant: (registration ? selectedRegistrationStateVariant : selectedTestingSummaryVariant) || undefined,
+      search: registration ? registrationStateSearch : testingSummarySearch,
+      status: registration ? selectedRegistrationStateStatus : undefined,
+      actionable_only: registration && registrationStateActionableOnly,
+    }).then(result => { if (!cancelled) setRegistrationSummary(result); })
+      .catch((error: Error) => { if (!cancelled) setRegistrationSummaryError(error.message); })
+      .finally(() => { if (!cancelled) setIsLoadingRegistrationSummary(false); });
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [activeTab, canonicalValidation, selectedRegistrationStateFamily, selectedRegistrationStateVariant,
+      selectedTestingSummaryFamily, selectedTestingSummaryVariant, registrationStateSearch, testingSummarySearch,
+      selectedRegistrationStateStatus, registrationStateActionableOnly, registrationSummaryRefresh,
+      testingSubjectSummaries, testingSummarySubjectSummaries]);
   useEffect(() => {
     setSelectedBulkPatchCatalogueNumbers([]);
     if (!selectedBulkPatchParentGroup) {
@@ -5349,6 +4977,10 @@ export function App() {
           )
         ) : (
           <TestingSummaryWorkspace
+            registrationSummary={registrationSummary}
+            isLoadingRegistrationSummary={isLoadingRegistrationSummary}
+            registrationSummaryError={registrationSummaryError}
+            onRefreshCounts={() => setRegistrationSummaryRefresh(value => value + 1)}
             title={summaryWorkspaceLabel}
             stateLabel={activeEnvironment === "prod" ? "Production State" : activeEnvironment === "dev" ? "Playground State" : "EUDAMED State"}
             isLoading={isLoadingTestingSummary}
@@ -5368,7 +5000,6 @@ export function App() {
               setSelectedTestingSummaryVariant("");
             }}
             workspaceSummary={searchedTestingWorkspaceSummary}
-            metrics={testingSummaryMetrics}
             rows={testingSummaryRows}
             eventRows={testingSummaryEventRows}
             recentSubjects={testingSummaryRecentSubjects}
@@ -5384,6 +5015,10 @@ export function App() {
           )
         ) : (
           <RegistrationStateWorkspace
+            registrationSummary={registrationSummary}
+            isLoadingRegistrationSummary={isLoadingRegistrationSummary}
+            registrationSummaryError={registrationSummaryError}
+            onRefreshCounts={() => setRegistrationSummaryRefresh(value => value + 1)}
             isLoading={isLoadingTestingSummary || isLoadingReadiness}
             error={testingSummaryError ?? readinessError}
             selectedFamily={selectedRegistrationStateFamily}
@@ -5393,9 +5028,6 @@ export function App() {
             actionableOnly={registrationStateActionableOnly}
             modelOptions={xmlModelOptions}
             statusOptions={registrationStateStatusOptions}
-            metrics={isLoadingReadiness || readinessError
-              ? registrationStateMetrics.map((metric) => ({ ...metric, value: "—" }))
-              : registrationStateMetrics}
             rows={registrationStateRows}
             onModelChange={(family, variant) => {
               setSelectedRegistrationStateFamily(family);

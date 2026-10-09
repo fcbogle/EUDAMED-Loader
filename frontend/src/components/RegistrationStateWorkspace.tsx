@@ -1,11 +1,7 @@
+import { RegistrationCountSummary } from "./RegistrationCountSummary";
+import type { RegistrationSummary } from "../types";
 import { DeviceModelFilter, type ModelFilterOption } from "./DeviceModelFilter";
 
-type RegistrationStateMetric = {
-  label: string;
-  value: string;
-  detail: string;
-  className?: string;
-};
 
 type RegistrationStateRow = {
   key: string;
@@ -14,6 +10,9 @@ type RegistrationStateRow = {
   basicUdiDiLabel: string;
   parentStatusLabel: string;
   parentStatusClassName: string;
+  totalDevices: number;
+  registeredDevices: number;
+  unknownDevices: number;
   seedPostCount: number;
   eligibleChildDeviceCount: number;
   childPostCount: number;
@@ -26,6 +25,10 @@ type RegistrationStateRow = {
 };
 
 type RegistrationStateWorkspaceProps = {
+  registrationSummary: RegistrationSummary | null;
+  isLoadingRegistrationSummary: boolean;
+  registrationSummaryError: string | null;
+  onRefreshCounts: () => void;
   isLoading: boolean;
   error: string | null;
   selectedFamily: string;
@@ -35,7 +38,6 @@ type RegistrationStateWorkspaceProps = {
   actionableOnly: boolean;
   modelOptions: ModelFilterOption[];
   statusOptions: string[];
-  metrics: RegistrationStateMetric[];
   rows: RegistrationStateRow[];
   onModelChange: (family: string, variant: string) => void;
   onStatusChange: (value: string) => void;
@@ -45,6 +47,10 @@ type RegistrationStateWorkspaceProps = {
 };
 
 export function RegistrationStateWorkspace({
+  registrationSummary,
+  isLoadingRegistrationSummary,
+  registrationSummaryError,
+  onRefreshCounts,
   isLoading,
   error,
   selectedFamily,
@@ -54,7 +60,6 @@ export function RegistrationStateWorkspace({
   actionableOnly,
   modelOptions,
   statusOptions,
-  metrics,
   rows,
   onModelChange,
   onStatusChange,
@@ -117,7 +122,7 @@ export function RegistrationStateWorkspace({
           <span className="status-pill ok compact">
             {selectedFamily ? (selectedVariant ? `${selectedFamily} / ${selectedVariant}` : selectedFamily) : "All models"}
           </span>
-          <span className="status-pill ok compact">SQLite live</span>
+          <span className="status-pill ok compact">Recorded SQLite snapshot</span>
           <span className="testing-summary-latest">
             {rows.length} parent group{rows.length === 1 ? "" : "s"} in scope
           </span>
@@ -131,15 +136,8 @@ export function RegistrationStateWorkspace({
         ) : null}
         {error ? <div className="panel error-banner testing-summary-error">{error}</div> : null}
 
-        <section className="summary-grid testing-summary-metric-grid registration-state-metric-grid">
-          {metrics.map((metric) => (
-            <div className={`summary-card summary-card-kpi testing-summary-metric-card ${metric.className ?? ""}`} key={metric.label}>
-              <span className="summary-label">{metric.label}</span>
-              <strong>{metric.value}</strong>
-              <p>{metric.detail}</p>
-            </div>
-          ))}
-        </section>
+        <RegistrationCountSummary summary={registrationSummary} isLoading={isLoadingRegistrationSummary}
+          error={registrationSummaryError} onRefresh={onRefreshCounts} />
 
         <div className="testing-summary-table-shell registration-state-table-shell">
           <table className="workbook-files-table testing-summary-table registration-state-table">
@@ -148,9 +146,12 @@ export function RegistrationStateWorkspace({
                 <th>Family / Variant</th>
                 <th>Basic UDI-DI</th>
                 <th>Parent</th>
-                <th>Seed POST</th>
-                <th>Eligible child devices</th>
-                <th>Child POST</th>
+                <th>Devices</th>
+                <th>Registered</th>
+                <th>Unknown</th>
+                <th>Parent POST candidates</th>
+                <th>POST XML eligible</th>
+                <th>Child POST XML eligible</th>
                 <th>PATCH</th>
                 <th>Market Info</th>
                 <th>Latest</th>
@@ -172,7 +173,7 @@ export function RegistrationStateWorkspace({
                     <td>
                       <span className={row.parentStatusClassName}>{row.parentStatusLabel}</span>
                     </td>
-                    {[row.seedPostCount, row.eligibleChildDeviceCount, row.childPostCount, row.patchCount, row.marketInfoCount].map((count, index) => (
+                    {[row.totalDevices, row.registeredDevices, row.unknownDevices, row.seedPostCount, row.eligibleChildDeviceCount, row.childPostCount, row.patchCount, row.marketInfoCount].map((count, index) => (
                       <td key={index}>{row.statusLabel === "Loading" || row.statusLabel === "Unavailable" ? "—" : count}</td>
                     ))}
                     <td>{row.latestLabel}</td>
@@ -184,7 +185,7 @@ export function RegistrationStateWorkspace({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={11} className="testing-summary-empty-cell">
+                  <td colSpan={14} className="testing-summary-empty-cell">
                     No registration-state rows match the current filter.
                   </td>
                 </tr>

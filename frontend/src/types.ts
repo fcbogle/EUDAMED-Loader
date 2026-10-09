@@ -935,3 +935,24 @@ export type SuccessXmlUploadResult = {
   error_entity_codes?: string[];
   error_details?: string[];
 };
+
+export type RegistrationCounts = {
+  total_devices: number; registered_devices: number; unknown_devices: number;
+  awaiting_devices: number; awaiting_ready: number; awaiting_blocked: number;
+  total_parents: number; registered_parents: number; unknown_parents: number; unresolved_parent_devices: number;
+  post_ready: number; child_post_ready: number; patch_ready: number; market_info_ready: number;
+};
+export type RegistrationSummaryGroup = Omit<RegistrationCounts, "total_parents" | "registered_parents" | "unknown_parents" | "unresolved_parent_devices"> & {
+  key: string; parent_key: string; product_family: string; product_variant: string;
+  basic_udi_di: string; parent_registered: boolean; parent_post_ready: boolean; patch_completed: number;
+  market_info_completed: number; latest_acceptance_at: string | null; status: string;
+  latest_patch_version: number | null; latest_market_info_version: number | null; parent_issuing_entity: string | null;
+};
+export type RegistrationSummary = {
+  import_batch_id: number | null; imported_at: string | null; calculated_at: string;
+  latest_acceptance_at: string | null; source_rows: number; mapped_rows: number;
+  outside_canonical_scope_rows: number; unresolved_identity_rows: number;
+  duplicate_identity_rows: number; identity_issue_count: number; unmatched_success_subjects: number;
+  groups: RegistrationSummaryGroup[]; counts: RegistrationCounts;
+  event_counts: Record<string, number>;
+};

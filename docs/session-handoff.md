@@ -1,6 +1,109 @@
 # Session Handoff
 
-Updated September 28, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated October 9, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## October 9 — Updated Production Inputs And Summary Workbook
+
+The owner supplied revised templates and `BasicUDIs 9th October.xlsx` in
+`data/prod/template/`. Every current template row has an explicit parent in the
+new 50-row reference. Elan MAX's 820 devices and 107 MAX Liners / 13 MAX Sleeves
+now have parent links. The owner approved Germany for Elan MAX and Germany/France
+for MAX Liners/Sleeves, with Germany first placement.
+
+The owner authorized a new workbook with a Summary tab. The preparation utility
+excludes the selected parent reference from device-template scanning, records
+approved proposed-market overrides and reports exceptions and prior scope removals.
+
+- [Current workbook](../data/prod/import_file/production-import-20261009-112246-846943.xlsx).
+- [Current audit](../data/prod/import_file/production-import-20261009-112246-846943.audit.json).
+- Tabs: To Register, Registered, Summary. Earlier artifacts remain intact.
+- 9,681 template rows / 9,679 distinct identities; To Register 9,674;
+  Registered 360; five overlaps; 10,034 distinct output identities.
+- Six device exceptions remain: EP-FSR/EP-MSR parent and EMDN conflicts, catalogue
+  330130's proposed/accepted parent mismatch, three missing Compact SAKL Market
+  Info state/versions. Two To Register identities have Needs review status.
+- Optional URL entries contain `Not available yet` for the three new parent
+  groups, affecting 940 rows. These are grouped on Summary; with the six device
+  exceptions, 946 current rows have Review Required. Countries are resolved by
+  the owner's overrides, while original values remain in the audit.
+- 29 previous identities are absent from current templates: the earlier 26
+  accessory gaps, both Glide Socks and catalogue 405815. Summary lists all for
+  scope confirmation; their data gaps were removed from scope, not completed.
+
+Sixteen focused synthetic tests passed. Saved-workbook checks cover tab/count/
+identity consistency, countries on all 940 rows, Summary exception totals,
+source/output hashes and preservation of the previous workbook. No source input
+was changed and no Production SQLite database was initialized or imported.
+
+Next: review Summary, resolve the six device exceptions, agree optional URL
+handling and confirm exclusions. Production database import/provenance,
+canonical coverage and XML readiness still require separate agreement/checks.
+See [current run instructions](production-import-preparation.md). The initial
+preparation checkpoint below is historical evidence.
+
+## October 9 — Initial Production Workbook Preparation
+
+The owner supplied `data/prod/template/`, `data/prod/eudamed_xml/` and
+`data/prod/import_file/` as the input/output locations and approved using
+`data/basic_udi_reference/BasicUDIs.xlsx` for proposed parent details. The earlier
+wait-for-information-folder instruction is satisfied for workbook preparation.
+
+`backend/scripts/prepare_production_import.py` now prepares dated two-tab workbooks
+and companion audit JSON. It retains original template values, exported accepted
+values, separate versions, nested structures and every source occurrence. It
+does not initialize/import Production SQLite or change canonical/XML rules.
+See [preparation instructions and review findings](production-import-preparation.md).
+
+First generated artifacts (local, ignored by Git; retain together):
+
+- [Production import workbook](../data/prod/import_file/production-import-20261009-071907-589408.xlsx).
+- [Companion source/audit JSON](../data/prod/import_file/production-import-20261009-071907-589408.audit.json).
+- [Workbook design and deferred database-import contract](production-import-workbook-design.md).
+
+The utility uses timestamped output names and never overwrites an earlier output.
+The two supplied files `APP-DTX-000103944.xml` and `APP-DTX-000103948.xml` require
+explicit Windows-1252 encoding overrides, recorded in the audit. See the linked
+preparation instructions for the exact command; there is no silent fallback.
+
+The first workbook contains 9,703 To Register identities and 360 Registered
+identities, including five template/export overlaps. Two template identities
+(EP-FSR and EP-MSR) have conflicting source data and receive Needs review. There
+are 974 review rows: missing parent references/properties, those conflicts, one
+proposed/accepted parent mismatch and three unknown Market Info state/versions.
+The owner-approved template-only classification is applied; no accepted versions
+are invented. Workbook preparation does not itself change application counts.
+
+The eight template workbooks contain 9,710 populated rows and 9,708 unique
+identities. The 15 export files contain 360 unique identities, with 355 XML-only
+devices. The two output tabs together preserve 10,063 distinct identities.
+To Register comprises 9,701 Not registered and two Needs review entries.
+
+| Review issue | Affected identities |
+| --- | --- |
+| Missing parent reference | 942: Elan MAX 820, MAX Liner/Sleeve 120, Footspares 2 |
+| Explicit parent lacks properties in BasicUDIs.xlsx | 26 |
+| Conflicting template data and proposed parents | 2: EP-FSR and EP-MSR |
+| Proposed parent differs from exported accepted parent | 1: GS1 / 05050649011207 |
+| Missing exported Market Info state/version | 3 Registered Compact SAKL devices |
+
+Reason counts overlap. Review Required is independent of Registration Status;
+missing workflow metadata does not turn a known Registered device into an
+unregistered device. Conflicting proposed cells remain blank, with all original
+alternatives preserved in the audit. These flags are not XML readiness results.
+
+Eleven synthetic preparation tests passed. Reopening the actual output verified
+tab/count/identity preservation, review totals and workbook/input hashes. All
+9,710 original rows, headers, cell values and cell types matched the audit.
+Earlier in this session, before adding the preparation utility, the complete
+Python run passed 238 tests in 248.66 seconds, all 62 frontend tests passed and
+the TypeScript/Vite build passed. Existing FastAPI startup deprecation and the
+537.53 kB JavaScript bundle warning remain. The full application suites were not
+rerun after adding this isolated utility; its 11 focused tests passed.
+
+Next:
+review the generated workbook, resolve parent/conflict inputs and agree production
+accepted-state provenance and database import behavior before implementing that
+phase. Regeneration and upload/M2M remain deferred.
 
 
 ## September 28 — Javelin Registration And Bulk Candidate Fix
@@ -250,9 +353,137 @@ The current environment is now called **Dev** (targeting Playground). September 
 
 Establish Production through a controlled, reviewed import/reconciliation of complete production exports: preserve originals, validate scope/pagination/encoding, match UDI-DI plus issuing entity and parent links, then store accepted fields, separate parent/device/Market Info versions, country lists, dates and provenance. Confirm registered parents without children are covered too. Missing identities in an unverified export remain unknown. Imports must not overwrite newer acceptance or silently preserve stale pending packages. Export reconciliation is a dated snapshot, not continuous synchronization; M2M remains deferred. Imported acceptance needs its own explicit provenance path, not fabricated POST acknowledgements.
 
+### October 8 — Production Import Workbook Utility Direction
+
+Historical planning checkpoint: the October 9 section above records the supplied
+folders, approved parent reference and implemented preparation utility. Its current
+next step supersedes the wait-for-folder instructions in this dated section.
+
+The owner proposes a reusable utility package to prepare the Production import
+workbook from the supplied template XMLs, template workbooks and EUDAMED XML
+extracts. **Do not start designing or implementing the utility yet.** The owner
+will provide an information folder; wait for that folder before inspecting the
+inputs and agreeing the detailed design. This direction is proposed work, not an
+implemented utility or authorization to initialize/import the Production database.
+
+The output should be a tabbed workbook covering the device types represented
+in the input template workbooks, including both template devices and EUDAMED
+registered devices. Preserve the established template structure where practical,
+with additional extracted registration information. Use one explicit registration
+status field and consistent colours to distinguish statuses; precise columns
+and colours remain to be agreed after reviewing the supplied folder.
+
+The owner prefers the **to-be-registered device data to be physically separated
+from the EUDAMED registered device data**, rather than mixed together with only
+colours or a status filter. The agreed arrangement, in order, is **two main data tabs**:
+
+1. **To Register** contains all template-only, unregistered devices across device
+   types, retaining all columns from the input template workbooks.
+2. **Registered** contains all EUDAMED registered devices across device types,
+   with linking identifiers and the additional fields from the EUDAMED extracts,
+   including the device version and the separate Market Info version, plus
+   suitable metadata to be agreed after reviewing the supplied folder.
+
+The owner's term "delta columns" means **additional EUDAMED fields**, not a
+comparison or report of differences between template and registered values.
+Metadata candidates include source XML filename, export date and extraction
+date; these are proposals until the available inputs and desired columns are
+reviewed. Preserve separate version fields where supplied, including Basic
+UDI-DI parent version if available; do not collapse parent, device and Market
+Info versions into one field or infer missing versions.
+
+Include a **Device Type** column for filtering within each tab, instead
+of creating separate tabs for each device or device type. This keeps the number
+of tabs manageable. A Summary tab is an optional proposal, not yet agreed.
+Use consistent linking identifiers and field conventions across both populations;
+the two tabs do not need identical full column sets. Allow additional business
+information to be added to the appropriate structure. Keep
+business-supplied additions distinguishable from extracted accepted EUDAMED
+values, and preserve the latter as the registration reference. Retain the status
+field and colours as supporting cues despite the physical separation.
+
+The owner has checked internally at work and authorizes this classification for
+the supplied Production preparation inputs:
+
+| Matched input evidence | Workbook registration status |
+| --- | --- |
+| Device appears in an EUDAMED XML extract | Registered |
+| Device appears in a template workbook with no matching EUDAMED entry | Not registered |
+| Device appears in both sources | Registered; reconcile the two sources into one device entry. |
+| Missing or conflicting identity prevents a reliable match | Flag for review rather than force a registration classification. |
+
+Match devices by UDI-DI plus issuing entity and retain Basic UDI-DI parent links.
+Template-only classification is now an owner-approved decision for these supplied
+inputs; do not keep requiring a separate export-completeness confirmation before
+making that workbook classification. This does not retrospectively classify
+unmatched identities in older export audits or turn generic workbook POST/PATCH
+instructions into accepted EUDAMED state.
+
+Keep proposed template values distinguishable from extracted accepted values.
+Retain source filenames, worksheet/row or XML provenance, export dates, and
+available accepted device/Market Info versions and country lists. Do not invent
+missing accepted versions or use Playground testing successes as Production
+acceptance evidence. How the workbook status and extracted evidence will populate
+the Production database must be reviewed as part of the later import design;
+this agreement alone does not change the application's current Unknown counts.
+
+The workbook must contain everything required for the supported Production
+import and submission workflows, not only identifiers and additional extract
+columns. Retain complete proposed device/parent data, available accepted EUDAMED
+data, separate versions, Market Info state, registration status and provenance.
+Determine the full required column set against the supplied inputs and current
+workflow requirements; flag missing required information rather than invent it.
+
+The owner requests **Production workbook design and import first**. Regeneration
+is a later consideration, not part of the current design or implementation scope.
+
+- **Import:** validate and reconcile the input workbook and EUDAMED extracts,
+  prepare the complete two-tab Production workbook, and support its controlled
+  import into the Production database. Preserve proposed business data separately
+  from extracted accepted state. The precise utility/application boundary and
+  database import behavior remain design decisions to review with the owner.
+- **Regeneration (deferred, provisional ideas only):** use a retained input workbook and a subsequent EUDAMED extract
+  to compare the proposed/input data with the registered snapshot and regenerate
+  the workbook. Include additional devices found only in EUDAMED, retain
+  business-added information, and report missing identities, field differences
+  and conflicts for review. The earlier "delta columns" clarification still means
+  additional EUDAMED fields; the comparison function is a separate requirement.
+- **Local retention:** keep a local copy of every generated/regenerated workbook
+  and retain the original input workbooks and XML extracts. Use distinguishable,
+  dated outputs and source/generation metadata so each workbook can be traced to
+  its inputs and compared with earlier outputs without overwriting originals.
+- **Complete alignment:** preserve every input device and all its supplied
+  columns/values across the two output tabs, adding EUDAMED-only devices. A device
+  appearing in both sources belongs in Registered, with proposed input values
+  still recoverable alongside accepted values. "100% alignment" means complete
+  input coverage and preservation, not silently forcing conflicting source and
+  accepted values to be equal. Additional devices with incomplete business data
+  must remain visible and be flagged for completion.
+
+The current delivery sequence is:
+
+1. Receive the owner's information folder and design the complete two-tab import
+   workbook against the template workbooks/XMLs, EUDAMED extracts and required
+   Production workflow data. Review and agree the design with the owner.
+2. Implement and validate the workbook preparation utility and import function
+   enabling controlled creation/population of the Production environment,
+   preserving source data and extracted accepted state separately.
+3. Verify the import, registration counts and XML workflows, then have the owner/QA
+   register a small number of devices through the existing manual EUDAMED workflow
+   and check the accepted results. Automated upload/M2M remains out of scope.
+4. Only after the import works successfully and that registration exercise is
+   verified, revisit regeneration design with the owner. QA's actual application
+   usage pattern is a determining input, and the owner has further thinking to do.
+
+Retain dated local workbook copies and original inputs in the initial phase.
+Do not assume that the earlier suggested recurring regeneration cycle, comparison
+behavior or business-edit handling is a finalized design. Continue to wait for
+the information folder before detailed utility design/implementation; documenting
+this direction does not itself initialize or import Production.
+
 ### Production Hold And Incremental Loader Direction
 
-The owner has decided to wait for Quality to confirm the master workbook structure before creating the Production environment or database. The proposed frontend-only Production preview was cancelled before any changes were made. Dev remains available for testing. Do not initialize Production or copy the Dev database as part of loader planning.
+Earlier planning placed Production creation on hold pending Quality confirmation of the master workbook structure. The owner has now supplied the inputs and the first preparation workbook is generated, as recorded in the October 9 section. The current next step is workbook/issue review and agreement of the production database-import contract. The proposed frontend-only Production preview was cancelled before any changes were made. Dev remains available for testing. Do not initialize Production or copy the Dev database as part of loader planning.
 
 After workbook confirmation, design a reusable incremental loader for subsequent workbooks using the same structure. The requested watermark should identify successfully imported device identities and row content, not simply the last Excel row number: rows can be reordered, inserted or moved between sheets.
 
@@ -273,7 +504,7 @@ Proposed import contract, to be finalized with the owner before implementation:
 - Workbook imports update proposed source/canonical data only. They must not overwrite accepted EUDAMED registration, device/PATCH versions or Market Info state. Establishing the trusted Production accepted baseline remains a separate reconciliation/import responsibility.
 - Extend the existing SQLite import batches, source lineage and stable device identity where suitable; first assess what the current importer already supports. This direction does not authorize a replacement database, a new canonical model or an implemented loader yet.
 
-Next sequence: obtain Quality's workbook-structure confirmation; review loader mapping, identity, validation, watermark and transaction rules with the owner; implement and verify with synthetic fixtures; then agree controlled Production initialization and baseline population.
+Next sequence: review the generated workbook and resolve missing/conflicting inputs; agree the import workbook and evidence mapping; review database import identity, validation and transaction rules with the owner; implement and verify database import with synthetic fixtures; then agree controlled Production initialization and baseline population and verify a small real registration exercise. Defer regeneration design until this succeeds and QA's application usage is understood. Incremental watermark/reimport ideas above must not expand the initial import scope without agreement.
 
 ### Recorded Production Export Review — September 2026
 

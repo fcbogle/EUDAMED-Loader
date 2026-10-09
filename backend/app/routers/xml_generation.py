@@ -10,6 +10,7 @@ from app.models import SuccessXmlUploadRequest, SuccessXmlUploadResult
 from app.services.country_reference import market_country_reference_payload
 from app.services.operation_assessment import OperationAssessmentService
 from app.services.testing_read_model import TestingReadModelService
+from app.services.registration_summary import RegistrationSummaryService
 from app.services.testing_success_xml import TestingSuccessXmlService
 from app.services.xml_generation import XmlGenerationService
 
@@ -636,6 +637,20 @@ def testing_workspace_summary(payload: dict | None = None) -> dict:
         product_variant=str(data["product_variant"]) if data.get("product_variant") else None,
     )
     return summary.model_dump(mode="json")
+
+
+@router.post("/xml/registration-summary")
+def registration_summary(payload: dict | None = None) -> dict:
+    data = payload or {}
+    try:
+        return RegistrationSummaryService().summary(
+            product_family=str(data.get("product_family") or ""),
+            product_variant=str(data.get("product_variant") or ""),
+            search=str(data.get("search") or ""), status=str(data.get("status") or ""),
+            actionable_only=data.get("actionable_only") is True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/xml/operation-readiness")

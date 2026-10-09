@@ -1,3 +1,5 @@
+import { RegistrationCountSummary } from "./RegistrationCountSummary";
+import type { RegistrationSummary } from "../types";
 import { DeviceModelFilter, type ModelFilterOption } from "./DeviceModelFilter";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
@@ -22,12 +24,6 @@ type TestingSummaryRow = {
   statusClassName: string;
 };
 
-type TestingMetric = {
-  label: string;
-  value: string;
-  detail: string;
-  className?: string;
-};
 
 type TestingEventRow = {
   key: string;
@@ -47,6 +43,10 @@ type TestingEventRow = {
 };
 
 type TestingSummaryWorkspaceProps = {
+  registrationSummary: RegistrationSummary | null;
+  isLoadingRegistrationSummary: boolean;
+  registrationSummaryError: string | null;
+  onRefreshCounts: () => void;
   title: string;
   stateLabel: string;
   isLoading: boolean;
@@ -59,7 +59,6 @@ type TestingSummaryWorkspaceProps = {
   onModelChange: (family: string, variant: string) => void;
   onClearFilters: () => void;
   workspaceSummary: TestingWorkspaceSummary | null;
-  metrics: TestingMetric[];
   rows: TestingSummaryRow[];
   eventRows: TestingEventRow[];
   recentSubjects: TestingSubjectReadModelSummary[];
@@ -91,6 +90,10 @@ function recentActivityLabel(summary: TestingSubjectReadModelSummary): string {
 }
 
 export function TestingSummaryWorkspace({
+  registrationSummary,
+  isLoadingRegistrationSummary,
+  registrationSummaryError,
+  onRefreshCounts,
   title,
   stateLabel,
   isLoading,
@@ -103,7 +106,6 @@ export function TestingSummaryWorkspace({
   onModelChange,
   onClearFilters,
   workspaceSummary,
-  metrics,
   rows,
   eventRows,
   recentSubjects,
@@ -148,7 +150,7 @@ export function TestingSummaryWorkspace({
           <span className="status-pill ok compact">
             {selectedFamily ? (selectedVariant ? `${selectedFamily} / ${selectedVariant}` : selectedFamily) : "All models"}
           </span>
-          <span className="status-pill ok compact">SQLite live</span>
+          <span className="status-pill ok compact">Recorded SQLite snapshot</span>
           {workspaceSummary?.latest_tested_at ? (
             <span className="testing-summary-latest">Latest success {workspaceSummary.latest_tested_at}</span>
           ) : (
@@ -164,16 +166,20 @@ export function TestingSummaryWorkspace({
         ) : null}
         {error ? <div className="panel error-banner testing-summary-error">{error}</div> : null}
 
-        <section className="summary-grid testing-summary-metric-grid">
-          {metrics.map((metric) => (
-            <div className={`summary-card summary-card-kpi testing-summary-metric-card ${metric.className ?? ""}`} key={metric.label}>
-              <span className="summary-label">{metric.label}</span>
-              <strong>{metric.value}</strong>
-              <p>{metric.detail}</p>
+        <RegistrationCountSummary summary={registrationSummary} isLoading={isLoadingRegistrationSummary}
+          error={registrationSummaryError} onRefresh={onRefreshCounts} />
+        <section aria-label="Successful operation history" className="summary-grid testing-summary-metric-grid">
+          {[["Parent POST events", "DEVICE.POST"], ["Child POST events", "UDI_DI.POST"],
+            ["PATCH events", "UDI_DI.PATCH"], ["Market Info events", "MARKET_INFO.PUT"]].map(([label, type]) => (
+            <div className="summary-card testing-summary-metric-card" key={type}>
+              <span className="summary-label">{label}</span>
+              <strong>{!isLoadingRegistrationSummary && !registrationSummaryError && registrationSummary?.import_batch_id != null ? registrationSummary.event_counts[type] : "—"}</strong>
+              <p>Successful history events in the model scope; not unique devices</p>
             </div>
           ))}
         </section>
 
+        {eventRows.length >= 10000 && <p>Detailed history is limited to 10,000 loaded events. Operation totals above use the complete database.</p>}
         <div className="testing-summary-table-shell">
           <table className="workbook-files-table testing-summary-table">
             <thead>
@@ -202,10 +208,10 @@ export function TestingSummaryWorkspace({
                     </td>
                     <td>
                       <span className={row.parentRegistered ? "status-pill ok compact" : "status-pill warn compact"}>
-                        {row.parentRegistered ? `${row.parentRegisteredCount} registered` : "Not registered"}
+                        {row.parentRegistered ? `${row.parentRegisteredCount} registered` : "Unknown"}
                       </span>
                     </td>
-                    <td>{`${row.successfulChildPostCount} done · ${row.availableChildPostCount} open`}</td>
+                    <td>{`${row.successfulChildPostCount} registered · ${row.availableChildPostCount} XML eligible`}</td>
                     <td>{`${row.patchCompletedCount} done · ${row.patchReadyCount} ready`}</td>
                     <td>{`${row.marketInfoCompletedCount} done · ${row.marketInfoReadyCount} ready`}</td>
                     <td>{row.latestPatchLabel}</td>
