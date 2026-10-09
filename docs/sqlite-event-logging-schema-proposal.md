@@ -14,7 +14,7 @@ error_ack event kinds; the proposed lowercase status migration was not adopted.
 Reviewed POST rows are history, not a PATCH readiness gate. See the
 [architecture](architecture-definition-draft.md) and [handoff](session-handoff.md)
 for implemented behavior. The [Production importer design](production-importer-design.md)
-proposes exported-baseline evidence using the existing schema; it is not implemented.
+documents implemented exported-baseline evidence using the existing schema.
 The SQL and open decisions below must not be applied as a migration plan.
 
 ## Purpose

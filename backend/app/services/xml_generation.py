@@ -253,6 +253,7 @@ class XmlGenerationService:
         product_family: str,
         product_variant: str,
         record_count: int | None,
+        accepted_baseline: bool = False,
     ) -> tuple[list[CanonicalValidationRecord], list[BulkXmlExcludedRecord], int]:
         bundle = self._validation_bundle()
         variant_records = [
@@ -267,7 +268,7 @@ class XmlGenerationService:
         excluded: list[BulkXmlExcludedRecord] = []
         eligible_posts: list[CanonicalValidationRecord] = []
         for record in variant_records:
-            if self._normalized_operation(record.submission_operation) != "POST":
+            if self._normalized_operation(record.submission_operation) != "POST" and not (accepted_baseline and self.selector._imported_baseline_record(record)):
                 excluded.append(
                     BulkXmlExcludedRecord(
                         catalogue_number=record.catalogue_number,
@@ -1528,7 +1529,13 @@ class XmlGenerationService:
             base_message_type = "POST"
             base_version = "1"
             base_state_source = "accepted_post"
-            base_state_label = "Accepted POST version 1"
+            if patch_state_resolution and patch_state_resolution.source == "production_export":
+                if patch_state_resolution.state.version != "1":
+                    raise ValueError("Imported accepted version requires the next PATCH version; refresh assessment.")
+                base_state_source = "production_export"
+                base_state_label = "Imported accepted baseline version 1"
+            else:
+                base_state_label = "Accepted POST version 1"
         else:
             if not patch_state_resolution:
                 raise ValueError(
@@ -1541,7 +1548,7 @@ class XmlGenerationService:
             base_message_type = "PATCH"
             base_version = patch_state_resolution.state.version
             base_state_source = patch_state_resolution.source
-            base_state_label = f"Latest successful PATCH version {patch_state_resolution.state.version}"
+            base_state_label = (f"Imported accepted baseline version {base_version}" if patch_state_resolution.source == "production_export" else f"Latest successful PATCH version {base_version}")
 
         base_xml_bytes = self.renderer.render_message(scenario_base_record)
         base_validation = self.xml_validation_service.validate_message(base_xml_bytes)
@@ -1762,7 +1769,7 @@ class XmlGenerationService:
             product_variant=product_variant,
             catalogue_number=catalogue_number,
         )
-        if self._normalized_operation(record.submission_operation) != "POST":
+        if self._normalized_operation(record.submission_operation) != "POST" and not (accepted_baseline and self.selector._imported_baseline_record(record)):
             raise ValueError(
                 f"Catalogue number {catalogue_number} is not currently classified as a POST record for "
                 f"{product_family} / {product_variant}."

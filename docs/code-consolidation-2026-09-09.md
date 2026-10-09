@@ -2,8 +2,9 @@
 
 Historical implementation checkpoint, reviewed 9 October 2026. Later identity,
 cohort, selection and count changes are recorded in [session-handoff.md](session-handoff.md).
-Successful acknowledgements remain the implemented accepted-state path; supporting
-exported Production baselines is proposed, not implemented.
+Successful acknowledgements remain the upload accepted-state path; October 9
+added separate imported Production baselines, described in the
+[importer contract](production-importer-design.md).
 
 ## Scope and retained behavior
 

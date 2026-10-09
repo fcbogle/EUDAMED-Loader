@@ -105,6 +105,7 @@ class SchemaInventory(BaseModel):
 
 
 class WorkbookImportRunRequest(BaseModel):
+    assessment_token: str | None = None
     imported_by: str | None = None
     label: str | None = None
     notes: str | None = None
@@ -343,6 +344,7 @@ class TestingSubjectReadModelSummary(BaseModel):
     catalogue_number: str | None = None
     primary_udi_di: str | None = None
     basic_udi_di: str | None = None
+    imported_baseline_present: bool = False
     post_success: bool = False
     baseline_patch_success: bool = False
     has_successful_device_post: bool = False

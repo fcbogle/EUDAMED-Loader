@@ -47,9 +47,8 @@ Do not treat all checks above as newly executed during this documentation sweep.
 
 ## Production boundary
 
-The existing evidence path relies on successful registration acknowledgements.
-Supporting imported Production accepted snapshots is proposed in the
-[Production importer design](production-importer-design.md) and remains
-unimplemented. Its end-to-end checks must preserve Market Info assessment,
-Upload Success XML, version progression and retained-country behavior. No new
-Market Info rules, schema changes or upload transport are introduced here.
+Production imported accepted snapshots now supplement successful registration
+acknowledgements. The [importer contract](production-importer-design.md) records
+synthetic verification of assessment, Upload Success XML, version progression and
+retained countries. First local Production import/operator checks remain pending.
+No upload transport was introduced.

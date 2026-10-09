@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Mapping
+from typing import Any
 
 from app.services.identity import normalize_identity, normalized_family_candidates
 from app.services.accepted_state import accepted_device_state, accepted_market_state
+from app.services.accepted_evidence import imported_event_sql, registration_event_sql
 from app.config import get_settings
 from app.models import (
     TestingBatchDeviceReadModelEntry,
@@ -94,7 +97,7 @@ class TestingReadModelService:
                 FROM (
                     SELECT ts.normalized_basic_udi_di
                     FROM testing_subjects ts
-                    WHERE ts.post_success = 1
+                    WHERE (ts.post_success = 1 OR EXISTS (SELECT 1 FROM testing_events event WHERE event.subject_id=ts.id AND {imported_event_sql()}))
                       AND COALESCE(ts.normalized_basic_udi_di, '') <> ''
                       {f"AND {family_clause}" if family_clause else ""}
                       {"AND ts.normalized_product_variant = ?" if product_variant else ""}
@@ -138,6 +141,7 @@ class TestingReadModelService:
                     ts.basic_udi_di,
                     ts.post_success,
                     ts.baseline_patch_success,
+                    MAX(CASE WHEN {imported_event_sql()} THEN 1 ELSE 0 END) AS imported_baseline_present,
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type = 'DEVICE.POST' THEN 1 ELSE 0 END) AS has_successful_device_post,
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH') THEN 1 ELSE 0 END) AS has_successful_child_post_or_patch,
                     ts.latest_successful_version,
@@ -207,13 +211,11 @@ class TestingReadModelService:
                 WHERE {family_clause}
                   AND ts.normalized_product_variant = ?
                   AND ts.normalized_basic_udi_di = ?
-                  AND ts.post_success = 1
                   AND EXISTS (
                       SELECT 1
                       FROM testing_events event
                       WHERE event.subject_id = ts.id
-                        AND event.status = 'SUCCESS'
-                        AND event.message_type IN ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH')
+                        AND {registration_event_sql()}
                   )
                 ORDER BY ts.catalogue_number
                 """,
@@ -248,7 +250,7 @@ class TestingReadModelService:
     def subject_history(self, subject_id: int) -> TestingSubjectHistory | None:
         with self._connect() as connection:
             subject_row = connection.execute(
-                """
+                f"""
                 SELECT
                     ts.id,
                     ts.device_subject_id,
@@ -259,6 +261,7 @@ class TestingReadModelService:
                     ts.basic_udi_di,
                     ts.post_success,
                     ts.baseline_patch_success,
+                    MAX(CASE WHEN {imported_event_sql()} THEN 1 ELSE 0 END) AS imported_baseline_present,
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type = 'DEVICE.POST' THEN 1 ELSE 0 END) AS has_successful_device_post,
                     MAX(CASE WHEN event.status = 'SUCCESS' AND event.message_type IN ('UDI_DI.POST', 'UDI_DI.PATCH') THEN 1 ELSE 0 END) AS has_successful_child_post_or_patch,
                     ts.latest_successful_version,
@@ -688,7 +691,7 @@ class TestingReadModelService:
     _normalized_family_candidates = staticmethod(normalized_family_candidates)
 
     @classmethod
-    def _subject_summary_from_row(cls, row: sqlite3.Row) -> TestingSubjectReadModelSummary:
+    def _subject_summary_from_row(cls, row: Mapping[str, Any]) -> TestingSubjectReadModelSummary:
         return TestingSubjectReadModelSummary(
             id=int(row["id"]),
             device_subject_id=int(row["device_subject_id"]) if row["device_subject_id"] is not None else None,
@@ -697,6 +700,7 @@ class TestingReadModelService:
             catalogue_number=cls._optional_string(row["catalogue_number"]),
             primary_udi_di=cls._optional_string(row["primary_udi_di"]),
             basic_udi_di=cls._optional_string(row["basic_udi_di"]),
+            imported_baseline_present=bool(row["imported_baseline_present"]),
             post_success=bool(row["post_success"]),
             baseline_patch_success=bool(row["baseline_patch_success"]),
             has_successful_device_post=bool(row["has_successful_device_post"]),

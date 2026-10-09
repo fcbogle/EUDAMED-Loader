@@ -10,6 +10,7 @@ import lxml.etree as ET
 
 from app.models import SuccessXmlUploadResult
 from app.services.accepted_state import json_state, state_matches_version
+from app.services.accepted_evidence import imported_baseline
 from app.services.testing_state_store import TestingStateStore
 
 MESSAGE_NS = "https://ec.europa.eu/tools/eudamed/dtx/servicemodel/Message/v1"
@@ -174,6 +175,10 @@ class TestingSuccessXmlService:
             matched = None
         current_version = current[version_column] if current else None
         current_state = current[state_column] if current else None
+        if current and acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"}:
+            baseline = imported_baseline(connection, subject_id)
+            if baseline and incoming_version and int(incoming_version) <= int(baseline["version"]):
+                return  # Historical POST evidence cannot replace a newer imported current baseline.
         if current and acknowledgement.message_type == "UDI_DI.PATCH":
             current_version = current_version or current["latest_successful_version"]
             current_state = current_state or current["latest_successful_state_json"]

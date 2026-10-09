@@ -22,6 +22,11 @@ def accepted_post_state(connection: sqlite3.Connection, subject: sqlite3.Row) ->
     state = json_state(subject['latest_successful_post_state_json'])
     if state is not None:
         return state
+    # Imported current snapshots provide the full baseline without inventing POST history.
+    from app.services.accepted_evidence import imported_baseline
+    baseline = imported_baseline(connection, int(subject['id']))
+    if baseline is not None:
+        return baseline
     # Compatibility with acknowledgements predating the accepted POST projection.
     row = connection.execute('''
         SELECT generated.state_after_json FROM testing_events success

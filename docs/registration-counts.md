@@ -4,7 +4,7 @@ Reviewed 9 October 2026 against the current service. This describes implemented
 acknowledgement-based counts. The prepared Production workbook has 10,028 eligible
 rows and six skipped rows, but has not been imported and does not change these
 counts. Imported-baseline and confirmed template-only classification support is
-proposed in [production-importer-design.md](production-importer-design.md).
+implemented in [production-importer-design.md](production-importer-design.md).
 
 Registration State and Testing Summary / Submission Summary now share
 `POST /api/xml/registration-summary`. The response is calculated over the complete
@@ -67,3 +67,12 @@ Synthetic tests cover identity deduplication/conflicts, separate issuer
 identities, parent-only success, repeated operations, missing acceptance,
 identifier changes, filtering, uncapped history, snapshot changes, actual POST
 assessment rules, and unavailable UI counts.
+
+## Production imported evidence
+
+Imported export snapshots count as registration evidence for distinct devices and
+parents/cohort eligibility. They have `IMPORTED` status and contribute zero upload
+operation successes. Trusted template-only identities count as awaiting registration.
+Actual Upload Success XML events continue to determine POST/PATCH/Market Info
+operation counts and advance accepted states. Import eligibility and XML readiness
+are reported separately; the six review rows are excluded from the initial import.

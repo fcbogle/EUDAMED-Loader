@@ -5,6 +5,9 @@ from fastapi import APIRouter, HTTPException, Query
 from app.models import WorkbookImportRunRequest
 from app.services.excel_profile import ExcelProfiler
 from app.services.workbook_import import WorkbookImportService
+from app.services.workbook_import_selector import workbook_importer
+from app.config import get_settings
+
 
 router = APIRouter(tags=["profiling"])
 
@@ -48,12 +51,24 @@ def distinct_values(
 @router.post("/workbook-imports/run")
 def run_workbook_import(payload: WorkbookImportRunRequest | None = None) -> dict:
     request = payload or WorkbookImportRunRequest()
-    result = WorkbookImportService().run_import(
-        imported_by=request.imported_by,
-        label=request.label,
-        notes=request.notes,
-    )
-    return result.model_dump(mode="json")
+    arguments = dict(imported_by=request.imported_by, label=request.label, notes=request.notes)
+    if get_settings().environment == "prod":
+        arguments["assessment_token"] = request.assessment_token
+    try:
+        result = workbook_importer().run_import(**arguments)
+        return result if isinstance(result, dict) else result.model_dump(mode="json")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/workbook-imports/assess")
+def assess_production_workbook() -> dict:
+    if get_settings().environment != "prod":
+        raise HTTPException(status_code=400, detail="Prepared workbook assessment is only available in Prod.")
+    try:
+        return workbook_importer().assess()
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/workbook-imports/latest")

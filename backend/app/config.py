@@ -17,6 +17,8 @@ class Settings(BaseModel):
     environment: Literal["dev", "prod"] = "dev"
     environment_file: Path | None = None
     data_root: Path | None = None
+    production_import_workbook: Path | None = None
+    production_import_audit: Path | None = None
     artifacts_dir: Path
     excel_dir: Path
     schema_dir: Path
@@ -163,7 +165,7 @@ def _validate_profile(settings: Settings, values: dict[str, str]) -> None:
 def _isolated_paths(settings: Settings) -> list[Path]:
     return [settings.excel_dir, settings.basic_udi_reference_dir, settings.testing_state_db_path,
             settings.testing_state_backup_dir, settings.normalization_dir, settings.reports_dir,
-            settings.artifacts_dir]
+            settings.artifacts_dir] + [p for p in (settings.production_import_workbook, settings.production_import_audit) if p is not None]
 
 
 def validate_schema_package(settings: Settings) -> None:
@@ -193,6 +195,8 @@ def get_settings() -> Settings:
         environment=environment,
         environment_file=env_file,
         data_root=path("EUDAMED_DATA_ROOT", project_root / "data" / environment),
+        production_import_workbook=(path("EUDAMED_PRODUCTION_IMPORT_WORKBOOK", path("EUDAMED_DATA_ROOT", project_root / "data/prod") / "import_file/production-import.xlsx") if environment == "prod" else None),
+        production_import_audit=(path("EUDAMED_PRODUCTION_IMPORT_AUDIT", path("EUDAMED_DATA_ROOT", project_root / "data/prod") / "import_file/production-import.audit.json") if environment == "prod" else None),
         excel_dir=path("EUDAMED_EXCEL_DIR", project_root / "data/source_excel"),
         schema_dir=path("EUDAMED_SCHEMA_DIR", project_root / "data/schema_profiles" / schema_profile),
         testing_state_db_path=path("EUDAMED_TESTING_STATE_DB_PATH", project_root / "data/testing/testing-state.sqlite3"),

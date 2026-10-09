@@ -77,6 +77,9 @@ function recentActivityLabel(summary: TestingSubjectReadModelSummary): string {
   if (summary.latest_success_message_type === "UDI_DI.POST") {
     return "Child POST";
   }
+  if (summary.imported_baseline_present && !summary.latest_success_message_type) {
+    return "Imported accepted baseline";
+  }
   if (summary.latest_successful_version && Number(summary.latest_successful_version) > 1) {
     return "PATCH";
   }

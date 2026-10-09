@@ -1,3 +1,4 @@
+import { requestWorkbookImport } from "./workbookImportRequest";
 import { matchesModelSearch } from "./modelSearch";
 import { DeviceModelFilter, mergeModelOptions } from "./components/DeviceModelFilter";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -107,6 +108,8 @@ import type {
   TestingEventReadModelEntry,
   TestingWorkspaceSummary,
   WorkbookImportSnapshotSummary,
+  ProductionImportAssessment,
+  WorkbookImportRunResponse,
 } from "./types";
 import {
   findRecordByCatalogueNumber,
@@ -1238,24 +1241,53 @@ export function App() {
     setIsLoadingWorkbookImportMonitoring(false);
   }
 
-  async function runWorkbookImportFromUi(): Promise<void> {
+  const [productionImportAssessment, setProductionImportAssessment] = useState<ProductionImportAssessment | null>(null);
+  const [productionImportReport, setProductionImportReport] = useState<WorkbookImportRunResponse | null>(null);
+  const importButtonLabel = activeEnvironment === "prod" ? "Import Production Workbook" : "Import Workbooks";
+
+  useEffect(() => {
+    setProductionImportAssessment(null);
+    setProductionImportReport(null);
+  }, [activeEnvironment]);
+
+  async function runWorkbookImportFromUi(assessmentToken?: string): Promise<void> {
+    if (activeEnvironment === null) return;
     setIsRunningWorkbookImport(true);
     setWorkbookImportActionMessage(null);
     setError(null);
     try {
-      await api.runWorkbookImport({
-        imported_by: "ui",
-        label: `UI import ${new Date().toISOString()}`,
-      });
+      const response = await requestWorkbookImport(activeEnvironment, assessmentToken);
+      if (response.kind === "assessment") {
+        setProductionImportReport(null);
+        setProductionImportAssessment(response.result);
+        return;
+      }
+      const result = response.result;
+      setProductionImportAssessment(null);
+      if (activeEnvironment === "prod") setProductionImportReport(result);
       await loadWorkbookImportMonitoring();
       await loadCanonicalValidationBundle(true);
-      setWorkbookImportActionMessage(null);
+      setWorkbookImportActionMessage(activeEnvironment === "prod"
+        ? `${result.already_imported ? "Already imported" : "Import complete"}: ${result.created_count ?? 0} added, ${result.unchanged_count ?? 0} unchanged, ${result.skipped_count ?? 0} skipped.`
+        : null);
     } catch (requestError) {
+      setProductionImportAssessment(null);
       setWorkbookImportActionMessage(null);
       setError(requestError instanceof Error ? requestError.message : "Failed to run workbook import.");
     } finally {
       setIsRunningWorkbookImport(false);
     }
+  }
+
+  function downloadProductionImportReport(): void {
+    const report = productionImportAssessment ?? productionImportReport;
+    if (!report) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `production-import-report-${("import_batch_id" in report ? report.import_batch_id : "assessment")}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   useEffect(() => {
@@ -2124,7 +2156,7 @@ export function App() {
       (summary) =>
         (summary.catalogue_number === record.catalogue_number ||
           (record.primary_udi_di && summary.primary_udi_di === record.primary_udi_di)) &&
-        (summary.post_success || summary.has_successful_device_post || summary.has_successful_child_post_or_patch),
+        (summary.imported_baseline_present || summary.post_success || summary.has_successful_device_post || summary.has_successful_child_post_or_patch),
     ),
   );
   const selectedPatchRecord = findRecordByCatalogueNumber(selectedPatchDeviceRecords, selectedXmlRecordKey);
@@ -3348,9 +3380,9 @@ export function App() {
                     className="action-button import-workbooks-button"
                     type="button"
                     onClick={() => void runWorkbookImportFromUi()}
-                    disabled={isRunningWorkbookImport}
+                    disabled={isRunningWorkbookImport || activeEnvironment === null}
                   >
-                    {isRunningWorkbookImport ? "Importing Workbooks..." : "Import Workbooks"}
+                    {isRunningWorkbookImport ? (activeEnvironment === "prod" ? "Checking / Importing..." : "Importing Workbooks...") : importButtonLabel}
                   </button>
                   <span className={`status-pill ${submissionSnapshotStatus.className}`}>
                     {submissionSnapshotStatus.label}
@@ -3452,6 +3484,33 @@ export function App() {
             </button>
           </section>
           {submissionDataTab === "activity" ? <SubmissionBatchHistory modelOptions={xmlModelOptions} /> : null}
+          {activeEnvironment === "prod" && productionImportAssessment && (
+            <section className="panel" aria-labelledby="production-import-heading">
+              <h2 id="production-import-heading">Review Production Import</h2>
+              <p>Production · {productionImportAssessment.workbook} · {productionImportAssessment.audit}</p>
+              <p>{productionImportAssessment.eligible_count} eligible ({productionImportAssessment.eligible_by_sheet["To Register"] ?? 0} To Register, {productionImportAssessment.eligible_by_sheet.Registered ?? 0} Registered), {productionImportAssessment.skipped_count} skipped.</p>
+              <p>{productionImportAssessment.new_count} new · {productionImportAssessment.unchanged_count} unchanged · {productionImportAssessment.retained_count} existing devices retained.</p>
+              <p>{productionImportAssessment.xml_ready_count} XML-ready · {productionImportAssessment.xml_blocked_count} blocked for XML generation. Import eligibility is separate from XML readiness.</p>
+              {productionImportAssessment.skipped_rows.length > 0 && <details><summary>Skipped devices</summary><ul>
+                {productionImportAssessment.skipped_rows.map(row => <li key={`${row.issuer}:${row.udi_di}`}>{row.udi_di} ({row.issuer}) — {row.sheet}, row {row.row}: {row.reasons.join("; ")}</li>)}
+              </ul></details>}
+              {productionImportAssessment.differences.length > 0 && <div role="alert"><p>Existing devices have changed. Review differences before importing.</p><ul>
+                {productionImportAssessment.differences.map(row => <li key={`${row.issuer}:${row.udi_di}`}>{row.issuer}: {row.udi_di} — {row.fields.map(field => field.field).join(", ")}</li>)}
+              </ul></div>}
+              <details><summary>Workbook Summary notes</summary><ul>{productionImportAssessment.summary.map((entry, index) => <li key={index}>{entry.Category}: {entry.Scope} — {entry.Details} {entry["Action / Status"]}</li>)}</ul></details>
+              <div className="catalogue-dialog-actions">
+                <button className="ghost-button" type="button" disabled={isRunningWorkbookImport} onClick={() => setProductionImportAssessment(null)}>Cancel</button>
+                <button className="ghost-button" type="button" onClick={downloadProductionImportReport}>Download assessment report</button>
+                <button className="action-button" type="button" disabled={isRunningWorkbookImport || !productionImportAssessment.can_import} onClick={() => void runWorkbookImportFromUi(productionImportAssessment.assessment_token)}>Confirm Production Import</button>
+              </div>
+            </section>
+          )}
+          {activeEnvironment === "prod" && productionImportReport && <section className="panel">
+            <h2>Production Import Result</h2>
+            <p>{productionImportReport.created_count ?? 0} added · {productionImportReport.unchanged_count ?? 0} unchanged · {productionImportReport.skipped_count ?? 0} skipped.</p>
+            <button className="ghost-button" type="button" onClick={downloadProductionImportReport}>Download import report</button>
+          </section>}
+
           {submissionDataTab === "snapshot" ? (
             <>
           {!isLoadingWorkbookImportMonitoring && !hasWorkbookImportSnapshot && !workbookImportSummaryError ? (
@@ -3471,9 +3530,9 @@ export function App() {
                   className="action-button import-workbooks-button"
                   type="button"
                   onClick={() => void runWorkbookImportFromUi()}
-                  disabled={isRunningWorkbookImport}
+                  disabled={isRunningWorkbookImport || activeEnvironment === null}
                 >
-                  {isRunningWorkbookImport ? "Importing Workbooks..." : "Import Workbooks"}
+                  {isRunningWorkbookImport ? (activeEnvironment === "prod" ? "Checking / Importing..." : "Importing Workbooks...") : importButtonLabel}
                 </button>
                 {workbookImportActionMessage ? <span className="save-message">{workbookImportActionMessage}</span> : null}
               </div>

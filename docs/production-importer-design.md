@@ -1,7 +1,10 @@
-# Production importer design — for owner review
+# Production importer — implemented contract
 
-Design checkpoint: 9 October 2026. No Production importer, database initialization
-or schema change is implemented by this document.
+Implemented 9 October 2026 following owner approval. The separate backend
+service module uses the existing SQLite tables and UI, preserves Dev raw-template
+import and distinguishes exported accepted baselines from successful uploads.
+Production has not been started or populated. The configured supplied pair was
+assessed read-only; synthetic isolated databases exercise persistence and workflows.
 
 ## Agreed behaviour
 
@@ -18,14 +21,14 @@ or schema change is implemented by this document.
 - Preserve Upload Success XML, per-device accepted-state progression, single/bulk
   POST/PATCH/Market Info separation and version safeguards.
 - Use one current pair: `data/prod/import_file/production-import.xlsx` and
-  `production-import.audit.json`. Fixed-name preparation is agreed but not yet
-  implemented; the latest actual pair still has the 20261009-114955-299236 suffix.
+  `production-import.audit.json`. Fixed-name staged publication and lock/hash validation are implemented.
+  The current pair was published from the validated October 9 preparation.
 
 Current expected first-import input: 9,674 To Register and 360 Registered rows.
 Eligible: 9,672 + 356 = 10,028. Skipped: two + four = six. These are workbook
 filter counts, not a claim that all 10,028 devices are already XML-ready.
 
-## Proposed operator flow
+## Approved operator flow
 
 Reuse the existing Submission Data panels, status card, import button position,
 loading/error presentation, database monitoring and post-import refresh. Both
@@ -57,7 +60,7 @@ Database initialization occurs only at the agreed first local Prod startup/impor
 
 ## Backend selection and API
 
-Add an importer selector using validated `Settings.environment`. Dev delegates
+The importer selector uses validated `Settings.environment`. Dev delegates
 to `WorkbookImportService`; Prod delegates to `ProductionWorkbookImporter`.
 Both use their environment's configured database, never a browser-supplied path.
 Prod rejects a Dev-style run request without a valid assessment confirmation.
@@ -65,8 +68,7 @@ Prod rejects a Dev-style run request without a valid assessment confirmation.
 - Keep `POST /api/workbook-imports/run` as the commit entry point and preserve the
   current Dev request/response contract.
 - Add `POST /api/workbook-imports/assess` for Production assessment.
-- Extend the Prod run response with created/unchanged/skipped counts and a report
-  reference. Existing shared import metadata remains available to monitoring.
+- Extend the Prod run response with created/unchanged/skipped counts and an inline JSON report. Existing shared import metadata remains available to monitoring.
 - Add configurable Prod-only current-workbook/audit paths under the validated
   Prod root. Keep Dev's current path configuration intact. A missing/mismatched
   Prod pair is an actionable error, never a fallback to raw-template import.
@@ -195,7 +197,7 @@ or trustworthy accepted export evidence as appropriate. Legacy tracekey/Playgrou
 sample SRNs must not fill Production gaps. Omit unavailable optional URLs; do not
 render Not available yet as a URL.
 
-## First release and repeat imports — recommendation to approve
+## First release and repeat imports — approved policy
 
 Focus on initial population and additive retries:
 
@@ -219,10 +221,10 @@ two filenames is not inherently atomic; readers must reject/retry mixed pairs.
 Fail clearly when the current workbook is locked. Retain originals and record input
 hashes/snapshots in the import history even after the current pair is overwritten.
 
-## Implementation order and acceptance checks
+## Implementation checklist (completed; first Prod run pending)
 
-1. Agree this design and first-release repeat-import policy. Finish fixed-name
-   workbook/audit preparation and select the current verified pair.
+1. Implement the approved direction: finish fixed-name workbook/audit preparation
+   and select the current verified pair.
 2. Add profile-bound importer selection and a read-only assessment, with Dev
    regression coverage and synthetic Prod file/identity/filter tests.
 3. Implement the existing-schema persistence adapter and explicit baseline evidence
@@ -242,7 +244,7 @@ ready/blocked canonical counts account for every device, registered evidence is
 attributable to exports, optional URL omission does not block the 940 devices and
 no Dev database or files change. No real EUDAMED upload or M2M transport is introduced.
 
-## Repository integration points inspected
+## Repository integration points
 
 - `backend/app/routers/profiling.py`: current run route directly invokes Dev importer.
 - `backend/app/services/workbook_import.py`: source, identity, projection, monitoring
@@ -254,6 +256,57 @@ no Dev database or files change. No real EUDAMED upload or M2M transport is intr
 - `backend/app/config.py`: validated Dev/Prod paths and actors.
 - `frontend/src/App.tsx`, `api.ts`: existing button locations, run request and refresh.
 
-Review points: configured-file UI flow, explicit imported-baseline event vocabulary
-with no physical schema change, additive first-release repeat-import policy and
-the shared evidence-resolution changes needed to preserve the tested workflows.
+Configured-file flow, exported-baseline provenance and additive repeat-import
+policy are now approved. Detailed imported-event vocabulary and shared
+evidence-resolution mechanics must preserve the existing schema and tested workflows.
+
+## Deferred preparation UI
+
+The owner requested a dedicated UI for new/updated Template workbooks and
+EUDAMED-generated export XMLs, exception reporting and generation of an updated
+import workbook with matching audit. This is a later roadmap item; design and
+implementation are deferred. It does not change the initial configured-file
+import flow. Reuse the preparation utility as the starting point and keep
+preparation distinct from database import. See Roadmap in Documentation.
+
+## Implementation and current assessment
+
+`production_workbook_import.py` performs assessment and transactional import;
+`production_workbook_adapter.py` maps prepared data and reconstructs accepted
+snapshots; `production_import_files.py` publishes the coherent current pair.
+No new package, database schema or dependency was introduced. Dev delegates to
+its existing service through `workbook_import_selector.py`.
+
+Assessment tokens expire after 15 minutes, are held in process memory, and bind
+configuration, file hashes and database contents. A new assessment supersedes the
+previous pending assessment; server restart requires reassessment. Run a single
+backend worker for this local flow. Excel locks and the exclusive pair lock stop
+publication/import. Readers reject mismatched hashes; two file replacements are
+not filesystem-atomic. Failure restores the previous pair; an interrupted process
+can leave a lock requiring inspection before removal.
+
+Source/audit hashes, original template occurrences and complete accepted XML trees
+are preserved. Import creates no generated package or successful POST/PATCH event.
+An imported `PRODUCTION_EXPORT.SNAPSHOT` has `IMPORTED` status and
+`BASELINE_IMPORT` kind. Shared accepted-state/cohort resolution recognizes this
+evidence while actual upload-success counts and flags retain their meaning.
+
+Repeat imports add only new eligible identities. Unchanged input is a no-op when
+nothing new exists. The differences report includes before/after business fields;
+changed existing identities stop import. Missing or newly skipped existing devices
+remain stored, including their newer locally accepted states. Source rows and
+baseline events remain append-only; current projection batch metadata advances to
+keep retained devices available in the shared read model.
+
+Current pair: 10,028 eligible, six skipped; 10,026 XML-ready and two XML-blocked.
+Both blocked devices are Echelon catalogue `EC27LN7S`, GS1 UDI-DIs
+`05050649030901` and `05050649032462`. Both are imported, but model/catalogue
+selection cannot distinguish them safely, so XML generation is blocked until
+identity selection is resolved. This is separate from Review Required filtering.
+The downloadable assessment/import report lists XML blockers and workbook notes.
+
+Synthetic coverage includes imported versions 1/2/3 progressing to PATCH 2/3/4,
+single and bulk PATCH/Market Info, real generated-package Success XML correlation,
+duplicate/delayed responses, retained countries, reimport/additions/changes,
+rollback, expired/configuration/database changes, hash mismatch and pair rollback.
+First local Production startup and owner-reviewed import remain the next operator step.

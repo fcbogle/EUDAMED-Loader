@@ -15,7 +15,7 @@ From the repository root:
   --parent-market-override 'GS1:5050649ELANACTIVENG=Germany' \
   --parent-market-override 'GS1:5050649MAXLINER5K=Germany,France' \
   --parent-market-override 'GS1:5050649MAXSLEEVEM7=Germany,France' \
-  --previous-audit data/prod/import_file/production-import-20261009-114955-299236.audit.json
+  --previous-audit data/prod/import_file/production-import.audit.json
 ```
 
 The two explicit overrides are needed for the supplied September 11 export set,
@@ -33,16 +33,13 @@ Default locations:
 | Output workbook and audit JSON | `data/prod/import_file/` |
 
 Override paths with `--template-dir`, `--xml-dir`, `--parent-reference` and
-`--output-dir`. Output filenames use UTC timestamps including microseconds.
-Each run creates a new `.xlsx` and matching `.audit.json`. Retain them together
-with the original inputs. Outputs and production inputs are ignored by Git.
-
-The owner has agreed to one current `production-import.xlsx` /
-`production-import.audit.json` pair in this output directory. Fixed-name staged
-replacement and lock handling are **not implemented**; the command above still
-creates a new dated pair. The [workbook contract](production-import-workbook-design.md)
-describes implemented preparation, while the
-[Production importer design](production-importer-design.md) remains proposed.
+`--output-dir`. The command now updates `production-import.xlsx` and
+`production-import.audit.json` using staged publication, hash verification and
+exclusive writer/Excel locks. It automatically uses the current audit for prior
+scope-removal notes when `--previous-audit` is omitted. `--dated-output` explicitly
+retains a dated pair instead. Original inputs remain unchanged and ignored by Git.
+See the [workbook contract](production-import-workbook-design.md) and
+[implemented importer](production-importer-design.md).
 
 The parent reference is excluded from device-template scanning even when stored
 in the same folder. Approved market overrides apply to proposed output only; the
@@ -57,8 +54,8 @@ from prepared URL fields, preserving the source value in the audit. Optional URL
 do not set Review Required. Summary records Included with optional URL omitted,
 grouped by parent; independent conflicts still retain their review flags.
 
-Current [workbook](../data/prod/import_file/production-import-20261009-114955-299236.xlsx)
-and [audit](../data/prod/import_file/production-import-20261009-114955-299236.audit.json):
+Current [workbook](../data/prod/import_file/production-import.xlsx)
+and [audit](../data/prod/import_file/production-import.audit.json):
 
 - To Register: 9,672 Review Required = No; two Yes.
 - Registered: 356 No; four Yes.
@@ -69,9 +66,9 @@ and [audit](../data/prod/import_file/production-import-20261009-114955-299236.au
 Scope-removal notes carry forward on subsequent preparations while the affected
 identities remain absent; restored identities are removed from those notes.
 Sixteen tests passed. Saved-output checks verified all 940 inclusion flags,
-Summary entries, counts and source/output hashes. Outputs use new dated filenames.
-The actual Prod database importer is still pending; these are eligibility counts,
-not completed database imports.
+Summary entries, counts and source/output hashes. These are eligibility counts,
+not completed database imports. The importer is now implemented and separately
+verified on synthetic databases; Production has not been populated.
 
 ## Refreshed preparation — first Summary workbook (historical)
 

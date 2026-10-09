@@ -97,6 +97,25 @@ export type SchemaInventory = {
   service_files: SchemaFileSummary[];
 };
 
+export type ProductionImportAssessment = {
+  environment: "prod";
+  workbook: string;
+  audit: string;
+  assessment_token: string;
+  eligible_count: number;
+  eligible_by_sheet: Record<string, number>;
+  skipped_count: number;
+  skipped_rows: { issuer: string; udi_di: string; sheet: string; row: number; reasons: string[] }[];
+  new_count: number;
+  unchanged_count: number;
+  retained_count: number;
+  differences: { issuer: string; udi_di: string; fields: { field: string; before: unknown; after: unknown }[] }[];
+  xml_ready_count: number;
+  xml_blocked_count: number;
+  can_import: boolean;
+  summary: Record<string, string | number>[];
+};
+
 export type WorkbookImportRunResponse = {
   import_batch_id: number;
   source_type: string;
@@ -105,6 +124,10 @@ export type WorkbookImportRunResponse = {
   workbook_count: number;
   source_row_count: number;
   device_subject_count: number;
+  created_count?: number;
+  skipped_count?: number;
+  unchanged_count?: number;
+  already_imported?: boolean;
 };
 
 export type WorkbookImportBatchSummary = {
@@ -848,6 +871,7 @@ export type TestingSubjectReadModelSummary = {
   catalogue_number: string | null;
   primary_udi_di: string | null;
   basic_udi_di: string | null;
+  imported_baseline_present?: boolean;
   post_success: boolean;
   baseline_patch_success: boolean;
   has_successful_device_post: boolean;

@@ -4,7 +4,7 @@ Implemented 19 September 2026: explicit startup profile selection, separate stor
 configuration, and checks before services open SQLite. The current environment is
 **Dev**, targeting Playground. UI environment labels are implemented through
 `GET /api/environment` and the shared EnvironmentBanner. The controlled Production
-baseline importer remains design work. Documentation reviewed 9 October 2026.
+baseline importer is implemented as a separate service module. Documentation reviewed 9 October 2026.
 
 ## Select a profile at startup
 
@@ -105,25 +105,29 @@ import acceptance data. Production preparation inputs have since been supplied:
 `data/prod/template/` (including the updated parent reference),
 `data/prod/eudamed_xml/` and generated outputs in `data/prod/import_file/`. See
 [preparation instructions](production-import-preparation.md) and the
-[importer design](production-importer-design.md). These preparation paths do not
-automatically change application profile settings or select a different importer.
-The table above records existing configuration/example paths, not the proposed
-prepared-workbook importer paths. The blank actor fields in `.env.prod.example`
-intentionally prevent it from passing validation unchanged.
+[importer design](production-importer-design.md). Backend-confirmed Prod selects the prepared-workbook importer; Dev keeps raw
+workbook import. `.env.prod.example` now includes:
 
-Do not copy the Dev database to Prod. The existing normal startup still initializes
-SQLite through application services, so use **`--check-config`** for profile review
-without database creation. Controlled production initialization/import and review
-of the existing initialization versus migration path remain separate work.
+```dotenv
+EUDAMED_PRODUCTION_IMPORT_WORKBOOK=data/prod/import_file/production-import.xlsx
+EUDAMED_PRODUCTION_IMPORT_AUDIT=data/prod/import_file/production-import.audit.json
+```
 
-Before running a Prod instance, prepare its approved source files and its own copy
-of normalization rules, then implement/rehearse the production accepted-baseline
-import. Passing the configuration check does not mean sources are complete or that
-production workflows are approved. The visible environment banner is implemented; environment-selected import UI,
-imported-baseline provenance and full workflow regression coverage against both
-schema profiles remain pending. Starting Prod currently does not enable the
-prepared-workbook importer. Use the read-only configuration check while that
-feature is designed and tested.
+Both files must be under the isolated Prod root, in the same directory, and match
+by workbook hash. Blank actor fields intentionally prevent the example from
+passing validation unchanged. Supply confirmed Production actors and its own
+normalization rules. Never copy the Dev database into Prod.
+
+Normal application startup initializes SQLite through existing services. Use
+**`--check-config`** for read-only profile review without database creation.
+Importer assessment itself can run against an absent database without creating
+it; confirmation initializes tables and persists the import transaction.
+
+Production UI uses Import Production Workbook, assessment, confirmation and JSON
+reports. Accepted export baselines remain separate from successful upload events.
+Synthetic regression covers the official Prod 3.0.30 schema and existing Dev
+workflows; the supplied workbook was assessed without database population. First
+local Production startup and reviewed import remain pending.
 
 The Dev package is explicitly a **3.0.30-derived bundle with a 3.0.32 message
 constraint**, not an official 3.0.32 release. See

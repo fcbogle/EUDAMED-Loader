@@ -11,6 +11,7 @@ import json
 import hashlib
 import sqlite3
 
+from app.services.accepted_evidence import imported_event_sql
 from app.config import get_settings
 from app.services.identity import normalize_identity, normalized_family_candidates
 from app.services.operation_assessment import OperationAssessmentService
@@ -26,10 +27,13 @@ def fields(record: dict) -> dict:
 
 def identifier(value: object, issuer: object = None) -> tuple[str, str]:
     value = token(value)
-    # Canonical XML identifiers have the form urn:ISSUER:CODE.
+    # Existing canonical records use ISSUER:CODE; older projections may use urn:ISSUER:CODE.
     if value.startswith("URN:"):
         parts = value.split(":", 2)
         return parts[1], parts[2]
+    if ":" in value:
+        entity, code = value.split(":", 1)
+        return entity, code
     return token(issuer), value
 
 
@@ -54,14 +58,17 @@ class RegistrationSummaryService:
             if projection is None:
                 raise ValueError("The latest import has no canonical snapshot. Refresh the import before using registration counts.")
             marker = self._marker(connection)
-            records = [self._compact(dict(row)) for row in connection.execute(
-                "SELECT device_subject_id, source_row_id, record_json FROM canonical_device_record WHERE source_import_batch_id=?", (batch["id"],))]
+            production = getattr(self.settings, "environment", "dev") == "prod"
+            record_query = ("SELECT c.device_subject_id, c.source_row_id, c.record_json, sr.raw_payload_json FROM canonical_device_record c JOIN source_row sr ON sr.id=c.source_row_id WHERE c.source_import_batch_id=?"
+                            if production else "SELECT device_subject_id, source_row_id, record_json FROM canonical_device_record WHERE source_import_batch_id=?")
+            records = [self._compact(dict(row)) for row in connection.execute(record_query, (batch["id"],))]
             source_count = connection.execute("SELECT COUNT(*) FROM source_row sr JOIN source_workbook sw ON sw.id=sr.source_workbook_id WHERE sw.import_batch_id=?", (batch["id"],)).fetchone()[0]
             issue_rows = connection.execute("SELECT di.device_subject_id FROM device_identity_issue di JOIN source_row sr ON sr.id=di.source_row_id JOIN source_workbook sw ON sw.id=sr.source_workbook_id WHERE sw.import_batch_id=? AND di.resolved_at IS NULL", (batch["id"],)).fetchall()
             issues = len(issue_rows)
             issue_subjects = {row[0] for row in issue_rows if row[0] is not None}
             subjects = [dict(row) for row in connection.execute("SELECT * FROM testing_subjects")] if "testing_subjects" in tables else []
-            events = [dict(row) for row in connection.execute("SELECT * FROM testing_events WHERE status='SUCCESS'")] if "testing_events" in tables else []
+            event_query = f"SELECT * FROM testing_events event WHERE status='SUCCESS' OR {imported_event_sql()}" if production else "SELECT * FROM testing_events WHERE status='SUCCESS'"
+            events = [dict(row) for row in connection.execute(event_query)] if "testing_events" in tables else []
         # Reuse generation's assessment rules, rather than reimplementing readiness.
         readiness = OperationAssessmentService().record_readiness()
         with sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True) as connection:
@@ -78,7 +85,7 @@ class RegistrationSummaryService:
         minimal = {name: record.get(name) for name in ("product_family", "product_variant", "primary_udi_di", "catalogue_number", "issuing_entity")}
         minimal["fields"] = [field for field in record.get("fields", []) if field["canonical_path"] in
                              {"device_record.identifier", "device_record.basic_udi_identifier", "basic_device.basic_udi_di"}]
-        return {**row, "fingerprint": hashlib.sha256(row["record_json"].encode()).hexdigest(), "record_json": json.dumps(minimal)}
+        return {**row, "production_registration_status": json.loads(row.get("raw_payload_json") or "{}").get("production_import", {}).get("registration_status"), "fingerprint": hashlib.sha256(row["record_json"].encode()).hexdigest(), "record_json": json.dumps(minimal)}
 
     @staticmethod
     def _marker(connection: sqlite3.Connection) -> tuple:
@@ -157,19 +164,19 @@ class RegistrationSummaryService:
                 key = None
             states = [json.loads(subject[column]) for column in ("latest_successful_post_state_json", "latest_successful_patch_state_json", "latest_successful_state_json") if subject.get(column)]
             state = states[0] if states else {}
-            issuer = state.get("device_identifier_issuing_entity") or state.get("issuing_entity")
+            issuer = state.get("device_identifier_issuing_entity") or state.get("issuing_entity") or state.get("device_record", {}).get("device_identifier_issuing_entity")
             if not key and issuer:
                 candidate = identifier(subject.get("primary_udi_di"), issuer)
                 key = candidate if candidate in devices else None
             if key and issuer and token(issuer) != key[0]:
                 key = None
-            if key and types & {"DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH"}:
+            if key and types & {"DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH", "PRODUCTION_EXPORT.SNAPSHOT"}:
                 accepted[key].add(subject["id"])
                 matched_subjects.add(subject["id"])
-            if "DEVICE.POST" in types:
+            if types & {"DEVICE.POST", "PRODUCTION_EXPORT.SNAPSHOT"}:
                 code = token(subject.get("basic_udi_di"))
                 candidates = parents_by_code[code]
-                parent_issuer = state.get("basic_identifier_issuing_entity") or issuer
+                parent_issuer = state.get("basic_identifier_issuing_entity") or state.get("device_record", {}).get("basic_identifier_issuing_entity") or issuer
                 parent = identifier(code, parent_issuer) if parent_issuer else devices[key][0]["parent"] if key else None
                 # A parent-only acknowledgement can be used only if its issuer is recoverable.
                 if parent in candidates:
@@ -197,7 +204,8 @@ class RegistrationSummaryService:
                 "latest_patch_version": None, "latest_market_info_version": None, "parent_issuing_entity": parent[0] if parent else None,
             })
             group["total_devices"] += 1
-            group["registered_devices" if key in accepted else "unknown_devices"] += 1
+            awaiting = key not in accepted and all(r.get("production_registration_status") == "Not registered" for r in rows)
+            group["registered_devices" if key in accepted else "awaiting_devices" if awaiting else "unknown_devices"] += 1
             eligible = [entry for entry in ready_by_code[key[1]] if
                         normalize_identity(entry["product_variant"]) == normalize_identity(record["product_variant"]) and
                         set(normalized_family_candidates(entry["product_family"])) & set(normalized_family_candidates(record["product_family"])) and
@@ -214,6 +222,9 @@ class RegistrationSummaryService:
                     if name in {"patch_ready", "market_info_ready"} and key not in accepted:
                         continue
                     group[name] += int(all(entry[name] for entry in eligible))
+            if awaiting:
+                awaiting_ready = bool(eligible and parent and issuer_unique and consistent and all(e["post_ready"] or e["child_post_ready"] for e in eligible))
+                group["awaiting_ready" if awaiting_ready else "awaiting_blocked"] += 1
             subject_ids = accepted.get(key, set())
             group["patch_completed"] += int(any("UDI_DI.PATCH" in successful[s] for s in subject_ids))
             group["market_info_completed"] += int(any("MARKET_INFO.PUT" in successful[s] for s in subject_ids))
@@ -245,7 +256,7 @@ class RegistrationSummaryService:
                         for name in ("DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH", "MARKET_INFO.PUT")}
         return {"import_batch_id": batch["id"], "imported_at": batch["imported_at"], "calculated_at": datetime.now(UTC).isoformat(),
                 "latest_acceptance_at": max((e.get("tested_at") or "" for e in events), default="") or None,
-                "source_rows": source_count, "mapped_rows": len(records), "outside_canonical_scope_rows": source_count - len(records),
+                "source_rows": source_count, "mapped_rows": len(records), "outside_canonical_scope_rows": max(0, source_count - len(records)),
                 "unresolved_identity_rows": unresolved, "duplicate_identity_rows": duplicates, "identity_issue_count": identity_issues,
                 "unmatched_success_subjects": len(set(successful) - matched_subjects),
                 "event_counts": event_counts, "groups": sorted(selected, key=lambda g: (g["product_family"], g["product_variant"], g["basic_udi_di"])),

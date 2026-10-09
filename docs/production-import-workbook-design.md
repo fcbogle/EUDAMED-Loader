@@ -1,8 +1,7 @@
 # Production import workbook contract
 
 Updated 9 October 2026 against the preparation utility and current saved workbook.
-Workbook preparation is implemented. The application Production importer remains
-unimplemented and is described in [production-importer-design.md](production-importer-design.md).
+Workbook preparation is implemented. The application Production importer is implemented and described in [production-importer-design.md](production-importer-design.md).
 This document does not authorize Production database initialization or import.
 
 ## Locations and output lifecycle
@@ -18,16 +17,13 @@ The selected parent reference is excluded from device-template scanning. It
 supersedes `data/basic_udi_reference/BasicUDIs.xlsx` for Production preparation;
 Dev reference configuration is unchanged.
 
-The current utility creates a new timestamped `.xlsx` / `.audit.json` pair on each
-run. The latest local pair is `production-import-20261009-114955-299236.xlsx` and
-`production-import-20261009-114955-299236.audit.json`. Earlier pairs are historical
-and may no longer be present. Production inputs and outputs are ignored by Git.
-
-The owner has agreed to maintain one current pair named `production-import.xlsx`
-and `production-import.audit.json`. That change is **not implemented yet**.
-It requires staged validation, coherent hash verification, a single writer and
-clear handling of Excel locks. Replacing two files does not itself make the pair
-atomic. Preserve the original templates, parent reference and XML files.
+The command stages a dated pair, then publishes the single current
+`production-import.xlsx` / `production-import.audit.json` pair with an exclusive
+writer lock, Excel-lock checks and workbook hash verification. Replacement errors
+restore the previous pair. Readers validate coherence because two renames are not
+atomic. `--dated-output` retains a dated pair for an explicit historical snapshot.
+Original inputs remain unchanged; Production inputs and outputs are ignored by Git.
+The current fixed-name pair contains the validated October 9 preparation.
 See [run instructions](production-import-preparation.md).
 
 ## Current populations and classification

@@ -2,6 +2,75 @@
 
 Updated October 9, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+## October 9 — Production Importer Implemented
+
+Implemented the approved configured-file flow in a separate backend service module,
+selected by backend environment. Dev retains raw-template import. Prod uses the
+existing SQLite schema and Submission Data panels, with Import Production Workbook,
+read-only assessment, confirmation and downloadable assessment/import JSON reports.
+A missing database remains absent during assessment. Tokens bind configuration,
+file hashes, database contents and a 15-minute expiry; process restart/new assessment
+requires reassessment. Use one local backend worker for this transient-token flow.
+
+The same current pair is now published at `data/prod/import_file/production-import.xlsx`
+and `production-import.audit.json`, from the validated October 9 dated preparation.
+CLI preparation defaults to staged fixed-name publication, Excel/exclusive writer
+locks, hash checks and rollback; `--dated-output` is available explicitly. Original
+inputs and the historical dated source pair remain unchanged. Source hashes,
+original occurrences and full exported XML trees are retained in import provenance.
+
+Read-only assessment of the supplied pair: 10,028 eligible (9,672 To Register,
+356 Registered), six skipped, 10,026 XML-ready and two XML-blocked. Both blocked
+rows are Echelon catalogue EC27LN7S: GS1 UDI-DIs 05050649030901 and 05050649032462.
+They are eligible for import, but the current model/catalogue XML selection cannot
+safely distinguish them. The assessment/import report lists blockers; workbook
+review flags are unchanged. All 940 optional-URL devices remain included.
+
+Persistence is transactional: new identities added; unchanged ignored; changes to
+existing business fields stop import with before/after reports; absent/newly skipped
+existing identities and newer accepted states retained. Baseline events are
+IMPORTED / BASELINE_IMPORT / PRODUCTION_EXPORT.SNAPSHOT, with explicit export
+provenance. No fabricated successful upload, reviewed ZIP or generated package.
+Shared registration counts, UI assessments, bulk cohorts and accepted-state
+resolution recognize baselines; actual upload-success flags/counts remain separate.
+
+Synthetic checks cover baseline versions 1/2/3 to PATCH 2/3/4, single/bulk PATCH
+and Market Info, UI assessments, generated ZIP Success XML correlation, duplicate
+and delayed responses, retained countries, reimports, changed data, rollback,
+expired/stale confirmations, unsupported accepted fields and pair publication failure.
+Verification: corrected full backend suite passed 266 tests in 254.45 seconds.
+Final affected-service regression passed 93 tests; the complete new importer suite
+passed all 16 tests, including four added after full-suite collection. Together
+these runs cover all 270 currently collected backend tests. The first full run
+found four subject-history SQL formatting failures; the corrected query and added
+history coverage passed subsequent checks. Existing FastAPI startup deprecation
+warnings remain. Frontend: 65 tests passed; TypeScript/Vite build passed with
+existing bundle warning (approximately 704 kB JavaScript). All local documentation
+links and `git diff --check` passed.
+
+Production has **not** been started or populated. Next: owner reviews this result,
+checks confirmed Production actors/normalization using `--check-config`, then starts
+the local Prod instance and reviews its assessment before confirming import.
+Deferred preparation UI and automated upload/M2M remain outside this implementation.
+The current checkpoint supersedes earlier implementation-pending notes below.
+
+## October 9 — Import Decisions Approved And Preparation UI Deferred
+
+The owner approved the configured current workbook/audit input, read-only
+assessment and confirmation, plus additive repeat-import handling. Subsequent
+new devices/corrected exceptions will use updated versions of the same pair:
+add new eligible identities, skip unchanged devices, stop/report changes to
+existing devices, retain missing identities and protect newer accepted state.
+Exported accepted-baseline evidence is kept distinct from successful submission
+acknowledgements. These decisions supersede the earlier pending review points.
+
+The owner also requested a dedicated UI to ingest new/updated Template files
+and EUDAMED-generated exports, report exceptions and generate an updated import
+workbook with matching audit. Added to the UI Roadmap as deferred work; design
+and implementation can wait. Initial importer remains a configured-file flow.
+No importer or preparation UI implementation was made in this documentation step.
+See [updated importer design](production-importer-design.md).
+
 ## October 9 — Complete Documentation Collection In UI
 
 All 17 Markdown files under `docs`, including report/sample notes and the index,
@@ -712,7 +781,7 @@ Next priorities:
 3. Review legacy accepted records with missing/partial snapshots before claiming complete source-drift protection. Choose a trusted recovery approach rather than filling historical acceptance from current workbook data.
 4. Gradually replace remaining text-based identity lookups with `device_subject_id` joins, preserving existing data and lineage. Broader canonical/submission persistence remains a separate design increment.
 5. Verify the implemented Bulk POST/PATCH performance work on a representative imported dataset and measure network/browser time before claiming 100-device launch performance.
-6. Review the October 9 Production importer design, implement the agreed No-only filter and existing-schema baseline adapter, preserve all eligible source identities with visible XML readiness blockers, and verify Upload Success XML before controlled Production initialization. Six device exceptions are deferred; 29 template exclusions still need scope confirmation. Preserve Dev behavior.
+6. Review the implemented Production importer, confirm profile actors/normalization with `--check-config`, then agree first local startup and reviewed import. Six review rows and two Echelon XML selection blockers are deferred; 29 template exclusions still need scope confirmation.
 7. Extend scenario coverage only with supporting validation and Playground evidence. Automated submission/M2M transport remains out of scope.
 
 The removed frontend branches, unused clients/types/state, generic preview component, duplicate normalization and old reviewed-POST gate should not be recreated. Retain historical archives unless their recovery/retention purpose has been deliberately resolved.

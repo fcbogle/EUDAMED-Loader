@@ -14,6 +14,7 @@ from typing import Any
 
 from app.services.identity import normalize_identity, normalized_family_candidates
 from app.services.accepted_state import accepted_device_state, accepted_post_state, accepted_market_state
+from app.services.accepted_evidence import imported_baseline, imported_event_sql, registration_event_sql
 from app.config import get_settings
 from app.xml_models import CriticalWarningXmlItem, PatchStateSnapshot, StorageConditionXmlItem
 
@@ -161,8 +162,11 @@ class TestingStateStore:
         version = str(latest_state.get("version") or "").strip()
         if not version:
             return None
+        with self._connect() as connection:
+            imported = imported_baseline(connection, int(row["id"]))
+        source = "production_export" if imported and str(imported.get("version")) == version and not row["latest_successful_patch_version"] else "sqlite_latest_successful_patch"
         return PatchStateResolution(
-            source="sqlite_latest_successful_patch",
+            source=source,
             state=PatchStateSnapshot(
                 version=version,
                 trade_name=self._optional_string(latest_state.get("trade_name")),
@@ -324,13 +328,11 @@ class TestingStateStore:
                 WHERE {family_clause}
                   AND normalized_product_variant = ?
                   AND normalized_basic_udi_di = ?
-                  AND post_success = 1
                   AND EXISTS (
                       SELECT 1
                       FROM testing_events event
                       WHERE event.subject_id = testing_subjects.id
-                        AND event.status = 'SUCCESS'
-                        AND event.message_type IN ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH')
+                        AND {registration_event_sql()}
                   )
                 ORDER BY id
                 """,
@@ -366,14 +368,12 @@ class TestingStateStore:
                 FROM testing_subjects
                 WHERE {family_clause}
                   AND normalized_product_variant = ?
-                  AND post_success = 1
                   AND basic_udi_di IS NOT NULL
                   AND EXISTS (
                       SELECT 1
                       FROM testing_events event
                       WHERE event.subject_id = testing_subjects.id
-                        AND event.status = 'SUCCESS'
-                        AND event.message_type IN ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH')
+                        AND {registration_event_sql()}
                   )
                 GROUP BY basic_udi_di
                 ORDER BY MIN(id)
@@ -395,13 +395,11 @@ class TestingStateStore:
                     WHERE {family_clause}
                       AND normalized_product_variant = ?
                       AND normalized_basic_udi_di = ?
-                      AND post_success = 1
-                      AND EXISTS (
+                          AND EXISTS (
                           SELECT 1
                           FROM testing_events event
                           WHERE event.subject_id = testing_subjects.id
-                            AND event.status = 'SUCCESS'
-                            AND event.message_type IN ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH')
+                            AND {registration_event_sql()}
                       )
                     ORDER BY id
                     LIMIT 10
@@ -448,8 +446,7 @@ class TestingStateStore:
                       SELECT 1
                       FROM testing_events event
                       WHERE event.subject_id = testing_subjects.id
-                        AND event.status = 'SUCCESS'
-                        AND event.message_type = 'DEVICE.POST'
+                        AND {registration_event_sql(parent=True)}
                   )
                 LIMIT 1
                 """,
@@ -484,8 +481,7 @@ class TestingStateStore:
                       SELECT 1
                       FROM testing_events event
                       WHERE event.subject_id = testing_subjects.id
-                        AND event.status = 'SUCCESS'
-                        AND event.message_type IN ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH')
+                        AND {registration_event_sql()}
                   )
                 LIMIT 1
                 """,
@@ -1423,11 +1419,11 @@ class TestingStateStore:
                 successes = connection.execute(f"""
                     SELECT testing_subjects.normalized_basic_udi_di, testing_subjects.normalized_primary_udi_di, event.message_type
                     FROM testing_subjects JOIN testing_events event ON event.subject_id = testing_subjects.id
-                    WHERE {clause} AND normalized_product_variant = ? AND event.status = 'SUCCESS'
+                    WHERE {clause} AND normalized_product_variant = ? AND {registration_event_sql()}
                     GROUP BY testing_subjects.id, event.message_type
                 """, (*params, self._normalize_identity(product_variant))).fetchall()
-                scope["parents"] = {row[0] for row in successes if row[2] == 'DEVICE.POST'}
-                scope["children"] = {row[1] for row in successes if row[2] in ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH')}
+                scope["parents"] = {row[0] for row in successes if row[2] in ('DEVICE.POST', 'PRODUCTION_EXPORT.SNAPSHOT')}
+                scope["children"] = {row[1] for row in successes if row[2] in ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH', 'PRODUCTION_EXPORT.SNAPSHOT')}
             token = self._generation.set(scope)
             yield
             connection.commit()

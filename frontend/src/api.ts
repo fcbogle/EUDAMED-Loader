@@ -22,6 +22,7 @@ import type {
   TestingWorkspaceSummary,
   RegistrationSummary,
   WorkbookImportRunResponse,
+  ProductionImportAssessment,
   WorkbookImportSnapshotSummary,
   SuccessXmlUploadResult,
 } from "./types";
@@ -159,7 +160,8 @@ export const api = {
         limit: params?.limit ?? 20,
       })}`,
     ),
-  runWorkbookImport: (payload?: { imported_by?: string; label?: string; notes?: string }) =>
+  assessProductionImport: () => sendJson<ProductionImportAssessment>("/workbook-imports/assess", "POST", {}),
+  runWorkbookImport: (payload?: { imported_by?: string; label?: string; notes?: string; assessment_token?: string }) =>
     sendJson<WorkbookImportRunResponse>("/workbook-imports/run", "POST", payload ?? {}),
   canonicalReview: () => getJson<CanonicalReviewBundle>("/canonical-review"),
   canonicalValidation: () => getJson<CanonicalValidationBundle>("/canonical-validation"),

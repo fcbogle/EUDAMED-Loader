@@ -24,7 +24,7 @@ class OperationAssessmentService:
             return []  # First-run UI: import is required before any operation is eligible.
         result = []
         for record in records:
-            if record.xml_readiness.status != "complete" or (record.submission_operation or "").upper() != "POST":
+            if record.xml_readiness.status != "complete" or ((record.submission_operation or "").upper() != "POST" and not self.xml_service.selector._imported_baseline_record(record)):
                 continue
             post = self._assess_single_post_record(record)
             patch = self._assess_single_patch_record(record)
@@ -137,6 +137,7 @@ class OperationAssessmentService:
             product_family=product_family,
             product_variant=product_variant,
             record_count=None,
+            accepted_baseline=True,
         )
         if catalogue_number:
             target_record = self._find_record(candidate_records, catalogue_number)
@@ -201,6 +202,7 @@ class OperationAssessmentService:
             product_family=product_family,
             product_variant=product_variant,
             record_count=None,
+            accepted_baseline=True,
         )
         if catalogue_number:
             target_record = self._find_record(candidate_records, catalogue_number)

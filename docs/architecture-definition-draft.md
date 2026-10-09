@@ -2,7 +2,7 @@
 
 ## Document Status And Purpose
 
-Reviewed and updated 9 October 2026 against current source and the [session handoff](session-handoff.md). The latest observed commit is `bbf5570` — `feat: prepare production import workbook with exception summary`; subsequent optional-URL preparation changes and the importer design are in the working tree. Use Git status for current commit/worktree state.
+Reviewed and updated 9 October 2026 against current source and the [session handoff](session-handoff.md). Production importer implementation is in the working tree; use Git status for current commit/worktree state.
 
 This document describes the application's architecture, responsibilities, state transitions and design boundaries. Implemented behavior is distinguished from future production and transport proposals. The handoff contains session continuity and verification details; the [Playground test report](eudamed-playground-test-report.md) contains execution evidence. Historical Playground findings do not establish current production registration state.
 
@@ -256,7 +256,7 @@ The UI model is a presentation of the existing family/variant pair, not a new ca
 
 Canonical search scopes source-sheet mappings, record selection and counts; Canonical Mapping displays the selected matching record's fields. Registration search scopes rows and metrics alongside status/actionable filters. Testing Summary scopes rows, counts, recent subjects and event history, resetting event pagination and expanded detail when search changes. Matching is case-insensitive with trimmed partial identifiers. Search-feedback space is reserved in the Registration Footprint and Testing Summary filter grids.
 
-Detailed Testing Summary lists still load at most 10,000 subjects/events per request and disclose the history limit. Registration State and Testing Summary / Submission Summary aggregate counts now use the uncapped `POST /api/xml/registration-summary` SQLite calculation, with identity reconciliation, filtering and snapshot consistency checks. Repeated operation successes do not increase distinct registered-device totals. Devices without matched acceptance evidence remain unknown in the current implementation. See [registration counts](registration-counts.md) for scope and exceptions; the history list limit does not cap those aggregates.
+Detailed Testing Summary lists still load at most 10,000 subjects/events per request and disclose the history limit. Registration State and Testing Summary / Submission Summary aggregate counts now use the uncapped `POST /api/xml/registration-summary` SQLite calculation, with identity reconciliation, filtering and snapshot consistency checks. Repeated operation successes do not increase distinct registered-device totals. Prod template-only devices are awaiting registration; devices without either matched accepted evidence or trusted template classification remain unknown. See [registration counts](registration-counts.md) for scope and exceptions; the history list limit does not cap those aggregates.
 
 ### Environment Identity And Schema Profiles
 
@@ -311,7 +311,13 @@ The earlier reconciliation workbook and Questions tab remain historical Quality-
 
 The current workbook has 10,034 identities: 10,028 eligible under the No-only review filter and six skipped. All 940 Elan MAX / MAX Liner/Sleeve rows are included with optional URLs omitted and approved markets. Summary retains six device exceptions and 29 removed-template scope notes. See the [workbook contract](production-import-workbook-design.md) and [preparation instructions](production-import-preparation.md).
 
-The [Production importer design](production-importer-design.md) preserves Dev raw-template import, proposes backend-profile selection of the prepared-workbook importer, reuses the same SQLite structure and UI, and requires exported accepted-baseline evidence compatible with Upload Success XML. Assessment/confirmation, imported event vocabulary and additive retry handling remain proposals for owner review. Fixed-name workbook/audit preparation is agreed but unimplemented. No Production importer or controlled database population is complete; workflow regression verification against both profiles remains outstanding.
+The [Production importer contract](production-importer-design.md) is implemented:
+backend-profile selection preserves Dev raw-template import and chooses the prepared
+Prod workbook/audit service, with assessment/confirmation, existing SQLite tables
+and UI, exported accepted baselines and Upload Success XML progression. Fixed-name
+pair publication and additive repeat-import safeguards are implemented. Synthetic
+regression covers both profiles; first local Prod startup/population remains pending.
+A dedicated template/export preparation UI remains deferred on the Roadmap.
 
 ### Future Production Eligibility
 
