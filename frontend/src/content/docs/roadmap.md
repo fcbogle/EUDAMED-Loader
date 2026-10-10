@@ -23,7 +23,7 @@ The owner approved the initial import flow and repeat-import policy:
 - Read the configured current workbook/audit pair, assess it, show counts and
   exceptions, then confirm import of the assessed content.
 - Import only Review Required = No rows. Include all 940 optional-URL devices;
-  defer the current six review rows.
+  defer the current five review rows.
 - Record exported accepted baselines with explicit provenance, separately from
   successful submission acknowledgements. Preserve Upload Success XML and
   accepted-state/version progression.

@@ -3,7 +3,7 @@
 Implemented 9 October 2026 following owner approval. The separate backend
 service module uses the existing SQLite tables and UI, preserves Dev raw-template
 import and distinguishes exported accepted baselines from successful uploads.
-Production has not been started or populated. The configured supplied pair was
+Production has started locally; the first import remains pending. The configured supplied pair was
 assessed read-only; synthetic isolated databases exercise persistence and workflows.
 
 ## Agreed behaviour
@@ -24,9 +24,18 @@ assessed read-only; synthetic isolated databases exercise persistence and workfl
   `production-import.audit.json`. Fixed-name staged publication and lock/hash validation are implemented.
   The current pair was published from the validated October 9 preparation.
 
-Current expected first-import input: 9,674 To Register and 360 Registered rows.
-Eligible: 9,672 + 356 = 10,028. Skipped: two + four = six. These are workbook
-filter counts, not a claim that all 10,028 devices are already XML-ready.
+Current expected first-import input: 9,674 To Register and 357 Registered rows.
+Eligible: 9,672 + 354 = 10,026. Skipped: two + three = five. These are workbook
+filter counts, not a claim that all 10,026 devices are already XML-ready.
+
+October 10 verification: the first local import is complete with 10,026 device
+subjects. Production Canonical Validation labels nonblocking source-completeness
+gaps as Completeness Notes and uses XML readiness for scope status. Export-backed
+UDI-DI status also supplies the duplicate market-status completeness field;
+existing imports receive this read-model enrichment without reimport or database
+rewrites. Unknown fields remain unknown, and Dev completeness rules are unchanged.
+Current notes: nine each on 350 registered devices (3,150 total); two Echelon
+catalogue-selection conflicts remain genuine XML blockers.
 
 ## Approved operator flow
 
@@ -46,7 +55,7 @@ behaviour and avoids a second input-selection mechanism. Show filenames and
 environment before confirmation; the browser cannot override either.
 
 1. Click Import Production Workbook to run a read-only assessment.
-2. Show eligible To Register/Registered counts, six skipped rows with reasons,
+2. Show eligible To Register/Registered counts, five skipped rows with reasons,
    new/existing identities, XML-ready/blocked projection counts, current import
    status and relevant Summary notes. Optional URL inclusion notes are information.
 3. Confirm import of the assessed content. Changed files, changed database state
@@ -238,7 +247,7 @@ hashes/snapshots in the import history even after the current pair is overwritte
 6. Run the full backend/frontend suites and production build. Validate the Prod
    profile read-only, then agree first local Prod initialization and reviewed import.
 
-For the current pair, assessment should report 10,028 eligible / six skipped before
+For the current pair, assessment should report 10,026 eligible / five skipped before
 any additional integrity failures. Verify all eligible identity/source rows persist,
 ready/blocked canonical counts account for every device, registered evidence is
 attributable to exports, optional URL omission does not block the 940 devices and
@@ -298,7 +307,7 @@ remain stored, including their newer locally accepted states. Source rows and
 baseline events remain append-only; current projection batch metadata advances to
 keep retained devices available in the shared read model.
 
-Current pair: 10,028 eligible, six skipped; 10,026 XML-ready and two XML-blocked.
+Current pair: 10,026 eligible, five skipped; 10,024 XML-ready and two XML-blocked.
 Both blocked devices are Echelon catalogue `EC27LN7S`, GS1 UDI-DIs
 `05050649030901` and `05050649032462`. Both are imported, but model/catalogue
 selection cannot distinguish them safely, so XML generation is blocked until
@@ -310,3 +319,9 @@ single and bulk PATCH/Market Info, real generated-package Success XML correlatio
 duplicate/delayed responses, retained countries, reimport/additions/changes,
 rollback, expired/configuration/database changes, hash mismatch and pair rollback.
 First local Production startup and owner-reviewed import remain the next operator step.
+
+Owner-approved exclusions now remove two Child’s 4-Bar Knee identities and one
+Blatchford App identity from the prepared pair. Six issuer/parent exclusion keys
+(including four Android/iOS programming-app parents without current device rows)
+are carried forward from the previous audit. Originals remain in audit provenance.
+These exclusions are separate from Review Required filtering; they add no review rows.

@@ -282,3 +282,37 @@ def test_unknown_parent_override_fails_before_output(inputs):
     with pytest.raises(ValueError, match="Invalid parent market override"):
         prepare_workbook(**inputs, parent_market_overrides={("GS1", "MISSING"): ["Germany"]})
     assert not inputs["output_dir"].exists()
+
+
+def test_owner_exclusions_cover_proposed_and_accepted_parents_and_preserve_sources(inputs):
+    import hashlib
+    paths=[*inputs['template_dir'].glob('*.xlsx'),*inputs['xml_dir'].glob('*.xml'),inputs['parent_reference']]
+    hashes={p:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
+    # The overlapping template proposes a different parent; accepted parent still excludes it.
+    workbook(inputs['template_dir']/'Template.xlsx',['Issuing Entity','UDI-DI code','Basic UDI-DI'],
+             [['GS1','00000000000001','OTHER'],['GS1','00000000000002','OTHER']])
+    hashes={p:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
+    result=prepare_workbook(**inputs,excluded_parent_identities={('GS1','PARENT')})
+    assert len(read_rows(result['workbook'],'Registered'))==0
+    assert len(read_rows(result['workbook'],'To Register'))==1
+    audit=json.loads(Path(result['audit']).read_text())
+    assert len(audit['export_occurrences'])==1 and len(audit['template_occurrences'])==2
+    assert audit['owner_excluded_device_rows'][0]['key']==['GS1','00000000000001']
+    assert result['owner_excluded_device_rows']==1
+    assert any(e['Category']=='Owner-approved exclusion' and e['Affected Rows']==1 for e in audit['summary_entries'])
+    assert all(hashlib.sha256(p.read_bytes()).hexdigest()==h for p,h in hashes.items())
+
+
+def test_exclusions_carry_forward_and_apply_to_future_devices(inputs):
+    first=prepare_workbook(**inputs,excluded_parent_identities={('GS1','FUTUREAPP')})
+    assert first['owner_excluded_device_rows']==0
+    workbook(inputs['parent_reference'],['Issuing Entity','Basic UDI-DI code','Device Model','Risk class'],
+             [['GS1','PARENT','Model','Class I'],['GS1','FUTUREAPP','Android App','Class I']],sheet='Upload')
+    workbook(inputs['template_dir']/'App.xlsx',['Issuing Entity','UDI-DI code','Basic UDI-DI'],
+             [['GS1','00000000000003','FUTUREAPP']],sheet='Android App')
+    second=prepare_workbook(**inputs,previous_audit=Path(first['audit']))
+    audit=json.loads(Path(second['audit']).read_text())
+    assert second['owner_excluded_device_rows']==1
+    assert audit['owner_excluded_parents']==[{'key':['GS1','FUTUREAPP']}]
+    assert ['GS1','00000000000003'] not in [r['key'] for r in audit['output_rows']]
+    assert second['registered_tab_rows']==1 and second['to_register_tab_rows']==1

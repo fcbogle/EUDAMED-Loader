@@ -391,6 +391,17 @@ class WorkbookImportService:
             CanonicalValidationRecord.model_validate(json.loads(str(row["record_json"])))
             for row in record_rows
         ]
+        if self.settings.environment == "prod":
+            from app.services.production_completeness import populate_export_market_status
+            for record in records:
+                if populate_export_market_status(record):
+                    record.completeness = self.validation_service._completeness_snapshot(record.fields)
+                    record.blockers = [
+                        f"{field.business_label} is not populated."
+                        for field in record.fields if field.required and field.value is None
+                    ]
+        ready_records = (sum(record.completeness.status == "complete" for record in records)
+                         if self.settings.environment == "prod" else int(snapshot_row["ready_records"]))
         return CanonicalValidationBundle(
             family_scope=str(snapshot_row["family_scope"]),
             scope_note=str(snapshot_row["scope_note"]),
@@ -401,8 +412,9 @@ class WorkbookImportService:
             matched_reference_records=int(snapshot_row["matched_reference_records"]),
             tracked_required_fields=int(snapshot_row["tracked_required_fields"]),
             tracked_xml_required_fields=int(snapshot_row["tracked_xml_required_fields"]),
-            ready_records=int(snapshot_row["ready_records"]),
-            blocked_records=int(snapshot_row["blocked_records"]),
+            ready_records=ready_records,
+            blocked_records=(len(records) - ready_records if self.settings.environment == "prod"
+                             else int(snapshot_row["blocked_records"])),
             xml_ready_records=int(snapshot_row["xml_ready_records"]),
             xml_blocked_records=int(snapshot_row["xml_blocked_records"]),
             family_summaries=self.validation_service._build_family_summaries(records),

@@ -1,5 +1,8 @@
+import { productionImportNotes } from "./productionImportNotes";
 import { requestWorkbookImport } from "./workbookImportRequest";
 import { matchesModelSearch } from "./modelSearch";
+import { matchingProductionMappingVariants } from "./productionVariantMappings";
+import { canonicalCompletenessNotes, canonicalValidationStatus } from "./canonicalValidationStatus";
 import { DeviceModelFilter, mergeModelOptions } from "./components/DeviceModelFilter";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBulkPostedCohorts } from "./useBulkPostedCohorts";
@@ -1128,8 +1131,8 @@ export function App() {
     );
   }
 
-  async function loadCanonicalReviewBundle(): Promise<void> {
-    if (canonicalReview || isLoadingCanonicalReview) {
+  async function loadCanonicalReviewBundle(forceRefresh = false): Promise<void> {
+    if ((!forceRefresh && canonicalReview) || isLoadingCanonicalReview) {
       return;
     }
     setIsLoadingCanonicalReview(true);
@@ -1267,6 +1270,7 @@ export function App() {
       if (activeEnvironment === "prod") setProductionImportReport(result);
       await loadWorkbookImportMonitoring();
       await loadCanonicalValidationBundle(true);
+      await loadCanonicalReviewBundle(true);
       setWorkbookImportActionMessage(activeEnvironment === "prod"
         ? `${result.already_imported ? "Already imported" : "Import complete"}: ${result.created_count ?? 0} added, ${result.unchanged_count ?? 0} unchanged, ${result.skipped_count ?? 0} skipped.`
         : null);
@@ -1602,16 +1606,17 @@ export function App() {
     selectedFamilySummary?.xml_ready_records ??
     canonicalValidation?.xml_ready_records ??
     0;
-  const selectedValidationStatus =
-    selectedValidationScopeRows === 0
-      ? { label: "Stop", className: "danger" }
-      : selectedValidationBlockedRows > 0
-        ? { label: "Warning", className: "warn" }
-        : { label: "Ready", className: "ok" };
+  const selectedValidationStatus = canonicalValidationStatus(
+    activeEnvironment, selectedValidationScopeRows, selectedValidationBlockedRows, selectedValidationXmlReadyRows,
+  );
   const selectedStorageExample = selectedValidationRecord?.storage_condition_items[0] ?? null;
   const selectedWarningExample = selectedValidationRecord?.critical_warning_items[0] ?? null;
   const selectedMarketAvailabilityExample = selectedValidationRecord?.market_availability_items[0] ?? null;
-  const selectedOpenBlockerPreview = selectedValidationRecord?.blockers.slice(0, 3) ?? [];
+  const selectedCompletenessNotes = selectedValidationRecord
+    ? canonicalCompletenessNotes(selectedValidationRecord, activeEnvironment) : [];
+  const selectedOpenBlockerPreview = selectedCompletenessNotes.slice(0, 3);
+  const selectedCompletenessNoteRows = selectedVariantRecords.filter(record =>
+    canonicalCompletenessNotes(record, activeEnvironment).length > 0).length;
   const selectedXmlBlockerPreview = selectedValidationRecord?.xml_blockers.slice(0, 3) ?? [];
   const canonicalMappingRowLookup = new Map(canonicalMappingRows.map((row) => [row.canonicalPath, row]));
   const selectedValidationMappingRows = (selectedValidationRecord?.fields ?? []).map((field) => ({
@@ -1685,7 +1690,7 @@ export function App() {
           className: latestImportBatch ? "ok" : "warn",
           detail:
             !hasWorkbookImportSnapshot && !workbookImportSummaryError
-              ? "No workbook import snapshot exists yet. Run the initial import to populate the SQLite-backed submission view."
+              ? "Import a workbook to review devices."
               : workbookImportSummaryError
                 ? workbookImportSummaryError
                 : "Submission Data requires a workbook import before SQLite-backed monitoring and read-model panels can load.",
@@ -3125,6 +3130,13 @@ export function App() {
     return order[left.match_status] - order[right.match_status];
   });
   const selectedValidationVariantMappings = orderedVariantMappings.filter((mapping) => {
+    if (activeEnvironment === "prod") {
+      return matchingProductionMappingVariants(
+        mapping, validationVariantSummaries, selectedValidationFamily, selectedValidationVariant,
+      ).some(summary => matchesModelSearch(
+        validationModelSearch, summary.product_family, summary.product_variant, mapping.basic_udi_di,
+      ));
+    }
     if (!matchesModelSearch(validationModelSearch, workbookFamilyLabel(mapping.workbook), mapping.device_model, mapping.basic_udi_di)) return false;
     if (selectedVariantSummary) {
       return (
@@ -3238,7 +3250,7 @@ export function App() {
           <div className="nav-title-block">
             <strong>EUDAMED Profiling Workspace</strong>
             <span className="nav-subtitle">
-              Submission data, validation, testing, and tracking
+              Device data, XML preparation, and registration tracking
             </span>
           </div>
         </div>
@@ -3303,14 +3315,14 @@ export function App() {
         </div>
       </nav>
 
-      <section className="hero">
+      <section className={activeTab === "workbooks" ? "hero submission-data-hero" : "hero"}>
         <div className="hero-copy-block">
           {activeTab === "workbooks" ? (
             <>
               <p className="eyebrow">Operational Data</p>
               <h1>Submission Data</h1>
               <p className="hero-copy hero-copy-compact">
-                Review imported workbook state, device coverage, XML readiness, duplicates, and current SQLite status.
+                Review device coverage, registration status, and XML readiness.
               </p>
             </>
           ) : null}
@@ -3366,40 +3378,19 @@ export function App() {
         </div>
         <aside className="status-card">
           {activeTab === "workbooks" ? (
-            isLoadingWorkbookImportMonitoring ? (
-              <>
-                <span className="status-label">Data Snapshot</span>
-                <span className={`status-pill ${submissionSnapshotStatus.className}`}>{submissionSnapshotStatus.label}</span>
-                <p className="status-detail status-detail-tight">{submissionSnapshotStatus.detail}</p>
-              </>
-            ) : (
-              <>
-                <span className="status-label">Data Snapshot</span>
-                <div className="status-card-toolbar">
-                  <button
-                    className="action-button import-workbooks-button"
-                    type="button"
-                    onClick={() => void runWorkbookImportFromUi()}
-                    disabled={isRunningWorkbookImport || activeEnvironment === null}
-                  >
-                    {isRunningWorkbookImport ? (activeEnvironment === "prod" ? "Checking / Importing..." : "Importing Workbooks...") : importButtonLabel}
-                  </button>
-                  <span className={`status-pill ${submissionSnapshotStatus.className}`}>
-                    {submissionSnapshotStatus.label}
-                  </span>
-                </div>
-                {latestImportBatch ? (
-                  <p className="status-detail status-detail-tight">
-                    Last import: <span className="status-detail-emphasis">{formatIsoDateTime(latestImportBatch.imported_at)}</span>.
-                  </p>
-                ) : (
-                  <p className="status-detail status-detail-tight">
-                    {submissionSnapshotStatus.detail}
-                  </p>
-                )}
-                {workbookImportActionMessage ? <p className="status-detail status-detail-tight">{workbookImportActionMessage}</p> : null}
-              </>
-            )
+            <>
+              <button
+                className="action-button import-workbooks-button"
+                type="button"
+                onClick={() => void runWorkbookImportFromUi()}
+                disabled={isLoadingWorkbookImportMonitoring || isRunningWorkbookImport || activeEnvironment === null}
+              >
+                {isRunningWorkbookImport ? (activeEnvironment === "prod" ? "Checking / Importing..." : "Importing Workbooks...") : importButtonLabel}
+              </button>
+              <span className={`status-pill compact ${submissionSnapshotStatus.className}`}>
+                {submissionSnapshotStatus.label}
+              </span>
+            </>
           ) : null}
           {activeTab === "canonicalValidation" ? (
             <>
@@ -3487,17 +3478,28 @@ export function App() {
           {activeEnvironment === "prod" && productionImportAssessment && (
             <section className="panel" aria-labelledby="production-import-heading">
               <h2 id="production-import-heading">Review Production Import</h2>
-              <p>Production · {productionImportAssessment.workbook} · {productionImportAssessment.audit}</p>
-              <p>{productionImportAssessment.eligible_count} eligible ({productionImportAssessment.eligible_by_sheet["To Register"] ?? 0} To Register, {productionImportAssessment.eligible_by_sheet.Registered ?? 0} Registered), {productionImportAssessment.skipped_count} skipped.</p>
-              <p>{productionImportAssessment.new_count} new · {productionImportAssessment.unchanged_count} unchanged · {productionImportAssessment.retained_count} existing devices retained.</p>
-              <p>{productionImportAssessment.xml_ready_count} XML-ready · {productionImportAssessment.xml_blocked_count} blocked for XML generation. Import eligibility is separate from XML readiness.</p>
-              {productionImportAssessment.skipped_rows.length > 0 && <details><summary>Skipped devices</summary><ul>
+              <p className="production-import-counts">
+                <strong>{productionImportAssessment.eligible_count.toLocaleString()} eligible</strong>
+                <span>{productionImportAssessment.skipped_count} skipped</span>
+                <span>{productionImportAssessment.xml_blocked_count} blocked for XML generation</span>
+              </p>
+              <details className="production-import-details">
+                <summary>Import details</summary>
+                <p>{productionImportAssessment.workbook} · {productionImportAssessment.audit}</p>
+                <p>{productionImportAssessment.eligible_by_sheet["To Register"] ?? 0} To Register · {productionImportAssessment.eligible_by_sheet.Registered ?? 0} Registered.</p>
+                <p>{productionImportAssessment.new_count} new · {productionImportAssessment.unchanged_count} unchanged · {productionImportAssessment.retained_count} existing devices retained.</p>
+                <p>{productionImportAssessment.xml_ready_count} XML-ready. Devices blocked for XML generation are still eligible for import.</p>
+              </details>
+              {productionImportAssessment.skipped_rows.length > 0 && <details className="production-import-details"><summary>Skipped devices ({productionImportAssessment.skipped_count})</summary><ul className="production-import-detail-list">
                 {productionImportAssessment.skipped_rows.map(row => <li key={`${row.issuer}:${row.udi_di}`}>{row.udi_di} ({row.issuer}) — {row.sheet}, row {row.row}: {row.reasons.join("; ")}</li>)}
               </ul></details>}
-              {productionImportAssessment.differences.length > 0 && <div role="alert"><p>Existing devices have changed. Review differences before importing.</p><ul>
+              {productionImportAssessment.xml_blocked_rows?.length > 0 && <details className="production-import-details"><summary>XML generation blockers ({productionImportAssessment.xml_blocked_count})</summary><ul className="production-import-detail-list">
+                {productionImportAssessment.xml_blocked_rows.map(row => <li key={`${row.issuer}:${row.udi_di}`}>{row.model} · {row.catalogue} · {row.udi_di} ({row.issuer}) — {row.reasons.join("; ")}</li>)}
+              </ul></details>}
+              {productionImportAssessment.differences.length > 0 && <div role="alert"><p>Existing devices have changed. Resolve differences before importing.</p><details className="production-import-details"><summary>Changed devices ({productionImportAssessment.differences.length})</summary><ul className="production-import-detail-list">
                 {productionImportAssessment.differences.map(row => <li key={`${row.issuer}:${row.udi_di}`}>{row.issuer}: {row.udi_di} — {row.fields.map(field => field.field).join(", ")}</li>)}
-              </ul></div>}
-              <details><summary>Workbook Summary notes</summary><ul>{productionImportAssessment.summary.map((entry, index) => <li key={index}>{entry.Category}: {entry.Scope} — {entry.Details} {entry["Action / Status"]}</li>)}</ul></details>
+              </ul></details></div>}
+              <details className="production-import-details"><summary>Workbook notes</summary><ul className="production-import-detail-list">{productionImportNotes(productionImportAssessment.summary).map((note, index) => <li key={index}>{note}</li>)}</ul></details>
               <div className="catalogue-dialog-actions">
                 <button className="ghost-button" type="button" disabled={isRunningWorkbookImport} onClick={() => setProductionImportAssessment(null)}>Cancel</button>
                 <button className="ghost-button" type="button" onClick={downloadProductionImportReport}>Download assessment report</button>
@@ -3911,15 +3913,15 @@ export function App() {
                 </div>
                 <div className="queue-chip">
                   <strong>{selectedValidationReadyRows}</strong>
-                  <span>canonical-ready</span>
+                  <span>{activeEnvironment === "prod" ? "complete data" : "canonical-ready"}</span>
                 </div>
                 <div className="queue-chip">
                   <strong>{selectedValidationXmlReadyRows}</strong>
                   <span>XML-ready</span>
                 </div>
                 <div className="queue-chip">
-                  <strong>{selectedValidationBlockedRows}</strong>
-                  <span>blocked rows</span>
+                  <strong>{activeEnvironment === "prod" ? selectedCompletenessNoteRows : selectedValidationBlockedRows}</strong>
+                  <span>{activeEnvironment === "prod" ? "rows with completeness notes" : "blocked rows"}</span>
                 </div>
                 <div className="device-subject-status-card">
                   <span className={`status-pill ${selectedValidationStatus.className}`}>
@@ -3946,7 +3948,7 @@ export function App() {
                       <p>Issuing entity {selectedValidationRecord.issuing_entity ?? "Unknown"}.</p>
                     </div>
                     <div className="summary-card summary-card-kpi summary-card-kpi-secondary">
-                      <span className="summary-label">Required Missing</span>
+                      <span className="summary-label">{activeEnvironment === "prod" ? "Completeness Gaps" : "Required Missing"}</span>
                       <strong>{selectedValidationRecord.completeness.missing_required_fields}</strong>
                       <p>{selectedValidationRecord.completeness.total_required_fields} completeness fields tracked.</p>
                     </div>
@@ -4053,7 +4055,7 @@ export function App() {
                           </thead>
                           <tbody>
                             {selectedValidationVariantMappings.map((mapping) => (
-                              <tr key={`${mapping.workbook}-${mapping.sheet}`}>
+                              <tr key={JSON.stringify([mapping.workbook, mapping.sheet, mapping.device_model, mapping.basic_udi_di, mapping.submission_operation])}>
                                 <td>{mapping.workbook}</td>
                                 <td>{mapping.sheet}</td>
                                 <td>{mapping.device_model ?? "Pending"}</td>
@@ -4083,11 +4085,14 @@ export function App() {
                 <div className="draft-list validation-secondary-card-grid">
                     <div className="draft-card">
                       <div className="draft-card-head">
-                        <strong>Canonical Blockers</strong>
+                        <strong>{activeEnvironment === "prod" ? "Completeness Notes" : "Canonical Blockers"}</strong>
                         <span className={selectedOpenBlockerPreview.length ? "status-pill warn compact" : "status-pill ok compact"}>
-                          {selectedOpenBlockerPreview.length}
+                          {activeEnvironment === "prod" ? selectedCompletenessNotes.length : selectedOpenBlockerPreview.length}
                         </span>
                       </div>
+                      {activeEnvironment === "prod" && selectedOpenBlockerPreview.length ? (
+                        <p className="panel-copy">Unknown values remain recorded. These notes do not block XML; see XML Blockers for generation issues.</p>
+                      ) : null}
                       {selectedOpenBlockerPreview.length ? (
                         <ul className="compact-list validation-highlight-list">
                           {selectedOpenBlockerPreview.map((blocker) => (
@@ -4095,7 +4100,7 @@ export function App() {
                           ))}
                         </ul>
                       ) : (
-                        <p className="panel-copy">No blocker fields remain missing for this sample row.</p>
+                        <p className="panel-copy">{activeEnvironment === "prod" ? "No completeness gaps for this sample row." : "No blocker fields remain missing for this sample row."}</p>
                       )}
                     </div>
                     <div className="draft-card">

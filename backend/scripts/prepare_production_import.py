@@ -25,6 +25,8 @@ def main() -> None:
     parser.add_argument("--parent-market-override", action="append", default=[], metavar="ISSUER:PARENT=COUNTRY,COUNTRY",
                         help="Approved proposed parent markets; first country is first placement")
     parser.add_argument("--previous-audit", type=Path, help="Report identities removed since an earlier preparation")
+    parser.add_argument("--exclude-parent", action="append", default=[], metavar="ISSUER:BASIC-UDI-DI",
+                        help="Owner-approved import exclusion; repeat as needed. Prior audit exclusions carry forward.")
     parser.add_argument("--dated-output", action="store_true", help="Keep a dated pair instead of updating the current pair")
     args = parser.parse_args()
     overrides = {}
@@ -43,11 +45,17 @@ def main() -> None:
             parser.error("Each market override must be a unique ISSUER:PARENT=COUNTRY,COUNTRY")
         markets[key] = countries
     current_audit = args.output_dir / "production-import.audit.json"
+    excluded_parents = set()
+    for item in args.exclude_parent:
+        issuer, separator, code = item.partition(":")
+        if not separator or not issuer.strip() or not code.strip():
+            parser.error("Each excluded parent must be ISSUER:BASIC-UDI-DI")
+        excluded_parents.add((issuer.strip().upper(), code.strip()))
     previous_audit = args.previous_audit or (current_audit if current_audit.exists() else None)
     result = prepare_workbook(template_dir=args.template_dir, xml_dir=args.xml_dir,
                               parent_reference=args.parent_reference, output_dir=args.output_dir,
                               encoding_overrides=overrides, parent_market_overrides=markets,
-                              previous_audit=previous_audit)
+                              previous_audit=previous_audit, excluded_parent_identities=excluded_parents)
     if not args.dated_output:
         staged_workbook, staged_audit = Path(result["workbook"]), Path(result["audit"])
         try:

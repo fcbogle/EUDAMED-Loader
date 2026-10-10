@@ -58,9 +58,9 @@ Current [workbook](../data/prod/import_file/production-import.xlsx)
 and [audit](../data/prod/import_file/production-import.audit.json):
 
 - To Register: 9,672 Review Required = No; two Yes.
-- Registered: 356 No; four Yes.
-- Under the owner's No-only import rule, 10,028 eligible rows and six skipped rows.
-- All 940 optional-URL rows included, countries as previously approved; six
+- Registered: 354 No; three Yes.
+- Under the owner's No-only import rule, 10,026 eligible rows and five skipped rows.
+- All 940 optional-URL rows included, countries as previously approved; five
   independent device exceptions and 29 prior scope exclusions remain on Summary.
 
 Scope-removal notes carry forward on subsequent preparations while the affected
@@ -69,6 +69,12 @@ Sixteen tests passed. Saved-output checks verified all 940 inclusion flags,
 Summary entries, counts and source/output hashes. These are eligibility counts,
 not completed database imports. The importer is now implemented and separately
 verified on synthetic databases; Production has not been populated.
+
+Owner-approved exclusions remove two Child’s 4-Bar Knee rows and Blatchford App.
+Four Android/iOS programming-app parents have no current child rows but are also
+excluded for future inputs. `--exclude-parent ISSUER:BASIC-UDI-DI` adds an approved
+exclusion; prior audit exclusions carry forward automatically. Original files and
+all source evidence remain unchanged. Summary/audit record intentional exclusions.
 
 ## Refreshed preparation — first Summary workbook (historical)
 

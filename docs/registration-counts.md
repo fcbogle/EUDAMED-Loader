@@ -1,8 +1,8 @@
 # Registration counts
 
 Reviewed 9 October 2026 against the current service. This describes implemented
-acknowledgement-based counts. The prepared Production workbook has 10,028 eligible
-rows and six skipped rows, but has not been imported and does not change these
+acknowledgement-based counts. The prepared Production workbook has 10,026 eligible
+rows and five skipped rows, but has not been imported and does not change these
 counts. Imported-baseline and confirmed template-only classification support is
 implemented in [production-importer-design.md](production-importer-design.md).
 
@@ -75,4 +75,4 @@ parents/cohort eligibility. They have `IMPORTED` status and contribute zero uplo
 operation successes. Trusted template-only identities count as awaiting registration.
 Actual Upload Success XML events continue to determine POST/PATCH/Market Info
 operation counts and advance accepted states. Import eligibility and XML readiness
-are reported separately; the six review rows are excluded from the initial import.
+are reported separately; the five review rows are excluded from the initial import.

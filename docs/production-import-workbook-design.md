@@ -46,8 +46,8 @@ remain visible. Conflicting template-only identities have Needs review status.
 | Data tab | Total rows | Review Required = No | Review Required = Yes |
 | --- | ---: | ---: | ---: |
 | To Register | 9,674 | 9,672 | 2 |
-| Registered | 360 | 356 | 4 |
-| Total | 10,034 | 10,028 | 6 |
+| Registered | 357 | 354 | 3 |
+| Total | 10,031 | 10,026 | 5 |
 
 The agreed Production import filter includes only No rows. These are eligibility
 counts, not completed imports or a claim that every eligible device is XML-ready.
@@ -79,7 +79,7 @@ review reasons and Summary entries. Conflicting proposed cells remain blank with
 alternatives retained in the audit. Missing formula caches are reported. Excel
 limits or invalid cell characters fail preparation rather than truncate data.
 
-Summary contains counts, approved markets, six individual device exceptions,
+Summary contains counts, approved markets, five individual device exceptions,
 optional URL inclusion notes, 29 prior removed-template identities, encoding
 provenance and later checks. Removal notes carry forward while identities remain
 absent; restored identities are removed from those notes. They do not delete
@@ -104,7 +104,6 @@ application records or count as additional skipped workbook rows.
 | Devices | Issue | Tab / skipped rows |
 | --- | --- | --- |
 | EP-FSR and EP-MSR | Accessories and Epirus occurrences disagree on parent and EMDN. Both alternatives are retained. | To Register / 2 |
-| Catalogue 330130, UDI-DI `05050649011207` | Proposed parent `5050649STRUCADAPTSA7` differs from accepted `5050649CHILD4BARKNEEH4`. | Registered / 1 |
 | Compact SAKL P019267, P239143 and p239443 | Countries and device registration are supplied, but explicit Market Info state/version metadata is missing. | Registered / 3 |
 
 Review Required is independent of known registration. Skipping a Registered row
@@ -131,3 +130,12 @@ exported accepted baselines separately. Profile selection, baseline evidence
 adaptation, transaction/reimport policy and the Production UI remain design work.
 Imported acceptance must have explicit export provenance, never fabricated POST
 successes, acknowledgements or review receipts. Automated upload/M2M remains deferred.
+
+## Owner-approved import exclusions — October 9
+
+Child’s 4-Bar Knee (two device rows) and Blatchford App (one row) are excluded
+from output. Android/iOS programming-app parent identities are also excluded for
+future device inputs. Exact issuer/parent exclusions persist in the companion
+audit and carry forward through subsequent preparation. Original source evidence
+is retained; existing database rows are not automatically deleted. Summary records
+three intentional exclusions separately from the five remaining review rows.

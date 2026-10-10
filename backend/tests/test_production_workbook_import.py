@@ -357,3 +357,104 @@ def test_production_api_requires_assessment_before_commit(production,monkeypatch
     assert assessment.status_code==200 and not settings.testing_state_db_path.exists()
     result=client.post('/api/workbook-imports/run',json={'assessment_token':assessment.json()['assessment_token']})
     assert result.status_code==200 and result.json()['created_count']==2
+
+
+def test_production_canonical_review_uses_imported_data_without_legacy_files(production,monkeypatch):
+    from app.services.canonical_review import CanonicalReviewService
+    from app.routers.canonical import canonical_review
+    settings,_,_=production
+    def forbidden(*args,**kwargs):
+        raise AssertionError('Production must not load legacy reference workbooks')
+    monkeypatch.setattr('app.services.basic_udi_reference.BasicUdiReferenceService.list_variant_mappings',forbidden)
+    assert CanonicalReviewService().load_review_bundle().variant_mappings==[]
+    assert not settings.testing_state_db_path.exists()
+    from app.services.workbook_import import WorkbookImportService
+    WorkbookImportService()
+    StateStore()
+    assert canonical_review()['variant_mappings']==[]
+    importer=ProductionWorkbookImporter();assessment=importer.assess();importer.run_import(assessment_token=assessment['assessment_token'])
+    before=counts(settings)
+    mappings=CanonicalReviewService().load_review_bundle().variant_mappings
+    assert len(mappings)==2
+    accepted=next(m for m in mappings if m.submission_operation=='PATCH')
+    assert accepted.basic_udi_di=='BASICSHARED' and accepted.first_eu_market_country=='DE'
+    assert counts(settings)==before
+
+
+def test_production_completeness_recovers_export_status_without_reimport_or_state_changes(production):
+    from app.services.workbook_import import WorkbookImportService
+    settings, _, _ = production
+    importer = ProductionWorkbookImporter()
+    importer.run_import(assessment_token=importer.assess()['assessment_token'])
+    service = WorkbookImportService()
+    with sqlite3.connect(settings.testing_state_db_path) as connection:
+        row = connection.execute("SELECT id, record_json FROM canonical_device_record WHERE record_json LIKE '%Supplied EUDAMED export snapshot%' LIMIT 1").fetchone()
+        record = json.loads(row[1])
+        fields = {field['canonical_path']: field for field in record['fields']}
+        assert fields['device_record.market_availability.market_status']['value'] == fields['device_record.status']['value']
+        fields['device_record.market_availability.market_status']['value'] = None
+        record['blockers'].append('UDI-DI Market Status is not populated.')
+        record['completeness']['missing_required_fields'] += 1
+        record['completeness']['mapped_required_fields'] -= 1
+        legacy_json = json.dumps(record)
+        connection.execute('UPDATE canonical_device_record SET record_json=? WHERE id=?', (legacy_json, row[0]))
+        evidence_before = connection.execute('SELECT state_after_json FROM testing_events').fetchall()
+    before = counts(settings)
+    bundle = service.canonical_validation_bundle_from_sqlite()
+    recovered = next(r for r in bundle.records if r.primary_udi_di == record['primary_udi_di'])
+    current = {f.canonical_path: f for f in recovered.fields}
+    assert current['device_record.market_availability.market_status'].value == current['device_record.status'].value
+    assert 'UDI-DI Market Status is not populated.' not in recovered.blockers
+    assert len(recovered.blockers) == 9
+    assert recovered.completeness.missing_required_fields == 9
+    assert current['basic_device.clinical_investigation'].value is None
+    assert current['device_record.cmr_present'].value is None
+    assert recovered.xml_blockers == record['xml_blockers']
+    assert counts(settings) == before
+    with sqlite3.connect(settings.testing_state_db_path) as connection:
+        assert connection.execute('SELECT record_json FROM canonical_device_record WHERE id=?', (row[0],)).fetchone()[0] == legacy_json
+        assert connection.execute('SELECT state_after_json FROM testing_events').fetchall() == evidence_before
+    # The existing Dev projection must retain its original completeness values.
+    service.settings = settings.model_copy(update={'environment': 'dev'})
+    dev_record = next(r for r in service.canonical_validation_bundle_from_sqlite().records if r.primary_udi_di == record['primary_udi_di'])
+    assert next(f for f in dev_record.fields if f.canonical_path == 'device_record.market_availability.market_status').value is None
+    assert len(dev_record.blockers) == 10
+
+
+def test_export_completeness_does_not_guess_or_replace_values(production):
+    from app.services.production_completeness import populate_export_market_status
+    from app.services.workbook_import import WorkbookImportService
+    importer = ProductionWorkbookImporter()
+    importer.run_import(assessment_token=importer.assess()['assessment_token'])
+    record = WorkbookImportService().canonical_validation_bundle_from_sqlite().records[0]
+    fields = {field.canonical_path: field for field in record.fields}
+    source = fields['device_record.status']
+    target = fields['device_record.market_availability.market_status']
+    target.value = 'EXISTING'
+    assert not populate_export_market_status(record)
+    assert target.value == 'EXISTING'
+    target.value = None
+    source.source_detail = 'Template field'
+    assert not populate_export_market_status(record)
+    source.source_detail = 'Supplied EUDAMED export snapshot'
+    source.value = None
+    assert not populate_export_market_status(record)
+    assert target.value is None
+
+
+def test_startup_completes_partial_production_database_before_health_checks(production,monkeypatch):
+    from app import main
+    from app.services.workbook_import import WorkbookImportService
+    settings,_,_=production
+    monkeypatch.setattr(main,'get_settings',lambda:settings)
+    service=WorkbookImportService()
+    missing={issue.table_name for issue in service.database_health_summary().issues if issue.code=='missing_table'}
+    assert missing=={'testing_subjects','testing_events','generated_packages','reviewed_post_baselines'}
+    main.log_testing_state_context()
+    assert service.database_health_summary().issues==[]
+    assert counts(settings)==(0,0,0,0,0)
+    main.log_testing_state_context()
+    assert service.database_health_summary().issues==[]
+    assert counts(settings)==(0,0,0,0,0)
+    assessment=ProductionWorkbookImporter().assess()
+    assert assessment['new_count']==2 and counts(settings)==(0,0,0,0,0)

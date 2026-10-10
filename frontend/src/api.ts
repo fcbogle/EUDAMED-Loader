@@ -122,7 +122,11 @@ export type RecordReadiness = {
 };
 
 export const api = {
-  async environment(signal?: AbortSignal): Promise<{ environment: string; message_schema_version: string; schema_package: string }> {
+  async environment(signal?: AbortSignal): Promise<{
+    environment: string; message_schema_version: string; schema_package: string;
+    manufacturer_srn?: string | null; authorised_representative_srn?: string | null;
+    authorised_representative_suppressed?: boolean;
+  }> {
     const response = await fetch(`${API_ROOT}/environment`, { signal });
     if (!response.ok) throw new ApiError(await readErrorMessage(response), response.status);
     return response.json();

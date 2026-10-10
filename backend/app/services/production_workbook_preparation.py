@@ -270,7 +270,8 @@ def _cell(value: Any) -> Any:
 def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Path,
                      output_dir: Path, encoding_overrides: dict[str, str] | None = None,
                      parent_market_overrides: dict[tuple[str, str], list[str]] | None = None,
-                     previous_audit: Path | None = None) -> dict:
+                     previous_audit: Path | None = None,
+                     excluded_parent_identities: set[tuple[str, str]] | None = None) -> dict:
     """Write a dated review workbook and audit JSON; never change source files or SQLite."""
     models, parents = _parent_reference(parent_reference)
     templates, template_columns, template_files = _templates(template_dir, models, parents, parent_reference=parent_reference)
@@ -280,6 +281,11 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
         if parent_key not in parents or not countries or any(not _text(c) or "?" in c for c in countries):
             raise ValueError(f"Invalid parent market override: {parent_key}")
     previous = json.loads(previous_audit.read_text(encoding="utf-8")) if previous_audit else None
+    excluded_parents = set(excluded_parent_identities or ())
+    excluded_parents.update(tuple(entry["key"]) for entry in (previous or {}).get("owner_excluded_parents", []))
+    if any(len(key) != 2 or not all(isinstance(value, str) and value.strip() for value in key)
+           for key in excluded_parents):
+        raise ValueError("Excluded parents require an explicit issuer and Basic UDI-DI")
     proposed: dict[tuple, list[dict]] = defaultdict(list)
     accepted: dict[tuple, list[dict]] = defaultdict(list)
     for index, entry in enumerate(templates):
@@ -314,9 +320,15 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
             c.alignment = Alignment(wrap_text=True, vertical="top")
         for i, column in enumerate(sheet_columns[name], 1):
             sheet.column_dimensions[get_column_letter(i)].width = 45 if column in ("Review Reasons", "Template Sources") else 24
-    rows, issues, optional_url_notes = [], [], []
+    rows, issues, optional_url_notes, excluded_rows = [], [], [], []
     for key in sorted(set(proposed) | set(accepted)):
         sources, registered = proposed.get(key, []), accepted.get(key, [])
+        source_parents = {tuple(entry["parent"]) for entry in sources + registered if entry.get("parent")}
+        if source_parents & excluded_parents:
+            excluded_rows.append({"key": key, "parents": sorted(source_parents),
+                                  "device_types": list(dict.fromkeys(entry["device_type"] for entry in sources + registered)),
+                                  "reason": "Owner-approved exclusion from Production import"})
+            continue
         reasons = list(dict.fromkeys(reason for s in sources + registered for reason in s["reasons"]))
         row: dict[str, Any] = {"Issuing Entity": (sources or registered)[0]["key"][0],
                                "UDI-DI": (sources or registered)[0]["key"][1],
@@ -412,9 +424,13 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
                                 "Basic UDI-DI": parent, "Data Location": location,
                                 "Details": details, "Action / Status": action})
     for name, count in (("Source template rows", len(templates)), ("Distinct template identities", len(proposed)),
-                        ("To Register", summary["to_register_tab_rows"]), ("Registered", len(accepted)),
+                        ("To Register", summary["to_register_tab_rows"]), ("Registered", summary["registered_tab_rows"]),
                         ("Distinct output identities", len(rows)), ("Rows with review flags", len(issues))):
         summary_entry("Counts", name, count, "", "Informational")
+    if excluded_parents:
+        summary_entry("Owner-approved exclusion", "Production import scope", len(excluded_rows),
+                      "Excluded parent identities: " + "; ".join(":".join(key) for key in sorted(excluded_parents)),
+                      "Intentionally excluded from import; original source evidence retained in audit")
     for parent_key, countries in market_overrides.items():
         count = sum(tuple(s["parent"] or ()) == parent_key for s in templates)
         summary_entry("Approved setting", parents[parent_key][0]["fields"]["Device Model"], count,
@@ -514,6 +530,7 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
                 cell.fill = PatternFill("solid", fgColor="E2EFDA")
         summary_sheet.row_dimensions[index].height = 60 if index > 1 else 30
     summary["removed_template_identities"] = len(removed)
+    summary["owner_excluded_device_rows"] = len(excluded_rows)
     audit = {"format_version": 1, "prepared_at": extracted, "purpose": "Workbook preparation; not database import",
              "inputs": {"templates": template_files, "exports": export_files,
                         "parent_reference": {"file": parent_reference.name, "sha256": _hash(parent_reference)}},
@@ -523,6 +540,8 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
              "approved_parent_market_overrides": [{"parent": k, "countries": v, "first_placement": v[0]}
                                                   for k, v in market_overrides.items()],
              "summary_entries": summary_entries, "removed_template_identities": removed,
+             "owner_excluded_parents": [{"key": key} for key in sorted(excluded_parents)],
+             "owner_excluded_device_rows": excluded_rows,
              "previous_audit": {"file": previous_audit.name, "sha256": _hash(previous_audit)} if previous_audit else None}
     output_dir.mkdir(parents=True, exist_ok=True)
     name = "production-import-" + stamp.strftime("%Y%m%d-%H%M%S-%f")

@@ -112,6 +112,7 @@ export type ProductionImportAssessment = {
   differences: { issuer: string; udi_di: string; fields: { field: string; before: unknown; after: unknown }[] }[];
   xml_ready_count: number;
   xml_blocked_count: number;
+  xml_blocked_rows: { issuer: string; udi_di: string; model: string; catalogue: string; reasons: string[] }[];
   can_import: boolean;
   summary: Record<string, string | number>[];
 };

@@ -61,3 +61,25 @@ test('failed environment confirmation keeps workspace identity unconfirmed', asy
   assert.deepEqual(changes, [null]);
   cleanup();
 });
+
+
+for (const environment of ['dev', 'prod']) {
+  test(`${environment} banner displays configured schema and both SRNs together`, async () => {
+    const h=harness(()=>Promise.resolve({environment,message_schema_version:'3.0.30',schema_package:'Official package',manufacturer_srn:'GB-MF-000000001',authorised_representative_srn:'DE-AR-000000002',authorised_representative_suppressed:false}));
+    h.render(); const cleanup=h.mount();await new Promise(setImmediate);
+    const text=h.render();assert.match(text,/environment-details/);assert.match(text,/GB-MF-000000001/);assert.match(text,/DE-AR-000000002/);cleanup();
+  });
+}
+test('Explicit suppression shows Not included rather than an active representative',async()=>{
+  const h=harness(()=>Promise.resolve({environment:'dev',authorised_representative_srn:'DE-AR-000000002',authorised_representative_suppressed:true}));
+  h.render();const cleanup=h.mount();await new Promise(setImmediate);
+  assert.match(h.render(),/Not included/);assert.ok(!h.render().includes('DE-AR-000000002'));cleanup();
+});
+test('Absent actor fields from an older backend remain unconfirmed',async()=>{
+  const h=harness(()=>Promise.resolve({environment:'prod'}));h.render();const cleanup=h.mount();await new Promise(setImmediate);
+  assert.ok(!h.render().includes('Not configured'));assert.match(h.render(),/Unconfirmed/);cleanup();
+});
+test('Invalid environment cannot display supplied SRNs as confirmed',async()=>{
+  const h=harness(()=>Promise.resolve({environment:'invalid',manufacturer_srn:'GB-MF-000000001'}));h.render();const cleanup=h.mount();await new Promise(setImmediate);
+  assert.ok(!h.render().includes('GB-MF-000000001'));assert.ok(!h.render().includes('environment-details'));cleanup();
+});

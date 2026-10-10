@@ -150,3 +150,13 @@ recorded in [session-handoff.md](session-handoff.md).
   schema mismatch, storage overlap, symlink/hard-link escape, actor separation and
   schema dependency errors.
 - No UI changes or live EUDAMED submissions were performed.
+
+## Environment banner actor details
+
+The shared banner shows schema/package and configured manufacturer/authorised
+representative SRNs in one metadata row. `/api/environment` returns public actor
+identifiers and explicit representative suppression, without storage paths or
+other configuration. “Not included” means AR suppression is enabled; “Not configured”
+means no override is supplied, and “Unconfirmed” means the older backend did not
+provide actor metadata. These are configured overrides, not an assertion about
+historical exported registrations. Restart the backend after the endpoint update.

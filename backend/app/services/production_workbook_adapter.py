@@ -190,6 +190,7 @@ def canonical_record(row: dict, settings: Settings, *, sheet: str, number: int,
             'device_record.primary_udi_di': full['primary_udi_di'], 'device_record.catalogue_number': full['catalogue_number'],
             'device_record.trade_name': full['trade_name'], 'device_record.language': full['language_code'],
             'device_record.production_identifier': full['production_identifier'], 'device_record.status': full['status_code'],
+            'device_record.market_availability.market_status': full['status_code'],
             'device_record.number_of_reuses': str(full['number_of_reuses']), 'device_record.base_quantity': str(full['base_quantity']) if full['base_quantity'] is not None else None,
             'basic_device.source_version_marker': snapshot['version'],
         }

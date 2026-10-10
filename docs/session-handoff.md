@@ -1,6 +1,130 @@
 # Session Handoff
 
-Updated October 9, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated October 10, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## October 10 — Production Completeness Notes
+
+At the owner's approval, Production now distinguishes nonblocking completeness
+notes from XML blockers in Canonical Validation. Scope status follows XML
+readiness; missing XML-required fields remain XML blockers. Dev labels, filtering
+and completeness warning rules remain unchanged.
+
+The duplicated UDI-DI market-status field is recovered only from a canonical
+status explicitly attributed to the supplied EUDAMED export. Existing values are
+never replaced. Current imports receive that field directly; existing imported
+records are enriched in the read model without rewriting the database or
+requiring reimport. Missing clinical, applicability and substance/tissue values
+remain unknown; no false/default values are invented.
+
+Read-only verification: 350 market-status warnings resolved, leaving 3,150
+completeness notes (nine per device across 350 registered devices). All 10,026
+devices remain represented, with 10,024 XML-ready and the same two Echelon XML
+selection blockers. No accepted state, history or XML guardrails were changed.
+Verification: 77 focused backend tests and all 80 frontend tests passed; the
+TypeScript/Vite build passed. Restart Production backend and refresh the browser.
+
+## October 10 — Production Source Mapping Display
+
+Read-only inspection confirms the local Production database now contains 10,026
+device subjects and canonical records. The first import has occurred; earlier
+notes describing an empty database or pending first import are dated checkpoints.
+
+Fixed the Source Sheet to Basic UDI panel: refresh canonical review after an
+import, and resolve Production family/model selection through imported variant
+summaries rather than infer families from the shared `production-import.xlsx`
+filename. Model selection now distinguishes variants sharing the same prepared
+tab. Mapping row keys include model, parent and operation. Dev filtering remains
+unchanged. No database records or XML rules were changed by this display fix.
+
+Verification: all 76 frontend tests and the TypeScript/Vite build passed. Refresh
+the browser to replace a mapping bundle cached before the first import.
+
+## October 9 — Environment Banner Actor Details
+
+At the owner's request, the shared Dev/Prod banner now places message schema,
+manufacturer SRN and authorised representative SRN in one styled metadata row.
+Values come from `/api/environment` and the active backend profile; no SRNs are
+hard-coded in the UI. The endpoint exposes these public actor identifiers and
+explicit AR suppression without returning storage paths or other configuration.
+Suppressed AR displays “Not included”; missing configuration displays “Not configured”;
+older backend responses remain “Unconfirmed”. Unverified environments show no actor
+identifiers. Narrow screens retain the three-column row with horizontal scrolling.
+
+Verification: 29 endpoint/profile tests and 73 frontend tests passed, including
+both environments, suppression, missing actor metadata and failed confirmation.
+Restart the backend and refresh the UI to obtain the extended endpoint response.
+No import or database-state change is part of this display update.
+
+## October 9 — Owner-Approved Knee And App Exclusions
+
+The owner excluded Child’s 4-Bar Knee and Android/iOS apps, then explicitly
+confirmed exclusion of Blatchford App. Updated the same current workbook/audit
+pair using audited issuer/parent exclusions, carried forward automatically from
+the previous audit on future CLI preparations. Original source files/hashes are
+unchanged. No existing database state was deleted or imported; Prod batches remain zero.
+
+Removed output identities: GS1 05050649008818 and 05050649011207 (Child’s 4-Bar
+Knee), and 05050649130915 (Blatchford App). Four Android/iOS programming-app parents
+have no current child rows, but are also excluded for future inputs:
+5050649LINXPAPPAND2T, 5050649LINXPAPPIOS54, 5050649O3PAPPAND5P, 5050649O3PAPPIOS7Y.
+The two device-bearing excluded parents are 5050649CHILD4BARKNEEH4 and
+5050649DIGITALHEALTH4D. Other four-bar knee models remain in scope.
+
+Current output: 9,674 To Register (9,672 No / two Yes), 357 Registered
+(354 No / three Yes), total 10,031 rows. Assessment: **10,026 eligible, five skipped,
+10,024 XML-ready, two XML-blocked**. The two Echelon catalogue collisions remain.
+The excluded Child’s parent conflict is no longer a review item; remaining review
+items are two Epirus conflicts and three Compact SAKL Market Info gaps. All 940
+optional-URL rows remain included; 29 historical template-removal notes remain.
+
+Audit retains all original source evidence plus excluded device identities and
+parent policy. Summary marks the three rows as intentional exclusions. UI notes
+show a brief exclusion count; the full workbook/audit remains available for review.
+Refresh the UI and run a new assessment because the previous pair hashes changed.
+
+Verification: 36 preparation/import tests passed, including accepted-parent versus
+proposed-parent exclusion, untouched source hashes and exclusion carry-forward to
+future device rows. All 68 frontend tests passed. Read-only assessment of the
+updated actual pair confirmed the counts above and zero Production batches.
+
+## October 9 — Complete Schema Initialization Before Monitoring
+
+The owner's first-run Schema and Health panel reported four missing tables:
+`testing_subjects`, `testing_events`, `generated_packages` and
+`reviewed_post_baselines`. Startup initialized WorkbookImportService only;
+testing/XML tables were otherwise created lazily when those workflows opened.
+
+Startup now initializes the existing TestingStateStore immediately after the
+import schema, before serving requests. This completes a partially initialized
+Prod database using the same existing schema as Dev, without importing devices
+or creating testing events. Repeated startup remains idempotent. Restart the
+backend and refresh Schema and Health; the four missing-table warnings should
+clear. Import-dependent N/A figures remain expected until the first import.
+
+Verification: 43 production-import/environment tests passed, including reproducing
+the partial database, completing startup, checking zero health issues, repeated
+startup with zero data rows and read-only assessment. Existing FastAPI startup
+deprecation warnings remain. No live Prod import was performed by this fix.
+
+## October 9 — First Production Startup: Canonical Review Fix
+
+The owner reported successful local Prod startup with schema 3.0.30 and zero
+import batches. The initial UI request to `/api/canonical-review` then failed:
+its variant-mapping path attempted to open the legacy tracekey reference workbook
+under `data/prod/basic_udi_reference`. That workbook is not a Prod import input.
+
+Fixed Canonical Review to preserve Dev's raw-reference mapping path and read Prod
+variant mappings from persisted canonical/source records. Before the first import,
+it returns an empty mapping list without loading legacy workbooks or creating a
+database. After import it shows model/parent/operation/market information with
+prepared workbook lineage. Original shared mapping definitions remain available.
+
+Verification: 19 focused tests passed, including absent/empty Prod databases and
+post-import mappings with legacy reference access forbidden. Direct read-only
+review using the actual Prod configuration now loads four entities and zero
+imported mappings successfully. No Production import was performed by this fix.
+Restart the backend (the owner started without `--reload`) and refresh the UI,
+then review Import Production Workbook's assessment before confirming.
 
 ## October 9 — Production Importer Implemented
 

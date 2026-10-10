@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 
-type EnvironmentContext = { environment: "dev" | "prod"; message_schema_version?: string; schema_package?: string };
+type EnvironmentContext = {
+  environment: "dev" | "prod";
+  message_schema_version?: string;
+  schema_package?: string;
+  manufacturer_srn?: string | null;
+  authorised_representative_srn?: string | null;
+  authorised_representative_suppressed?: boolean;
+};
 
 export function EnvironmentBanner({ onEnvironmentChange }: { onEnvironmentChange?: (environment: "dev" | "prod" | null) => void } = {}) {
   const [context, setEnvironment] = useState<EnvironmentContext | null>(null);
@@ -33,10 +40,22 @@ export function EnvironmentBanner({ onEnvironmentChange }: { onEnvironmentChange
         <strong>{environment === "dev" ? "EUDAMED Playground" : environment === "prod" ? "EUDAMED Production" : "Confirming EUDAMED environment"}</strong>
         <span>{environment === "dev" ? "Dev environment · Playground testing data" : environment === "prod" ? "Production environment · Production data" : failed ? "Environment could not be verified. Check the backend connection." : "Checking the active backend profile…"}</span>
       </div>
-      {environment && <div className="environment-schema" aria-label="Active message schema">
-        <span>Message schema</span>
-        <strong>{context?.message_schema_version || "Unconfirmed"}</strong>
-        <span>{context?.schema_package || "Package unconfirmed"}</span>
+      {environment && <div className="environment-details" aria-label="Active schema and actor SRNs">
+        <div className="environment-field" aria-label="Active message schema">
+          <span>Message schema</span>
+          <strong>{context?.message_schema_version || "Unconfirmed"}</strong>
+          <small>{context?.schema_package || "Package unconfirmed"}</small>
+        </div>
+        <div className="environment-field" aria-label="Configured manufacturer SRN">
+          <span>Manufacturer SRN</span>
+          <strong>{context?.manufacturer_srn === undefined ? "Unconfirmed" : context.manufacturer_srn || "Not configured"}</strong>
+        </div>
+        <div className="environment-field" aria-label="Configured authorised representative SRN">
+          <span>Authorised representative SRN</span>
+          <strong>{context?.authorised_representative_suppressed === true
+            ? "Not included"
+            : context?.authorised_representative_srn === undefined ? "Unconfirmed" : context.authorised_representative_srn || "Not configured"}</strong>
+        </div>
       </div>}
       {failed && <button type="button" className="ghost-button" onClick={() => setAttempt(value => value + 1)}>Retry</button>}
     </aside>

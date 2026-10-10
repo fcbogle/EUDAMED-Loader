@@ -13,7 +13,7 @@ startup and reviewed import remain pending.
 | [Session handoff](session-handoff.md) | Current decisions and next steps, followed by dated checkpoints. |
 | [Architecture](architecture-definition-draft.md) | Implemented boundaries and remaining Production/transport design. |
 | [Environment profiles](environment-profiles.md) | Implemented profile selection/isolation and read-only checks. |
-| [Workbook contract](production-import-workbook-design.md) | Implemented three-tab preparation; six review rows, 10,028 eligible. |
+| [Workbook contract](production-import-workbook-design.md) | Implemented three-tab preparation; five review rows, 10,026 eligible. |
 | [Preparation](production-import-preparation.md) | Current command, paths, optional URL policy and historical results. |
 | [Production importer](production-importer-design.md) | Implemented assessment/import, baseline provenance, repeat-import safeguards. |
 | [Registration counts](registration-counts.md) | Implemented uncapped SQLite aggregates with exported registration evidence. |
