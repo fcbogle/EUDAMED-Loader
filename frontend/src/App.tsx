@@ -1815,10 +1815,10 @@ export function App() {
     return index;
   }, [recordReadiness]);
   const readinessForRecord = (record: { product_family: string | null; product_variant: string | null; catalogue_number: string | null }) =>
-    readinessByDevice.get(JSON.stringify([record.product_variant, record.catalogue_number]))
+    isLoadingReadiness || readinessError ? undefined : readinessByDevice.get(JSON.stringify([record.product_variant, record.catalogue_number]))
       ?.find((entry) => familyLabelsOverlap(entry.product_family, record.product_family));
   useEffect(() => {
-    if (!canonicalValidation) return;
+    if (!canonicalValidation || activeTab !== "xml") return;
     let cancelled = false;
     setIsLoadingReadiness(true);
     setReadinessError(null);
@@ -1830,7 +1830,7 @@ export function App() {
         setError(error instanceof Error ? error.message : "Operation readiness is unavailable.");
       }).finally(() => { if (!cancelled) setIsLoadingReadiness(false); });
     return () => { cancelled = true; };
-  }, [canonicalValidation, testingSubjectSummaries, testingSummarySubjectSummaries]);
+  }, [activeTab, canonicalValidation, testingSubjectSummaries, testingSummarySubjectSummaries]);
   const selectedBulkEligiblePostRecords = selectedXmlVariantRecords.filter(
     (record) => (record.submission_operation ?? "").toUpperCase() === "POST",
   );
@@ -2320,11 +2320,11 @@ export function App() {
     selectedBulkMarketInfoBasicUdiDi,
   ]);
   useEffect(() => {
-    if (activeTab !== "testingSummary" && activeTab !== "registrationState") {
+    if (activeTab !== "testingSummary") {
       return;
     }
-    const scopedFamily = activeTab === "registrationState" ? selectedRegistrationStateFamily : selectedTestingSummaryFamily;
-    const scopedVariant = activeTab === "registrationState" ? selectedRegistrationStateVariant : selectedTestingSummaryVariant;
+    const scopedFamily = selectedTestingSummaryFamily;
+    const scopedVariant = selectedTestingSummaryVariant;
     let cancelled = false;
     setIsLoadingTestingSummary(true);
     setTestingSummaryError(null);
@@ -5204,8 +5204,8 @@ export function App() {
             isLoadingRegistrationSummary={isLoadingRegistrationSummary}
             registrationSummaryError={registrationSummaryError}
             onRefreshCounts={() => setRegistrationSummaryRefresh(value => value + 1)}
-            isLoading={isLoadingTestingSummary || isLoadingReadiness}
-            error={testingSummaryError ?? readinessError}
+            isLoading={isLoadingRegistrationSummary}
+            error={registrationSummaryError}
             selectedFamily={selectedRegistrationStateFamily}
             selectedVariant={selectedRegistrationStateVariant}
             selectedStatus={selectedRegistrationStateStatus}

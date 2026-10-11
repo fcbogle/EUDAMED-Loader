@@ -68,12 +68,13 @@ class ValidationRecordSelector:
             f"{product_family} / {product_variant}."
         )
 
-    def _imported_baseline_record(self, record: CanonicalValidationRecord) -> bool:
+    def _imported_baseline_record(self, record: CanonicalValidationRecord, *, state_store=None) -> bool:
         from app.config import get_settings
         from app.services.testing_state_store import TestingStateStore
         if get_settings().environment != "prod":
             return False
-        state = TestingStateStore().accepted_post_state(product_family=record.product_family,
+        store = state_store if state_store is not None else TestingStateStore()
+        state = store.accepted_post_state(product_family=record.product_family,
             product_variant=record.product_variant, catalogue_number=record.catalogue_number or "")
         return bool(state and state.get("accepted_state_source") == "production_export")
 

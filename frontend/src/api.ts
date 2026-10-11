@@ -21,6 +21,7 @@ import type {
   TestingEventReadModelEntry,
   TestingWorkspaceSummary,
   RegistrationSummary,
+  RegistrationChildrenPage,
   WorkbookImportRunResponse,
   ProductionImportAssessment,
   WorkbookImportSnapshotSummary,
@@ -144,6 +145,8 @@ export const api = {
     }),
   registrationSummary: (params: { product_family?: string; product_variant?: string; search?: string; status?: string; actionable_only?: boolean }) =>
     sendJson<RegistrationSummary>("/xml/registration-summary", "POST", params),
+  registrationChildren: (params: { basic_udi_di: string; issuing_entity: string; group_keys: string[]; import_batch_id: number; offset: number; limit: number }) =>
+    sendJson<RegistrationChildrenPage>("/xml/registration-children", "POST", params),
   operationReadiness: () => getJson<RecordReadiness[]>("/xml/operation-readiness"),
   latestWorkbookImportSummary: () => getJson<WorkbookImportSnapshotSummary>("/workbook-imports/latest/summary"),
   workbookImportSchemaSummary: () => getJson<DatabaseSchemaSummary>("/workbook-imports/schema-summary"),

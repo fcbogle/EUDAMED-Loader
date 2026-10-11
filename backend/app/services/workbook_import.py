@@ -388,7 +388,7 @@ class WorkbookImportService:
             ).fetchall()
 
         records = [
-            CanonicalValidationRecord.model_validate(json.loads(str(row["record_json"])))
+            CanonicalValidationRecord.model_validate_json(str(row["record_json"]))
             for row in record_rows
         ]
         if self.settings.environment == "prod":

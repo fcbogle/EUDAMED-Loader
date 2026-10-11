@@ -1,6 +1,8 @@
 import { RegistrationCountSummary } from "./RegistrationCountSummary";
 import type { RegistrationSummary } from "../types";
 import { DeviceModelFilter, type ModelFilterOption } from "./DeviceModelFilter";
+import { useState } from "react";
+import { RegistrationParentsChildren } from "./RegistrationParentsChildren";
 
 
 type RegistrationStateRow = {
@@ -67,6 +69,7 @@ export function RegistrationStateWorkspace({
   onActionableOnlyChange,
   onReset,
 }: RegistrationStateWorkspaceProps) {
+  const [view, setView] = useState<"state" | "parents">("state");
   return (
     <section className="tab-stack">
       <section className="panel testing-summary-panel registration-state-panel">
@@ -75,6 +78,23 @@ export function RegistrationStateWorkspace({
             <span className="section-kicker">Registration Footprint</span>
             <h2>Registration State</h2>
           </div>
+        </div>
+        <div className="registration-view-tabs" role="tablist" aria-label="Registration views"
+          onKeyDown={event => {
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+            event.preventDefault();
+            const next = event.key === "Home" ? "state" : event.key === "End" ? "parents" : view === "state" ? "parents" : "state";
+            setView(next);
+            event.currentTarget.querySelector<HTMLButtonElement>(`#registration-${next === "state" ? "state" : "parents"}-tab`)?.focus();
+          }}>
+          <button type="button" role="tab" id="registration-state-tab" aria-selected={view === "state"}
+            aria-controls="registration-view-panel" tabIndex={view === "state" ? 0 : -1} className={`xml-mode-button ${view === "state" ? "active" : ""}`}
+            onClick={() => setView("state")}>Registration State</button>
+          <button type="button" role="tab" id="registration-parents-tab" aria-selected={view === "parents"}
+            aria-controls="registration-view-panel" tabIndex={view === "parents" ? 0 : -1} className={`xml-mode-button ${view === "parents" ? "active" : ""}`}
+            onClick={() => setView("parents")}>Parents &amp; Children</button>
+        </div>
+        <div className="section-heading section-heading-spread">
           <div className="testing-summary-filter-row registration-state-filter-row">
             <DeviceModelFilter
               options={modelOptions}
@@ -136,6 +156,8 @@ export function RegistrationStateWorkspace({
         ) : null}
         {error ? <div className="panel error-banner testing-summary-error">{error}</div> : null}
 
+        <div id="registration-view-panel" role="tabpanel" aria-labelledby={view === "state" ? "registration-state-tab" : "registration-parents-tab"}>
+        {view === "state" ? <>
         <RegistrationCountSummary summary={registrationSummary} isLoading={isLoadingRegistrationSummary}
           error={registrationSummaryError} onRefresh={onRefreshCounts} />
 
@@ -192,6 +214,15 @@ export function RegistrationStateWorkspace({
               )}
             </tbody>
           </table>
+        </div>
+        </> : <>
+          <div className="registration-parent-toolbar">
+            <button type="button" className="ghost-button" disabled={isLoadingRegistrationSummary} onClick={onRefreshCounts}>Refresh counts</button>
+          </div>
+          {!isLoadingRegistrationSummary && !registrationSummaryError && registrationSummary?.import_batch_id != null ?
+            <RegistrationParentsChildren key={registrationSummary.calculated_at} summary={registrationSummary} /> :
+            !isLoadingRegistrationSummary && !registrationSummaryError ? <p>Import a workbook to view parents and children.</p> : null}
+        </>}
         </div>
       </section>
     </section>

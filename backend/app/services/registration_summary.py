@@ -42,7 +42,7 @@ class RegistrationSummaryService:
         self.settings = get_settings()
 
     def summary(self, *, product_family: str = "", product_variant: str = "", search: str = "",
-                status: str = "", actionable_only: bool = False) -> dict:
+                status: str = "", actionable_only: bool = False, include_children: bool = False) -> dict:
         db = self.settings.testing_state_db_path
         if not db.exists():
             return self._empty()
@@ -59,9 +59,15 @@ class RegistrationSummaryService:
                 raise ValueError("The latest import has no canonical snapshot. Refresh the import before using registration counts.")
             marker = self._marker(connection)
             production = getattr(self.settings, "environment", "dev") == "prod"
-            record_query = ("SELECT c.device_subject_id, c.source_row_id, c.record_json, sr.raw_payload_json FROM canonical_device_record c JOIN source_row sr ON sr.id=c.source_row_id WHERE c.source_import_batch_id=?"
+            record_query = ("SELECT c.device_subject_id, c.source_row_id, c.record_json, json_extract(sr.raw_payload_json, '$.production_import.registration_status') AS production_registration_status FROM canonical_device_record c JOIN source_row sr ON sr.id=c.source_row_id WHERE c.source_import_batch_id=?"
                             if production else "SELECT device_subject_id, source_row_id, record_json FROM canonical_device_record WHERE source_import_batch_id=?")
-            records = [self._compact(dict(row)) for row in connection.execute(record_query, (batch["id"],))]
+            records = []
+            readiness_payloads = []
+            for row in connection.execute(record_query, (batch["id"],)):
+                compact = self._compact(dict(row))
+                records.append(compact)
+                if self._matches_readiness_scope(compact, product_family, product_variant, search):
+                    readiness_payloads.append(row["record_json"])
             source_count = connection.execute("SELECT COUNT(*) FROM source_row sr JOIN source_workbook sw ON sw.id=sr.source_workbook_id WHERE sw.import_batch_id=?", (batch["id"],)).fetchone()[0]
             issue_rows = connection.execute("SELECT di.device_subject_id FROM device_identity_issue di JOIN source_row sr ON sr.id=di.source_row_id JOIN source_workbook sw ON sw.id=sr.source_workbook_id WHERE sw.import_batch_id=? AND di.resolved_at IS NULL", (batch["id"],)).fetchall()
             issues = len(issue_rows)
@@ -70,14 +76,45 @@ class RegistrationSummaryService:
             event_query = f"SELECT * FROM testing_events event WHERE status='SUCCESS' OR {imported_event_sql()}" if production else "SELECT * FROM testing_events WHERE status='SUCCESS'"
             events = [dict(row) for row in connection.execute(event_query)] if "testing_events" in tables else []
         # Reuse generation's assessment rules, rather than reimplementing readiness.
-        readiness = OperationAssessmentService().record_readiness()
+        readiness = OperationAssessmentService().record_readiness(record_payloads=readiness_payloads)
         with sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True) as connection:
             if marker != self._marker(connection):
                 raise ValueError("Import or acceptance state changed while calculating counts. Refresh to obtain a consistent snapshot.")
         return self._build(records, subjects, events, readiness, batch=dict(batch),
                            source_count=source_count, identity_issues=issues, issue_subjects=issue_subjects,
                            product_family=product_family, product_variant=product_variant,
-                           search=search, status=status, actionable_only=actionable_only)
+                           search=search, status=status, actionable_only=actionable_only,
+                           include_children=include_children)
+
+    def children(self, *, basic_udi_di: str, issuing_entity: str, group_keys: list[str],
+                 offset: int = 0, limit: int = 20, import_batch_id: int | None = None) -> dict:
+        """Lazy, paged drill-down using the same reconciled identities and readiness as counts."""
+        if not token(basic_udi_di) or not token(issuing_entity):
+            raise ValueError("A Basic UDI-DI and issuing entity are required.")
+        result = self.summary(search=basic_udi_di, include_children=True)
+        if import_batch_id is not None and result["import_batch_id"] != import_batch_id:
+            raise ValueError("The import changed. Refresh registration counts before opening children.")
+        groups = [g for g in result["groups"] if token(g["basic_udi_di"]) == token(basic_udi_di)
+                  and token(g["parent_issuing_entity"]) == token(issuing_entity)
+                  and g["key"] in group_keys]
+        children = sorted((child for g in groups for child in g["children"]),
+                          key=lambda child: (child["catalogue_number"] or "", child["issuing_entity"], child["primary_udi_di"]))
+        return {"import_batch_id": result["import_batch_id"], "calculated_at": result["calculated_at"],
+                "total": len(children), "offset": offset, "limit": limit,
+                "children": children[offset:offset + limit]}
+
+    @staticmethod
+    def _matches_readiness_scope(row: dict, family: str, variant: str, search: str) -> bool:
+        record = json.loads(row["record_json"])
+        values = fields(record)
+        parent = identifier(values.get("device_record.basic_udi_identifier") or values.get("basic_device.basic_udi_di"), record.get("issuing_entity"))
+        parent_code = parent[1] if all(parent) else "Unresolved"
+        return (
+            (not family or set(normalized_family_candidates(family)) & set(normalized_family_candidates(record["product_family"])))
+            and (not variant or normalize_identity(variant) == normalize_identity(record["product_variant"]))
+            and (not search.strip() or any(search.strip().casefold() in str(value).casefold()
+                 for value in (record["product_family"], record["product_variant"], parent_code)))
+        )
 
     @staticmethod
     def _compact(row: dict) -> dict:
@@ -85,7 +122,7 @@ class RegistrationSummaryService:
         minimal = {name: record.get(name) for name in ("product_family", "product_variant", "primary_udi_di", "catalogue_number", "issuing_entity")}
         minimal["fields"] = [field for field in record.get("fields", []) if field["canonical_path"] in
                              {"device_record.identifier", "device_record.basic_udi_identifier", "basic_device.basic_udi_di"}]
-        return {**row, "production_registration_status": json.loads(row.get("raw_payload_json") or "{}").get("production_import", {}).get("registration_status"), "fingerprint": hashlib.sha256(row["record_json"].encode()).hexdigest(), "record_json": json.dumps(minimal)}
+        return {**row, "production_registration_status": row.get("production_registration_status"), "fingerprint": hashlib.sha256(row["record_json"].encode()).hexdigest(), "record_json": json.dumps(minimal)}
 
     @staticmethod
     def _marker(connection: sqlite3.Connection) -> tuple:
@@ -119,7 +156,8 @@ class RegistrationSummaryService:
     @staticmethod
     def _build(records: list[dict], subjects: list[dict], events: list[dict], readiness: list[dict], *, batch: dict,
                source_count: int, identity_issues: int, product_family: str = "", product_variant: str = "",
-               search: str = "", status: str = "", actionable_only: bool = False, issue_subjects: set[int] | None = None) -> dict:
+               search: str = "", status: str = "", actionable_only: bool = False, issue_subjects: set[int] | None = None,
+               include_children: bool = False) -> dict:
         issue_subjects = issue_subjects or set()
         by_identity: dict[tuple, list[dict]] = defaultdict(list)
         unresolved = 0
@@ -213,6 +251,7 @@ class RegistrationSummaryService:
             # Do not count an ambiguous issuer, unresolved parent, or conflicting duplicate draft as ready.
             issuer_unique = issuer_counts[key[1]] == 1
             consistent = len({r.get("fingerprint") or json.dumps(r["record"], sort_keys=True) for r in rows}) == 1 and not any(r["device_subject_id"] in issue_subjects for r in rows)
+            device_ready = {name: False for name in ("post_ready", "child_post_ready", "patch_ready", "market_info_ready")}
             if parent and eligible and issuer_unique and consistent:
                 if key not in accepted and all(entry["post_ready"] and not entry.get("parent_registered", False) for entry in eligible):
                     group["parent_post_ready"] = True
@@ -221,7 +260,16 @@ class RegistrationSummaryService:
                         continue
                     if name in {"patch_ready", "market_info_ready"} and key not in accepted:
                         continue
-                    group[name] += int(all(entry[name] for entry in eligible))
+                    device_ready[name] = all(entry[name] for entry in eligible)
+                    group[name] += int(device_ready[name])
+            if include_children:
+                group.setdefault("children", []).append({
+                    "key": json.dumps(key), "product_family": record["product_family"],
+                    "product_variant": record["product_variant"], "catalogue_number": record.get("catalogue_number"),
+                    "primary_udi_di": key[1], "issuing_entity": key[0],
+                    "registration_status": "Registered" if key in accepted else "Awaiting registration" if awaiting else "Unknown",
+                    **device_ready,
+                })
             if awaiting:
                 awaiting_ready = bool(eligible and parent and issuer_unique and consistent and all(e["post_ready"] or e["child_post_ready"] for e in eligible))
                 group["awaiting_ready" if awaiting_ready else "awaiting_blocked"] += 1

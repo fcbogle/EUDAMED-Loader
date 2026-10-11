@@ -981,3 +981,14 @@ export type RegistrationSummary = {
   groups: RegistrationSummaryGroup[]; counts: RegistrationCounts;
   event_counts: Record<string, number>;
 };
+
+export type RegistrationChild = {
+  key: string; product_family: string; product_variant: string; catalogue_number: string | null;
+  primary_udi_di: string; issuing_entity: string;
+  registration_status: "Registered" | "Awaiting registration" | "Unknown";
+  post_ready: boolean; child_post_ready: boolean; patch_ready: boolean; market_info_ready: boolean;
+};
+export type RegistrationChildrenPage = {
+  import_batch_id: number | null; calculated_at: string; total: number; offset: number; limit: number;
+  children: RegistrationChild[];
+};

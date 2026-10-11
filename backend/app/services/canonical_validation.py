@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
@@ -1077,14 +1078,13 @@ class CanonicalValidationService:
         if not records:
             return []
         template_fields = records[0].fields
+        missing_counts = Counter(
+            field.canonical_path for record in records for field in record.fields
+            if field.required and field.value is None
+        )
         summaries: list[ValidationBlockerSummary] = []
         for template_field in template_fields:
-            missing_count = sum(
-                1
-                for record in records
-                for field in record.fields
-                if field.canonical_path == template_field.canonical_path and field.required and field.value is None
-            )
+            missing_count = missing_counts[template_field.canonical_path]
             summaries.append(
                 ValidationBlockerSummary(
                     canonical_path=template_field.canonical_path,

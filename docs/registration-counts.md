@@ -1,10 +1,35 @@
 # Registration counts
 
-Reviewed 9 October 2026 against the current service. This describes implemented
-acknowledgement-based counts. The prepared Production workbook has 10,026 eligible
-rows and five skipped rows, but has not been imported and does not change these
-counts. Imported-baseline and confirmed template-only classification support is
-implemented in [production-importer-design.md](production-importer-design.md).
+Reviewed 11 October 2026 against the current service. Counts use recorded
+acceptance evidence and, in Production, the prepared import classification.
+The initial Production import on 10 October contained 10,026 devices, with five
+review rows skipped. These are dated import findings, not live inventory totals.
+Imported-baseline and confirmed template-only classification support is described
+in [production-importer-design.md](production-importer-design.md).
+
+## Registration views
+
+Registration State has two internal tabs in both Dev and Production. **Registration
+State** is the existing counts and operation table and remains the default.
+**Parents & Children** groups the currently filtered model rows by issuer plus
+Basic UDI-DI. Each parent shows its recorded status, total children, registered,
+awaiting and unknown children, child POST readiness and a suggested next step.
+Models sharing a regulatory parent appear together; different issuers remain
+separate. Unresolved parent groups remain visible and cannot be expanded.
+
+Both tabs share model/search, readiness-status and actionable filters. Counts in
+the parent view cover children in that filter, not necessarily every child of a
+parent. Expanding one parent loads child details through
+`POST /api/xml/registration-children`, with 20 children per page in the UI (the API
+allows up to 100). Previous/Next controls show the current range and total. Details
+show model, catalogue number, issuer-qualified UDI-DI, registration status and
+XML eligibility. Child details use the same deduplication, acceptance and
+readiness calculation as the summary. Import changes are rejected with a refresh
+message; refreshing counts clears expanded details. Unknown registration remains
+unknown even if POST XML is eligible. Suggested actions do not generate or submit
+XML. The new view does not change persistence or generation rules.
+
+## Evidence and counting
 
 Registration State and Testing Summary / Submission Summary now share
 `POST /api/xml/registration-summary`. The response is calculated over the complete
@@ -29,13 +54,13 @@ never increase the number of registered devices. Reviewed/generated packages,
 ERROR events, version numbers and the default `unregistered` value alone do not
 prove registration status.
 
-Devices without matched acceptance evidence are **unknown**. The application has
-no verified negative-registration reconciliation path yet. Consequently,
-**confirmed awaiting registration**, **awaiting ready** and **awaiting blocked**
-remain zero; they do not represent all unknown devices. A workbook POST
-instruction, an empty Production database, or an unsuccessful submission does
-not establish that an identity is absent from EUDAMED. Before actual submission,
-unknown identities must be checked against the agreed Production evidence.
+Devices without matched acceptance evidence are **unknown**, unless the trusted
+Production import explicitly classifies their current identities as not registered.
+Those Production identities count as **awaiting registration**, subdivided into
+ready and blocked. Dev's default `unregistered` flag and a workbook POST
+instruction are not negative-registration evidence. An empty database or an
+unsuccessful submission does not establish that an identity is absent from EUDAMED.
+Unknown identities must be checked against the agreed environment evidence.
 
 POST XML eligibility is shown separately from registration status. Readiness
 uses the same per-record operation assessment as XML generation, with additional

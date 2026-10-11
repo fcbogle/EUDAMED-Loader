@@ -11,8 +11,10 @@ function harness() {
   } }).outputText;
   const module = { exports: {} };
   const Filter = () => null;
+  let view = 'state';
   new Function('require', 'module', 'exports', output)(name => name === './RegistrationCountSummary' ? { RegistrationCountSummary: () => null } : name === './DeviceModelFilter'
-    ? { DeviceModelFilter: Filter } : require(name), module, module.exports);
+    ? { DeviceModelFilter: Filter } : name === './RegistrationParentsChildren' ? { RegistrationParentsChildren: () => null }
+      : name === 'react' ? { useState: () => [view, value => { view = value; }] } : require(name), module, module.exports);
   const state = { family: 'Family A', variant: 'Model A', query: '' };
   function render() {
     const nodes = [];
@@ -23,6 +25,7 @@ function harness() {
     }
     visit(module.exports.RegistrationStateWorkspace({
       isLoading: false, error: null, selectedFamily: state.family, selectedVariant: state.variant,
+      registrationSummary: {import_batch_id: 1, calculated_at: 'now', groups: []},
       selectedStatus: '', searchText: state.query, actionableOnly: false,
       modelOptions: [], statusOptions: [], metrics: [], rows: [],
       onModelChange: (family, variant) => Object.assign(state, { family, variant }),
@@ -41,6 +44,18 @@ test('registration model search updates the result query and clears an older mod
   assert.deepEqual(h.state, { family: '', variant: '', query: ' BASIC-B ' });
   assert.equal(h.render().filter.props.searchQuery, ' BASIC-B ');
   assert.equal(h.render().nodes.filter(n => n.type === 'input' && n.props.type === 'search').length, 0);
+});
+
+test('registration sub-tabs default to the existing view and retain filters when switched', () => {
+  const h = harness();
+  let tabs = h.render().nodes.filter(node => node.props?.role === 'tab');
+  assert.deepEqual(tabs.map(node => node.props['aria-selected']), [true, false]);
+  tabs[1].props.onClick();
+  tabs = h.render().nodes.filter(node => node.props?.role === 'tab');
+  assert.deepEqual(tabs.map(node => node.props['aria-selected']), [false, true]);
+  assert.deepEqual(h.state, {family: 'Family A', variant: 'Model A', query: ''});
+  tabs[0].props.onClick();
+  assert.equal(h.render().nodes.find(node => node.props?.role === 'tab').props['aria-selected'], true);
 });
 
 test('choosing a model and clearing search preserves the chosen pair; Reset clears visible search', () => {

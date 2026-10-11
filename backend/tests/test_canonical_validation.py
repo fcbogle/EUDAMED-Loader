@@ -13,6 +13,19 @@ from app.services.canonical_review import CanonicalReviewService
 from app.services.canonical_validation import CanonicalValidationService
 
 
+def test_blocker_summary_counts_preserve_template_order_and_required_missing_semantics():
+    from types import SimpleNamespace
+    def field(path, value, required=True, label=None):
+        return SimpleNamespace(canonical_path=path, value=value, required=required, business_label=label or path)
+    records = [
+        SimpleNamespace(fields=[field('second', None), field('first', 'known'), field('optional', None, False)]),
+        SimpleNamespace(fields=[field('first', None), field('second', None), field('optional', None, False), field('extra', None)]),
+    ]
+    result = CanonicalValidationService._build_blocker_summaries(records)
+    assert [(row.canonical_path, row.missing_count) for row in result] == [('second', 2), ('first', 1), ('optional', 0)]
+    assert CanonicalValidationService._build_blocker_summaries([]) == []
+
+
 def _canonical_paths_for_model(model_class: type[BaseModel], prefix: str) -> set[str]:
     paths: set[str] = set()
     for field_name, field_info in model_class.model_fields.items():

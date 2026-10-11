@@ -800,8 +800,111 @@ select {
 }
 
 .registration-state-panel {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
   gap: 18px;
 }
+
+.registration-state-panel > [role="tabpanel"] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.registration-state-panel .testing-summary-table-shell {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.registration-view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-self: start;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 0 4px;
+  border: 1px solid #dce7ea;
+  border-radius: 14px;
+  background: #edf3f5;
+}
+
+.registration-view-tabs .xml-mode-button {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 9px 16px;
+  background: transparent;
+  color: #456773;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.registration-view-tabs .xml-mode-button:hover {
+  background: #e0eaee;
+  color: #00445a;
+}
+
+.registration-view-tabs .xml-mode-button.active {
+  background: #00445a;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 45, 60, 0.16);
+}
+
+.registration-view-tabs .xml-mode-button:focus-visible {
+  outline: 2px solid #648f00;
+  outline-offset: 2px;
+}
+
+.registration-state-panel > .section-heading:first-child {
+  margin-bottom: 0;
+}
+
+.registration-parent-toolbar,
+.registration-children-pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.registration-parent-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: #043f50;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.registration-parent-toggle code {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8rem;
+}
+
+.registration-parent-toggle:focus-visible {
+  outline: 2px solid #648f00;
+  outline-offset: 3px;
+}
+
+.registration-parent-toggle:disabled { cursor: default; }
+.registration-children-detail { padding: 12px 16px; background: #f0f5f6; border-radius: 12px; }
+.registration-parents-table { min-width: 950px; }
+.registration-children-table { min-width: 800px; }
+.registration-parents-table th,
+.registration-children-table th { white-space: nowrap; }
 
 .testing-summary-filter-row {
   display: flex;
@@ -4059,11 +4162,35 @@ a.ghost-button:visited {
 .registration-state-filter-row > .device-model-filter {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: auto minmax(38px, auto);
+  grid-template-rows: auto minmax(30px, auto);
   align-items: start;
+  column-gap: 10px;
+  row-gap: 8px;
+}
+.registration-state-filter-row .read-model-filter-control {
+  gap: 6px;
+}
+.registration-state-filter-row .read-model-filter-control > span {
+  min-height: 20px;
+  line-height: 20px;
+}
+.registration-state-filter-row .read-model-filter-control :is(input, select) {
+  height: 42px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 12px;
+  font-size: 0.82rem;
 }
 .registration-state-filter-row .device-model-filter-search-status {
   grid-column: 1 / -1;
+  min-height: 30px;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+.registration-state-filter-row .device-model-filter-search-status .ghost-button {
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  line-height: 20px;
 }
 .registration-state-filter-row > .read-model-filter-control {
   min-width: 0;
@@ -4071,7 +4198,25 @@ a.ghost-button:visited {
 .registration-state-filter-row > .registration-state-toggle,
 .registration-state-filter-row > .testing-summary-clear-button {
   align-self: start;
-  margin-top: 24px;
+  margin-top: 26px;
+  height: 42px;
+}
+.registration-state-filter-row > .registration-state-toggle {
+  align-items: center;
+  padding: 0;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.registration-state-filter-row > .registration-state-toggle input {
+  margin: 0;
+  flex-shrink: 0;
+}
+.registration-state-filter-row > .testing-summary-clear-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  font-size: 0.82rem;
 }
 @media (max-width: 1000px) {
   .registration-state-filter-row { grid-template-columns: minmax(0, 1fr) auto auto; }
@@ -4081,7 +4226,7 @@ a.ghost-button:visited {
   .registration-state-filter-row { grid-template-columns: minmax(0, 1fr); }
   .registration-state-filter-row > .device-model-filter {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(38px, auto);
+    grid-template-rows: auto auto minmax(30px, auto);
   }
   .registration-state-filter-row > .registration-state-toggle,
   .registration-state-filter-row > .testing-summary-clear-button { margin-top: 0; }
@@ -4194,3 +4339,6 @@ a.ghost-button:visited {
   overflow-wrap: anywhere;
   padding-right: 12px;
 }
+
+.registration-count-details { margin: 10px 0; font-size: 0.82rem; }
+.registration-count-details > summary { width: fit-content; cursor: pointer; font-weight: 600; }

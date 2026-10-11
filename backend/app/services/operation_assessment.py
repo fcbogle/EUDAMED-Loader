@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 
 from app.models import OperationAssessment, OperationAssessmentIdentityScope, OperationAssessmentType
@@ -16,32 +16,44 @@ class OperationAssessmentService:
         self.testing_read_model = TestingReadModelService()
         self.testing_state_store = self.xml_service.testing_state_store
 
-    def record_readiness(self) -> list[dict[str, object]]:
+    def record_readiness(self, *, record_payloads: Sequence[str] | None = None) -> list[dict[str, object]]:
         """The same per-record rules used by operation assessment, for dashboard counts."""
-        try:
-            records = self.xml_service._validation_bundle().records
-        except ValueError:
-            return []  # First-run UI: import is required before any operation is eligible.
-        result = []
-        for record in records:
-            if record.xml_readiness.status != "complete" or ((record.submission_operation or "").upper() != "POST" and not self.xml_service.selector._imported_baseline_record(record)):
-                continue
-            post = self._assess_single_post_record(record)
-            patch = self._assess_single_patch_record(record)
-            market = self._assess_single_market_info_record(record)
-            result.append({
-                "product_family": record.product_family,
-                "product_variant": record.product_variant,
-                "catalogue_number": record.catalogue_number,
-                "primary_udi_di": record.primary_udi_di,
-                "basic_udi_di": post.evidence.get("candidate_basic_udi_di"),
-                "parent_registered": bool(post.evidence.get("parent_registration_known")),
-                "post_ready": post.status == "available",
-                "child_post_ready": post.status == "available" and bool(post.evidence.get("parent_registration_known")),
-                "patch_ready": patch.status == "available",
-                "market_info_ready": market.status == "available",
-            })
-        return result
+        with self.xml_service.selector.request_scope(self.xml_service.canonical_projection_service):
+            try:
+                records = (self.xml_service._validation_bundle().records if record_payloads is None
+                           else [CanonicalValidationRecord.model_validate_json(payload) for payload in record_payloads])
+            except ValueError:
+                return []  # First-run UI: import is required before any operation is eligible.
+            groups = defaultdict(list)
+            for index, record in enumerate(records):
+                if record.xml_readiness.status == "complete":
+                    groups[(record.product_family, record.product_variant)].append((index, record))
+            result = []
+            for (family, variant), entries in groups.items():
+                # Reuse the existing generation snapshot and per-device rules.
+                with self.testing_state_store.generation_scope(product_family=family, product_variant=variant):
+                    for index, record in entries:
+                        if ((record.submission_operation or "").upper() != "POST"
+                                and not self.xml_service.selector._imported_baseline_record(record, state_store=self.testing_state_store)):
+                            continue
+                        post = self._assess_single_post_record(record)
+                        # Both update assessments require tracked child registration.
+                        registered = bool(post.evidence.get("child_registration_known"))
+                        patch = self._assess_single_patch_record(record) if registered else None
+                        market = self._assess_single_market_info_record(record) if registered else None
+                        result.append((index, {
+                            "product_family": record.product_family,
+                            "product_variant": record.product_variant,
+                            "catalogue_number": record.catalogue_number,
+                            "primary_udi_di": record.primary_udi_di,
+                            "basic_udi_di": post.evidence.get("candidate_basic_udi_di"),
+                            "parent_registered": bool(post.evidence.get("parent_registration_known")),
+                            "post_ready": post.status == "available",
+                            "child_post_ready": post.status == "available" and bool(post.evidence.get("parent_registration_known")),
+                            "patch_ready": patch is not None and patch.status == "available",
+                            "market_info_ready": market is not None and market.status == "available",
+                        }))
+            return [entry for _, entry in sorted(result, key=lambda item: item[0])]
 
     def assess_single_post(
         self,

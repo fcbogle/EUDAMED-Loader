@@ -323,6 +323,50 @@ def test_imported_baselines_are_available_through_ui_assessments(production):
     assert preview.post_validation.valid
 
 
+def test_dashboard_readiness_reuses_model_snapshot_and_preserves_single_device_rules(production):
+    from app.services.operation_assessment import OperationAssessmentService
+    importer = ProductionWorkbookImporter()
+    importer.run_import(assessment_token=importer.assess()['assessment_token'])
+    service = OperationAssessmentService()
+    bundle = service.xml_service._validation_bundle()
+    expected = []
+    for record in bundle.records:
+        if record.xml_readiness.status != 'complete':
+            continue
+        post = service._assess_single_post_record(record)
+        patch_result = service._assess_single_patch_record(record)
+        market = service._assess_single_market_info_record(record)
+        expected.append({
+            'product_family': record.product_family, 'product_variant': record.product_variant,
+            'catalogue_number': record.catalogue_number, 'primary_udi_di': record.primary_udi_di,
+            'basic_udi_di': post.evidence.get('candidate_basic_udi_di'),
+            'parent_registered': bool(post.evidence.get('parent_registration_known')),
+            'post_ready': post.status == 'available',
+            'child_post_ready': post.status == 'available' and bool(post.evidence.get('parent_registration_known')),
+            'patch_ready': patch_result.status == 'available',
+            'market_info_ready': market.status == 'available',
+        })
+    # Context reuse must not create another state-store/schema instance per row.
+    with patch.object(StateStore, '_ensure_database', side_effect=AssertionError('Unexpected per-row initialization')):
+        with patch.object(service.testing_state_store, 'generation_scope', wraps=service.testing_state_store.generation_scope) as scopes:
+            assert service.record_readiness() == expected
+            assert scopes.call_count == 1
+        with patch.object(service.xml_service, '_validation_bundle', side_effect=AssertionError('Unnecessary canonical reload')):
+            assert service.record_readiness(record_payloads=[r.model_dump_json() for r in bundle.records]) == expected
+            assert service.record_readiness(record_payloads=[]) == []
+        unregistered = next(r for r in bundle.records if r.submission_operation == 'POST')
+        unregistered = unregistered.model_copy(update={'xml_readiness': unregistered.xml_readiness.model_copy(update={'status': 'complete'})})
+        repeated = bundle.model_copy(update={'records': [unregistered] * 100})
+        with patch.object(service.xml_service, '_validation_bundle', return_value=repeated), \
+                patch.object(service.testing_state_store, 'generation_scope', wraps=service.testing_state_store.generation_scope) as scopes, \
+                patch.object(service, '_assess_single_patch_record', side_effect=AssertionError('Unregistered PATCH')), \
+                patch.object(service, '_assess_single_market_info_record', side_effect=AssertionError('Unregistered Market Info')):
+            result = service.record_readiness()
+            assert len(result) == 100
+            assert scopes.call_count == 1
+            assert all(not r['patch_ready'] and not r['market_info_ready'] for r in result)
+
+
 def test_server_profile_selects_the_importer_and_has_no_fallback(production,monkeypatch):
     from app.services import workbook_import_selector as selector
     settings,_,_=production

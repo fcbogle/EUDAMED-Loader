@@ -5,6 +5,7 @@ from typing import Protocol, TypedDict, cast
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 
 from app.models import SuccessXmlUploadRequest, SuccessXmlUploadResult
 from app.services.country_reference import market_country_reference_payload
@@ -649,6 +650,23 @@ def registration_summary(payload: dict | None = None) -> dict:
             search=str(data.get("search") or ""), status=str(data.get("status") or ""),
             actionable_only=data.get("actionable_only") is True,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+class RegistrationChildrenRequest(BaseModel):
+    basic_udi_di: str = Field(min_length=1)
+    issuing_entity: str = Field(min_length=1)
+    group_keys: list[str] = Field(min_length=1, max_length=1000)
+    import_batch_id: int | None = None
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+@router.post("/xml/registration-children")
+def registration_children(payload: RegistrationChildrenRequest) -> dict:
+    try:
+        return RegistrationSummaryService().children(**payload.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

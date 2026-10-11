@@ -1,6 +1,94 @@
 # Session Handoff
 
-Updated October 10, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated October 11, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## October 11 — Parents & Children Registration View
+
+Owner-approved shared Dev/Production UI: Registration State now has two internal
+tabs, **Registration State** (existing view, default) and **Parents & Children**.
+The same model/search/status/actionable filters apply to both. Parent rows combine
+filtered model groups sharing an issuer-qualified Basic UDI-DI and show child
+totals, registered/awaiting/unknown counts, child POST readiness and suggested
+next step. Unresolved parents remain visible without an expandable device list.
+
+Opening a parent loads 20 children at a time from the new read-model
+`POST /api/xml/registration-children` endpoint. Details reuse the summary's
+identity reconciliation, accepted-evidence and operation-readiness rules, keeping
+unknown registration separate from XML eligibility. Exact parent issuer and
+current model group keys scope the drill-down; a changed import requires a refresh.
+Closing a parent discards pending responses, and count refreshes clear details.
+No schema migration, importer change, reimport or XML workflow change is required.
+Restart the backend and refresh the browser to use the new endpoint and tabs.
+See [registration-counts.md](registration-counts.md) for operator guidance.
+
+Verification: 28 registration-summary backend tests and all 90 frontend tests
+passed, including issuer separation, parent-only acceptance, child deduplication,
+filter-preserving tab switching, lazy loading, pagination, cancelled responses and
+retry. The frontend production build passed. Browser layout review remains for
+the owner; existing Dev/Production acceptance and generation rules are preserved.
+
+Follow-up: the owner requested smaller child pages to keep expanded parent rows
+manageable. Both environments now request 20 children per page explicitly, and
+the endpoint default is also 20. Previous/Next retain the visible range and total;
+107 MAX Liners children therefore occupy six pages, with seven on the last page.
+
+## October 10 — Registration State Refresh Performance
+
+Second optimization: Registration Summary reuses canonical record payloads from
+its current SQLite snapshot instead of rebuilding the full canonical bundle.
+Readiness assessment is limited to the selected family/model/search; whole-import
+identity reconciliation still includes every record, so conflicts outside the
+visible scope cannot make an ambiguous device eligible. Status/actionable filters
+are applied after readiness as before. Explicit empty search results never fall
+back to assessing all records.
+
+Canonical completeness summaries now count missing fields in one pass, preserving
+the same field order and required/missing semantics. Persisted canonical records
+use Pydantic's direct JSON validation. Read-only local measurements: all-model
+registration summary 4.015 seconds; MAX search 1.395 seconds for 940 devices;
+Elan MAX selection 1.388 seconds for 820 devices. Complete summaries matched the
+unfiltered-readiness calculation for all three scopes. Full canonical loading
+fell from about five seconds to 2.383 seconds. These are service measurements;
+browser/network timings remain to be checked by the owner. Restart the backend;
+no reimport or database rewrite is required.
+
+Second-optimization verification: all 112 focused backend tests passed in
+257.56 seconds, including canonical validation, shared import, Production import,
+search scoping and whole-import identity-conflict protection.
+
+Follow-up UI simplification: awaiting/ready/blocked totals remain visible; import
+timestamps and whole-import reconciliation are collapsed under Details. Unknown
+status guidance appears only when unknown devices exist, and nonzero data
+exceptions remain visible. Removed the unconditional claim that no
+non-registration reconciliation exists, which contradicted the prepared Production
+classification. Counts and readiness rules are unchanged. All 82 frontend tests
+and the build passed after this presentation change.
+
+Registration State no longer loads testing subject/event panels or the separate
+XML-workspace readiness request. Its refresh indicator follows its own summary
+request. XML readiness is loaded when entering the XML workspace; pending/failed
+readiness does not expose stale per-device eligibility counts.
+
+Dashboard readiness now reuses the existing request-local canonical selection
+and per-model accepted-state transaction. Imported-baseline lookup reuses the
+same state store. PATCH/Market Info assessments are skipped only when the existing
+POST evidence confirms no tracked child registration, their shared prerequisite.
+Production summary queries extract registration classification without loading
+the complete source audit payload. No long-lived cache or eligibility rule change
+was introduced; concurrent-state marker checks remain in place.
+
+Read-only Production measurements: a 100-device sample fell from 800 connections
+to 11, and from 0.141 to 0.013 seconds for readiness alone. For all 10,024
+XML-ready records, previous readiness took 14.653 seconds excluding initial
+canonical loading; updated readiness including canonical loading took 6.009
+seconds. Every device's POST/child POST/PATCH/Market Info result matched. The full
+updated registration summary took 7.108 seconds. These are local service timings,
+not browser/network timings. Totals remain 10,026 devices, 354 registered, 9,672
+awaiting registration and two XML blockers.
+
+Verification: 98 focused backend tests passed, then the additional snapshot-reuse
+regression passed (99 distinct tests); all 80 frontend tests and the build passed.
+Restart the backend and refresh the browser. No reimport is required.
 
 ## October 10 — Production Completeness Notes
 

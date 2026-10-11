@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import pytest
@@ -173,7 +174,7 @@ def service(path):
 def test_sql_summary_uses_only_latest_import_and_exposes_excluded_rows(tmp_path, monkeypatch):
     path = tmp_path / 'synthetic.sqlite3'
     create_database(path)
-    monkeypatch.setattr('app.services.registration_summary.OperationAssessmentService', lambda: SimpleNamespace(record_readiness=lambda: [ready('D2')]))
+    monkeypatch.setattr('app.services.registration_summary.OperationAssessmentService', lambda: SimpleNamespace(record_readiness=lambda **kwargs: [ready('D2')]))
     result = service(path).summary()
     assert result['counts']['total_devices'] == 1
     assert result['source_rows'] == 2
@@ -182,10 +183,49 @@ def test_sql_summary_uses_only_latest_import_and_exposes_excluded_rows(tmp_path,
     assert result['import_batch_id'] == 2
 
 
+def test_readiness_is_scoped_to_search_without_losing_whole_import_reconciliation(tmp_path, monkeypatch):
+    path = tmp_path / 'synthetic.sqlite3'
+    create_database(path)
+    calls = []
+    def readiness(*, record_payloads):
+        calls.append(record_payloads)
+        return [ready('D2')] if record_payloads else []
+    monkeypatch.setattr('app.services.registration_summary.OperationAssessmentService', lambda: SimpleNamespace(record_readiness=readiness))
+    matched = service(path).summary(search='b1')
+    assert len(calls[-1]) == 1
+    assert matched['counts']['total_devices'] == 1
+    empty = service(path).summary(search='no matching model')
+    assert calls[-1] == []
+    assert empty['counts']['total_devices'] == 0
+    assert empty['source_rows'] == matched['source_rows'] == 2
+    assert empty['mapped_rows'] == matched['mapped_rows'] == 1
+    assert empty['outside_canonical_scope_rows'] == matched['outside_canonical_scope_rows'] == 1
+
+
+def test_scoped_readiness_preserves_identity_conflicts_outside_selected_family(tmp_path, monkeypatch):
+    path = tmp_path / 'synthetic.sqlite3'
+    create_database(path)
+    conflicting = record(subject=3, udi='D2')
+    payload = json.loads(conflicting['record_json'])
+    payload['product_family'] = 'Other family'
+    with sqlite3.connect(path) as connection:
+        connection.execute('INSERT INTO canonical_device_record VALUES (?,?,?,?,?)', (3, 3, json.dumps(payload), 2, '2026-10-08'))
+    calls = []
+    def readiness(*, record_payloads):
+        calls.append(record_payloads)
+        return [ready('D2')]
+    monkeypatch.setattr('app.services.registration_summary.OperationAssessmentService', lambda: SimpleNamespace(record_readiness=readiness))
+    result = service(path).summary(product_family='A')
+    assert len(calls[-1]) == 1
+    assert result['unresolved_identity_rows'] == 2
+    assert result['counts']['total_devices'] == 0
+    assert result['counts']['post_ready'] == 0
+
+
 def test_mid_calculation_acceptance_change_rejects_mixed_snapshot(tmp_path, monkeypatch):
     path = tmp_path / 'synthetic.sqlite3'
     create_database(path)
-    def readiness():
+    def readiness(**kwargs):
         with sqlite3.connect(path) as c:
             c.execute("INSERT INTO testing_events VALUES (2,2,'UDI_DI.POST','SUCCESS','2026-10-08')")
         return []
@@ -218,9 +258,12 @@ def test_post_counts_follow_actual_generation_assessment_rules():
     assessment = OperationAssessmentService.__new__(OperationAssessmentService)
     state = {'registered': False}
     assessment.testing_state_store = SimpleNamespace(
+        generation_scope=lambda **kwargs: nullcontext(),
         has_successful_basic_udi_post=lambda **kwargs: True,
         has_successful_primary_udi_post=lambda **kwargs: state['registered'])
     assessment.xml_service = SimpleNamespace(_validation_bundle=lambda: SimpleNamespace(records=[device]),
+        selector=SimpleNamespace(request_scope=lambda projection: nullcontext()),
+        canonical_projection_service=None,
         _bulk_record_summary=lambda record: SimpleNamespace(basic_udi_di='B1'))
     assessment._assess_single_patch_record = lambda record: SimpleNamespace(status='blocked')
     assessment._assess_single_market_info_record = lambda record: SimpleNamespace(status='blocked')
@@ -238,7 +281,7 @@ def test_post_counts_follow_actual_generation_assessment_rules():
 def test_snapshot_rejects_subject_identity_change_without_new_event(tmp_path, monkeypatch):
     path = tmp_path / 'synthetic.sqlite3'
     create_database(path)
-    def readiness():
+    def readiness(**kwargs):
         with sqlite3.connect(path) as c:
             c.execute("UPDATE testing_subjects SET primary_udi_di='CHANGED' WHERE id=2")
         return []
@@ -283,3 +326,71 @@ def test_unresolved_parent_is_disclosed_without_losing_known_device_total():
     assert result['counts']['unresolved_parent_devices'] == 1
     assert result['counts']['total_parents'] == 0
     assert result['counts']['post_ready'] == 0
+
+
+def test_child_details_share_summary_identity_and_acceptance_rules():
+    rows = [record(), record(subject=2, udi='D2'), record(subject=3, udi='D2')]
+    rows[1]['production_registration_status'] = 'Not registered'
+    rows[2]['production_registration_status'] = 'Not registered'
+    result = summary(records=rows, subjects=[subject()], events=[event()],
+                     readiness=[ready(post_ready=False, patch_ready=True), ready('D2', child_post_ready=True)],
+                     include_children=True)
+    group = result['groups'][0]
+    assert group['total_devices'] == len(group['children']) == 2
+    assert group['children'][0]['registration_status'] == 'Registered'
+    assert group['children'][0]['patch_ready'] is True
+    assert group['children'][0]['post_ready'] is False
+    assert group['children'][1]['registration_status'] == 'Awaiting registration'
+    assert group['children'][1]['child_post_ready'] is True
+    assert summary(records=rows)['groups'][0].get('children') is None
+
+
+def test_parent_only_acceptance_preserves_unknown_child_and_enables_child_post():
+    parent = subject(device=None, udi=None,
+                     latest_successful_post_state_json=json.dumps({'basic_identifier_issuing_entity': 'GS1'}))
+    result = summary(subjects=[parent], events=[event()], readiness=[ready(child_post_ready=True, parent_registered=True)],
+                     include_children=True)
+    group = result['groups'][0]
+    assert group['parent_registered'] is True
+    assert group['children'][0]['registration_status'] == 'Unknown'
+    assert group['children'][0]['child_post_ready'] is True
+
+
+def test_child_details_do_not_expose_ambiguous_identity_as_ready():
+    result = summary(records=[record(), record(subject=2, issuer='HIBCC')],
+                     readiness=[ready()], include_children=True)
+    assert all(not g['children'][0]['post_ready'] for g in result['groups'])
+    result = summary(readiness=[ready()], issue_subjects={1}, include_children=True)
+    assert result['groups'][0]['children'][0]['post_ready'] is False
+
+
+def test_children_drilldown_uses_exact_parent_issuer_group_scope_and_pagination(monkeypatch):
+    result = summary(records=[record(), record(subject=2, udi='D2'),
+                              record(subject=3, udi='D3', parent='B10'),
+                              record(subject=4, udi='D4', issuer='HIBCC')], include_children=True)
+    instance = service(None)
+    calls = []
+    monkeypatch.setattr(instance, 'summary', lambda **kw: calls.append(kw) or result)
+    gs1 = next(g for g in result['groups'] if g['basic_udi_di'] == 'B1' and g['parent_issuing_entity'] == 'GS1')
+    page = instance.children(basic_udi_di='B1', issuing_entity='GS1', group_keys=[gs1['key']], offset=1, limit=1, import_batch_id=1)
+    assert page['total'] == 2
+    assert [c['primary_udi_di'] for c in page['children']] == ['D2']
+    assert calls == [{'search': 'B1', 'include_children': True}]
+    assert instance.children(basic_udi_di='B1', issuing_entity='GS1', group_keys=['not in scope'])['total'] == 0
+    with pytest.raises(ValueError, match='import changed'):
+        instance.children(basic_udi_di='B1', issuing_entity='GS1', group_keys=[gs1['key']], import_batch_id=2)
+
+
+def test_children_request_rejects_invalid_pagination_and_reports_snapshot_conflict(monkeypatch):
+    from pydantic import ValidationError
+    from app.routers.xml_generation import RegistrationChildrenRequest, registration_children
+    payload = {'basic_udi_di': 'B1', 'issuing_entity': 'GS1', 'group_keys': ['group']}
+    for invalid in ({'offset': -1}, {'limit': 101}, {'group_keys': []}):
+        with pytest.raises(ValidationError):
+            RegistrationChildrenRequest(**(payload | invalid))
+    def fail(**kwargs):
+        raise ValueError('The import changed. Refresh counts.')
+    monkeypatch.setattr('app.routers.xml_generation.RegistrationSummaryService', lambda: SimpleNamespace(children=fail))
+    with pytest.raises(Exception) as exc:
+        registration_children(RegistrationChildrenRequest(**payload))
+    assert exc.value.status_code == 409

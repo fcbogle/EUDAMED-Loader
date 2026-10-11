@@ -7,9 +7,33 @@ type Props = {
   onRefresh: () => void;
 };
 
+function readableDate(value: string | null): string {
+  if (!value) return "not available";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "not available";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short",
+  }).format(date);
+}
+
+const readableCount = (value: number) => value.toLocaleString("en-GB");
+
 export function RegistrationCountSummary({ summary, isLoading, error, onRefresh }: Props) {
   const counts = summary?.counts;
   const confirmed = !isLoading && !error && summary?.import_batch_id != null;
+  const hasDataExceptions = summary && (
+    summary.outside_canonical_scope_rows > 0 || summary.unresolved_identity_rows > 0 ||
+    summary.identity_issue_count > 0 || summary.unmatched_success_subjects > 0 ||
+    (counts?.unresolved_parent_devices ?? 0) > 0
+  );
+  const dataChecks = summary ? [
+    [summary.outside_canonical_scope_rows, "source rows could not be mapped"],
+    [summary.unresolved_identity_rows, "rows have missing or conflicting device identifiers"],
+    [summary.duplicate_identity_rows, "duplicate rows were counted only once"],
+    [summary.identity_issue_count, "device identity issues need review"],
+    [summary.unmatched_success_subjects, "registration confirmation records could not be matched to current devices"],
+    [counts?.unresolved_parent_devices ?? 0, "devices could not be linked to a Basic UDI-DI"],
+  ].filter(([count]) => Number(count) > 0) : [];
   const metrics = [
     ["Basic UDI-DI parents", counts?.total_parents, "unique resolved parent identifiers in scope"],
     ["Parents registered", counts?.registered_parents, "confirmed acceptance"],
@@ -41,19 +65,24 @@ export function RegistrationCountSummary({ summary, isLoading, error, onRefresh 
         ))}
       </div>
       {confirmed && summary && <>
-        <p>Confirmed awaiting registration: {counts?.awaiting_devices} ({counts?.awaiting_ready} ready, {counts?.awaiting_blocked} blocked).
-          No non-registration reconciliation is currently recorded. Devices without acceptance evidence remain unknown;
-          XML eligibility does not establish that they require registration.</p>
-        <p>Import #{summary.import_batch_id}: {summary.imported_at}. Latest recorded acceptance: {summary.latest_acceptance_at ?? "None"}.
-          Counts calculated: {summary.calculated_at}. Registration is based on this environment’s recorded evidence.
-          {" "}{counts?.unresolved_parent_devices} devices in scope have an unresolved parent identifier.</p>
-        <p>Whole import: {summary.source_rows} source rows; {summary.mapped_rows} canonical rows;
-          {" "}{summary.outside_canonical_scope_rows} rows outside canonical scope;
-          {" "}{summary.unresolved_identity_rows} canonical rows with unresolved or conflicting identity;
-          {" "}{summary.duplicate_identity_rows} duplicate identity rows counted once;
-          {" "}{summary.identity_issue_count} open import identity issues;
-          {" "}{summary.unmatched_success_subjects} acceptance subjects unmatched to current identities.
-          Unresolved and out-of-scope rows are excluded from the unique-device totals.</p>
+        <p>Awaiting registration: {counts?.awaiting_devices} · {counts?.awaiting_ready} ready · {counts?.awaiting_blocked} blocked.</p>
+        {(counts?.unknown_devices ?? 0) > 0 && <p>Confirm unknown registration status before generating POST.</p>}
+        {hasDataExceptions && <p className="status-detail-emphasis">Import data needs review; see Details.</p>}
+        <details className="registration-count-details">
+        <summary>Details</summary>
+        <p>Workbook imported: {readableDate(summary.imported_at)} (import {summary.import_batch_id}).
+          {" "}Counts updated: {readableDate(summary.calculated_at)}.</p>
+        <p>{summary.latest_acceptance_at ? <>Latest registration confirmation: {readableDate(summary.latest_acceptance_at)}.</> :
+          "Latest registration confirmation date: not available."}
+          {" "}These figures use the data and registration confirmations recorded in this environment.</p>
+        {(counts?.unknown_devices ?? 0) > 0 && <p>A device stays Unknown until its registration status is confirmed.
+          Being ready for XML does not mean it needs registration.</p>}
+        <p>Across the full import, {readableCount(summary.source_rows)} source rows were read and {readableCount(summary.mapped_rows)} were mapped for review.
+          {!hasDataExceptions ? " No outstanding data issues were found." : " The following checks need attention."}</p>
+        {dataChecks.length > 0 && <ul>{dataChecks.map(([count, message]) => <li key={message}>{readableCount(Number(count))} {message}.</li>)}</ul>}
+        {(summary.unresolved_identity_rows > 0 || summary.outside_canonical_scope_rows > 0) &&
+          <p>Rows that could not be mapped or identified are excluded from the device totals.</p>}
+        </details>
       </>}
     </section>
   );
