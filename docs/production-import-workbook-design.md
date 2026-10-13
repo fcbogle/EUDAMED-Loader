@@ -1,7 +1,7 @@
 # Production import workbook contract
 
 Updated 9 October 2026 against the preparation utility and current saved workbook.
-Workbook preparation is implemented. The application Production importer is implemented and described in [production-importer-design.md](production-importer-design.md).
+Workbook preparation is implemented. The application Production importer is implemented and described in the [Production importer design](production-importer-design.md).
 This document does not authorize Production database initialization or import.
 
 ## Locations and output lifecycle

@@ -1,10 +1,15 @@
 # Documentation index
 
-Reviewed 9 October 2026. Current guides describe implemented behavior; importer
-proposals and historical findings are labelled separately. Files under `docs`
+Reviewed 11 October 2026. Current guides describe implemented behavior;
+historical proposals and findings are labelled separately. Files under `docs`
 are documentation/evidence, not authorization to initialize Production or submit
-through M2M. The application Production importer is implemented; first local Production
-startup and reviewed import remain pending.
+through M2M. The application Production importer is implemented, and the first
+local Production startup and reviewed import were completed on 10 October.
+See the [session handoff](session-handoff.md) for subsequent work and verification.
+
+The application's Documentation viewer renders the links below as navigation to
+the referenced guide, including links in tables. Linked schema-profile guidance
+and project development instructions are also available from the viewer.
 
 ## Current guides and design
 

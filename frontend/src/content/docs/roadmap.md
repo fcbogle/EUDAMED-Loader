@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 9 October 2026. Implemented capabilities are separated from approved next
+Updated 11 October 2026. Implemented capabilities are separated from approved next
 work and deferred features. This roadmap does not describe future features as
 already available.
 
@@ -35,9 +35,11 @@ The owner approved the initial import flow and repeat-import policy:
   verification of single/bulk workflows.
 
 The importer and fixed-name replacement are implemented. First local Production
-startup and reviewed import are next. Two eligible Echelon devices share catalogue
+startup and reviewed import were completed on 10 October. Two eligible Echelon devices share catalogue
 EC27LN7S and remain blocked for XML generation until identity selection is resolved.
-Detailed contracts are in Production Importer Design under Documentation.
+See the [Production importer design](../../../../docs/production-importer-design.md)
+for the implemented contract. Shared Registration State / Parents & Children tabs,
+20-child pagination and scoped readiness refresh are also implemented.
 
 ## Deferred — Production preparation UI
 

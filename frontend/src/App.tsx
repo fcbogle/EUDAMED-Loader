@@ -1,3 +1,4 @@
+import { renderMarkdownDocument } from "./markdownDocument";
 import { productionImportNotes } from "./productionImportNotes";
 import { requestWorkbookImport } from "./workbookImportRequest";
 import { matchesModelSearch } from "./modelSearch";
@@ -11,6 +12,8 @@ import { ApiError, api, type RecordReadiness } from "./api";
 import architectureDefinitionDocumentation from "../../docs/architecture-definition-draft.md?raw";
 import sessionHandoffDocumentation from "../../docs/session-handoff.md?raw";
 import documentationIndexDocumentation from "../../docs/README.md?raw";
+import projectInstructionsDocumentation from "../../AGENTS.md?raw";
+import schemaProfilesDocumentation from "../../data/schema_profiles/README.md?raw";
 import environmentProfilesDocumentation from "../../docs/environment-profiles.md?raw";
 import productionWorkbookContractDocumentation from "../../docs/production-import-workbook-design.md?raw";
 import productionPreparationDocumentation from "../../docs/production-import-preparation.md?raw";
@@ -496,9 +499,12 @@ type DocumentationSection = {
     | "xmlPerformance"
     | "sqliteProposal"
     | "identityPolicy"
-    | "xmlSamples";
+    | "xmlSamples"
+    | "projectInstructions"
+    | "schemaProfiles";
 
   title: string;
+  sourcePath: string;
   markdown: string;
 };
 
@@ -522,183 +528,6 @@ type CanonicalMappingRow = {
   exampleCanonicalValue: string | null;
 };
 
-type MarkdownListItem = {
-  text: string;
-  children: MarkdownListBlock[];
-};
-
-type MarkdownListKind = "unordered" | "ordered";
-
-type MarkdownListBlock = {
-  kind: MarkdownListKind;
-  items: MarkdownListItem[];
-};
-
-function renderInlineMarkdown(text: string): (string | JSX.Element)[] {
-  const parts: (string | JSX.Element)[] = [];
-  const pattern = /\[\[pill:([^\]]+)\]\]|`([^`]+)`|\*\*([^*]+)\*\*/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
-    }
-    if (match[1] !== undefined) {
-      parts.push(
-        <span className="markdown-pill" key={`pill-${key++}`}>
-          {match[1]}
-        </span>,
-      );
-    } else if (match[2] !== undefined) {
-      parts.push(<code key={`code-${key++}`}>{match[2]}</code>);
-    } else if (match[3] !== undefined) {
-      parts.push(<strong key={`strong-${key++}`}>{match[3]}</strong>);
-    }
-    lastIndex = pattern.lastIndex;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
-
-  return parts;
-}
-
-function parseMarkdownList(
-  lines: string[],
-  startIndex: number,
-  baseIndent: number,
-  kind: MarkdownListKind,
-): [MarkdownListItem[], number] {
-  const items: MarkdownListItem[] = [];
-  let index = startIndex;
-  const pattern = kind === "ordered" ? /^(\s*)\d+\. (.*)$/ : /^(\s*)- (.*)$/;
-
-  while (index < lines.length) {
-    const match = lines[index].match(pattern);
-    if (!match) {
-      break;
-    }
-
-    const indent = match[1].length;
-    const text = match[2];
-
-    if (indent < baseIndent) {
-      break;
-    }
-
-    if (indent > baseIndent) {
-      if (!items.length) {
-        break;
-      }
-      const childKind: MarkdownListKind = /^\s*\d+\. /.test(lines[index]) ? "ordered" : "unordered";
-      const [children, nextIndex] = parseMarkdownList(lines, index, indent, childKind);
-      items[items.length - 1].children = [{ kind: childKind, items: children }];
-      index = nextIndex;
-      continue;
-    }
-
-    items.push({ text, children: [] });
-    index += 1;
-  }
-
-  return [items, index];
-}
-
-function renderMarkdownList(items: MarkdownListItem[], keyPrefix: string, kind: MarkdownListKind): JSX.Element {
-  const Tag = kind === "ordered" ? "ol" : "ul";
-  return (
-    <Tag key={keyPrefix}>
-      {items.map((item, itemIndex) => (
-        <li key={`${keyPrefix}-item-${itemIndex}`}>
-          {renderInlineMarkdown(item.text)}
-          {item.children.map((childBlock, childIndex) =>
-            renderMarkdownList(
-              childBlock.items,
-              `${keyPrefix}-nested-${itemIndex}-${childIndex}`,
-              childBlock.kind,
-            ),
-          )}
-        </li>
-      ))}
-    </Tag>
-  );
-}
-
-function renderMarkdownDocument(content: string): JSX.Element[] {
-  const lines = content.split("\n");
-  const blocks: JSX.Element[] = [];
-  let index = 0;
-  let key = 0;
-
-  while (index < lines.length) {
-    const line = lines[index];
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-      index += 1;
-      continue;
-    }
-
-    if (trimmed.startsWith("```")) {
-      const codeLines: string[] = [];
-      index += 1;
-      while (index < lines.length && !lines[index].trim().startsWith("```")) {
-        codeLines.push(lines[index]);
-        index += 1;
-      }
-      index += 1;
-      blocks.push(
-        <pre className="markdown-code-block" key={`block-${key++}`}>
-          <code>{codeLines.join("\n")}</code>
-        </pre>,
-      );
-      continue;
-    }
-
-    if (trimmed.startsWith("#")) {
-      const level = Math.min(trimmed.match(/^#+/)?.[0].length ?? 1, 3);
-      const text = trimmed.replace(/^#+\s*/, "");
-      const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-      const Tag = level === 1 ? "h1" : level === 2 ? "h2" : "h3";
-      blocks.push(
-        <Tag key={`block-${key++}`} id={id}>
-          {renderInlineMarkdown(text)}
-        </Tag>,
-      );
-      index += 1;
-      continue;
-    }
-
-    if (/^\s*(- |\d+\. )/.test(line)) {
-      const kind: MarkdownListKind = /^\s*\d+\. /.test(line) ? "ordered" : "unordered";
-      const baseIndent =
-        (kind === "ordered" ? line.match(/^(\s*)\d+\. /) : line.match(/^(\s*)- /))?.[1].length ?? 0;
-      const [items, nextIndex] = parseMarkdownList(lines, index, baseIndent, kind);
-      blocks.push(renderMarkdownList(items, `block-${key++}`, kind));
-      index = nextIndex;
-      continue;
-    }
-
-    const paragraphLines: string[] = [];
-    while (
-      index < lines.length &&
-      lines[index].trim() &&
-      !lines[index].trim().startsWith("#") &&
-      !lines[index].trim().startsWith("- ") &&
-      !/^\d+\. /.test(lines[index].trim()) &&
-      !lines[index].trim().startsWith("```")
-    ) {
-      paragraphLines.push(lines[index].trim());
-      index += 1;
-    }
-    blocks.push(<p key={`block-${key++}`}>{renderInlineMarkdown(paragraphLines.join(" "))}</p>);
-  }
-
-  return blocks;
-}
 
 function titleCaseToken(value: string): string {
   return value
@@ -792,6 +621,7 @@ export function App() {
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
     DocumentationSection["id"]
   >("projectStructure");
+  const [documentationNavigation, setDocumentationNavigation] = useState<{ id: string; anchor: string } | null>(null);
   const [latestWorkbookImportSummary, setLatestWorkbookImportSummary] = useState<WorkbookImportSnapshotSummary | null>(null);
   const [databaseSchemaSummary, setDatabaseSchemaSummary] = useState<DatabaseSchemaSummary | null>(null);
   const [databaseHealthSummary, setDatabaseHealthSummary] = useState<DatabaseHealthSummary | null>(null);
@@ -929,148 +759,189 @@ export function App() {
   const [isLoadingCanonicalValidation, setIsLoadingCanonicalValidation] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
+      id: "projectInstructions",
+      title: "Project Development Guidelines",
+      sourcePath: "AGENTS.md",
+      markdown: projectInstructionsDocumentation,
+    },
+    {
+      id: "schemaProfiles",
+      title: "Schema Profile Guide",
+      sourcePath: "data/schema_profiles/README.md",
+      markdown: schemaProfilesDocumentation,
+    },
+    {
       id: "documentationIndex",
       title: "Documentation Index",
+      sourcePath: "docs/README.md",
       markdown: documentationIndexDocumentation,
     },
     {
       id: "environmentProfiles",
       title: "Dev and Prod Configuration",
+      sourcePath: "docs/environment-profiles.md",
       markdown: environmentProfilesDocumentation,
     },
     {
       id: "productionWorkbookContract",
       title: "Production Workbook Contract",
+      sourcePath: "docs/production-import-workbook-design.md",
       markdown: productionWorkbookContractDocumentation,
     },
     {
       id: "productionPreparation",
       title: "Production Workbook Preparation",
+      sourcePath: "docs/production-import-preparation.md",
       markdown: productionPreparationDocumentation,
     },
     {
       id: "productionImporterDesign",
-      title: "Production Importer Design (Draft)",
+      title: "Production Importer Design",
+      sourcePath: "docs/production-importer-design.md",
       markdown: productionImporterDesignDocumentation,
     },
     {
       id: "registrationCounts",
       title: "Registration Counts",
+      sourcePath: "docs/registration-counts.md",
       markdown: registrationCountsDocumentation,
     },
     {
       id: "marketInfoParity",
       title: "Market Info Parity and Verification",
+      sourcePath: "docs/market-info-parity-checklist.md",
       markdown: marketInfoParityDocumentation,
     },
     {
       id: "publishingRemotes",
       title: "Publishing to Business and GitHub",
+      sourcePath: "docs/publishing-remotes.md",
       markdown: publishingRemotesDocumentation,
     },
     {
       id: "playgroundTestReport",
       title: "Playground Test Report (Historical)",
+      sourcePath: "docs/eudamed-playground-test-report.md",
       markdown: playgroundTestReportDocumentation,
     },
     {
       id: "basicUdiComparison",
       title: "Basic UDI Comparison — September 18",
+      sourcePath: "docs/basic-udi-registration-comparison-2026-09-18.md",
       markdown: basicUdiComparisonDocumentation,
     },
     {
       id: "codeConsolidation",
       title: "XML Consolidation — September 9",
+      sourcePath: "docs/code-consolidation-2026-09-09.md",
       markdown: codeConsolidationDocumentation,
     },
     {
       id: "xmlPerformance",
       title: "XML Performance — September 16",
+      sourcePath: "docs/xml-generation-performance-2026-09-16.md",
       markdown: xmlPerformanceDocumentation,
     },
     {
       id: "sqliteProposal",
       title: "SQLite Event Logging (Historical Proposal)",
+      sourcePath: "docs/sqlite-event-logging-schema-proposal.md",
       markdown: sqliteProposalDocumentation,
     },
     {
       id: "identityPolicy",
       title: "Device Identity Policy (Historical Proposal)",
+      sourcePath: "docs/reports/device-subject-identity-policy.md",
       markdown: identityPolicyDocumentation,
     },
     {
       id: "xmlSamples",
       title: "XML Sample Notes (Historical)",
+      sourcePath: "docs/xml_samples/README.md",
       markdown: xmlSamplesDocumentation,
     },
     {
       id: "projectStructure",
       title: "Project Overview",
+      sourcePath: "frontend/src/content/docs/project-structure.md",
       markdown: projectStructureDocumentation,
     },
     {
       id: "architectureDefinition",
       title: "Architecture Definition Draft",
+      sourcePath: "docs/architecture-definition-draft.md",
       markdown: architectureDefinitionDocumentation,
     },
     {
       id: "sessionHandoff",
       title: "Session Handoff",
+      sourcePath: "docs/session-handoff.md",
       markdown: sessionHandoffDocumentation,
     },
     {
       id: "architecturePosition",
       title: "Architecture Position",
+      sourcePath: "frontend/src/content/docs/architecture-position.md",
       markdown: architecturePositionDocumentation,
     },
     {
       id: "roadmap",
       title: "Roadmap",
+      sourcePath: "frontend/src/content/docs/roadmap.md",
       markdown: roadmapDocumentation,
     },
     {
       id: "workbooks",
       title: "Workbooks",
+      sourcePath: "frontend/src/content/docs/workbooks.md",
       markdown: workbooksDocumentation,
     },
     {
       id: "canonicalValidation",
       title: "Canonical Validation",
+      sourcePath: "frontend/src/content/docs/canonical-validation.md",
       markdown: canonicalValidationDocumentation,
     },
     {
       id: "dataInterpretation",
       title: "Data Interpretation",
+      sourcePath: "frontend/src/content/docs/data-interpretation.md",
       markdown: dataInterpretationDocumentation,
     },
     {
       id: "xml",
       title: "XML Generation",
+      sourcePath: "frontend/src/content/docs/xml-generation.md",
       markdown: xmlGenerationDocumentation,
     },
     {
       id: "xmlSampleComparison",
       title: "XML Sample Comparison",
+      sourcePath: "frontend/src/content/docs/xml-sample-comparison.md",
       markdown: xmlSampleComparisonDocumentation,
     },
     {
       id: "eudamedServiceContractFindings",
       title: "EUDAMED Service Contract Findings",
+      sourcePath: "frontend/src/content/docs/eudamed-service-contract-findings.md",
       markdown: eudamedServiceContractFindingsDocumentation,
     },
     {
       id: "eudamedTestingGenerationUi",
       title: "EUDAMED Testing And Generation UI",
+      sourcePath: "frontend/src/content/docs/eudamed-testing-generation-ui.md",
       markdown: eudamedTestingGenerationUiDocumentation,
     },
     {
       id: "testingScenarios",
       title: "Testing Scenarios",
+      sourcePath: "frontend/src/content/docs/testing-scenarios.md",
       markdown: testingScenariosDocumentation,
     },
     {
       id: "softwareEngineeringPatterns",
       title: "Software Engineering Patterns",
+      sourcePath: "frontend/src/content/docs/software-engineering-patterns.md",
       markdown: softwareEngineeringPatternsDocumentation,
     },
   ];
@@ -1078,7 +949,7 @@ export function App() {
     {
       id: "project",
       title: "Project",
-      sectionIds: ["documentationIndex", "projectStructure", "architectureDefinition", "sessionHandoff", "architecturePosition", "roadmap"],
+      sectionIds: ["documentationIndex", "projectStructure", "architectureDefinition", "sessionHandoff", "architecturePosition", "roadmap", "projectInstructions"],
     },
     {
       id: "dataCanonical",
@@ -1103,7 +974,7 @@ export function App() {
     {
       id: "operations",
       title: "Configuration And Publishing",
-      sectionIds: ["environmentProfiles", "publishingRemotes"],
+      sectionIds: ["environmentProfiles", "schemaProfiles", "publishingRemotes"],
     },
     {
       id: "historical",
@@ -1114,6 +985,22 @@ export function App() {
   const selectedDocumentationSection =
     documentationSections.find((section) => section.id === activeDocumentationSection) ??
     documentationSections[0];
+
+  function navigateDocumentation(id: string, anchor: string): void {
+    const section = documentationSections.find(entry => entry.id === id);
+    if (!section) return;
+    setActiveDocumentationSection(section.id);
+    setDocumentationNavigation({id, anchor});
+  }
+
+  useEffect(() => {
+    if (!documentationNavigation || activeTab !== "documentation" || activeDocumentationSection !== documentationNavigation.id) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = documentationNavigation.anchor ? document.getElementById(documentationNavigation.anchor) : null;
+      (target ?? document.getElementById("documentation-content"))?.scrollIntoView({block: "start"});
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [documentationNavigation, activeDocumentationSection, activeTab]);
 
   function initializeCanonicalValidationState(canonicalValidationData: CanonicalValidationBundle): void {
     setCanonicalValidation(canonicalValidationData);
@@ -5264,7 +5151,7 @@ export function App() {
                               : "documentation-toc-link"
                           }
                           type="button"
-                          onClick={() => setActiveDocumentationSection(section.id)}
+                          onClick={() => navigateDocumentation(section.id, "")}
                         >
                           {section.title}
                         </button>
@@ -5274,7 +5161,7 @@ export function App() {
                 ))}
               </div>
             </aside>
-            <article className="panel documentation-panel">
+            <article className="panel documentation-panel" id="documentation-content">
               <div className="section-heading">
                 <div>
                   <span className="section-kicker">Documentation</span>
@@ -5282,7 +5169,11 @@ export function App() {
                 </div>
               </div>
               <div className="markdown-document">
-                {renderMarkdownDocument(selectedDocumentationSection.markdown)}
+                {renderMarkdownDocument(selectedDocumentationSection.markdown, {
+                  sourcePath: selectedDocumentationSection.sourcePath,
+                  documents: documentationSections,
+                  onNavigate: navigateDocumentation,
+                })}
               </div>
             </article>
           </section>

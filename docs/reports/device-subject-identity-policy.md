@@ -1,6 +1,6 @@
 # Device Subject Identity Policy
 
-## Historical policy status — reviewed 9 October 2026
+## Historical policy status — reviewed 11 October 2026
 
 The original proposal below predates the current identity resolver. Dev import now
 classifies matches using primary UDI-DI or fallback labels, records explicit
@@ -13,9 +13,12 @@ an unchanged simple upsert. Consult
 
 Production preparation reconciles issuer plus UDI-DI (parent issuer plus Basic
 UDI-DI). That issuer-aware contract must not be reduced to a bare code or catalogue
-match. Application importer adaptation is still proposed in the
-[Production importer design](../production-importer-design.md); this document does
-not authorize changing Dev matching behavior or the database model.
+match. The application importer adaptation is implemented, including exported
+baseline evidence and additive repeat-import safeguards; the first local import
+completed on 10 October. See the
+[Production importer design](../production-importer-design.md). Registration summary
+and parent-child read models retain issuer-qualified identities. This historical
+policy does not authorize changing Dev matching behavior or the database model.
 
 ## Purpose
 

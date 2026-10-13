@@ -3875,6 +3875,22 @@ a.ghost-button:visited {
   color: #274752;
 }
 
+.documentation-panel,
+.markdown-document { min-width: 0; }
+.markdown-document a {
+  color: #005772;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+.markdown-document a:hover { color: #002a3a; }
+.markdown-document a:focus-visible { outline: 2px solid #648f00; outline-offset: 3px; border-radius: 3px; }
+.markdown-table-shell { max-width: 100%; overflow-x: auto; margin: 16px 0; border: 1px solid #dce7ea; border-radius: 12px; }
+.markdown-table-shell table { width: 100%; margin: 0; border-collapse: collapse; }
+.markdown-table-shell th { background: #edf3f5; }
+.markdown-table-shell :is(th, td) { padding: 10px 14px; overflow-wrap: anywhere; min-width: 130px; }
+.markdown-table-shell tbody tr:last-child td { border-bottom: 0; }
+
 .markdown-document h1,
 .markdown-document h2,
 .markdown-document h3 {

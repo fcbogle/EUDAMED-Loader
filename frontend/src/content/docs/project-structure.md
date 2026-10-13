@@ -2,7 +2,9 @@
 
 ## Project Creator
 
-This project was created by Frank C Bogle, Head of Enterprise Solutions, Blatchford Mobility UK, as an analysis-first workspace for understanding source workbook data, shaping a canonical regulatory model, and preparing reliable EUDAMED XML generation workflows before any live submission capability is added.
+Created by **Frank C Bogle**, Head of Enterprise Solutions, Blatchford Mobility UK.
+
+The application supports source workbook analysis, canonical regulatory modelling, and the preparation, validation and tracking of EUDAMED XML submissions.
 
 ## Main Directories
 
@@ -21,13 +23,25 @@ This project was created by Frank C Bogle, Head of Enterprise Solutions, Blatchf
 
 ## Current Flow
 
-`Excel input -> workbook review -> canonical review -> canonical validation -> XML preview/download`
+Dev: `Raw templates + reference -> SQLite import -> canonical validation -> operation assessment -> XML preview/download`
+
+Production: `Templates + reference + exported XML -> prepared workbook/audit -> assessed import -> SQLite canonical data and export baselines -> operation assessment -> XML preview/download`
+
+Successful acknowledgement uploads update accepted state and recorded history
+in the active environment. Downloading XML does not submit it.
 
 ## Current State
 
 - broader multi-family scope is already implemented in workbook review, canonical review, validation, and XML preview
-- accessories remain excluded from active variant mapping
-- the main remaining cleanup is consistency between canonical model names and XML-facing field paths
+- Dev retains its configured source/mapping exclusions; Production follows the approved prepared-workbook scope and owner exclusions
+- Production importing and export-baseline evidence are implemented; initial local startup/import completed on 10 October 2026
+- Registration State includes a Parents & Children view with lazy-loaded 20-child pages in both environments
+- canonical completeness, XML eligibility and registration evidence remain separate
+- the main remaining cleanup includes canonical/XML field-name consistency and transitional text/alias identity paths
+
+See [Architecture Position](architecture-position.md), the
+[architecture definition](../../../../docs/architecture-definition-draft.md) and
+[Canonical Validation](canonical-validation.md) for current boundaries.
 
 ## Intended Direction
 
@@ -35,4 +49,6 @@ The long-term architecture is still:
 
 `Preparation -> Submission -> Delivery -> History`
 
-The current scaffold stops before delivery and history.
+Operational import, package, batch and acknowledgement history already exists in
+SQLite. Automated delivery/M2M and a complete formal submission/audit solution
+remain future work.

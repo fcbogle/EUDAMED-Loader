@@ -2,6 +2,54 @@
 
 Updated October 11, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+## October 11 — Architecture Documentation Review
+
+Updated the architecture definition and embedded Architecture Position against
+implemented Production preparation/import, separate export-baseline evidence,
+shared registration tabs/20-child drill-down, scoped readiness performance,
+Production completeness notes, actor banner and Markdown navigation. Corrected
+the old first-startup/import pending statements and preparation counts: the
+October 10 checkpoint had 10,031 prepared rows, 10,026 eligible and five skipped,
+with 354 registered baselines and 9,672 awaiting devices after initial import.
+Counts are explicitly historical, not live inventory.
+
+Aligned Project Overview and the startup milestone in Roadmap. Updated only the
+current-status prefaces of the historical SQLite and identity proposals, preserving
+their original discussion/DDL. The OpenAI/RAG assistant is labelled as discussion,
+not implemented or an approved architecture change. No runtime, database or
+workflow changes are part of this review.
+
+Verification: all five Markdown renderer/cross-reference checks and the frontend
+production build passed after the documentation changes.
+
+## October 11 — Documentation Links and Tables
+
+Follow-up renderer correction: wrapped lines within bullets and numbered items
+now stay in the same list item instead of appearing as separate paragraphs.
+Nested mixed lists and blank-separated sibling bullets are preserved. Regression
+uses the actual Production importer Agreed behaviour section; all 98 frontend
+tests and the production build passed. Corrected that guide's outdated introductory
+claim that the first Production import was pending.
+
+The Documentation viewer now renders Markdown cross-document links and tables,
+including links in table cells and nested lists. Relative paths resolve against
+the current document's actual repository path, so nested reports and multiple
+README files navigate correctly. Clicking a document link selects its sidebar
+section and scrolls to the document or linked heading. External HTTP/HTTPS links
+open separately; code blocks remain literal and raw HTML is not executed.
+
+The renderer is a small standalone React utility with no new dependency. The
+schema-profile README and AGENTS.md project guidelines are included because
+existing guides link to them. Every local Markdown cross-reference in the
+available documentation is covered by a resolution test. The workbook contract's
+locations table now renders as a table, with working preparation/importer links.
+The documentation index records the completed October 10 initial Production import.
+Refresh the browser; no backend restart or reimport is required.
+
+Verification: all 96 frontend tests passed, including cross-reference coverage,
+relative paths, heading anchors, table rendering, escaped pipes and safe link
+handling. The frontend production build passed.
+
 ## October 11 — Parents & Children Registration View
 
 Owner-approved shared Dev/Production UI: Registration State now has two internal

@@ -2,7 +2,7 @@
 
 Date: 2026-08-31
 
-## Historical proposal status — reviewed 9 October 2026
+## Historical proposal status — reviewed 11 October 2026
 
 The proposal below preserves the original design discussion; it is not current
 DDL or an outstanding implementation checklist. Existing code now includes
@@ -15,7 +15,12 @@ Reviewed POST rows are history, not a PATCH readiness gate. See the
 [architecture](architecture-definition-draft.md) and [handoff](session-handoff.md)
 for implemented behavior. The [Production importer design](production-importer-design.md)
 documents implemented exported-baseline evidence using the existing schema.
-The SQL and open decisions below must not be applied as a migration plan.
+Production baselines use `IMPORTED` / `BASELINE_IMPORT` with message type
+`PRODUCTION_EXPORT.SNAPSHOT` and source `production_export`; they are registration
+evidence, not successful uploads. Initial local Production startup/import completed
+on 10 October. The shared registration summary and 20-child drill-down use this
+schema without introducing new tables. The SQL and open decisions below must not
+be applied as a migration plan.
 
 ## Purpose
 

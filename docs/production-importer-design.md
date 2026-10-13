@@ -3,8 +3,9 @@
 Implemented 9 October 2026 following owner approval. The separate backend
 service module uses the existing SQLite tables and UI, preserves Dev raw-template
 import and distinguishes exported accepted baselines from successful uploads.
-Production has started locally; the first import remains pending. The configured supplied pair was
-assessed read-only; synthetic isolated databases exercise persistence and workflows.
+Production started locally and the first reviewed import completed on 10 October
+2026. The supplied pair was assessed before confirmation; synthetic isolated
+databases separately exercise persistence and workflows.
 
 ## Agreed behaviour
 
