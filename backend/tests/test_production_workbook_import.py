@@ -206,6 +206,8 @@ def test_import_zip_success_xml_duplicate_delayed_and_next_patch(production):
 
 
 def test_imported_devices_are_in_bulk_patch_market_info_and_read_models(production):
+    from fastapi.testclient import TestClient
+    from app.main import app
     from app.services.testing_read_model import TestingReadModelService
     settings,_,_=production
     importer=ProductionWorkbookImporter();a=importer.assess();importer.run_import(assessment_token=a['assessment_token'])
@@ -216,6 +218,16 @@ def test_imported_devices_are_in_bulk_patch_market_info_and_read_models(producti
     assert read.subject_history(summaries[0].id).subject.imported_baseline_present
     entries=read.bulk_patch_posted_entries(product_family='Synthetic model',product_variant='Synthetic model',basic_udi_di='BASICSHARED')
     assert len(entries)==1 and entries[0]['current_state']['version']=='2'
+    # Both bulk workspaces use this HTTP selector before requesting their devices.
+    # Imported acceptance must qualify without fabricating a successful upload.
+    parents=TestClient(app).post('/api/xml/bulk-patch-posted-parents',json={
+        'product_family':'Synthetic model','product_variant':'Synthetic model',
+    })
+    assert parents.status_code==200
+    assert parents.json()['parents']==[{
+        'basic_udi_di':'BASICSHARED','posted_child_count':1,
+        'sample_catalogue_numbers':['SYN-00000'],
+    }]
     service=XmlGenerationService(require_import=True)
     common=dict(product_family='Synthetic model',product_variant='Synthetic model',basic_udi_di='BASICSHARED',record_count=1,selected_catalogue_numbers=['SYN-00000'])
     preview=service.preview_bulk_patch(**common,scenario_id='trade_name_edit',scenario_inputs={'new_trade_name':'Bulk name'})

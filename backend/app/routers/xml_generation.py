@@ -113,11 +113,17 @@ def _bulk_patch_posted_parent_groups_from_summaries(
     grouped: dict[str, _BulkPatchPostedParentGroup] = {}
     for summary in summaries:
         entry = _summary_entry(summary)
-        if not entry.get("post_success") or not entry.get("has_successful_child_post_or_patch"):
+        # Use registration evidence, not local upload-success flags: Production
+        # export baselines and the DEVICE.POST seed also establish a child.
+        if not any(entry.get(key) for key in (
+            "imported_baseline_present",
+            "has_successful_device_post",
+            "has_successful_child_post_or_patch",
+        )):
             continue
         basic_udi_di = str(entry.get("basic_udi_di") or "").strip()
         catalogue_number = str(entry.get("catalogue_number") or "").strip()
-        if not basic_udi_di:
+        if not basic_udi_di or not str(entry.get("primary_udi_di") or "").strip():
             continue
         group = grouped.setdefault(
             basic_udi_di,
