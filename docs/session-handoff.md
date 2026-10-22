@@ -1,6 +1,187 @@
 # Session Handoff
 
-Updated October 11, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated October 22, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## October 22 — Import Management And Reporting Direction
+
+The owner has identified two development areas below. This is agreed business
+direction for further design discussion, **not authorization to implement new
+menus, import workflows, reporting services or reconciliation logic**. This update
+records the direction only. Retain the current SQLite and manual XML workflows.
+
+### Import Management — Proposed UI For Enterprise Solutions
+
+Provide a dedicated Import Management UI covering receipt/selection of Regulatory
+Affairs Template workbooks, the Basic UDI-DI workbook, EUDAMED XML extracts and
+supporting information; source structure/population and parent checks; exception
+review; creation/review of the Import workbook and matching audit; application
+assessment/confirmation; post-import checks; and import history/report access.
+The current script-based preparation and configured-file Production importer
+remain implemented behavior until a new UI is agreed and built.
+
+Enterprise Solutions owns **all** source receipt, input checking, preparation,
+review, application assessment, import confirmation, import-report retention and
+post-import verification. Regulatory Affairs supplies/confirms business data and
+resolves business exceptions. Operators begin submission activities after
+Enterprise Solutions hands over the checked imported data. Operators generate and
+review XML/ZIPs, submit manually to EUDAMED, import returned responses and verify
+outcomes; they do not manage source-file preparation or database imports.
+
+The downloadable assessment/result report is currently JSON. Provide a readable
+Excel assessment/result workbook through the future UI, with concise totals for
+new, unchanged, retained, skipped and changed/conflicting records; clear reasons
+and required actions; and whether import can proceed or completed successfully.
+This report records a particular assessment/import, not ongoing registration
+status. Preserve the matching audit JSON and detailed integrity/source evidence;
+a business-facing Excel report must not replace the audit needed by the importer.
+Existing identity, No-only import, additive repeat-import and newer-acceptance
+protections remain the starting contract, not incidental redesign opportunities.
+
+### Reporting — Registration Snapshot And EUDAMED Comparison
+
+A new top-level Reporting menu is proposed, with two distinct functions:
+
+1. Generate a dated registration snapshot from the application database, with
+   **one tab per device model**. Match that model's Regulatory Affairs Template
+   column names, terminology, column order and formatting, including existing
+   model-specific variations. Add only the reporting fields needed to explain
+   registration and versions; do not expose internal canonical/API names as the
+   business column vocabulary.
+2. Receive EUDAMED XML extracts and compare them with a **selected saved
+   application snapshot**, producing a brief exception report for action. Preserve
+   both inputs so the comparison is reproducible after application state changes.
+   Comparison must not automatically alter accepted state or import data.
+
+Show Basic UDI-DI parent status separately from Device UDI-DI child status. A
+registered parent can have unregistered children. Use explicit status text plus
+independent colour indicators: Registered/pale green, Unregistered/pale amber,
+and Unknown/pale grey where evidence remains unresolved. Do not silently convert
+unknown to unregistered or infer non-registration merely from export absence.
+Include a legend and status filters.
+
+Template columns contain the available device details even when an identity is
+unregistered; the status must clearly say Unregistered where confirmed. The owner
+does not want "proposed values" as a confusing business status label. For registered
+records, distinguish accepted information from unsent edits; for unregistered
+records, use the available imported details without implying acceptance. Include
+separate parent, device and Market Information versions where known; missing
+versions remain unknown, not invented. Record snapshot date/time, environment,
+manufacturer, scope and source import/evidence references.
+
+Match regulatory identities by issuing entity plus UDI-DI, retaining the
+issuer-qualified Basic UDI-DI link; catalogue/model names are review context,
+not identity. Compare registration status and relevant accepted versions, parent
+links and countries. Record export dates, scope, filters and pagination; report
+incomplete coverage, unknown values, parents without export coverage and timing
+differences as limitations/unable-to-compare cases, not proven discrepancies.
+A snapshot comparison demonstrates agreement for the stated scope and dates,
+not continuous synchronization with EUDAMED.
+
+### Business Readability Is A Core Requirement
+
+Reports are for business readers and must be **brief, clear and action-oriented**.
+Lead with the overall position, totals and exceptions. Use plain-language outcomes
+such as Matches, Difference found and Unable to compare. For each exception show
+model/device, what differs, required action and responsible team. Keep technical
+errors, hashes and detailed audit evidence outside the main business summary.
+The detailed model tabs retain the familiar Template layout; avoid maintaining
+competing registration calculations between reports and the operational views.
+
+The import report answers "what happened during this import?"; the registration
+snapshot answers "what position does the application record at this time?".
+For example, a later registration snapshot changes after successful response
+imports, while the earlier import result remains historical evidence.
+Detailed menu placement, UI interactions, final report fields/layout, file handling
+and implementation scope still need owner review before coding.
+
+### Continue Registrations Using The Existing Workflows
+
+The owner may register additional devices **before** these new functions are
+added. Import Management/Reporting development is not a prerequisite for ongoing
+controlled registration. Continue using the existing reviewed import, Registration
+State / Parents & Children, Single POST for parent seeds and Bulk POST for further
+children, with current eligibility and environment controls. This is a continuation
+direction, not an instruction for Codex to submit anything externally.
+
+After **every** submission, retain the exact downloaded package and returned XML,
+use Upload Success XML for each response, and verify per-device outcomes before
+dependent actions. Resolve errors/partial outcomes through Enterprise Solutions.
+Do not assume current portal/application agreement from a preview, ZIP download
+or historical count alone. Automated upload/M2M remains out of scope.
+
+October 22 documentation verification: all 98 frontend tests and the
+TypeScript/Vite production build passed; the existing >500 kB bundle warning
+remains (777.84 kB JavaScript at this check). `git diff --check` passed. No new
+backend run was needed for this prose-only update; the latest full Python result
+is the October 21 run recorded below.
+
+## October 20–21 — Work Instruction And Bulk Update Parent Lookup
+
+### Work Instruction
+
+The owner developed the operator WI in
+`docs/work instruction/BQP 06-20 Annex B Issue D WI SOP EUDAMED Loader.docx`.
+Update this **same file in place**; do not create revision copies. The owner will
+assign formal document versions. Read the latest saved file before editing,
+preserve owner edits, and check its Word lock rather than unrelated PowerPoint
+locks. The directory also contains the owner's PDF and diagram PowerPoint;
+do not assume either is automatically synchronized after a Word edit.
+
+The WI uses General Information (1), Operating Instructions (2), and Approvals
+(3). Section 1.5 introduces application checks/navigation and functional areas.
+Sections 2.2–2.4 cover source checks and the Enterprise Solutions import role;
+2.5 parent/seed registration; 2.6 child Bulk POST; 2.7 PATCH; 2.8 Market Information
+PUT; and 2.9 error outcomes, retained evidence and Enterprise Solutions escalation.
+The last document pass completed 2.9, removed draft/completion wording and
+standardized 33 list items and 31 diagrams. Standard list spacing is 6 pt after;
+diagrams are centred, inline, with 6 pt above and 9 pt below. Preserve annotations,
+image proportions and the Windchill approval table. DOCX package/XML checks passed;
+final pagination still needs visual review in Word. Do not claim document release
+or regenerate the owner's PDF without a request.
+
+### Shared Bulk PATCH / Bulk Market Info Parent Lookup — Fixed
+
+Commit `3ec14d4` corrects the shared `/api/xml/bulk-patch-posted-parents` route.
+The old summary filter required local post-success/child-success flags, hiding
+parents whose registrations came from trusted Production exports and seed-only
+DEVICE.POST evidence. The selector now recognizes imported baselines, successful
+DEVICE.POST seeds and successful UDI_DI.POST/PATCH evidence, while excluding
+unresolved identities and parent-only entries without a Device UDI-DI. Existing
+per-device accepted-state, readiness, scenario and version guards remain intact.
+
+October 21 read-only reproduction: Aqualimb TF parent `5050649AQUALIMBTFX7` was
+registered with 13 registered children assessed ready for PATCH/Market Info, while
+the old parent endpoint returned none. The corrected lookup returned the parent
+and all 13 children using their imported evidence, without fabricating successes
+or changing application data. These are dated observations, not today's inventory.
+Both bulk workspaces share the corrected lookup. No migration or reimport is
+required; restart the backend and refresh the browser if it still runs pre-fix
+code. Runtime restart/browser verification was not established by the code test.
+
+Verification: 28 focused tests passed; the full Python suite passed **293 tests
+in 236.66 seconds**, with two existing FastAPI startup deprecation warnings.
+Seven new HTTP selection regressions and a strengthened Production importer
+regression cover the route, which earlier service-only tests missed. No XML was
+submitted and no live database state was changed by the diagnosis/fix.
+
+### Recorded Production Registration Milestone
+
+Repository commit `d9c5a72` records four successful Production submissions on
+October 12: 118 devices and two Basic UDI-DI parents, with four response XMLs
+recorded in Production SQLite. This is the commit's dated milestone, not a fresh
+October 22 database/portal audit. Production import/startup and manual submissions
+are no longer pending initial implementation. Do not mistake older planning
+statements below for current instructions to hold all Production activity.
+
+### Dependency Incident Check — Limited Scope
+
+The October 21 LiteLLM incident review found no LiteLLM/Trivy references in the
+project files searched, no such packages among 27 distributions in the project
+virtual environment, and no installed dependency declarations referencing them.
+This does not clear historical installations, other environments/tools, CI builds
+or the entire host. Historical build/install evidence and host indicators remain
+outside that check. No package changes, credential rotation or full incident
+response were performed. Keep any security assurance limited to the checks done.
 
 ## October 11 — Architecture Documentation Review
 
@@ -582,12 +763,12 @@ POST success. This is a dated local checkpoint, not a live Playground inventory.
 
 ## Repository And Delivery Context
 
-- Branch observed during this refresh: `feature/testing-batches-audit`.
-- Latest implementation commit observed at the October 9 sweep: `bbf5570` — `feat: prepare production import workbook with exception summary`. `355d910` introduced the earlier XML consolidation and ZIP-review rules.
-- Optional-URL preparation updates, the importer draft and this documentation sweep have working-tree changes. Use `git status --short` for current status; do not assume all described work is committed.
-- The application prepares, validates and packages EUDAMED XML, then records manually uploaded Playground acknowledgements. It does not submit XML through EUDAMED M2M transport.
+- Branch recorded during the earlier refresh: `feature/testing-batches-audit`; verify the current branch with Git.
+- Latest implementation commit checked on October 22: `3ec14d4` — `fix: recognise imported registrations in bulk update parent selection`. `355d910` introduced the earlier XML consolidation and ZIP-review rules.
+- Use `git status --short` for current working-tree state; earlier working-tree descriptions below are dated evidence, not current status.
+- The application prepares, validates and packages XML for the selected Dev/Production environment, then records manually imported EUDAMED responses. It does not submit XML through M2M transport.
 - The owner approved a combined Device Model selector and aligned review filters. Preserve distinct operation-specific rules and exact-device selection when evolving these controls.
-- SQLite remains the active application store. Near-launch priorities include operational verification, bulk-generation performance and a trusted production baseline. Separate production deployment/import is not yet implemented. The first request-local XML performance improvements described below are implemented; real operator end-to-end timing remains to be measured.
+- SQLite remains the active application store. Dev/Production profiles, Production baseline import and manual registration workflows are implemented. Operational verification and representative performance measurements continue; Import Management UI and Reporting are proposed design work as recorded above.
 
 Follow [AGENTS.md](../AGENTS.md) for collaboration requirements. The owner has explicitly approved the ZIP-review design described below; that decision is resolved.
 
@@ -679,7 +860,7 @@ Older accepted entries may have only partial snapshots or no snapshot. Compatibi
 
 September 16 review fixes: when a newer accepted device or Market Info version has no matching payload snapshot, historical snapshots remain stored but are not exposed as the current accepted state. Single PATCH readiness and generation block; Bulk PATCH excludes affected devices. Restore matching generation context and re-import the acknowledgement to repair the snapshot, or complete a new Market Info update when only the country baseline is missing. A same-version duplicate acknowledgement can repair a stale snapshot without duplicating the acknowledgement event. Legacy POST-only fallback remains supported.
 
-Current testing eligibility remains Playground-centric and relies on tracked successful registration. Workbook classification as `PATCH` alone does not establish a trusted accepted baseline for the controlled scenario workspace. Production handling of already registered devices without locally generated POST history is future design work.
+Eligibility uses tracked successful registration or supported Production export-baseline evidence. Workbook classification as `PATCH` alone does not establish a trusted accepted baseline. Production export-baseline handling is implemented; the October 21 parent-selector correction aligns bulk selection with that existing evidence model.
 
 ## Market Info Rules
 
@@ -767,7 +948,7 @@ Dev's configured `data/basic_udi_reference/BasicUDIs.xlsx` uses two sheets: `Upl
 
 Parent registration does not prove child registration. Workbook POST/PATCH labels express source intent; accepted EUDAMED device identity/state must govern production eligibility. Workbooks supply proposed data, not proof of acceptance.
 
-The current environment is now called **Dev** (targeting Playground). September 19 configuration work adds separate Dev/Prod startup profiles in one codebase: `.env.dev` and `.env.prod`, explicit schema selection, isolated storage paths and startup checks. Run `python -m app.run --environment dev --check-config` from `backend/` for read-only validation. Dev retains its existing database and source paths; Prod requires explicit configuration and actor identities. See [environment profiles](environment-profiles.md). UI environment labels are implemented. Controlled production database initialization/import and full generation verification against both profiles remain pending. No production database or acceptance data was created. Do not copy Playground successes into production acceptance.
+The current environment is now called **Dev** (targeting Playground). September 19 configuration work adds separate Dev/Prod startup profiles in one codebase: `.env.dev` and `.env.prod`, explicit schema selection, isolated storage paths and startup checks. Run `python -m app.run --environment dev --check-config` from `backend/` for read-only validation. Dev retains its existing database and source paths; Prod requires explicit configuration and actor identities. See [environment profiles](environment-profiles.md). UI environment labels are implemented. Production initialization and the initial reviewed import completed on October 10; the subsequent Production registration milestone is recorded above. Full operator verification of every flow remains separate from implementation. Do not copy Playground successes into Production acceptance.
 
 Establish Production through a controlled, reviewed import/reconciliation of complete production exports: preserve originals, validate scope/pagination/encoding, match UDI-DI plus issuing entity and parent links, then store accepted fields, separate parent/device/Market Info versions, country lists, dates and provenance. Confirm registered parents without children are covered too. Missing identities in an unverified export remain unknown. Imports must not overwrite newer acceptance or silently preserve stale pending packages. Export reconciliation is a dated snapshot, not continuous synchronization; M2M remains deferred. Imported acceptance needs its own explicit provenance path, not fabricated POST acknowledgements.
 
@@ -777,7 +958,7 @@ Historical planning checkpoint: the October 9 section above records the supplied
 folders, approved parent reference and implemented preparation utility. Its current
 decisions supersede the wait-for-folder instructions, two-tab-only layout, optional
 Summary proposal and dated-retention preference below. Summary is implemented;
-a single current pair is agreed but its replacement mechanism remains pending.
+a single current pair and its staged replacement mechanism are now implemented.
 The remainder of this section records the October 8 discussion, not instructions
 to pause current design work.
 
@@ -905,7 +1086,7 @@ this direction does not itself initialize or import Production.
 
 ### Production Hold And Incremental Loader Direction
 
-Earlier planning placed Production creation on hold pending Quality confirmation of the master workbook structure. Updated inputs and the current three-tab workbook are now prepared. The October 9 importer draft is ready for owner review, with No-only import and optional URL inclusion agreed. Configured-file assessment/confirmation and the additive repeat-import policy remain proposals. The table below is historical loader direction; consult the newer draft for the proposed initial application flow. The proposed frontend-only Production preview was cancelled before any changes were made. Dev remains available for testing. Do not initialize Production or copy the Dev database as part of loader planning.
+Historical planning placed Production creation on hold pending Quality confirmation of the master workbook structure. That hold was superseded by the implemented configured-file preparation/import, No-only eligibility and additive repeat-import handling, followed by the reviewed October 10 import. The table below retains historical loader direction and is not a current instruction to delay registrations. The proposed frontend-only Production preview was cancelled. Dev remains available for testing; do not copy its acceptance data into Production. The proposed Import Management UI is a later enhancement, not the initial importer.
 
 After workbook confirmation, design a reusable incremental loader for subsequent workbooks using the same structure. The requested watermark should identify successfully imported device identities and row content, not simply the last Excel row number: rows can be reordered, inserted or moved between sheets.
 
@@ -1000,10 +1181,14 @@ Choose the action by service/operation rather than single versus bulk packaging.
 
 ## Verification And Next Work
 
-Latest complete run on October 9, before preparation additions: 238 Python tests
-passed in 248.66 seconds, 62 frontend tests passed and the TypeScript/Vite build
-passed. Latest preparation changes passed 16 focused tests and saved-output/hash
-checks. Older totals below remain dated checkpoints; the importer is not yet built.
+Latest complete Python run: **293 passed in 236.66 seconds** on October 21
+after the bulk parent-selector correction; two existing FastAPI startup warnings.
+The October 22 documentation check passed all 98 frontend tests and the
+TypeScript/Vite build (777.84 kB JavaScript, existing >500 kB warning). Frontend
+checks are automated component/helper checks, not full browser verification.
+Production importer/startup and the initial reviewed import are implemented.
+Older results below remain dated checkpoints. This October 22 handoff edit is
+prose-only; no new backend test run or live registration inventory is implied.
 
 
 Historical September 19 UI verification: **48 frontend Node tests passed** and the TypeScript/Vite build passed. Coverage includes model pair selection, Basic UDI search, clearing/resetting scopes, environment lookup and event-pagination reset. These are component/helper/hook checks, not full browser end-to-end tests. The existing Vite warning for a JavaScript chunk over 500 kB remains. Removing banner stickiness was a subsequent CSS-only edit checked with `git diff --check`. No new full backend run was performed for these frontend changes.
@@ -1034,14 +1219,19 @@ git diff --check
 
 Subsequent readiness-fix verification: all 11 frontend tests and the production build passed, then below the 500 kB warning threshold. These tests are not browser confirmation. September 16 documentation verification: all nine local links resolved and `git diff --check` passed. The frontend build passed, but embedded documentation growth brought the JavaScript bundle to approximately 503.5 kB, restoring Vite's 500 kB warning. This is a bundle-size warning, not an XML-generation timing measurement. Backend tests were not rerun for this prose-only change.
 
-Next priorities:
+Current priorities: continue controlled registrations when the owner is ready;
+verify the running backend includes the bulk parent-selector fix; discuss the
+Import Management and Reporting design before implementation. The new functions
+are not prerequisites for additional registrations.
+
+Continuing verification and hardening priorities:
 
 1. Verify model search/selection across all six XML operations and the review screens, unmatched Basic UDI-DIs, reset, recent testing/event pagination, stable controls and the non-sticky environment banner. Then manually verify previews, ZIP review feedback, draft edits, exact-device selection and acknowledgement refresh across the six visible workspaces, including navigation while an upload is in flight.
 2. In controlled Playground testing, verify retained countries in PATCH after Market Info changes, mixed-baseline bulk Market Info, mixed success/error responses, duplicate uploads and delayed older acknowledgements. Use downloaded payloads with recorded generation context; previews alone do not create that history.
 3. Review legacy accepted records with missing/partial snapshots before claiming complete source-drift protection. Choose a trusted recovery approach rather than filling historical acceptance from current workbook data.
 4. Gradually replace remaining text-based identity lookups with `device_subject_id` joins, preserving existing data and lineage. Broader canonical/submission persistence remains a separate design increment.
 5. Verify the implemented Bulk POST/PATCH performance work on a representative imported dataset and measure network/browser time before claiming 100-device launch performance.
-6. Review the implemented Production importer, confirm profile actors/normalization with `--check-config`, then agree first local startup and reviewed import. Six review rows and two Echelon XML selection blockers are deferred; 29 template exclusions still need scope confirmation.
+6. Continue reviewed Production imports under Enterprise Solutions using the implemented preparation and assessment flow. Initial startup/import is complete. Review any remaining source exceptions against current evidence; five skipped rows, two Echelon XML-selection blockers and 29 template-removal notes were historical checkpoints, not a current unresolved inventory. Design the new Import Management UI and business-readable reports with the owner before coding.
 7. Extend scenario coverage only with supporting validation and Playground evidence. Automated submission/M2M transport remains out of scope.
 
 The removed frontend branches, unused clients/types/state, generic preview component, duplicate normalization and old reviewed-POST gate should not be recreated. Retain historical archives unless their recovery/retention purpose has been deliberately resolved.
