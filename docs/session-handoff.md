@@ -2,6 +2,120 @@
 
 Updated October 22, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+## October 22 — Master Validation Document And Restart Handoff
+
+The active task is collaborative review of the Master Validation document:
+`docs/master validation/EUDAMED In-house XML application_FCB.docx`.
+The supplied Word template has been populated and subsequently revised with the
+owner. Continue reviewing sections with the owner; do not treat the document as
+approved validation or an instruction to implement application changes.
+
+### Document Handling And Owner Preferences
+
+- Update the same Word file in place; do not create revision copies. The owner
+  manages formal versioning and release fields.
+- Always read the latest saved document before editing. The owner has made
+  independent edits; never regenerate it from the initial population script.
+- Check for Word's `~$*.docx` lock file. If open, prepare the change but wait for
+  the owner to save and close before writing. Compare original bytes immediately
+  before saving to avoid overwriting a concurrent edit.
+- Preserve unrelated content, formatting, comments and approval/control fields.
+  Existing editing used `.venv/bin/python`, `zipfile` and `lxml` without adding
+  dependencies; only affected package parts were rewritten. Temporary helper
+  scripts in `/tmp` are disposable, not authoritative project artifacts.
+- Use plain business language. Describe receiving, checking, preparing, reviewing
+  and importing data without scripting or implementation detail. Import work is
+  owned by the **Head of Enterprise Solutions** acting for Enterprise Solutions;
+  Operators retain submission and returned-response activities.
+- Personal references to Frank Bogle were replaced with **Head of Enterprise
+  Solutions**, including document metadata. References to this handoff and other
+  working project documents were removed from the validation document. Keep
+  controlled procedures, the WI and primary test evidence as appropriate.
+
+### Completed Document Updates
+
+The document covers purpose/scope, intended use, responsibilities, regulatory
+applicability and risks, validation strategy, lifecycle/change control,
+dependencies, approval, requirements traceability and evidence. Appendix A has
+13 user/system requirements; Appendix B has 12 validation areas (VP-01–VP-12).
+Existing approval fields remain for authorised completion; do not invent approval
+or formal test passes.
+
+- Section 1.1 explains the common codebase with separate Playground/Production
+  configurations, reviewed XML download, separate manual portal upload and
+  mandatory response import. No live EUDAMED connection or automatic sync.
+- Sections 2.1/2.1.1/2.1.2 explain the business process and responsibilities.
+  Process arrows were replaced with sentences. Source code is held in a
+  **Blatchford standard software repository provided to the application developer
+  by the company CTO**; the role name is Head of Enterprise Solutions. Candidate
+  software reference 3ec14d4 is historical, not an approved release baseline.
+- Import wording was also simplified in lifecycle/revalidation, Appendix A and
+  VP-02, retaining source checks, repeat-import protection and post-import review.
+- Section 2.2 explains EUDAMED schema/business-rule rejection, corrections at the
+  Blatchford end and resubmission. Distinguish risk reduction for invalid XML from
+  factual device-data accuracy: service acceptance cannot prove every supplied
+  value is correct. Some business-rule documentation is published; do not claim
+  that all rules are unavailable. Local XSD validation cannot reproduce every
+  server-side check. Partial bulk success requires per-device response review.
+- Section 3.1/3.1.1 describes extensive Playground UAT by the Head of Enterprise
+  Solutions and focuses on successful outcomes. Unsuccessful submissions are
+  described as feedback used to refine the application and retest. The owner
+  asked to avoid a failure-count narrative in this section.
+- Appendix B is now **Validation Test Coverage and Evidence**. Its blanket
+  “Not executed” statements were replaced with coverage statements distinguishing
+  completed Playground UAT, supporting automated checks and evidence or detailed
+  checks still requiring confirmation. Single and bulk PATCH share the same 137
+  successful outcomes; do not count these twice. Backup/restore demonstration is
+  not established by the evidence reviewed. Final evidence linkage and approval
+  remain outstanding; broad UAT does not prove every outlined negative case.
+- Formatting was standardised: Arial body 11 pt, headings 14/12/11 pt, tables
+  generally 10 pt, header/footer 9 pt, consistent paragraph/list/section spacing,
+  repeated table headers and rows kept together. Preserve subsequent owner edits.
+
+### Playground Counts Verified Read-Only On October 22
+
+Counts came from `data/testing/testing-state.sqlite3`, not a new Playground run.
+Retained dated outcomes span August 9–October 5, 2026. Generated/preview events
+were excluded. No repeated successful subject/message-type/version combination
+was found in this check. A bulk upload can yield many individual device outcomes.
+
+| XML message | Recorded submission groups | Successful individual outcomes |
+| --- | ---: | ---: |
+| DEVICE.POST | 10 | 10 |
+| UDI_DI.POST | 19 | 205 |
+| UDI_DI.PATCH | 28 | 137 |
+| MARKET_INFO.PUT | 10 | 65 |
+| Total | 67 | 417 |
+
+There are **215 distinct device records** across successful outcomes. Groups were
+identified using retained correlation IDs, with submission/transaction IDs as
+fallbacks. Of the 67 groups, 64 contain only recorded successes, two have mixed
+outcomes and one contains errors only; 31 error outcomes are retained. These are
+retained-history counts, **not a complete lifetime test total, a pass rate, 417
+uploads or 417 formally approved protocol cases**. Earlier rejected attempts are
+not all in the database; not all older successes have original response XML
+attached. The final document summary table therefore lists only the successful
+individual outcomes by message type, without the total-attempt column. Original
+XML/responses and exact software/configuration versions must be linked where
+available before accepting historical UAT as formal validation evidence.
+
+The September 28 Javelin “no successful PATCH at that checkpoint” note below is
+historical; the October 22 query includes later PATCH outcomes dated September 28.
+Do not mistake earlier checkpoints for current database inventory.
+
+### Verification And Next Action After Restart
+
+All recent changes were document edits and read-only evidence queries. No
+application behavior, registration data, dependencies or transport were changed;
+no new automated suite or live Playground submission was run. DOCX ZIP/XML
+integrity and targeted content/preservation checks passed. Visual pagination
+still needs owner review in Word.
+
+The owner can continue reviewing the remaining validation sections. Keep the
+completed UAT visible while distinguishing outstanding evidence, recovery/access
+checks, final baseline identification and QA/asset-owner approval. The separate
+Import Management and Reporting directions below remain discussion-only.
+
 ## October 22 — Import Management And Reporting Direction
 
 The owner has identified two development areas below. This is agreed business
