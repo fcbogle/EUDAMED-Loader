@@ -46,6 +46,7 @@ import type { RegistrationSummary } from "./types";
 import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
 import { EnvironmentBanner } from "./components/EnvironmentBanner";
+import { ApplicationNavigation, type NavigationPage } from "./components/ApplicationNavigation";
 import { DeviceModelSelector } from "./components/DeviceModelSelector";
 import { XmlValidationStack } from "./components/XmlValidationStack";
 import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
@@ -125,7 +126,15 @@ import {
   resolvePostWorkspaceRecord,
 } from "./xmlWorkspace";
 
-type MainTab = "workbooks" | "canonicalValidation" | "xml" | "registrationState" | "testingSummary" | "documentation";
+type PlannedTab = "sourceFiles" | "assessmentImport" | "importHistory" | "registrationSnapshot" | "eudamedComparison";
+type MainTab = NavigationPage;
+const PLANNED_WORKSPACES: { id: PlannedTab; group: "Import Management" | "Reporting"; title: string; description: string }[] = [
+  { id: "sourceFiles", group: "Import Management", title: "Source Files", description: "Select and review import workbooks and EUDAMED XML extracts." },
+  { id: "assessmentImport", group: "Import Management", title: "Assessment & Import", description: "Review changes and exceptions before importing." },
+  { id: "importHistory", group: "Import Management", title: "Import History", description: "View previous imports and their result reports." },
+  { id: "registrationSnapshot", group: "Reporting", title: "Registration Snapshot", description: "Create a dated registration report by device model." },
+  { id: "eudamedComparison", group: "Reporting", title: "EUDAMED Comparison", description: "Compare EUDAMED XML extracts with a saved registration snapshot." },
+];
 type SubmissionDataTab = "activity" | "snapshot";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
 type PatchScenarioId =
@@ -3128,142 +3137,92 @@ export function App() {
     setIsDownloadingXml,
   });
 
+  const plannedWorkspace = PLANNED_WORKSPACES.find((workspace) => workspace.id === activeTab);
+
   return (
     <main className="app-shell">
       <EnvironmentBanner onEnvironmentChange={setActiveEnvironment} />
-      <nav className="top-nav">
+      <nav className="top-nav" aria-label="Application navigation">
         <div className="brand-block">
-          <span className="brand-kicker">Regulatory Data Preparation</span>
-          <div className="nav-title-block">
-            <strong>EUDAMED Profiling Workspace</strong>
-            <span className="nav-subtitle">
-              Device data, XML preparation, and registration tracking
-            </span>
-          </div>
+          <strong>EUDAMED Profiling Workspace</strong>
         </div>
-        <div className="nav-links nav-links-grouped">
-          <div className="nav-group">
-            <span className="nav-group-label">Data Views</span>
-            <div className="nav-group-buttons">
-              <button
-                className={activeTab === "workbooks" ? "nav-link active" : "nav-link"}
-                type="button"
-                onClick={() => setActiveTab("workbooks")}
-              >
-                Submission Data
-              </button>
-              <button
-                className={activeTab === "canonicalValidation" ? "nav-link active" : "nav-link"}
-                type="button"
-                onClick={() => setActiveTab("canonicalValidation")}
-              >
-                Canonical Validation
-              </button>
-              <button
-                className={activeTab === "registrationState" ? "nav-link active" : "nav-link"}
-                type="button"
-                onClick={() => setActiveTab("registrationState")}
-              >
-                Registration State
-              </button>
-            </div>
-          </div>
-          <div className="nav-group">
-            <span className="nav-group-label">{workspaceActivity} Workspaces</span>
-            <div className="nav-group-buttons">
-              <button
-                className={activeTab === "xml" ? "nav-link active nav-link-primary" : "nav-link nav-link-primary"}
-                type="button"
-                onClick={() => setActiveTab("xml")}
-              >
-                {xmlWorkspaceLabel}
-              </button>
-              <button
-                className={activeTab === "testingSummary" ? "nav-link active" : "nav-link"}
-                type="button"
-                onClick={() => setActiveTab("testingSummary")}
-              >
-                {summaryWorkspaceLabel}
-              </button>
-            </div>
-          </div>
-          <div className="nav-group nav-group-reference">
-            <span className="nav-group-label">Documentation</span>
-            <div className="nav-group-buttons">
-              <button
-                className={activeTab === "documentation" ? "nav-link active nav-link-reference" : "nav-link nav-link-reference"}
-                type="button"
-                onClick={() => setActiveTab("documentation")}
-              >
-                Documentation
-              </button>
-            </div>
-          </div>
-        </div>
+        <ApplicationNavigation
+          activePage={activeTab}
+          onSelect={setActiveTab}
+          xmlWorkspaceLabel={xmlWorkspaceLabel}
+          summaryWorkspaceLabel={summaryWorkspaceLabel}
+        />
       </nav>
 
       <section className={activeTab === "workbooks" ? "hero submission-data-hero" : "hero"}>
         <div className="hero-copy-block">
+          {plannedWorkspace ? (
+            <>
+              <h1>{plannedWorkspace.title}</h1>
+              <p className="hero-copy" tabIndex={0}>{plannedWorkspace.description}</p>
+            </>
+          ) : null}
           {activeTab === "workbooks" ? (
             <>
-              <p className="eyebrow">Operational Data</p>
               <h1>Submission Data</h1>
-              <p className="hero-copy hero-copy-compact">
+              <p className="hero-copy" tabIndex={0}>
                 Review device coverage, registration status, and XML readiness.
               </p>
             </>
           ) : null}
           {activeTab === "canonicalValidation" ? (
             <>
-              <p className="eyebrow">Canonical Validation</p>
               <h1>Canonical Validation</h1>
-              <p className="hero-copy">
-                Review family and variant readiness, then inspect source-to-canonical mapping before XML generation.
+              <p className="hero-copy" tabIndex={0}>
+                Review data mapping and XML readiness.
               </p>
             </>
           ) : null}
           {activeTab === "xml" ? (
             <>
-              <p className="eyebrow">{xmlWorkspaceLabel}</p>
               <h1>{activeEnvironment === null ? xmlWorkspaceLabel : `${xmlWorkspaceLabel} Workspace`}</h1>
-              <p className="hero-copy">
+              <p className="hero-copy" tabIndex={0}>
                 {activeEnvironment === "prod"
-                  ? "Assess availability, generate POST, PATCH, and bulk XML, validate locally, and prepare controlled EUDAMED submission files."
+                  ? "Prepare and validate XML for EUDAMED submission."
                   : activeEnvironment === "dev"
-                    ? "Assess availability, generate POST, PATCH, and bulk XML, validate locally, and prepare controlled Playground test files."
-                    : "Assess availability, generate POST, PATCH, and bulk XML, and validate locally."}
+                    ? "Prepare and validate XML for Playground testing."
+                    : "Prepare and validate XML files."}
               </p>
             </>
           ) : null}
           {activeTab === "testingSummary" ? (
             <>
-              <p className="eyebrow">{summaryWorkspaceLabel}</p>
               <h1>{activeEnvironment === null ? "EUDAMED Snapshot" : `EUDAMED ${workspaceActivity} Snapshot`}</h1>
-              <p className="hero-copy">
-                Review recorded {activeEnvironment === "prod" ? "submission" : activeEnvironment === "dev" ? "testing" : "operation"} outcomes, Basic UDI-DI registration status, and the next available POST and PATCH actions.
+              <p className="hero-copy" tabIndex={0}>
+                Review recorded {activeEnvironment === "prod" ? "submission" : activeEnvironment === "dev" ? "testing" : "operation"} outcomes and available actions.
               </p>
             </>
           ) : null}
           {activeTab === "registrationState" ? (
             <>
-              <p className="eyebrow">Registration State</p>
               <h1>Registration State</h1>
-              <p className="hero-copy">
-                Review family and variant registration status, Basic UDI-DI coverage, and the next available POST, PATCH, and Market Info actions.
+              <p className="hero-copy" tabIndex={0}>
+                Review registration status and available actions.
               </p>
             </>
           ) : null}
           {activeTab === "documentation" ? (
             <>
-              <p className="eyebrow">Documentation</p>
               <h1>Architecture And Workflow Notes</h1>
-              <p className="hero-copy">
-                Review the current architecture position, workflow design, implementation notes, and roadmap.
+              <p className="hero-copy" tabIndex={0}>
+                Select and view implementation documentation
               </p>
             </>
           ) : null}
         </div>
         <aside className="status-card">
+          {plannedWorkspace ? (
+            <>
+              <span className="status-label">Planned workspace</span>
+              <span className="status-pill warn">Not yet available</span>
+              <p className="status-detail">Planned for a future update.</p>
+            </>
+          ) : null}
           {activeTab === "workbooks" ? (
             <>
               <button
@@ -3286,47 +3245,47 @@ export function App() {
               <p className="status-detail">
                 {latestImportBatch
                   ? <>
-                      Showing validated data mapped from source Excel for XML generation in{" "}
+                      Validated data from{" "}
                       <span className="status-detail-emphasis">batch #{latestImportBatch.import_batch_id}</span>.
                     </>
-                  : "Showing validated data mapped from source Excel for XML generation."}
+                  : "Review imported data readiness."}
               </p>
             </>
           ) : null}
           {activeTab === "xml" ? (
             <>
-              <span className="status-label">Testing Snapshot</span>
+              <span className="status-label">XML readiness</span>
               <span className={xmlReadyRecords.length ? "status-pill ok" : "status-pill warn"}>
-                {xmlReadyRecords.length ? "Testing workspace ready" : "Testing workspace blocked"}
+                {xmlReadyRecords.length ? "Ready" : "Blocked"}
               </span>
               <p className="status-detail">
                 {xmlReadyRecords.length
                   ? <>
                       <span className="status-detail-emphasis">{xmlReadyRecords.length}</span>{" "}
-                      XML-ready record{xmlReadyRecords.length === 1 ? "" : "s"} available across the testing workspaces.
+                      XML-ready record{xmlReadyRecords.length === 1 ? "" : "s"} available.
                     </>
-                  : "Waiting for validation-ready records."}
+                  : "No validation-ready records."}
               </p>
             </>
           ) : null}
           {activeTab === "testingSummary" ? (
             <>
-              <span className="status-label">Testing state</span>
-              <span className="status-pill ok">SQLite live</span>
+              <span className="status-label">{workspaceActivity} state</span>
+              <span className="status-pill ok">Application data</span>
               <p className="status-detail">
                 {testingSummaryWorkspaceSummary
-                  ? `${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count} successful testing event${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count === 1 ? "" : "s"} recorded in the current scope.`
-                  : "Testing summary loads the current SQLite-backed Playground state."}
+                  ? `${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count} successful POST/PATCH event${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count === 1 ? "" : "s"} in scope.`
+                  : "Select a scope to review recorded outcomes."}
               </p>
             </>
           ) : null}
           {activeTab === "registrationState" ? (
             <>
               <span className="status-label">Registration state</span>
-              <span className="status-pill ok">SQLite live</span>
+              <span className="status-pill ok">Application data</span>
               <p className="status-detail">
                 <span className="status-detail-emphasis">{registrationStateRows.length}</span> parent group
-                {registrationStateRows.length === 1 ? "" : "s"} tracked in the current scope.
+                {registrationStateRows.length === 1 ? "" : "s"} in scope.
               </p>
             </>
           ) : null}
@@ -3335,7 +3294,7 @@ export function App() {
               <span className="status-label">Documentation set</span>
               <span className="status-pill ok">{documentationSections.length} sections available</span>
               <p className="status-detail">
-                Each section maps directly to a primary workflow tab in the application.
+                Select perspective to view
               </p>
             </>
           ) : null}

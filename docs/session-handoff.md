@@ -2,6 +2,106 @@
 
 Updated October 24, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+## October 24 — Development Navigation And Planned Workspaces
+
+Banner descriptions and status-card explanations were subsequently shortened
+across the workspaces. Documentation uses the owner's wording: “Select and view
+implementation documentation” and “Select perspective to view”. Counts and
+readiness conditions are unchanged; the summary count is explicitly described as
+successful POST/PATCH events. Environment-specific submission/testing wording is
+retained. All 103 frontend tests and the build passed after the copy update.
+
+Implemented on `feature/import-management-reporting` in `.worktrees/development`:
+the initial large grouped menu was replaced after owner visual review with a
+compact two-level menu: Import Management, Data Views, EUDAMED, Reporting and Help.
+Only the active area's pages are displayed underneath. The title block is shorter
+and the repeated tagline is removed; both navigation rows wrap on small screens.
+The selected area/page are highlighted and the last page used in each area is
+retained while the application stays open. Reloading resets to Submission Data.
+Following owner review, workspace banners were also reduced to consistent
+28–32 px serif page titles, 16 px descriptions, less padding and smaller status
+cards. Redundant introductory labels were removed from the banner titles.
+The owner subsequently requested single-line descriptions and consistent banner
+depth. Descriptions now stay unwrapped, with horizontal scrolling when needed
+and keyboard focus support so the full sentence remains accessible. The previous
+character-width caps were removed. After further owner review, the 192 px minimum
+was reduced to 112 px with 12 px vertical padding. Banner status labels and badges
+now share one row, with details underneath, removing the tall stacked card.
+On narrow screens banners
+can grow for stacked content and accessibility rather than clip controls.
+Submission Data uses the same title/description scale while retaining its import
+controls. Body, table and non-banner status-card styles were left unchanged.
+All 103 frontend tests and the build passed after this visual refinement; browser
+review remains with the owner. This refinement does not change database state.
+The Dev/Prod banner remains visible, with environment-specific wording confined
+to the EUDAMED submenu. Import Management has
+Source Files, Assessment & Import, and Import History; Reporting has Registration
+Snapshot and EUDAMED Comparison. Existing Data Views, environment-aware EUDAMED
+Workspaces and Documentation navigation remain available.
+
+Each new entry opens its own descriptive placeholder with a **Not yet available**
+status. No upload, import, report generation or comparison actions were added.
+The owner wants menu work completed now and Import Management/Reporting feature
+implementation held until Playground XML exports are available. Future import
+testing will use Template data and Playground exports, retaining the existing
+Dev/Playground state and protecting Production.
+
+Verification: all 103 frontend tests and the TypeScript/Vite build passed after
+correcting the environment-guide reference below (it is a local file, not a
+registered in-app documentation section). Five new navigation checks cover
+contextual page visibility, active area/page indicators, last-page restoration
+and Dev/Prod/unconfirmed EUDAMED labels. The existing >500 kB bundle warning
+remains. Browser layout/click verification is still for owner review in Dev.
+No backend changes, application starts, database operations or main-branch changes
+were made for this menu update.
+
+## October 24 — Development Worktree Established And Full Tests Passed
+
+The owner confirmed **one environment at a time** and use of the **existing
+Dev/Playground database** for the next development wave. This supersedes the
+earlier open isolation-design decisions below. Production remains in the original
+folder on `main`; the new worktree is `.worktrees/development`, on
+`feature/import-management-reporting`, starting from
+`018734a1f7e6d5651e5c7951ccb62b3ca0f45eb6`.
+
+Use `docs/development-and-production.md` for branch and environment switching
+instructions in the development worktree.
+The development worktree has an ignored `.env.dev` retaining the existing
+Playground actor configuration and explicit paths to the original
+`data/testing/testing-state.sqlite3`, its backup directory and Dev source/reference
+workbooks. It has independent Python/frontend dependencies, copied from the
+installed baseline, and its own normalization/report/artifact paths. No database
+was copied. The Production database remains `data/prod/application.sqlite3` in the
+original folder. No runtime was started or stopped by this setup; the existing
+Production backend was observed with that database open and was left running.
+
+Both original profiles and the new worktree's Dev profile passed read-only
+`--check-config` checks. These validate configuration/schema without opening
+SQLite; runtime/browser switching remains for the owner to verify using the guide.
+Both environments retain ports 8000/5173: stop both current processes and close
+old application browser tabs before starting the other environment. Do not switch
+the original Production checkout off `main` to develop features.
+
+The full baseline Python suite passed **293 tests in 237.31 seconds** with two
+existing FastAPI startup deprecation warnings. It ran to completion without a
+short timeout, with inherited EUDAMED settings removed, Dev selected and temporary
+database overrides; the session fixture also isolates its database. All **98
+frontend tests** and the TypeScript/Vite build passed in both the original checkout
+and the new development worktree. The existing bundle warning remains (790.59 kB
+JavaScript). These are automated checks, not new Playground submissions.
+
+Production database and associated `application.sqlite3*` files were fingerprinted
+without opening SQLite before the tests/setup and checked afterwards: file hashes,
+sizes and modification times were unchanged. Production `main` and its tracked
+working files were unchanged. The nested worktree is excluded locally through
+`.git/info/exclude`; no tracked ignore change was made on `main`. No commits,
+remote pushes, merges, migrations or application feature changes were performed.
+The new guide and this handoff update are pending changes on the development branch.
+
+Next: verify owner-controlled environment switching, then agree menu subheadings
+and the detailed Import Management/Reporting scope before feature implementation.
+Development may update Playground state; it MUST NOT touch the Production database.
+
 ## October 24 — Next Development Wave And Production Isolation
 
 The owner's next-session instruction is to **review and update the Git branching
