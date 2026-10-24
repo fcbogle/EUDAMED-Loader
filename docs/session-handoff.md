@@ -2,6 +2,157 @@
 
 Updated October 24, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+## Latest Restart Position — Owner-Accepted UI Baseline
+
+Work remains in `.worktrees/development` on
+`feature/import-management-reporting`. The pending UI work follows local commit
+`810f52e` (navigation/banner refinement and development-isolation guidance).
+The original checkout remains on `main` for Production. Use
+`docs/development-and-production.md` for starting and switching environments;
+the owner chose one environment running at a time. Development uses the existing
+Playground database; Production has its own database containing registered devices
+and **MUST remain untouched by development and tests**.
+
+The owner has reviewed the screens and accepted the latest compact layout as the
+UI baseline: two-level navigation, 22–24 px sans-serif banner titles, concise
+single-line descriptions, active area/step labels, filled active submenu items,
+compact status displays and a teal accent identifying the working panel.
+Retain this hierarchy and theme when extending the application. Owner visual
+acceptance is not formal validation or confirmation of every browser interaction.
+
+The current Import Management UI has three separate stages:
+
+1. **Import Source Files** — multiple Template Excel files, one Basic UDI-DI Excel
+   reference and multiple EUDAMED XML extracts; local selection feedback only.
+2. **Create Import Workbook** — source-check/exception layout and preparation of
+   the proposed Excel workbook with To Register, Registered and Summary sheets,
+   plus its linked application-managed audit file.
+3. **Assess & Import Workbook** — prepared-input review, database assessment,
+   exception review, confirmation and import-result layout.
+
+Reporting now has UI previews for **Registration Snapshot** and **EUDAMED
+Comparison**: model/status and outcome filters, separate parent/device registration
+indicators, known/unknown versions, synthetic examples and local XML selection.
+Import History is still a placeholder. Selected files and filters are held only
+in browser memory; a reload clears them. No source contents are processed.
+
+**These are UI previews, not working import/report services.** Upload, source
+checks, workbook/snapshot creation, database assessment/import, comparison and
+downloads remain disabled. Example counts and devices are explicitly synthetic,
+independent of selected files and operational state. No endpoints, mappings,
+validation rules, schema or database state were changed for this UI work.
+
+Next: obtain the owner's Playground XML exports when the service is available,
+review them alongside the corresponding Template and Basic UDI-DI files, and
+agree the processing integration and controlled test cases before enabling actions.
+Do not assume a previous outage remains current; recheck availability when needed.
+Preserve the existing Playground history and agree a backup before real import
+testing. Export scope, pages, dates and environment matter; absence from an
+incomplete export does not establish non-registration. Production is outside
+this development/testing scope. Automated upload/M2M remains prohibited.
+
+Latest implementation verification: **109 frontend tests passed**, including six
+new Import Management/Reporting checks, and the TypeScript/Vite build passed.
+The existing >500 kB JavaScript bundle warning remains. The latest full backend
+run is still **293 passed in 237.31 seconds** from the earlier baseline check;
+backend tests were not rerun for these frontend-only changes. This handoff refresh
+is documentation-only and was checked with `git diff --check`. Older results and
+intermediate UI descriptions below are dated checkpoints superseded by this section.
+
+## October 24 — Workspace Focus And Compact Banner Hierarchy
+
+Following owner visual review, banner titles now use the application sans-serif
+at 22–24 px, with 15 px descriptions. Location text identifies the active area;
+the three import pages show Import Management / Step N of 3. The active submenu
+page has a subtle filled background as well as its underline. Primary working
+panels have a slim teal left accent. The Dev/Prod identity banner is retained.
+
+Large white banner status cards were replaced with compact status displays.
+Import/Reporting previews show a relevant neutral empty-state badge; their preview
+notice appears once below the banner. Operational counts, import controls and
+readiness/warning conditions remain intact. Repeated panel titles were shortened
+to Source files, Source checks and workbook, Prepared workbook and Snapshot scope.
+This supersedes the earlier serif-title/status-card styling notes below.
+
+Verification: all **109 frontend tests** and the TypeScript/Vite build passed;
+the existing bundle-size warning remains. The owner accepted the resulting visual
+layout; exhaustive interaction/accessibility verification remains separate.
+No backend, database, Production code or environment configuration changed.
+
+## October 24 — Reporting UI Previews
+
+The owner authorised UI development for Registration Snapshot and EUDAMED
+Comparison while waiting for Playground exports. Both now use the established
+compact banners, panels, controls and status styles on the development branch.
+
+Registration Snapshot provides model and device-status filters, an opt-in
+synthetic preview, separate parent/device registration indicators and parent,
+device and Market Info versions. Unknown remains independent from Unregistered;
+a registered parent can have unregistered children. The preview is illustrative,
+not the final model-specific Template worksheet layout. Excel creation is
+disabled; saved-snapshot history is an explicit empty state. The intended output
+retains one Template-style worksheet per model and snapshot provenance.
+
+EUDAMED Comparison provides saved-snapshot selection (synthetic example only),
+local multi-file XML selection, and opt-in synthetic results with outcome filters.
+Results distinguish Matches, Difference found and Unable to compare; exceptions
+show findings, required actions and an owner. Unconfirmed export coverage is
+Unable to compare, never proof of non-registration. Examples remain independent
+of selected files/snapshot. XMLs are not read or uploaded; comparison and report
+download buttons remain disabled. Selections/filters persist during application
+navigation, but are not saved across reloads. No real report is created.
+
+Verification: **109 frontend tests** and the TypeScript/Vite build passed, with
+the existing >500 kB bundle warning. Three new checks cover unknown/parent status,
+filter retention, incomplete export coverage and disabled processing with local
+file selection. Owner browser review is outstanding. No backend, schema,
+dependencies, Production code or database state was changed.
+
+## October 24 — Source Files And Assessment & Import UI Previews
+
+Owner review clarified three distinct stages, now implemented as separate
+numbered Import Management submenu pages: **1. Import Source Files**,
+**2. Create Import Workbook**, and **3. Assess & Import Workbook**. Import History
+remains separate. The redundant button-like progress labels were removed.
+Step 1 contains file selection/upload feedback; Step 2 contains source checks,
+exceptions and workbook preparation/download; Step 3 contains database assessment,
+confirmation and results. Next/back controls connect the stages while retaining
+local selections. These remain UI previews with processing disabled and synthetic
+examples explicitly labelled. All 106 frontend tests and the build passed after
+the three-stage refinement; owner browser review remains outstanding.
+
+The owner authorised these two UI pages ahead of receiving the Playground XML
+exports. This supersedes the earlier menu-only hold for **UI work only**; backend
+upload, preparation and import implementation remains deferred.
+
+Source Files now provides three local file selectors: multiple Device Template
+Excel files, one Basic UDI-DI reference Excel file, and multiple EUDAMED XML
+extracts. Filenames, sizes and local selection status are shown, with a basic
+extension warning. Selection is not upload, content validation or acceptance.
+Files remain in browser memory and are retained when navigating between the
+application areas; refreshing clears the selection. No file bytes are read or
+sent by this preview.
+
+The agreed output is an Excel **Import Workbook**, retaining the existing
+To Register, Registered and Summary structure and a linked application-managed
+audit file. Creating that pair remains separate from database import.
+
+Assessment & Import provides the prepared-input, assessment, exception-review,
+confirmation and result layout. Both pages use existing panels, colours, buttons
+and compact banners. Optional example views contain conspicuously labelled
+synthetic totals and two fictional device exceptions, independent of selected
+files or application records. Real upload/check/create/download/assess/import
+buttons remain disabled; ticking the example review checkbox cannot enable an
+import. Import History remains a placeholder; Reporting was subsequently expanded
+into the UI previews described above.
+
+Verification: **106 frontend tests** and the TypeScript/Vite build passed, with
+the existing >500 kB bundle warning. New checks cover file selection and its
+retention, extension feedback and disabled imports after example acknowledgement.
+These are component checks; owner browser/layout review remains outstanding.
+No backend, dependencies, schema, mapping rules, main application code or database
+state were changed. All new UI work is on `feature/import-management-reporting`.
+
 ## October 24 — Development Navigation And Planned Workspaces
 
 Banner descriptions and status-card explanations were subsequently shortened

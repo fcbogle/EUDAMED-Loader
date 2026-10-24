@@ -47,6 +47,8 @@ import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
 import { EnvironmentBanner } from "./components/EnvironmentBanner";
 import { ApplicationNavigation, type NavigationPage } from "./components/ApplicationNavigation";
+import { ImportManagementWorkspace } from "./components/ImportManagementWorkspace";
+import { ReportingWorkspace } from "./components/ReportingWorkspace";
 import { DeviceModelSelector } from "./components/DeviceModelSelector";
 import { XmlValidationStack } from "./components/XmlValidationStack";
 import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
@@ -126,11 +128,12 @@ import {
   resolvePostWorkspaceRecord,
 } from "./xmlWorkspace";
 
-type PlannedTab = "sourceFiles" | "assessmentImport" | "importHistory" | "registrationSnapshot" | "eudamedComparison";
+type PlannedTab = "sourceFiles" | "createImportWorkbook" | "assessmentImport" | "importHistory" | "registrationSnapshot" | "eudamedComparison";
 type MainTab = NavigationPage;
 const PLANNED_WORKSPACES: { id: PlannedTab; group: "Import Management" | "Reporting"; title: string; description: string }[] = [
-  { id: "sourceFiles", group: "Import Management", title: "Source Files", description: "Select and review import workbooks and EUDAMED XML extracts." },
-  { id: "assessmentImport", group: "Import Management", title: "Assessment & Import", description: "Review changes and exceptions before importing." },
+  { id: "sourceFiles", group: "Import Management", title: "Import Source Files", description: "Select Template workbooks, the Basic UDI-DI reference and EUDAMED XML extracts." },
+  { id: "createImportWorkbook", group: "Import Management", title: "Create Import Workbook", description: "Check source data and prepare the Excel Import Workbook." },
+  { id: "assessmentImport", group: "Import Management", title: "Assess & Import Workbook", description: "Assess the prepared workbook and confirm database import." },
   { id: "importHistory", group: "Import Management", title: "Import History", description: "View previous imports and their result reports." },
   { id: "registrationSnapshot", group: "Reporting", title: "Registration Snapshot", description: "Create a dated registration report by device model." },
   { id: "eudamedComparison", group: "Reporting", title: "EUDAMED Comparison", description: "Compare EUDAMED XML extracts with a saved registration snapshot." },
@@ -3138,6 +3141,12 @@ export function App() {
   });
 
   const plannedWorkspace = PLANNED_WORKSPACES.find((workspace) => workspace.id === activeTab);
+  const isImportUiPreview = activeTab === "sourceFiles" || activeTab === "createImportWorkbook" || activeTab === "assessmentImport";
+  const isReportingUiPreview = activeTab === "registrationSnapshot" || activeTab === "eudamedComparison";
+  const importStep = activeTab === "sourceFiles" ? 1 : activeTab === "createImportWorkbook" ? 2 : activeTab === "assessmentImport" ? 3 : null;
+  const locationLabel = importStep ? `Import Management / Step ${importStep} of 3`
+    : plannedWorkspace?.group ?? (activeTab === "xml" || activeTab === "testingSummary" ? "EUDAMED" : activeTab === "documentation" ? "Help" : "Data Views");
+
 
   return (
     <main className="app-shell">
@@ -3156,6 +3165,7 @@ export function App() {
 
       <section className={activeTab === "workbooks" ? "hero submission-data-hero" : "hero"}>
         <div className="hero-copy-block">
+          <p className="workspace-location">{locationLabel}</p>
           {plannedWorkspace ? (
             <>
               <h1>{plannedWorkspace.title}</h1>
@@ -3215,13 +3225,16 @@ export function App() {
             </>
           ) : null}
         </div>
-        <aside className="status-card">
+        <aside className="hero-status" aria-label="Workspace status">
           {plannedWorkspace ? (
-            <>
-              <span className="status-label">Planned workspace</span>
-              <span className="status-pill warn">Not yet available</span>
-              <p className="status-detail">Planned for a future update.</p>
-            </>
+            <span className="status-pill neutral">
+              {activeTab === "sourceFiles" ? "No files uploaded"
+                : activeTab === "createImportWorkbook" ? "No workbook created"
+                : activeTab === "assessmentImport" ? "No workbook prepared"
+                : activeTab === "registrationSnapshot" ? "No snapshot created"
+                : activeTab === "eudamedComparison" ? "No comparison run"
+                : "Not yet available"}
+            </span>
           ) : null}
           {activeTab === "workbooks" ? (
             <>
@@ -3301,7 +3314,21 @@ export function App() {
         </aside>
       </section>
 
+      <div className="workspace-content">
       {error ? <div className="panel error-banner">{error}</div> : null}
+      <div hidden={!isImportUiPreview}>
+        <ImportManagementWorkspace
+          page={activeTab === "assessmentImport" || activeTab === "createImportWorkbook" ? activeTab : "sourceFiles"}
+          onPageChange={setActiveTab}
+        />
+      </div>
+      <div hidden={!isReportingUiPreview}>
+        <ReportingWorkspace
+          page={activeTab === "eudamedComparison" ? "eudamedComparison" : "registrationSnapshot"}
+          environment={activeEnvironment}
+          onPageChange={setActiveTab}
+        />
+      </div>
       {activeTab === "workbooks" ? (
         <>
           <section className="submission-data-tabs" aria-label="Submission Data workspace">
@@ -5138,6 +5165,7 @@ export function App() {
           </section>
         </section>
       ) : null}
+      </div>
     </main>
   );
 }

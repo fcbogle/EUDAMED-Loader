@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 export type NavigationPage =
-  | "sourceFiles" | "assessmentImport" | "importHistory"
+  | "sourceFiles" | "createImportWorkbook" | "assessmentImport" | "importHistory"
   | "workbooks" | "canonicalValidation" | "registrationState"
   | "xml" | "testingSummary"
   | "registrationSnapshot" | "eudamedComparison" | "documentation";
@@ -18,8 +18,9 @@ export function ApplicationNavigation({ activePage, onSelect, xmlWorkspaceLabel,
   const [lastPages, setLastPages] = useState<Partial<Record<Area, NavigationPage>>>({});
   const groups: NavigationGroup[] = [
     { id: "imports", label: "Import Management", pages: [
-      { id: "sourceFiles", label: "Source Files" },
-      { id: "assessmentImport", label: "Assessment & Import" },
+      { id: "sourceFiles", label: "1. Import Source Files" },
+      { id: "createImportWorkbook", label: "2. Create Import Workbook" },
+      { id: "assessmentImport", label: "3. Assess & Import Workbook" },
       { id: "importHistory", label: "Import History" },
     ] },
     { id: "data", label: "Data Views", pages: [

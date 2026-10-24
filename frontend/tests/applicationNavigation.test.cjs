@@ -39,10 +39,10 @@ test('navigation displays only the selected area pages and marks both navigation
   const h = harness();
   assert.deepEqual(h.pages(), ['Submission Data', 'Canonical Validation', 'Registration State']);
   h.click('Import Management');
-  assert.deepEqual(h.pages(), ['Source Files', 'Assessment & Import', 'Import History']);
+  assert.deepEqual(h.pages(), ['1. Import Source Files', '2. Create Import Workbook', '3. Assess & Import Workbook', 'Import History']);
   assert.equal(h.props.activePage, 'sourceFiles');
   assert.equal(h.nodes().find(n => n.props?.['aria-pressed'] === true).props.children, 'Import Management');
-  assert.equal(h.nodes().find(n => n.props?.['aria-current'] === 'page').props.children, 'Source Files');
+  assert.equal(h.nodes().find(n => n.props?.['aria-current'] === 'page').props.children, '1. Import Source Files');
   h.click('Reporting');
   assert.deepEqual(h.pages(), ['Registration Snapshot', 'EUDAMED Comparison']);
   h.click('Help');
