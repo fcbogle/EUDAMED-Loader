@@ -2,6 +2,84 @@
 
 Updated October 24, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+## October 24 — Next Development Wave And Production Isolation
+
+The owner's next-session instruction is to **review and update the Git branching
+strategy before beginning further application development**. The current branch
+at this handoff is `main`. Create a new development branch for the next wave;
+development must not change the current `main` branch or disturb the owner's
+ability to start and use the existing Production application independently.
+This section supersedes earlier next-action priorities where they conflict.
+
+### Production Database — Mandatory Protection
+
+**The Production database MUST remain untouched by development. It contains
+registered devices and retained registration evidence.** Do not reset, seed,
+reimport, migrate, replace or otherwise write to it as part of development,
+automated tests or development startup. Normal owner-controlled Production
+registration work remains a separate operational activity.
+
+A Git branch alone does not isolate SQLite files, environment configuration,
+generated artifacts or running processes. Before starting development services
+or running tests, identify the actual Production database and all configured
+state/output paths through read-only inspection. Agree the isolation arrangement
+with the owner, including a separate development checkout/worktree or equivalent,
+development database and configuration, and separate ports/output locations where
+needed. Check resolved paths rather than assuming that a different branch or an
+environment label protects Production. Use synthetic fixtures for development
+and tests; do not copy live registration data into development without explicit
+owner approval. Do not start the application against Production as a diagnostic
+step, because startup itself may initialize or migrate state.
+
+### Required Branching And Startup Guidance
+
+Review the existing local branches, remotes, startup scripts and environment
+configuration before proposing exact commands. Preserve the current Production
+code baseline and record its commit; do not assume that the tip of `main` is a
+formally approved release. Identify uncommitted changes before branching or
+switching, and preserve them without silently including unrelated changes.
+The workspace GitHub panel now uses remote `backup`; `origin` remains Azure
+DevOps. Verify these mappings before giving push/pull instructions.
+
+Provide the owner with clear, repeatable instructions for:
+
+1. Starting the existing Production application from its preserved code and
+   Production configuration, independently of development.
+2. Creating and using the new development branch and isolated working directory,
+   including starting the development application against its own database.
+3. Identifying the active branch, environment and resolved database paths before
+   running commands, and safely stopping/restarting each application.
+4. Committing, pushing and reviewing development work, and the deliberate review
+   and release steps required before any future integration into `main` or
+   Production. Do not merge or deploy development changes automatically.
+
+Exact branch names, commands and the isolation design still require review with
+the owner. Do the read-only assessment and present the concrete arrangement
+before material configuration, architecture or workflow changes, following
+`AGENTS.md`. Do not interrupt a running Production service to set up development.
+
+### Three Main Development Areas
+
+After Production isolation is established, commence collaborative design and
+development on the new development branch in these areas:
+
+1. **Application menu bar:** include **Import Management** and **Reporting**, with
+   appropriate subheadings/submenus agreed with the owner before implementation.
+2. **Import Management:** develop the dedicated Enterprise Solutions workspace,
+   using the October 22 requirements below as the starting business direction.
+3. **Reporting:** develop the registration snapshot and EUDAMED comparison
+   functions, using the October 22 requirements below as the starting direction.
+
+The owner has requested this next development wave; earlier “discussion-only”
+wording records the previous checkpoint. Detailed menu structure, scope, data
+handling, report layouts and material implementation decisions still require
+owner involvement. Preserve SQLite, accepted-state and lineage guardrails, the
+existing registration workflows and the prohibition on upload/M2M work.
+
+This handoff update records the instruction only. No development branch or
+isolated runtime has been created, no Production startup procedure has been
+verified, and no database or application behavior has been changed by this update.
+
 ## October 24 — Validation Document Completed And Sent
 
 The owner confirmed that the Master Validation document is complete and has
