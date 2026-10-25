@@ -5,7 +5,14 @@ from pathlib import Path
 from app.config import get_settings
 
 
-def test_default_settings_use_project_local_data_dirs(monkeypatch) -> None:
+def test_default_settings_use_project_local_data_dirs(monkeypatch, tmp_path) -> None:
+    # Test defaults, not the operator's local profile (a worktree may intentionally
+    # keep its operational inputs outside the checkout).
+    profile = tmp_path / "empty-dev.env"
+    profile.write_text("EUDAMED_ENVIRONMENT=dev\n")
+    monkeypatch.setenv("EUDAMED_ENVIRONMENT", "dev")
+    monkeypatch.setenv("EUDAMED_ENV_FILE", str(profile))
+    monkeypatch.delenv("EUDAMED_DEV_INPUT_BATCH_ROOT", raising=False)
     monkeypatch.delenv("EUDAMED_EXCEL_DIR", raising=False)
     monkeypatch.delenv("EUDAMED_SCHEMA_DIR", raising=False)
     monkeypatch.delenv("EUDAMED_BASIC_UDI_REFERENCE_DIR", raising=False)
@@ -18,6 +25,7 @@ def test_default_settings_use_project_local_data_dirs(monkeypatch) -> None:
     project_root = Path(__file__).resolve().parents[2]
 
     assert settings.excel_dir == project_root / "data" / "source_excel"
+    assert settings.dev_input_batch_root == project_root / "data/dev/import-batches"
     assert settings.schema_dir == project_root / "data/schema_profiles/dev-3.0.32-derived"
     assert settings.basic_udi_reference_dir == project_root / "data" / "basic_udi_reference"
     assert settings.basic_udi_reference_workbook == project_root / "data" / "basic_udi_reference" / "BasicUDIs.xlsx"

@@ -1529,10 +1529,10 @@ class XmlGenerationService:
             base_message_type = "POST"
             base_version = "1"
             base_state_source = "accepted_post"
-            if patch_state_resolution and patch_state_resolution.source == "production_export":
+            if patch_state_resolution and patch_state_resolution.source in {"production_export", "playground_export"}:
                 if patch_state_resolution.state.version != "1":
                     raise ValueError("Imported accepted version requires the next PATCH version; refresh assessment.")
-                base_state_source = "production_export"
+                base_state_source = patch_state_resolution.source
                 base_state_label = "Imported accepted baseline version 1"
             else:
                 base_state_label = "Accepted POST version 1"
@@ -1548,7 +1548,7 @@ class XmlGenerationService:
             base_message_type = "PATCH"
             base_version = patch_state_resolution.state.version
             base_state_source = patch_state_resolution.source
-            base_state_label = (f"Imported accepted baseline version {base_version}" if patch_state_resolution.source == "production_export" else f"Latest successful PATCH version {base_version}")
+            base_state_label = (f"Imported accepted baseline version {base_version}" if patch_state_resolution.source in {"production_export", "playground_export"} else f"Latest successful PATCH version {base_version}")
 
         base_xml_bytes = self.renderer.render_message(scenario_base_record)
         base_validation = self.xml_validation_service.validate_message(base_xml_bytes)

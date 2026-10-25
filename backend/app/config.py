@@ -17,6 +17,7 @@ class Settings(BaseModel):
     environment: Literal["dev", "prod"] = "dev"
     environment_file: Path | None = None
     data_root: Path | None = None
+    dev_input_batch_root: Path | None = None
     production_import_workbook: Path | None = None
     production_import_audit: Path | None = None
     artifacts_dir: Path
@@ -110,7 +111,7 @@ def _validate_profile(settings: Settings, values: dict[str, str]) -> None:
             prod_values = {k: v for k, v in dotenv_values(prod_file, interpolate=False).items() if v is not None}
             if prod_values.get("EUDAMED_DATA_ROOT"):
                 reserved.append(_path_setting(PROJECT_ROOT, prod_values, "EUDAMED_DATA_ROOT", reserved[0]))
-        for path in _isolated_paths(settings):
+        for path in _isolated_paths(settings) + ([settings.dev_input_batch_root] if settings.dev_input_batch_root else []):
             if any(_overlap(path, root) for root in reserved):
                 raise ValueError(f"Dev storage overlaps reserved Prod storage: {path}")
         return
@@ -195,6 +196,7 @@ def get_settings() -> Settings:
         environment=environment,
         environment_file=env_file,
         data_root=path("EUDAMED_DATA_ROOT", project_root / "data" / environment),
+        dev_input_batch_root=(path("EUDAMED_DEV_INPUT_BATCH_ROOT", project_root / "data/dev/import-batches") if environment == "dev" else None),
         production_import_workbook=(path("EUDAMED_PRODUCTION_IMPORT_WORKBOOK", path("EUDAMED_DATA_ROOT", project_root / "data/prod") / "import_file/production-import.xlsx") if environment == "prod" else None),
         production_import_audit=(path("EUDAMED_PRODUCTION_IMPORT_AUDIT", path("EUDAMED_DATA_ROOT", project_root / "data/prod") / "import_file/production-import.audit.json") if environment == "prod" else None),
         excel_dir=path("EUDAMED_EXCEL_DIR", project_root / "data/source_excel"),

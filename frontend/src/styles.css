@@ -193,6 +193,12 @@ select {
 }
 
 .import-management-workspace { margin-bottom: 24px; }
+.import-batch-notice { margin: 0; padding: 10px 14px; border: 1px solid #b9d3db; border-radius: 10px; background: #edf5f7; color: #355864; font-size: 0.88rem; }
+.import-batch-selector { display: grid; gap: 6px; max-width: 520px; margin-bottom: 12px; font-size: 0.88rem; font-weight: 600; color: #00445a; }
+.import-batch-selector select { padding: 9px 12px; border: 1px solid #b5cbd3; border-radius: 8px; background: #f5f9fa; color: #355864; font: inherit; }
+.import-batch-selector select:focus-visible { outline: 2px solid #005f99; outline-offset: 3px; }
+.import-batch-file-groups { margin: 16px 0; }
+.import-retained-file { display: block; margin-top: 4px; font-size: 0.75rem; }
 .import-preview-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 16px; border: 1px solid #d8c6a7; border-radius: 12px; background: #fff8eb; color: #705022; font-size: 0.88rem; }
 .import-source-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .import-source-field { display: grid; align-content: start; gap: 12px; min-width: 0; padding: 18px; border: 1px solid #d4e2e6; border-radius: 12px; background: #f5f9fa; }
@@ -222,6 +228,14 @@ select {
 .import-exception-table caption { padding: 0 0 10px; text-align: left; font-weight: 700; color: #00445a; }
 .import-exception-table th, .import-exception-table td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid #d4e2e6; }
 .import-exception-table th { background: #edf4f6; }
+.assessment-primary-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.assessment-primary-metrics .import-metric:first-child { border-color: #6c9fac; background: #edf5f7; }
+.assessment-differences { margin: 18px 0; padding: 16px; border: 1px solid #b9d3db; border-left: 4px solid #00445a; border-radius: 10px; }
+.assessment-differences h3 { margin: 0 0 8px; }
+.assessment-differences td { overflow-wrap: anywhere; }
+.assessment-supporting-details { margin: 16px 0; }
+.assessment-supporting-details > summary { cursor: pointer; color: #355864; font-weight: 600; }
+.assessment-supporting-details[open] > summary { margin-bottom: 12px; }
 .import-review-confirmation { display: flex; align-items: start; gap: 8px; margin-top: 20px; color: #355864; font-size: 0.9rem; }
 .import-review-confirmation input { margin-top: 4px; }
 @media (max-width: 1000px) { .import-source-grid { grid-template-columns: 1fr; } }

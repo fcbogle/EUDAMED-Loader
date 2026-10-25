@@ -164,7 +164,9 @@ class TestingStateStore:
             return None
         with self._connect() as connection:
             imported = imported_baseline(connection, int(row["id"]))
-        source = "production_export" if imported and str(imported.get("version")) == version and not row["latest_successful_patch_version"] else "sqlite_latest_successful_patch"
+        source = latest_state.get("accepted_state_source")
+        if source not in {"playground_export", "sqlite_latest_successful_patch"}:
+            source = "production_export" if imported and str(imported.get("version")) == version and not row["latest_successful_patch_version"] else "sqlite_latest_successful_patch"
         return PatchStateResolution(
             source=source,
             state=PatchStateSnapshot(
@@ -1422,8 +1424,8 @@ class TestingStateStore:
                     WHERE {clause} AND normalized_product_variant = ? AND {registration_event_sql()}
                     GROUP BY testing_subjects.id, event.message_type
                 """, (*params, self._normalize_identity(product_variant))).fetchall()
-                scope["parents"] = {row[0] for row in successes if row[2] in ('DEVICE.POST', 'PRODUCTION_EXPORT.SNAPSHOT')}
-                scope["children"] = {row[1] for row in successes if row[2] in ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH', 'PRODUCTION_EXPORT.SNAPSHOT')}
+                scope["parents"] = {row[0] for row in successes if row[2] in ('DEVICE.POST', 'PRODUCTION_EXPORT.SNAPSHOT', 'PLAYGROUND_EXPORT.SNAPSHOT')}
+                scope["children"] = {row[1] for row in successes if row[2] in ('DEVICE.POST', 'UDI_DI.POST', 'UDI_DI.PATCH', 'PRODUCTION_EXPORT.SNAPSHOT', 'PLAYGROUND_EXPORT.SNAPSHOT')}
             token = self._generation.set(scope)
             yield
             connection.commit()

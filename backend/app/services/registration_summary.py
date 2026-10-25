@@ -73,7 +73,10 @@ class RegistrationSummaryService:
             issues = len(issue_rows)
             issue_subjects = {row[0] for row in issue_rows if row[0] is not None}
             subjects = [dict(row) for row in connection.execute("SELECT * FROM testing_subjects")] if "testing_subjects" in tables else []
-            event_query = f"SELECT * FROM testing_events event WHERE status='SUCCESS' OR {imported_event_sql()}" if production else "SELECT * FROM testing_events WHERE status='SUCCESS'"
+            event_columns = {row[1] for row in connection.execute('PRAGMA table_info(testing_events)')}
+            baseline_columns = {'event_kind', 'accepted_state_source', 'state_after_json'}
+            event_query = (f"SELECT * FROM testing_events event WHERE status='SUCCESS' OR {imported_event_sql()}"
+                           if baseline_columns <= event_columns else "SELECT * FROM testing_events WHERE status='SUCCESS'")
             events = [dict(row) for row in connection.execute(event_query)] if "testing_events" in tables else []
         # Reuse generation's assessment rules, rather than reimplementing readiness.
         readiness = OperationAssessmentService().record_readiness(record_payloads=readiness_payloads)
@@ -208,10 +211,10 @@ class RegistrationSummaryService:
                 key = candidate if candidate in devices else None
             if key and issuer and token(issuer) != key[0]:
                 key = None
-            if key and types & {"DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH", "PRODUCTION_EXPORT.SNAPSHOT"}:
+            if key and types & {"DEVICE.POST", "UDI_DI.POST", "UDI_DI.PATCH", "PRODUCTION_EXPORT.SNAPSHOT", "PLAYGROUND_EXPORT.SNAPSHOT"}:
                 accepted[key].add(subject["id"])
                 matched_subjects.add(subject["id"])
-            if types & {"DEVICE.POST", "PRODUCTION_EXPORT.SNAPSHOT"}:
+            if types & {"DEVICE.POST", "PRODUCTION_EXPORT.SNAPSHOT", "PLAYGROUND_EXPORT.SNAPSHOT"}:
                 code = token(subject.get("basic_udi_di"))
                 candidates = parents_by_code[code]
                 parent_issuer = state.get("basic_identifier_issuing_entity") or state.get("device_record", {}).get("basic_identifier_issuing_entity") or issuer

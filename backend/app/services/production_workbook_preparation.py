@@ -105,10 +105,11 @@ def _parent_reference(path: Path) -> tuple[dict, dict]:
     return dict(by_model), dict(by_code)
 
 
-def _templates(directory: Path, models: dict, parents: dict, *, parent_reference: Path) -> tuple[list[dict], list[str], list[dict]]:
+def _templates(directory: Path, models: dict, parents: dict, *, parent_reference: Path,
+               excluded_workbook_names: tuple[str, ...] = ()) -> tuple[list[dict], list[str], list[dict]]:
     occurrences, columns, files = [], [], []
     for path in sorted(directory.glob("*.xlsx")):
-        if path.name.startswith("~$") or path.resolve() == parent_reference.resolve():
+        if path.name.startswith("~$") or path.name in excluded_workbook_names or path.resolve() == parent_reference.resolve():
             continue
         workbook = load_workbook(path, read_only=True, data_only=False)
         cached = load_workbook(path, read_only=True, data_only=True)
@@ -271,10 +272,16 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
                      output_dir: Path, encoding_overrides: dict[str, str] | None = None,
                      parent_market_overrides: dict[tuple[str, str], list[str]] | None = None,
                      previous_audit: Path | None = None,
-                     excluded_parent_identities: set[tuple[str, str]] | None = None) -> dict:
+                     excluded_parent_identities: set[tuple[str, str]] | None = None,
+                     excluded_workbook_names: tuple[str, ...] = (),
+                     output_prefix: str = "production-import", environment_label: str = "Production",
+                     unmatched_status_label: str = "Not registered") -> dict:
     """Write a dated review workbook and audit JSON; never change source files or SQLite."""
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", output_prefix):
+        raise ValueError("Invalid workbook output prefix")
     models, parents = _parent_reference(parent_reference)
-    templates, template_columns, template_files = _templates(template_dir, models, parents, parent_reference=parent_reference)
+    templates, template_columns, template_files = _templates(template_dir, models, parents, parent_reference=parent_reference,
+                                                           excluded_workbook_names=excluded_workbook_names)
     exports, export_files = _exports(xml_dir, encoding_overrides or {})
     market_overrides = parent_market_overrides or {}
     for parent_key, countries in market_overrides.items():
@@ -327,7 +334,7 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
         if source_parents & excluded_parents:
             excluded_rows.append({"key": key, "parents": sorted(source_parents),
                                   "device_types": list(dict.fromkeys(entry["device_type"] for entry in sources + registered)),
-                                  "reason": "Owner-approved exclusion from Production import"})
+                                  "reason": f"Owner-approved exclusion from {environment_label} import"})
             continue
         reasons = list(dict.fromkeys(reason for s in sources + registered for reason in s["reasons"]))
         row: dict[str, Any] = {"Issuing Entity": (sources or registered)[0]["key"][0],
@@ -381,7 +388,7 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
         reasons = list(dict.fromkeys(reasons))
         conflicting = any(r.startswith("Conflicting") for r in reasons)
         invalid_identity = any(r.startswith(("Missing device identity", "GS1 UDI-DI")) for r in reasons)
-        status = "Registered" if registered else "Needs review" if conflicting or invalid_identity else "Not registered"
+        status = "Registered" if registered else "Needs review" if conflicting or invalid_identity else unmatched_status_label
         row.update({"Registration Status": status, "Review Required": "Yes" if reasons else "No",
                     "Review Reasons": "; ".join(reasons)})
         tab = "Registered" if registered else "To Register"
@@ -396,7 +403,7 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
                 c.data_type = "s"
                 c.number_format = "@"
             c.alignment = Alignment(vertical="top")
-        colour = {"Registered": "E2EFDA", "Not registered": "FFF2CC", "Needs review": "F8CBAD"}[status]
+        colour = {"Registered": "E2EFDA", unmatched_status_label: "FFF2CC", "Needs review": "F8CBAD"}[status]
         sheet.cell(row_number, 2).fill = PatternFill("solid", fgColor=colour)
         if reasons:
             for column_number in (3, 4):
@@ -428,7 +435,7 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
                         ("Distinct output identities", len(rows)), ("Rows with review flags", len(issues))):
         summary_entry("Counts", name, count, "", "Informational")
     if excluded_parents:
-        summary_entry("Owner-approved exclusion", "Production import scope", len(excluded_rows),
+        summary_entry("Owner-approved exclusion", f"{environment_label} import scope", len(excluded_rows),
                       "Excluded parent identities: " + "; ".join(":".join(key) for key in sorted(excluded_parents)),
                       "Intentionally excluded from import; original source evidence retained in audit")
     for parent_key, countries in market_overrides.items():
@@ -499,7 +506,7 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
         if meta["encoding_override"]:
             summary_entry("Recorded encoding override", meta["file"], meta["devices"], meta["encoding_override"],
                           "Applied explicitly; original XML retained")
-    summary_entry("Later verification", "Production baseline and import", 0,
+    summary_entry("Later verification", f"{environment_label} baseline and import", 0,
                   "Exports are dated snapshots. Parent-only registrations, export currency, actor configuration, "
                   "canonical mapping coverage and XML readiness need verification before database import/submission.",
                   "Deferred; this workbook does not initialize SQLite or certify XML readiness")
@@ -544,7 +551,7 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
              "owner_excluded_device_rows": excluded_rows,
              "previous_audit": {"file": previous_audit.name, "sha256": _hash(previous_audit)} if previous_audit else None}
     output_dir.mkdir(parents=True, exist_ok=True)
-    name = "production-import-" + stamp.strftime("%Y%m%d-%H%M%S-%f")
+    name = output_prefix + "-" + stamp.strftime("%Y%m%d-%H%M%S-%f")
     destination, audit_path = output_dir / (name + ".xlsx"), output_dir / (name + ".audit.json")
     # Exclusive creation preserves any earlier output, including concurrent runs.
     created = []

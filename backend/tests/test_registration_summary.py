@@ -394,3 +394,18 @@ def test_children_request_rejects_invalid_pagination_and_reports_snapshot_confli
     with pytest.raises(Exception) as exc:
         registration_children(RegistrationChildrenRequest(**payload))
     assert exc.value.status_code == 409
+
+
+def test_dev_playground_baseline_registers_identity_without_submission_success(tmp_path, monkeypatch):
+    path=tmp_path/'synthetic.sqlite3'
+    create_database(path)
+    with sqlite3.connect(path) as connection:
+        for column in ('event_kind TEXT','accepted_state_source TEXT','state_after_json TEXT'):
+            connection.execute('ALTER TABLE testing_events ADD COLUMN '+column)
+        connection.execute("INSERT INTO testing_events(id,subject_id,message_type,status,event_kind,accepted_state_source,state_after_json) VALUES(2,2,'PLAYGROUND_EXPORT.SNAPSHOT','IMPORTED','BASELINE_IMPORT','playground_export','{}')")
+    monkeypatch.setattr('app.services.registration_summary.OperationAssessmentService',lambda:SimpleNamespace(record_readiness=lambda **kwargs:[ready('D2',post_ready=False,patch_ready=True)]))
+    result=service(path).summary()
+    assert result['counts']['registered_devices']==1
+    assert result['counts']['registered_parents']==1
+    assert result['counts']['patch_ready']==1
+    assert sum(result['event_counts'].values())==0

@@ -159,6 +159,12 @@ def test_dev_rejects_prod_storage(profiles, monkeypatch):
         select(monkeypatch,"dev")
 
 
+def test_dev_batch_root_rejects_production_storage(profiles, monkeypatch):
+    monkeypatch.setenv("EUDAMED_DEV_INPUT_BATCH_ROOT", "data/prod/import-batches")
+    with pytest.raises(ValueError, match="Dev storage overlaps"):
+        select(monkeypatch, "dev")
+
+
 def test_schema_dependency_errors_are_reported_before_startup(profiles, monkeypatch):
     root, _, _ = profiles
     settings=select(monkeypatch,"prod")

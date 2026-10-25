@@ -29,6 +29,8 @@ def main() -> None:
     print(f"Profile: {settings.environment_file}")
     print(f"Schema directory: {settings.schema_dir}")
     print(f"Database: {settings.testing_state_db_path}")
+    if settings.environment == "dev":
+        print(f"Dev input batches: {settings.dev_input_batch_root}")
     if args.check_config:
         print("Configuration valid; no services started and no database opened.")
         return

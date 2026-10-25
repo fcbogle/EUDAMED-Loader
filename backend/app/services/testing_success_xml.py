@@ -173,6 +173,14 @@ class TestingSuccessXmlService:
         # A correlated draft with a different version is not this acceptance's payload.
         if matched is not None and acknowledgement.entity_version and str(matched["version"]) != acknowledgement.entity_version:
             matched = None
+        if current:
+            # Export-backed caches establish a floor independently of historical
+            # POST/PATCH columns, which remain original submission observations.
+            cache_column = 'latest_successful_market_info_state_json' if acknowledgement.message_type == 'MARKET_INFO.PUT' else 'latest_successful_state_json'
+            exported = json_state(current[cache_column])
+            if exported and exported.get('accepted_state_source') == 'playground_export':
+                if not incoming_version or int(incoming_version) <= int(exported['version']):
+                    return
         current_version = current[version_column] if current else None
         current_state = current[state_column] if current else None
         if current and acknowledgement.message_type in {"DEVICE.POST", "UDI_DI.POST"}:

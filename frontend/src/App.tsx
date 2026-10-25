@@ -49,6 +49,8 @@ import { EnvironmentBanner } from "./components/EnvironmentBanner";
 import { ApplicationNavigation, type NavigationPage } from "./components/ApplicationNavigation";
 import { ImportManagementWorkspace } from "./components/ImportManagementWorkspace";
 import { ReportingWorkspace } from "./components/ReportingWorkspace";
+import { DevBatchPreparationWorkspace } from "./components/DevBatchPreparationWorkspace";
+import type { DevBatchContext } from "./devInputBatchTypes";
 import { DeviceModelSelector } from "./components/DeviceModelSelector";
 import { XmlValidationStack } from "./components/XmlValidationStack";
 import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
@@ -629,6 +631,7 @@ export function App() {
   const [isLoadingReadiness, setIsLoadingReadiness] = useState(true);
   const [readinessError, setReadinessError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<MainTab>("workbooks");
+  const [devBatchContext, setDevBatchContext] = useState<DevBatchContext>({ batchId: "", valid: false, checked: false, prepared: false });
   const [submissionDataTab, setSubmissionDataTab] = useState<SubmissionDataTab>("snapshot");
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
     DocumentationSection["id"]
@@ -3228,7 +3231,11 @@ export function App() {
         <aside className="hero-status" aria-label="Workspace status">
           {plannedWorkspace ? (
             <span className="status-pill neutral">
-              {activeTab === "sourceFiles" ? "No files uploaded"
+              {activeEnvironment === "dev" && isImportUiPreview
+                ? activeTab === "sourceFiles" ? devBatchContext.valid ? "Batch files verified" : "Select a Dev batch"
+                  : activeTab === "createImportWorkbook" ? devBatchContext.prepared ? "Workbook created" : devBatchContext.checked ? "Sources checked" : "Source checks required"
+                  : devBatchContext.prepared ? "Workbook ready for review" : "No workbook prepared"
+                : activeTab === "sourceFiles" ? "No files uploaded"
                 : activeTab === "createImportWorkbook" ? "No workbook created"
                 : activeTab === "assessmentImport" ? "No workbook prepared"
                 : activeTab === "registrationSnapshot" ? "No snapshot created"
@@ -3317,10 +3324,15 @@ export function App() {
       <div className="workspace-content">
       {error ? <div className="panel error-banner">{error}</div> : null}
       <div hidden={!isImportUiPreview}>
-        <ImportManagementWorkspace
+        {activeEnvironment === "dev" ? <DevBatchPreparationWorkspace
+          page={activeTab === "assessmentImport" || activeTab === "createImportWorkbook" ? activeTab : "sourceFiles"}
+          enabled={isImportUiPreview}
+          onPageChange={setActiveTab}
+          onContextChange={setDevBatchContext}
+        /> : <ImportManagementWorkspace
           page={activeTab === "assessmentImport" || activeTab === "createImportWorkbook" ? activeTab : "sourceFiles"}
           onPageChange={setActiveTab}
-        />
+        />}
       </div>
       <div hidden={!isReportingUiPreview}>
         <ReportingWorkspace

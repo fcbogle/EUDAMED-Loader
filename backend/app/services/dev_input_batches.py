@@ -85,8 +85,8 @@ def create_dev_batch(*, project_root: Path, xml_dir: Path, batch_id: str) -> Pat
     return destination
 
 
-def inspect_dev_batch(batch_dir: Path, *, excluded_workbook_names: tuple[str, ...] = ()) -> dict:
-    """Return source findings only; does not create reports or write any inputs."""
+def verify_dev_batch_inputs(batch_dir: Path) -> dict:
+    """Verify the immutable file inventory before any source reading or preparation."""
     batch = batch_dir.resolve()
     manifest = json.loads((batch / "manifest.json").read_text())
     if manifest.get("environment") != "dev" or manifest.get("format_version") != 1:
@@ -103,6 +103,14 @@ def inspect_dev_batch(batch_dir: Path, *, excluded_workbook_names: tuple[str, ..
               for p in (batch / role).rglob("*") if p.is_file()}
     if actual != expected:
         raise ValueError("Batch has added or missing input files; create a new batch")
+    return manifest
+
+
+def inspect_dev_batch(batch_dir: Path, *, excluded_workbook_names: tuple[str, ...] = ()) -> dict:
+    """Return source findings only; does not create reports or write any inputs."""
+    batch = batch_dir.resolve()
+    manifest = verify_dev_batch_inputs(batch)
+    expected = {entry["path"] for entry in manifest["files"]}
     reference = batch / "basic-udi/BasicUDIs.xlsx"
     findings = {"batch_id": manifest["batch_id"], "environment": "dev",
                 "manufacturer_srn": manifest["manufacturer_srn"],
@@ -142,6 +150,7 @@ def inspect_dev_batch(batch_dir: Path, *, excluded_workbook_names: tuple[str, ..
                 "row_occurrences": len(active_rows), "distinct_device_identities": len(active_keys),
                 "duplicate_identity_occurrences": sum(count - 1 for count in Counter(tuple(row["key"]) for row in active_rows if all(row["key"])).values()),
                 "rows_with_findings": sum(bool(row["reasons"]) for row in active_rows),
+                "finding_counts": dict(Counter(reason for row in active_rows for reason in row["reasons"])),
                 "in_exports": len(active_keys & accepted), "export_only": len(accepted - active_keys)},
             exports={"files": len(export_files), "device_records": len(exports),
                      "distinct_device_identities": len(accepted), "pages": export_files,

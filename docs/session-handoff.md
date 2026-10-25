@@ -2,6 +2,267 @@
 
 Updated October 25, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+## Important — Dev Test Cleanup Changed Legacy POST-Review Entries
+
+Final verification found an unintended Dev-only database change during the earlier
+failed full test run: the existing cleanup fixture used a stale cached operational
+path and cleared `reviewed_post_baselines`. Its exact pre-run row set is unknown.
+Production's file hash/mtime/size remain unchanged. Submission-event counts and
+the 215-device identity/version comparison still match the earlier inspection.
+
+Test cleanup now uses a fixed temporary path, and a new pytest connection guard
+blocks writes to non-temporary databases regardless of stale application settings.
+No stale backup has been restored. The owner confirmed there is no newer Dev
+backup/Time Machine snapshot; the known September 3 backup is not assumed current.
+See `docs/dev-test-isolation-incident-2026-10-25.md` for evidence and safeguards.
+This supersedes any statement that both databases remained unchanged through the
+whole test exercise. File preparation itself does not call database services.
+Review markers must be re-established through a fresh owner review, not recreated
+as historical approvals. No review entries have been fabricated or restored.
+A consistent post-incident safety copy now exists at
+`data/testing/backups/testing-state-after-review-cleanup-20261025T120142Z.sqlite3`,
+with a JSON sidecar. This protects remaining state; it does not recover the lost
+entries. The earlier guarded complete Python run passed **313 tests in 241.76 seconds**
+and caused no further Dev file changes. Production and all 12 source/copy
+fingerprints were unchanged. At that check, **114 frontend tests** and the build
+passed. The newer reconciliation verification is recorded below; owner browser
+verification remains outstanding.
+
+## October 25 — Test-isolation Fix Applied To Main
+
+The owner explicitly requested fixing main now. The isolated patch was applied to
+the original main checkout, changing only `backend/tests/conftest.py` and adding
+`backend/tests/test_database_test_isolation.py`. No feature, application,
+configuration or Production data changes were copied from development. All 34
+focused isolation/configuration/profile checks passed on main, including the eight
+isolation regressions. Dev and Production hashes, sizes and modification times
+matched their pre-fix values after testing. The pre-existing root `.DS_Store`
+change was left untouched.
+
+The earlier restriction against running tests on unguarded main is superseded for
+this local checkout. The test-only main changes are currently UNCOMMITTED; commit
+and publish them separately before assuming other checkouts have the protection.
+Suggested message: `Protect operational databases from test setup and cleanup`.
+Development's same safeguards remain in place. The patch file is retained as
+historical transfer evidence and should not be reapplied to the already fixed
+checkout.
+
+## October 25 — Production Test-isolation Follow-up
+
+Owner stressed that the Dev cleanup incident must not recur against Production.
+Development regressions now explicitly exercise direct Production path rejection,
+read/write URI rejection, stale cached Production settings in legacy review
+cleanup, and a temporary symlink redirect. No Production connection is opened by
+these checks: the guard rejects before SQLite. Session setup additionally asserts
+its exact temporary database/backup destinations before any unlink/initialization;
+a regression proves a poisoned Production configuration fails before either.
+All 42 targeted isolation/configuration/baseline tests pass.
+
+IMPORTANT: inspection of the original `main` checkout found its old cleanup
+fixture is still present. These uncommitted development protections do not apply
+there yet. Do not run tests from `main` until the test-only fix has been promoted
+and checked. `docs/production-test-isolation.patch` contains exactly the conftest
+fix and regression file for that checkout; `git apply --check` passed against main,
+but the patch has NOT been applied. No main application/configuration/database
+files were modified. Production baseline changes remain separately unauthorised.
+
+## October 25 — Owner-approved Dev Playground Baseline Applied
+
+The owner authorised aligning Dev with the retained extracts, then testing and
+reviewing fresh Playground XMLs. The controlled Dev import has now completed:
+215 devices / 10 represented parents, with 215 distinct imported-baseline audit
+events. These are `PLAYGROUND_EXPORT.SNAPSHOT` / `IMPORTED` evidence, not upload
+successes. Current accepted reads and generation use the export-backed state;
+Production evidence remains separately labelled and Production is unchanged.
+
+Fresh assessment reports **215 Matches / 8,600 matching fields / zero differences
+and missing local fields** within the supported comparison. All 1,284 historical
+event rows and all 12 protected source/canonical/review/package/batch tables retain
+their checksums. Actual SUCCESS totals remain 10 parent POST, 205 child POST,
+137 PATCH and 65 Market Info. Review markers remain zero; none were fabricated.
+The unique Esprit identity link was recorded explicitly. Prior ambiguous generic
+versions and all before-state caches remain in audit evidence.
+
+Run `a3de0e74d85e4108aa1b8f234b18f015` has a verified pre-change SQLite backup,
+full change audit and verification ledger. Fresh report ID:
+`105c7a775963404e98079d7be4204e9c`. Full paths, hashes, recovery limits and owner test
+instructions are in `docs/dev-playground-baseline-applied-2026-10-25.md`.
+This intentional approved update supersedes earlier read-only-only status and the
+pre-alignment Dev fingerprint. The earlier test-cleanup incident remains recorded;
+the update did not recover its missing historical review approvals.
+
+Verification: full Python run **326 passed in 237.81 seconds**, followed by **57
+focused tests** after final additions/registration-reader compatibility updates.
+Existing FastAPI deprecation warnings remain. Runtime checks with all SQLite
+connections forced read-only show 215 registered/PATCH-ready/Market Info-ready
+devices and 10 registered parents. A LINX22L5SD version-5 preview retains quantity
+1 and passes XSD validation; no generation/review/submission was logged. Database
+hash was unchanged by verification. Frontend remains at its earlier 118-test/build
+verification; no frontend code changed in this baseline increment.
+
+Next: restart Dev and refresh its frontend, rerun baseline assessment, review key
+values, test one manually reviewed device, retain exact submitted XML/ZIP and ACK,
+and compare fresh exports before expanding the batch. No source folders were
+removed, no Template edits/import were applied, and no Production migration or
+M2M work was performed. All code changes remain uncommitted.
+
+## October 25 — EliteVT Bulk PATCH Association Confirmed
+
+Owner suggested the ten repeated EliteVT names came from Bulk PATCH. Read-only
+queries confirm the exact ten-device cohort shares the August 14 successful
+version-2 transaction `90bffe49-e7b6-41e8-aee4-3ce65a521b84`, independently listed
+in test report BT4. This supports a common bulk origin, but the legacy scenario
+is `equivalent_first_patch` and retains no payload/name-change delta, so the
+specific repeated name's origin/intent is not proven. Findings and limitations
+are appended to `docs/playground-baseline-assessment-2026-10-25.md`. No operational
+state or generation behavior was changed.
+
+## October 25 — LINX22L5SD Historical Quantity Investigation
+
+Owner requested tracing `GS1 / 05050649085604` (`LINX22L5SD`). Read-only queries
+found quantity 1 → 2 in the context associated with successful September 1 PATCH
+version 3 (event 385), then retained quantity 2 at successful PATCH version 4
+(event 775). Both generation/acknowledgement pairs match by correlation ID, but
+acknowledgements contain no quantity values. The retained September 3 database
+backup already contains version 4 with quantity 2, corroborating that this local
+value predates current Import Management work. The October export has the same
+device version 4 and trade name, but quantity 1.
+
+Outgoing XML/ZIP bytes were not located in the checked project or usual download
+locations; the database retains package metadata/hashes rather than outgoing
+payload bytes. The owner confirmed the ZIPs are no longer available. Historical
+generation code was inspected but is not proof of the missing submitted files.
+Cause remains unresolved; do not assert external changes or an application/portal
+defect without evidence. Preserve this exception for baseline review. Details,
+event IDs, package hashes and limits are in
+`docs/linx22l5sd-quantity-investigation-2026-10-25.md`. Both current operational
+database hashes remain unchanged. No baseline or generation changes were made.
+
+## October 25 — Assessment UI Prioritises Known Differences
+
+Owner feedback: the missing-evidence total (6,660 fields) overshadowed the 23
+known-value differences. The Dev assessment now leads with value differences,
+affected-device count and total devices, followed by an immediately visible
+before/after table containing only proven value differences. Field-type counts
+and readable field labels support review. Missing evidence, matching counts,
+snapshot completeness and scope notes are in a separate expandable explanation;
+6,660 is explicitly a field count. The full device comparison and lineage notes
+remain available, with version/identity concerns signposted separately.
+Per-device summaries distinguish differences from unknown fields. This changes
+presentation only; assessment logic, report downloads and databases are unchanged.
+Frontend verification: 118 tests pass; TypeScript/Vite build passes with the
+existing bundle-size warning. Owner browser verification remains outstanding.
+
+## October 25 — Read-only Playground Baseline Assessment Implemented
+
+The owner approved investigating alignment of Dev's accepted state with actual
+Playground exports. The agreed reconciliation contract is in
+`docs/playground-baseline-reconciliation-proposal-2026-10-25.md`. Only its first,
+read-only assessment stage is now implemented; no baseline writes are enabled.
+
+New `PlaygroundReconciliation` reads the existing Dev SQLite database using
+`mode=ro`, `query_only` and one snapshot transaction, without store constructors
+or migrations. Verified batch exports are compared by issuer-qualified device
+identity against accepted device/POST/Market Info evidence. Proposed canonical
+fields resolve identity only; they never substitute for accepted values. The
+assessment separates differences, missing evidence and lineage/version concerns.
+
+Dev Import Management → Step 3 now offers **Assess Playground baseline** and
+Excel/audit downloads. This is separate from workbook import, whose assessment
+and confirmation remain disabled. Report files are retained under each batch's
+`reconciliation/<id>/` folder, with fingerprint-verified downloads. Batch selection
+changes invalidate delayed UI responses. Production endpoints refuse this flow.
+
+The actual 215-device report found 23 known-value differences (10 base quantities,
+10 trade names, two Market Info versions, one warning comment), 1,917 matching
+projected fields and 6,660 unknown local fields. Local device snapshots are 25
+full, 100 partial and 90 missing/unusable. There are 124 update proposals and 91
+records requiring explicit lineage/version review; none are applied. The earlier
+generic-version comparison is not equivalent to qualified POST/PATCH evidence.
+
+See `docs/playground-baseline-assessment-2026-10-25.md` for the retained report ID,
+findings, limitations and owner review instructions. Both operational database
+fingerprints remained unchanged by this assessment; the earlier review-marker
+incident remains separately unresolved. Next: owner reviews the concrete report
+before implementation/application of the controlled Dev baseline update. Do not
+fabricate successful submissions or operator approvals, switch source paths,
+remove legacy folders, or migrate Production as part of this stage.
+
+Assessment verification: the full backend run passed **310 tests in 232.77
+seconds**, with two existing FastAPI startup warnings. After the final duplicate-
+identity and unreadable-database checks were added, all **16 affected backend
+tests** passed again (including all eight reconciliation tests). The **nine
+repository utility tests** passed separately. These runs cover all 321 current
+Python tests. All **116 frontend tests** and the TypeScript/Vite build passed;
+the existing bundle-size warning remains (860.09 kB). Final operational database
+hashes, sizes and modification times match the pre-assessment/post-incident
+fingerprints. All 12 original inputs and batch copies still match their manifest.
+The retained Excel has 215 device rows, 8,600 field rows and five export rows.
+No formal browser acceptance is implied, and no changes have been committed.
+
+## October 25 — Dev Batch Selection, Checks And Workbook Creation Connected
+
+The owner authorised connecting the first three file-preparation steps and will
+perform browser verification after implementation. In a backend-confirmed Dev
+environment, Import Management now selects existing manifest-backed batches,
+displays real source-file/provenance/integrity information, runs real source
+checks, and creates/downloads the review Import Workbook and linked audit.
+This supersedes earlier statements that these actions remain UI previews.
+
+`EUDAMED_DEV_INPUT_BATCH_ROOT` is a new optional Dev-only setting. The local ignored
+development profile points it to the original project's
+`data/dev/import-batches/`; existing input/database paths and all Production files
+remain unchanged. The launcher prints the batch root during Dev configuration
+checks. New `/api/dev-input-batches` endpoints refuse Production, validate batch
+identity/manufacturer and file fingerprints, bind preparation to checked inputs
+and the existing workbook exclusions, reject stale inputs, serialize preparation
+and publish complete immutable pairs under `prepared/<id>/`. No database import
+or state services are called by the file-preparation endpoints. The separately
+authorised baseline assessment below reads SQLite through a read-only connection.
+
+The shared existing workbook preparer gained optional filtering/output-label
+parameters whose defaults preserve existing Production behaviour. Dev uses the
+current Accessories/Footspares exclusion and makes no parent/market overrides.
+Dev export-absent rows are labelled **Not evidenced by supplied exports**, not
+asserted unregistered; To Register remains a preparation grouping requiring later
+assessment. Source checks do not certify canonical or XML readiness.
+
+Actual-batch verification created an Import Workbook with 8,209 To Register rows,
+215 Registered rows and zero review-required rows under the preparation checks.
+The final workbook, paired audit and ZIP were verified. Both operational database
+files retained their SHA-256, size and modification time across that file-only
+verification; the separate test-cleanup incident above was detected subsequently.
+Original source copies and configured import paths were not switched or deleted.
+Generated pairs remain local/ignored. Workbook database assessment/import, baseline
+updates and Reporting generation remain disabled/deferred. Read-only baseline
+comparison is now available as described above. New browser
+uploads are not connected; this increment uses the existing copied Dev batch.
+
+Owner test instructions are in `docs/dev-workbook-preparation-testing.md`.
+Restart the Dev backend, refresh the development frontend, select batch
+2026-10-25-001, check sources and create/download the pair. Main/Production must
+remain separate. Earlier-format smoke-test artifacts are retained as drafts but
+cannot be downloaded as current-format preparations; create a fresh pair.
+
+Verification before the isolation guard: the full backend suite passed **311 tests in 238.88 seconds**
+with two existing FastAPI startup deprecation warnings. All **114 frontend tests**
+and the TypeScript/Vite build passed, with the existing >500 kB JavaScript warning
+(849.39 kB at this check). New coverage includes Dev-only HTTP access, real paired
+downloads, stale/mutated input rejection, scope retention, failed-preparation
+cleanup, output integrity, export-absence wording, asynchronous UI selection
+guards and React StrictMode loading. The default-path test now uses an empty
+synthetic Dev profile rather than assuming the operator's local worktree paths.
+The later guarded run passed **313 tests in 241.76 seconds**, with the same two
+startup warnings and no further operational-file changes. No formal owner browser
+acceptance of this functional increment is implied.
+
+Actual final-format verification artifact: `8331d75d8e26443bbe904a8f91c69173`,
+workbook `dev-import-20261025-113116-043599.xlsx`. Its companion audit is about
+91 MB uncompressed; the paired ZIP is about 2.6 MB. User-created preparations
+receive new immutable artifact IDs/filenames; these retained files are ignored
+by Git. The separate Dev test-cleanup incident above remains unresolved; Production
+is unchanged.
+
 ## October 25 — First Dev Batch Created And Inspected
 
 Phase 1 of the agreed Dev-first file arrangement is now implemented. The batch

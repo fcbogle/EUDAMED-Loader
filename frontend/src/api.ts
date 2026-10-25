@@ -27,6 +27,7 @@ import type {
   WorkbookImportSnapshotSummary,
   SuccessXmlUploadResult,
 } from "./types";
+import type { DevBatch, DevBatchInspection, DevPreparedWorkbook, PlaygroundAssessment } from "./devInputBatchTypes";
 
 const API_ROOT = "http://localhost:8000/api";
 
@@ -123,6 +124,12 @@ export type RecordReadiness = {
 };
 
 export const api = {
+  devInputBatches: () => getJson<{ batches: DevBatch[] }>("/dev-input-batches"),
+  inspectDevInputBatch: (id: string) => sendJson<DevBatchInspection>(`/dev-input-batches/${encodeURIComponent(id)}/inspect`, "POST", {}),
+  prepareDevInputBatch: (id: string, inspectionToken: string) => sendJson<DevPreparedWorkbook>(`/dev-input-batches/${encodeURIComponent(id)}/prepare`, "POST", { inspection_token: inspectionToken }),
+  downloadDevInputWorkbook: (id: string, artifactId: string, kind: "workbook" | "audit" | "package") => sendDownload(`/dev-input-batches/${encodeURIComponent(id)}/prepared/${encodeURIComponent(artifactId)}/${kind}`, "GET"),
+  assessPlaygroundBaseline: (id: string) => sendJson<PlaygroundAssessment>(`/dev-input-batches/${encodeURIComponent(id)}/baseline-assessment`, "POST", {}),
+  downloadPlaygroundAssessment: (id: string, reportId: string, kind: "json" | "xlsx") => sendDownload(`/dev-input-batches/${encodeURIComponent(id)}/baseline-assessment/${encodeURIComponent(reportId)}/${kind}`, "GET"),
   async environment(signal?: AbortSignal): Promise<{
     environment: string; message_schema_version: string; schema_package: string;
     manufacturer_srn?: string | null; authorised_representative_srn?: string | null;
