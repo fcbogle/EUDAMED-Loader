@@ -1,11 +1,143 @@
 # Session Handoff
 
-Updated October 24, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated October 25, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## October 25 — First Dev Batch Created And Inspected
+
+Phase 1 of the agreed Dev-first file arrangement is now implemented. The batch
+`data/dev/import-batches/2026-10-25-001/` in the original project folder contains
+verified copies of six Templates, the Dev BasicUDIs.xlsx and five Playground
+exports, plus a provenance manifest and source-assessment JSON. `prepared/` is
+empty. No current source files, input configuration, database paths, baseline
+state or Production files were moved or changed. The batch is excluded from Git
+locally in the shared repository; the development branch also adds its ignore rule.
+
+The new `backend/scripts/manage_dev_input_batch.py` utility creates a new batch
+without replacing an existing one and performs read-only source inspection using
+the existing preparation readers. It verifies file fingerprints before inspection
+and opens no application databases. No UI processing buttons have been enabled.
+
+Findings: all six Templates contain 8,773 row occurrences / 8,771 distinct device
+identities. The 349 missing-parent findings and two duplicate identity occurrences
+involve the already-excluded Accessories/Footspares workbook. With the explicit
+inspection filter matching the current exclusion policy, the five active files
+contain 8,424 distinct devices, no duplicate identities and no findings from these
+structural checks. All 215 XML devices match active Template identities; there are
+47 reference parent identities. This is not full XML-readiness or import assessment.
+The excluded source is preserved; its import eligibility has not been changed.
+
+See `docs/dev-input-batch-2026-10-25.md` for paths, commands, findings and the
+integration/cleanup checklist. A notable retained dependency is the legacy
+tracekey workbook in `data/basic_udi_reference/`: existing Dev reference and
+canonical services still read it. Preserve it until its handling is explicitly
+resolved; do not delete the old reference directory as incidental cleanup.
+
+Verification: **27 focused backend tests passed** (batch safety/integrity plus
+existing workbook-preparation regressions); `git diff --check` passed. No frontend
+code changed and no full backend suite was rerun for this first batch utility.
+
+Next: review these concrete findings and agree the selected-batch/preparation
+integration, including preservation of the current exclusion and legacy-reference
+behaviour. Then implement the processing/reporting steps in the agreed sequence.
+The XML version exceptions remain investigation-only; no baseline update is
+authorised yet. No obsolete folders were removed. Earlier future-tense batch
+creation instructions below are superseded by this completed checkpoint.
+
+## October 25 — Agreed Dev-First File Structure And Migration Direction
+
+**Retain all current Dev and Production XML/Excel locations for now.** Introduce
+and prove a new folder structure for Dev before retiring any superseded Dev input
+folders. Production files and configuration must remain unchanged so the existing
+application on `main` continues to work. No additional databases are planned;
+both existing databases and their paths remain unchanged throughout this work.
+
+### Phase 1 — Establish Dev Batch Inputs Without Moving Originals
+
+Create a complete Dev input batch under the original project's data area, outside
+the development worktree, for example:
+
+```text
+data/dev/import-batches/2026-10-25-001/
+├── templates/       Copies of the current Dev Device Template Excel files
+├── basic-udi/       Copy of the current Dev BasicUDIs.xlsx
+├── eudamed-xml/     Copies of the five downloaded Playground XML exports
+└── prepared/        Future Import Workbook and linked audit file
+```
+
+Preserve original filenames and verify copied bytes against their sources.
+Retain batch provenance, environment, source dates and file fingerprints so later
+preparation, assessment and reporting results can be traced to exact inputs.
+Ensure operational batch inputs/outputs are excluded from Git. Merely creating
+these folders does not change which inputs the existing importers use.
+
+The current original inputs to retain are:
+
+- Dev Templates: `data/source_excel/`.
+- Dev parent reference: `data/basic_udi_reference/BasicUDIs.xlsx`.
+- Playground exports: `data/testing/playground-extracts/25-10-2026/`.
+- All Production inputs, including `data/prod/template/`, `data/prod/eudamed_xml/`
+  and the prepared workbook/audit pair under `data/prod/import_file/`.
+
+### Phase 2 — Implement And Test Against The New Dev Structure
+
+Connect the Import Management and Reporting changes to an explicitly selected Dev
+batch and test the complete workflow: source-file selection/receipt, checks,
+Import Workbook/audit preparation, assessment, controlled database import,
+registration snapshot generation and comparison with the retained Playground
+exports. Preserve current accepted-state, identity, version and lineage controls.
+Review material integration/mapping/validation decisions with the owner before
+implementation, following `AGENTS.md`.
+
+Use the existing Dev/Playground database, with an agreed backup before real import
+testing; do not create another application database or overwrite its testing
+history. Automated regressions continue to use isolated temporary test databases
+and synthetic fixtures. Confirm repeat-import behaviour, exception handling,
+reproducible reports and preserved evidence. No Dev process or test may write to
+Production. Production operation remains on `main`, one environment at a time.
+
+### Phase 3 — Retire Superseded Dev Input Folders After Success
+
+Only after the new Dev structure and workflows pass verification and owner review,
+update remaining Dev configuration/scripts/references to use the new locations.
+Check retained audits and file references, verify preservation/backups, then
+present the exact obsolete Dev input folders for owner-approved removal. Do not
+delete originals merely because copies exist. **Never remove `data/testing/`: it
+contains the existing Playground database and retained history.** Database files,
+database backup folders and other retained evidence are outside input cleanup.
+
+### Phase 4 — Repeat For Production As A Separate Controlled Change
+
+After the Dev transition is successful, undertake the equivalent Production
+folder, configuration, workflow-testing and input-retirement tasks with the owner.
+Production adoption must be reviewed and released deliberately so `main` remains
+usable; do not apply development path changes to Production in advance. Preserve
+the existing Production database, registered devices and audit/acceptance history.
+No Production file migration or deletion is authorised by this documentation update.
+
+### Available Export Evidence And Immediate Next Work
+
+The owner reported Playground operational again on October 25 and supplied five
+exports, `APP-DTX-000119311.xml` through `APP-DTX-000119315.xml`, in the retained
+Playground export folder above. Read-only review found all five pages
+(50 + 50 + 50 + 50 + 15), 215 unique devices, 10 represented parents, schema
+3.0.32 and manufacturer `UK-MF-000033261`. All 215 successful local device
+identities match; 53 available Market Info country snapshots agree. Two EliteVT
+version discrepancies and one missing local Elite Blade device version require
+review before claiming full alignment. Details are in
+`docs/playground-export-review-2026-10-25.md`; no state was repaired/imported.
+The export folder is excluded through the shared repository-local Git exclude.
+
+Next session: review this phased direction, prepare the copied Dev batch and
+its provenance, then agree processing integration and test cases. **The batch
+folders/copies, path changes and cleanup have not been implemented yet.** This
+update changes documentation only. Production, existing Dev input files and both
+databases were not changed. `git diff --check` passed; no application tests were
+rerun for this prose-only update.
 
 ## Latest Restart Position — Owner-Accepted UI Baseline
 
 Work remains in `.worktrees/development` on
-`feature/import-management-reporting`. The pending UI work follows local commit
+`feature/import-management-reporting`. The UI work follows local commit
 `810f52e` (navigation/banner refinement and development-isolation guidance).
 The original checkout remains on `main` for Production. Use
 `docs/development-and-production.md` for starting and switching environments;
@@ -42,10 +174,9 @@ downloads remain disabled. Example counts and devices are explicitly synthetic,
 independent of selected files and operational state. No endpoints, mappings,
 validation rules, schema or database state were changed for this UI work.
 
-Next: obtain the owner's Playground XML exports when the service is available,
-review them alongside the corresponding Template and Basic UDI-DI files, and
-agree the processing integration and controlled test cases before enabling actions.
-Do not assume a previous outage remains current; recheck availability when needed.
+Next: follow the October 25 Dev-first file-structure direction above. The owner
+has supplied Playground exports; review those alongside copied Dev Template and
+Basic UDI-DI inputs and agree integration/tests before enabling processing actions.
 Preserve the existing Playground history and agree a backup before real import
 testing. Export scope, pages, dates and environment matter; absence from an
 incomplete export does not establish non-registration. Production is outside
