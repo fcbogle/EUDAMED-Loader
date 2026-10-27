@@ -964,16 +964,17 @@ export type SuccessXmlUploadResult = {
 export type RegistrationCounts = {
   total_devices: number; registered_devices: number; unknown_devices: number;
   awaiting_devices: number; awaiting_ready: number; awaiting_blocked: number;
-  total_parents: number; registered_parents: number; unknown_parents: number; unresolved_parent_devices: number;
+  total_parents: number; registered_parents: number; unregistered_parents?: number; unknown_parents: number; unresolved_parent_devices: number;
   post_ready: number; child_post_ready: number; patch_ready: number; market_info_ready: number;
 };
-export type RegistrationSummaryGroup = Omit<RegistrationCounts, "total_parents" | "registered_parents" | "unknown_parents" | "unresolved_parent_devices"> & {
+export type RegistrationSummaryGroup = Omit<RegistrationCounts, "total_parents" | "registered_parents" | "unknown_parents" | "unregistered_parents" | "unresolved_parent_devices"> & {
   key: string; parent_key: string; product_family: string; product_variant: string;
-  basic_udi_di: string; parent_registered: boolean; parent_post_ready: boolean; patch_completed: number;
+  basic_udi_di: string; parent_registration_status?: "Registered" | "Unregistered" | "Unknown"; parent_registered: boolean; parent_post_ready: boolean; patch_completed: number;
   market_info_completed: number; latest_acceptance_at: string | null; status: string;
   latest_patch_version: number | null; latest_market_info_version: number | null; parent_issuing_entity: string | null;
 };
 export type RegistrationSummary = {
+  registration_coverage?: { environment: string; manufacturer_srn: string; confirmed_at: string; export_as_of: string; covers_parent_only: boolean } | null;
   import_batch_id: number | null; imported_at: string | null; calculated_at: string;
   latest_acceptance_at: string | null; source_rows: number; mapped_rows: number;
   outside_canonical_scope_rows: number; unresolved_identity_rows: number;
@@ -985,7 +986,7 @@ export type RegistrationSummary = {
 export type RegistrationChild = {
   key: string; product_family: string; product_variant: string; catalogue_number: string | null;
   primary_udi_di: string; issuing_entity: string;
-  registration_status: "Registered" | "Awaiting registration" | "Unknown";
+  registration_status: "Registered" | "Unregistered" | "Awaiting registration" | "Unknown";
   post_ready: boolean; child_post_ready: boolean; patch_ready: boolean; market_info_ready: boolean;
 };
 export type RegistrationChildrenPage = {

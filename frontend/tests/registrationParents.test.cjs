@@ -26,8 +26,10 @@ test('models sharing the same issuer-qualified parent form one row, while issuer
 test('a seed acceptance changes the next step from parent POST to remaining child POST', () => {
   const before = registrationParents([group()])[0];
   assert.equal(parentNextStep(before), 'Review parent POST');
+  assert.equal(before.registrationStatus, 'Unregistered');
   const after = registrationParents([group({parent_registered: true, parent_post_ready: false,
     registered_devices: 1, awaiting_devices: 106, child_post_ready: 106})])[0];
+  assert.equal(after.registrationStatus, 'Registered');
   assert.equal(after.registeredChildren, 1);
   assert.equal(after.awaiting, 106);
   assert.equal(parentNextStep(after), 'Review Bulk UDI-DI POST');
@@ -39,6 +41,7 @@ test('unknown registration and unresolved parents remain distinct from confirmed
     group({key: 'another', parent_key: '', parent_issuing_entity: null})]);
   assert.equal(missing.length, 2);
   assert.equal(parentNextStep(missing[0]), 'Resolve parent identity');
+  assert.equal(missing[0].registrationStatus, 'Unknown');
 });
 test('child XML labels distinguish seed, child-only POST, updates and unavailable actions', () => {
   assert.equal(childXmlActions({post_ready: true}), 'Parent + child POST candidate');

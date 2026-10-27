@@ -28,6 +28,137 @@ fingerprints were unchanged. At that check, **114 frontend tests** and the build
 passed. The newer reconciliation verification is recorded below; owner browser
 verification remains outstanding.
 
+## October 25 — Owner Clarification: Source Membership Defines Labels
+
+This supersedes the earlier rule reserving Unregistered for explicitly confirmed
+negative coverage. For both Device UDI-DIs and Basic UDI-DIs, **Registered** means
+recorded EUDAMED registration evidence; **Unregistered** means present in imported
+Template/BasicUDI workbook data but absent from that evidence; **Unknown** means
+absent from all those sources. These labels describe the active environment's
+recorded sources, not a live EUDAMED query. Identity issues remain separate XML
+blockers and do not turn a workbook identifier into Unknown.
+
+Implemented in the feature registration read model, parent/child pills, parent
+status rows and counts. Current Dev totals: **215 Registered / 8,208 Unregistered /
+0 Unknown devices**, and **10 Registered / 4 Unregistered / 0 Unknown parents**.
+Of the Unregistered devices, 8,207 are ready and one, Echelon `EC27LN7S`
+(`05050649030901`), remains blocked by its existing identity issue. No generation
+rules or accepted-state/version safeguards were relaxed. Existing source rows
+with unresolved identifiers remain reported as import exceptions.
+
+The previous device-only coverage confirmation is retained as dated provenance;
+it does not assert complete coverage of parent-only registrations. It is no
+longer required to label a known workbook identifier Unregistered. No additional
+operational database writes are needed for this clarification. Production and
+main remain untouched; browser review should use restarted Dev and a refreshed
+frontend. See `docs/registration-coverage-confirmation-2026-10-25.md`.
+
+Verification of this clarification: **344 backend tests passed in 234.94 seconds**
+(`pytest backend/tests`), **40 focused registration tests passed**, all **123
+frontend tests** and the build passed. Read-only Dev checks confirm the new
+labels/counts, retained identity blocker and four XSD-valid Echelon POST previews.
+Dev and Production database fingerprints are unchanged through this increment;
+main is clean. Changes remain uncommitted in the feature worktree.
+
+## October 25 — Confirmed Dev Device Coverage and Unregistered Pills
+
+The owner approved Unregistered labels and clarified that complete Playground
+coverage means **device extracts only**. A backed-up, attributed confirmation now
+ties Dev manufacturer `UK-MF-000033261` to the applied batch `2026-10-25-001`.
+This supersedes earlier blanket statements that all absent Dev devices remain
+Unknown. Identity conflicts remain Unknown; parent-only absence is not inferred.
+
+Current read-only totals: **215 Registered, 8,207 Unregistered, 1 Unknown device**;
+parents remain **10 Registered, 4 Unknown**. The UI explains device-only scope and
+uses Unregistered for child pills/counts previously labelled Awaiting registration.
+All 14 pre-existing Dev tables have unchanged logical checksums. Only the new
+scope-confirmation metadata was added; Production and main remain unchanged.
+Different later imported export evidence requires a fresh completeness confirmation.
+
+The full Python suite passed **347 tests in 243.07 seconds**; the subsequent
+new-export invalidation regression passed within a **35-test focused run**.
+All **123 frontend tests** and the build passed. Read-only checks confirm child
+pills, parent counts, the accepted baseline and XSD-valid Echelon POST previews.
+Backup, audit provenance and browser review instructions are recorded in
+`docs/registration-coverage-confirmation-2026-10-25.md`. Feature changes remain
+uncommitted; restart Dev and refresh before owner browser review.
+
+## October 25 — Shared Registration-driven POST/PATCH Policy
+
+The owner clarified that registered devices must be treated as PATCH and devices
+without registration as POST in BOTH environments. This supersedes the earlier
+Dev-only source-label exception and the previous claim that Production retains
+its historical source-operation restriction. The shared feature code no longer
+uses that legacy testing designation to select operational candidates.
+
+Readiness now exposes `registration_known` and `operational_operation`. Successful
+registration/imported baseline evidence from the active database establishes
+PATCH designation; absence of evidence permits POST candidacy with normal data
+and identity checks, while registration views retain Unknown when appropriate.
+The single POST download rechecks registration in both environments and rejects a
+duplicate before logging generation or review. Explicit accepted-baseline previews
+remain available for PATCH/Market Info review.
+
+Frontend candidate counts use backend readiness; a legacy success flag alone no
+longer admits a device to PATCH selection. Source-label POST/PATCH totals and
+badges were removed from current-status displays, and the mapping field is now
+labelled Historical source label (unused). Preview registration text names the
+active environment instead of unconditionally claiming acceptance. Old metadata
+is retained without schema/data changes. Policy and limits are in
+`docs/registration-driven-operation-policy.md`.
+
+Core synthetic checks cover both environments and a separate-database same-UDI
+case proving registration is not shared. Production's operational database and
+main application remain unchanged; the shared Production behavior is implemented
+on the feature branch, pending a reviewed release. No database reconciliation,
+source edits, submission or M2M work is included in this policy increment.
+
+Final verification: **342 Python tests passed in 241.27 seconds**, including
+Production synthetic workflows, cross-environment isolation and legacy-flag
+regressions. All **121 frontend tests** and the TypeScript/Vite build passed.
+Existing FastAPI deprecation and bundle-size warnings remain. Read-only runtime
+checks preserve 215 registered Dev devices / 10 parents, and all four Echelon
+variant previews pass XSD checks. Dev and Production database hashes still match
+the post-reconciliation/pre-policy fingerprints. Main remains clean; these feature
+changes are uncommitted. Restart Dev and refresh the frontend for browser review.
+
+## October 25 — Dev POST Selection No Longer Uses Legacy PATCH Labels
+
+The owner requested POST access for devices without recorded registration after
+aligning Dev's accepted state with Playground. Dev candidate selection, readiness
+and POST rendering now accept XML-ready source records regardless of their old
+POST/PATCH classification. POST intent is applied to a temporary projection;
+source workbooks, canonical operation labels and accepted snapshots are untouched.
+Both frontend selection and backend assessment/generation use the updated scope.
+
+Existing registration evidence still blocks duplicate POST in operational
+assessment/next-candidate/bulk selection. Known parents use child UDI-DI POST;
+unknown parents retain the existing DEVICE.POST flow. Devices not evidenced by
+exports remain Unknown, rather than being automatically relabelled unregistered.
+PATCH/Market Info still require registration evidence. Production keeps its source
+POST classification restriction; main application code was not changed.
+
+Targeted synthetic regressions cover PATCH-labelled Dev sources rendered as POST,
+readiness, registered-device exclusion, parent-vs-child POST, non-ready source
+exclusion, source-data preservation and unchanged Production filtering. Frontend
+policy tests cover Dev, Production and environment loading. Read-only runtime previews succeeded for Echelon `EC22L1S`, Echelon ER
+`ECER22L1S` and Echelon VT `ECVT22L11S` as DEVICE.POST, and the next Echelon VAC
+candidate `EVAC22R3SD` as UDI_DI.POST. All passed XSD validation. Both operational
+database fingerprints remain unchanged. No XML was submitted or generation
+history recorded. A direct POST download for a newly eligible PATCH-labelled
+source is also refused once registration is known, while explicit accepted-baseline
+previews remain available for PATCH/Market Info review.
+
+Verification: the initial full Python run passed 337 tests and exposed one older
+readiness test double without settings. The condition now short-circuits ordinary
+POST rows before consulting environment settings. All 172 focused registration,
+XML-generation, workbook-import and Production-import tests then passed, covering
+the corrected failure and all affected workflows. All 120 frontend tests and the
+TypeScript/Vite build passed. Existing FastAPI deprecation and bundle-size warnings
+remain. The feature changes are uncommitted; owner browser verification is next.
+Restart Dev, select Echelon (or ER/VT), and use the operational POST assessment.
+No registration status was inferred solely from export absence.
+
 ## October 25 — Test-isolation Fix Applied To Main
 
 The owner explicitly requested fixing main now. The isolated patch was applied to

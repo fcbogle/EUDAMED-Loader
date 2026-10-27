@@ -50,13 +50,13 @@ def summary(records=None, subjects=None, events=None, readiness=None, **filters)
         batch={"id": 1, "imported_at": "2026-10-08T10:00:00Z"}, source_count=len(records), identity_issues=0, **filters)
 
 
-def test_no_acceptance_and_default_unregistered_do_not_prove_non_registration():
+def test_workbook_membership_sets_unregistered_without_legacy_flags():
     result = summary(subjects=[subject(registration_status="unregistered", post_success=0)], readiness=[ready()])
     assert result["counts"]["total_devices"] == 1
-    assert result["counts"]["unknown_devices"] == 1
-    assert result["counts"]["awaiting_devices"] == 0
+    assert result["counts"]["unknown_devices"] == 0
+    assert result["counts"]["awaiting_devices"] == 1
     assert result["counts"]["post_ready"] == 1
-    assert result["counts"]["unknown_parents"] == 1
+    assert result["counts"]["unregistered_parents"] == 1
 
 
 def test_repeated_patch_events_count_once_as_registered_device_and_separate_history():
@@ -80,7 +80,7 @@ def test_flags_drafts_and_errors_are_not_success_evidence():
 def test_linked_acknowledgement_with_changed_identifier_or_issuer_does_not_register_new_identity():
     for sub in [subject(udi="OLD"), subject(latest_successful_post_state_json=json.dumps({"issuing_entity": "HIBCC"}))]:
         result = summary(subjects=[sub], events=[event()])
-        assert result["counts"]["unknown_devices"] == 1
+        assert result["counts"]["awaiting_devices"] == 1
         assert result["unmatched_success_subjects"] == 1
 
 
@@ -307,11 +307,11 @@ def test_status_filter_totals_and_group_rows_use_same_scope():
     assert result['counts']['total_devices'] == result['counts']['registered_devices'] + result['counts']['unknown_devices'] + result['counts']['awaiting_devices']
 
 
-def test_unknown_parent_identity_is_not_mistaken_for_parent_post_eligibility():
+def test_workbook_parent_label_does_not_override_parent_post_eligibility():
     result = summary(readiness=[ready(child_post_ready=True, parent_registered=True)])
     # Existing generation may know a parent from legacy text lineage, while the
     # stronger identity summary lacks issuer evidence. Do not offer another seed.
-    assert result['counts']['unknown_parents'] == 1
+    assert result['counts']['unregistered_parents'] == 1
     assert result['groups'][0]['parent_post_ready'] is False
     assert result['groups'][0]['status'] == 'Child POST ready'
 
@@ -340,19 +340,19 @@ def test_child_details_share_summary_identity_and_acceptance_rules():
     assert group['children'][0]['registration_status'] == 'Registered'
     assert group['children'][0]['patch_ready'] is True
     assert group['children'][0]['post_ready'] is False
-    assert group['children'][1]['registration_status'] == 'Awaiting registration'
+    assert group['children'][1]['registration_status'] == 'Unregistered'
     assert group['children'][1]['child_post_ready'] is True
     assert summary(records=rows)['groups'][0].get('children') is None
 
 
-def test_parent_only_acceptance_preserves_unknown_child_and_enables_child_post():
+def test_parent_only_acceptance_preserves_unregistered_child_and_enables_child_post():
     parent = subject(device=None, udi=None,
                      latest_successful_post_state_json=json.dumps({'basic_identifier_issuing_entity': 'GS1'}))
     result = summary(subjects=[parent], events=[event()], readiness=[ready(child_post_ready=True, parent_registered=True)],
                      include_children=True)
     group = result['groups'][0]
     assert group['parent_registered'] is True
-    assert group['children'][0]['registration_status'] == 'Unknown'
+    assert group['children'][0]['registration_status'] == 'Unregistered'
     assert group['children'][0]['child_post_ready'] is True
 
 
@@ -409,3 +409,21 @@ def test_dev_playground_baseline_registers_identity_without_submission_success(t
     assert result['counts']['registered_parents']==1
     assert result['counts']['patch_ready']==1
     assert sum(result['event_counts'].values())==0
+
+
+@pytest.mark.parametrize(('in_eudamed','in_workbook','expected'), [
+    (True,True,'Registered'), (True,False,'Registered'),
+    (False,True,'Unregistered'), (False,False,'Unknown'),
+])
+def test_source_membership_defines_registration_status(in_eudamed,in_workbook,expected):
+    from app.services.registration_summary import registration_status
+    assert registration_status(in_eudamed=in_eudamed,in_workbook=in_workbook)==expected
+
+
+def test_workbook_identity_issue_blocks_actions_without_changing_source_label():
+    result=summary(readiness=[ready()],issue_subjects={1},include_children=True)
+    child=result['groups'][0]['children'][0]
+    assert child['registration_status']=='Unregistered'
+    assert not child['post_ready']
+    assert result['counts']['awaiting_blocked']==1
+    assert result['groups'][0]['parent_registration_status']=='Unregistered'

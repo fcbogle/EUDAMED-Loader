@@ -17,7 +17,7 @@ const summary = {import_batch_id: 1, groups: [{key: 'group', parent_key: 'GS1:B1
   parent_registered: true, parent_post_ready: false, total_devices: 107, registered_devices: 1,
   awaiting_devices: 106, unknown_devices: 0, child_post_ready: 106, awaiting_blocked: 0,
   patch_ready: 1, market_info_ready: 1}]};
-function harness(response) {
+function harness(response, viewSummary = summary) {
   let current;
   const calls = [];
   function load(file, requireFn = require) {
@@ -43,7 +43,7 @@ function harness(response) {
     return {render() {current = store; store.cursor = 0; return nodes(component(props));},
       effect() {return store.effect();}};
   }
-  const parent = instance(components.RegistrationParentsChildren, {summary});
+  const parent = instance(components.RegistrationParentsChildren, {summary: viewSummary});
   return {calls, parent, open() {
     parent.render().find(n => n.props?.className === 'registration-parent-toggle').props.onClick();
     const node = parent.render().find(n => typeof n.type === 'function');
@@ -94,4 +94,18 @@ test('child request errors remain visible and can be retried', async () => {
   fail = false; rendered.find(n => n.type === 'button').props.onClick();
   cleanup(); child.render(); cleanup = child.effect(); await tick();
   assert.match(JSON.stringify(child.render()), /CAT-D1/); cleanup();
+});
+
+
+test('workbook parents and children show Unregistered without extract evidence', async () => {
+  const current = {...summary, registration_coverage: {covers_parent_only: false},
+    groups: [{...summary.groups[0], parent_registered: false}]};
+  const h = harness(() => Promise.resolve({...page(), children: [{...page().children[0], registration_status: 'Unregistered'}]}), current);
+  const parents = h.parent.render();
+  assert.ok(parents.some(n => n.type === 'span' && n.props.children === 'Unregistered'));
+  assert.match(JSON.stringify(parents), /Unregistered means present in the imported Template or BasicUDI workbook/);
+  const child = h.open(); child.render(); child.effect(); await tick();
+  const rendered = child.render();
+  assert.ok(rendered.some(n => n.type === 'span' && n.props.children === 'Unregistered'));
+  assert.doesNotMatch(JSON.stringify(rendered), /Confirm registration status before POST/);
 });

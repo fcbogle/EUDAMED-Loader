@@ -353,6 +353,8 @@ def test_dashboard_readiness_reuses_model_snapshot_and_preserves_single_device_r
             'catalogue_number': record.catalogue_number, 'primary_udi_di': record.primary_udi_di,
             'basic_udi_di': post.evidence.get('candidate_basic_udi_di'),
             'parent_registered': bool(post.evidence.get('parent_registration_known')),
+            'registration_known': bool(post.evidence.get('child_registration_known')),
+            'operational_operation': 'PATCH' if post.evidence.get('child_registration_known') else 'POST',
             'post_ready': post.status == 'available',
             'child_post_ready': post.status == 'available' and bool(post.evidence.get('parent_registration_known')),
             'patch_ready': patch_result.status == 'available',

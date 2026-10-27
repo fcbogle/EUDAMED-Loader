@@ -33,9 +33,6 @@ class OperationAssessmentService:
                 # Reuse the existing generation snapshot and per-device rules.
                 with self.testing_state_store.generation_scope(product_family=family, product_variant=variant):
                     for index, record in entries:
-                        if ((record.submission_operation or "").upper() != "POST"
-                                and not self.xml_service.selector._imported_baseline_record(record, state_store=self.testing_state_store)):
-                            continue
                         post = self._assess_single_post_record(record)
                         # Both update assessments require tracked child registration.
                         registered = bool(post.evidence.get("child_registration_known"))
@@ -48,6 +45,8 @@ class OperationAssessmentService:
                             "primary_udi_di": record.primary_udi_di,
                             "basic_udi_di": post.evidence.get("candidate_basic_udi_di"),
                             "parent_registered": bool(post.evidence.get("parent_registration_known")),
+                            "registration_known": registered,
+                            "operational_operation": "PATCH" if registered else "POST",
                             "post_ready": post.status == "available",
                             "child_post_ready": post.status == "available" and bool(post.evidence.get("parent_registration_known")),
                             "patch_ready": patch is not None and patch.status == "available",

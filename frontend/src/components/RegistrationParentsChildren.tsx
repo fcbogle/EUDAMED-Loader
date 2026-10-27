@@ -34,7 +34,7 @@ function ParentChildren({ parent, importBatchId }: { parent: RegistrationParent;
           <td>{child.product_family} / {child.product_variant}</td>
           <td>{child.catalogue_number || "Unavailable"}</td>
           <td><code>{child.issuing_entity}: {child.primary_udi_di}</code></td>
-          <td><span className={`status-pill compact ${child.registration_status === "Registered" ? "ok" : "warn"}`}>{child.registration_status}</span></td>
+          <td><span className={`status-pill compact ${child.registration_status === "Registered" ? "ok" : "warn"}`}>{child.registration_status === "Awaiting registration" ? "Unregistered" : child.registration_status}</span></td>
           <td>{childXmlActions(child)}{child.registration_status === "Unknown" && child.post_ready ? <div className="panel-copy">Confirm registration status before POST.</div> : null}</td>
         </tr>)}</tbody>
       </table>
@@ -54,10 +54,11 @@ export function RegistrationParentsChildren({ summary }: { summary: Registration
   const [parents] = useState(() => registrationParents(summary.groups));
   return <div>
     <p className="panel-copy">{parents.length} Basic UDI parent{parents.length === 1 ? "" : "s"} in the current filter. Open a parent to view its children.</p>
+    <p className="panel-copy">Unregistered means present in the imported Template or BasicUDI workbook but absent from recorded EUDAMED evidence. Unknown means absent from all these sources. Identity checks control XML eligibility separately.</p>
     <div className="testing-summary-table-shell">
       <table className="workbook-files-table registration-parents-table">
         <caption className="visually-hidden">Parents and children registration overview</caption>
-        <thead><tr><th>Model / Basic UDI-DI</th><th>Parent status</th><th>Children</th><th>Registered</th><th>Awaiting</th><th>Unknown</th><th>Child POST ready</th><th>Next step</th></tr></thead>
+        <thead><tr><th>Model / Basic UDI-DI</th><th>Parent status</th><th>Children</th><th>Registered</th><th>Unregistered</th><th>Unknown</th><th>Child POST ready</th><th>Next step</th></tr></thead>
         <tbody>{parents.map((parent, index) => <Fragment key={parent.key}>
           <tr>
             <td><button type="button" className="registration-parent-toggle" disabled={!parent.issuer || summary.import_batch_id == null}
@@ -66,7 +67,7 @@ export function RegistrationParentsChildren({ summary }: { summary: Registration
               <span aria-hidden="true">{expanded === parent.key ? "▾" : "▸"}</span>
               <span><strong>{parent.models.join(" · ")}</strong><code>{parent.issuer ? `${parent.issuer}: ` : ""}{parent.basicUdiDi}</code></span>
             </button></td>
-            <td><span className={`status-pill compact ${parent.registered ? "ok" : "warn"}`}>{parent.registered ? "Registered" : "Unknown"}</span></td>
+            <td><span className={`status-pill compact ${parent.registered ? "ok" : "warn"}`}>{parent.registrationStatus}</span></td>
             <td>{parent.total}</td><td>{parent.registeredChildren}</td><td>{parent.awaiting}</td><td>{parent.unknown}</td><td>{parent.childPostReady}</td><td>{parentNextStep(parent)}</td>
           </tr>
           {expanded === parent.key && summary.import_batch_id != null ? <tr id={`registration-parent-children-${index}`}><td colSpan={8}>

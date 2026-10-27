@@ -2,7 +2,7 @@ import type { RegistrationChild, RegistrationSummaryGroup } from "./types";
 
 export type RegistrationParent = {
   key: string; basicUdiDi: string; issuer: string | null; models: string[]; groupKeys: string[];
-  registered: boolean; total: number; registeredChildren: number; awaiting: number; unknown: number;
+  registered: boolean; registrationStatus: "Registered" | "Unregistered" | "Unknown"; total: number; registeredChildren: number; awaiting: number; unknown: number;
   childPostReady: number; awaitingBlocked: number; parentPostReady: boolean;
   patchReady: number; marketInfoReady: number;
 };
@@ -13,7 +13,7 @@ export function registrationParents(groups: RegistrationSummaryGroup[]): Registr
     const key = group.parent_key || group.key;
     const parent = parents.get(key) ?? {
       key, basicUdiDi: group.basic_udi_di, issuer: group.parent_issuing_entity,
-      models: [], groupKeys: [], registered: false, total: 0, registeredChildren: 0,
+      models: [], groupKeys: [], registered: false, registrationStatus: "Unknown", total: 0, registeredChildren: 0,
       awaiting: 0, unknown: 0, childPostReady: 0, awaitingBlocked: 0, parentPostReady: false,
       patchReady: 0, marketInfoReady: 0,
     };
@@ -21,6 +21,7 @@ export function registrationParents(groups: RegistrationSummaryGroup[]): Registr
     if (!parent.models.includes(model)) parent.models.push(model);
     parent.groupKeys.push(group.key);
     parent.registered ||= group.parent_registered;
+    parent.registrationStatus = parent.registered ? "Registered" : group.parent_registration_status === "Unregistered" || (group.parent_key && group.parent_issuing_entity) ? "Unregistered" : "Unknown";
     parent.parentPostReady ||= group.parent_post_ready;
     parent.total += group.total_devices;
     parent.registeredChildren += group.registered_devices;

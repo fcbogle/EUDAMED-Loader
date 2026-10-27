@@ -60,9 +60,9 @@ class ValidationRecordSelector:
                 )
                 and record.catalogue_number == catalogue_number
                 and record.xml_readiness.status == "complete"
-                and ((record.submission_operation or "").upper() == "POST" or self._imported_baseline_record(record))
             ):
-                return record
+                # Operation intent is selected here, without editing imported data.
+                return record.model_copy(update={"submission_operation": "POST"})
         raise ValueError(
             f"Catalogue number {catalogue_number} is not an XML-ready POST record for "
             f"{product_family} / {product_variant}."

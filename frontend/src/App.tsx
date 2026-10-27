@@ -1,3 +1,4 @@
+import { postSourceSelectable, hasRegistrationEvidence, registrationOperation } from "./postSourceSelection";
 import { renderMarkdownDocument } from "./markdownDocument";
 import { productionImportNotes } from "./productionImportNotes";
 import { requestWorkbookImport } from "./workbookImportRequest";
@@ -1528,7 +1529,6 @@ export function App() {
   const latestImportBatch = latestWorkbookImportSummary?.import_batch ?? null;
   const importedWorkbooks = latestWorkbookImportSummary?.imported_workbooks ?? [];
   const importTableCounts = latestWorkbookImportSummary?.table_counts ?? [];
-  const importOperationCounts = latestWorkbookImportSummary?.operation_counts ?? [];
   const canonicalProjectionStatus = latestWorkbookImportSummary?.canonical_projection_status ?? "missing";
   const mergedSourceRowCount = latestWorkbookImportSummary?.merged_source_row_count ?? 0;
   const distinctSubjectCount = latestImportBatch?.device_subject_count ?? 0;
@@ -1546,10 +1546,6 @@ export function App() {
   const healthIssues = databaseHealthSummary?.issues ?? [];
   const indexedTableCount = monitoredTables.filter((table) => table.indexes.length > 0).length;
   const foreignKeyCount = monitoredTables.reduce((sum, table) => sum + table.foreign_keys.length, 0);
-  const postDeviceSubjectCount =
-    importOperationCounts.find((entry) => entry.submission_operation === "POST")?.device_subject_count ?? 0;
-  const patchDeviceSubjectCount =
-    importOperationCounts.find((entry) => entry.submission_operation === "PATCH")?.device_subject_count ?? 0;
   const identityIssueTableCount =
     importTableCounts.find((entry) => entry.table_name === "device_identity_issue")?.row_count ??
     0;
@@ -1702,9 +1698,9 @@ export function App() {
   const selectedXmlPairRecord =
     selectedXmlVariantRecords.find(
       (record) =>
-        record.catalogue_number === selectedXmlRecordKey && (record.submission_operation ?? "").toUpperCase() === "POST",
+        record.catalogue_number === selectedXmlRecordKey && postSourceSelectable(activeEnvironment, record.submission_operation),
     ) ??
-    selectedXmlVariantRecords.find((record) => (record.submission_operation ?? "").toUpperCase() === "POST") ??
+    selectedXmlVariantRecords.find((record) => postSourceSelectable(activeEnvironment, record.submission_operation)) ??
     null;
   const readinessByDevice = useMemo(() => {
     const index = new Map<string, RecordReadiness[]>();
@@ -1734,7 +1730,7 @@ export function App() {
     return () => { cancelled = true; };
   }, [activeTab, canonicalValidation, testingSubjectSummaries, testingSummarySubjectSummaries]);
   const selectedBulkEligiblePostRecords = selectedXmlVariantRecords.filter(
-    (record) => (record.submission_operation ?? "").toUpperCase() === "POST",
+    (record) => postSourceSelectable(activeEnvironment) && readinessForRecord(record)?.post_ready,
   );
   const selectedBulkEligiblePostCount = selectedBulkEligiblePostRecords.length;
   const selectedExactAvailablePostCount = selectedBulkEligiblePostRecords.filter((record) => readinessForRecord(record)?.post_ready).length;
@@ -1844,7 +1840,7 @@ export function App() {
   const registrationStateRows = summaryGroups.map(group => ({
     key: group.key, productFamily: group.product_family, productVariant: group.product_variant,
     basicUdiDiLabel: group.parent_issuing_entity ? `${group.parent_issuing_entity}: ${group.basic_udi_di}` : group.basic_udi_di,
-    parentStatusLabel: group.parent_registered ? "Registered" : "Unknown",
+    parentStatusLabel: group.parent_registration_status ?? (group.parent_registered ? "Registered" : group.parent_key ? "Unregistered" : "Unknown"),
     parentStatusClassName: group.parent_registered ? "status-pill ok compact" : "status-pill warn compact",
     seedPostCount: group.parent_post_ready ? 1 : 0,
     eligibleChildDeviceCount: group.post_ready, childPostCount: group.child_post_ready,
@@ -2063,10 +2059,12 @@ export function App() {
       (summary) =>
         (summary.catalogue_number === record.catalogue_number ||
           (record.primary_udi_di && summary.primary_udi_di === record.primary_udi_di)) &&
-        (summary.imported_baseline_present || summary.post_success || summary.has_successful_device_post || summary.has_successful_child_post_or_patch),
+        hasRegistrationEvidence(summary),
     ),
   );
   const selectedPatchRecord = findRecordByCatalogueNumber(selectedPatchDeviceRecords, selectedXmlRecordKey);
+  const designationRecord = xmlMode === "post" ? selectedPostCandidateRecord : selectedPatchRecord ?? selectedXmlRecord;
+  const activeRegistrationOperation = registrationOperation(designationRecord ? readinessForRecord(designationRecord)?.registration_known : undefined);
   const selectedPatchWorkspaceRecord = resolvePatchWorkspaceRecord(
     selectedXmlVariantRecords,
     selectedPatchRecord?.catalogue_number ?? assessedPatchCandidateCatalogueNumber,
@@ -3456,14 +3454,14 @@ export function App() {
               <p>Workbook rows merged into an existing device subject</p>
             </div>
             <div className="summary-card summary-card-kpi summary-card-kpi-post">
-              <span className="summary-label">POST</span>
-              <strong>{latestImportBatch ? postDeviceSubjectCount : "N/A"}</strong>
-              <p>Registration subjects</p>
+              <span className="summary-label">Duplicate Rows</span>
+              <strong>{latestImportBatch ? workbookDuplicateRowCount : "N/A"}</strong>
+              <p>Source duplicates requiring review</p>
             </div>
             <div className="summary-card summary-card-kpi summary-card-kpi-patch">
-              <span className="summary-label">PATCH</span>
-              <strong>{latestImportBatch ? patchDeviceSubjectCount : "N/A"}</strong>
-              <p>Update subjects</p>
+              <span className="summary-label">Identity Issues</span>
+              <strong>{latestImportBatch ? unresolvedIdentityRowCount : "N/A"}</strong>
+              <p>Unresolved source identities</p>
             </div>
           </section>
 
@@ -3551,7 +3549,7 @@ export function App() {
                 </div>
                 <div className="queue-chip">
                   <strong>{latestImportBatch ? testingStateTables.reduce((sum, table) => sum + table.row_count, 0) : "N/A"}</strong>
-                  <span>Testing Data Rows</span>
+                  <span>Registration &amp; Audit Rows</span>
                 </div>
               </div>
               {latestImportBatch ? (
@@ -3781,7 +3779,7 @@ export function App() {
                     {selectedValidationRecord
                       ? `${selectedValidationRecord.catalogue_number ?? "No catalogue"} · ${selectedValidationRecord.trade_name ?? "No trade name"}`
                       : selectedVariantSummary
-                        ? `${selectedVariantSummary.submission_operation ?? "N/A"} scope with ${selectedVariantSummary.total_records} rows, ${selectedVariantSummary.xml_ready_records} XML-ready, and ${selectedVariantSummary.xml_blocked_records} XML-blocked.`
+                        ? `${selectedVariantSummary.total_records} rows, ${selectedVariantSummary.xml_ready_records} XML-ready, and ${selectedVariantSummary.xml_blocked_records} XML-blocked.`
                         : selectedFamilySummary
                           ? `${selectedFamilySummary.variant_count} variants in scope, ${selectedFamilySummary.total_records} rows, ${selectedFamilySummary.xml_ready_records} XML-ready.`
                           : `${validationFamilySummaries.length} in-scope families and ${validationVariantSummaries.length} variants are currently represented.`}
@@ -3810,7 +3808,7 @@ export function App() {
                 </div>
                 <div className="device-subject-status-card">
                   <span className={`status-pill ${selectedValidationStatus.className}`}>
-                    {selectedValidationRecord?.submission_operation ?? selectedVariantSummary?.submission_operation ?? "Scope"}
+                    Source data
                   </span>
                 </div>
               </div>
@@ -3933,7 +3931,7 @@ export function App() {
                               <th>Source sheet</th>
                               <th>Basic UDI variant</th>
                               <th>Basic UDI-DI</th>
-                              <th>Registration mode</th>
+                              <th>Historical source label (unused)</th>
                               <th>Review status</th>
                               <th>Review notes</th>
                             </tr>
@@ -4372,7 +4370,7 @@ export function App() {
                       <h3>Registered Anchor</h3>
                     </div>
                     <span className="status-pill ok compact">
-                      {selectedTestingAnchor?.eudamed_status ?? "Loading anchor"}
+                      {activeRegistrationOperation ? `${activeRegistrationOperation} · ${selectedTestingAnchor?.eudamed_status ?? "Active-environment registration assessed"}` : "Checking active-environment registration"}
                     </span>
                   </div>
                   {selectedTestingAnchor ? (

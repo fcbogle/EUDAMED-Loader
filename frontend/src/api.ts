@@ -117,6 +117,8 @@ export type RecordReadiness = {
   primary_udi_di: string | null;
   basic_udi_di: string | null;
   parent_registered: boolean;
+  registration_known?: boolean;
+  operational_operation?: "POST" | "PATCH";
   post_ready: boolean;
   child_post_ready: boolean;
   patch_ready: boolean;
