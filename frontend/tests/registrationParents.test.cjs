@@ -7,7 +7,7 @@ const output = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/r
   { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText;
 const moduleUnderTest = { exports: {} };
 new Function('require', 'module', 'exports', output)(require, moduleUnderTest, moduleUnderTest.exports);
-const { registrationParents, parentNextStep, childXmlActions } = moduleUnderTest.exports;
+const { registrationParents, parentNextStep, childXmlActions, matchesPatchReviewScope } = moduleUnderTest.exports;
 function group(extra = {}) {
   return {key: 'model1', parent_key: 'GS1:B1', basic_udi_di: 'B1', parent_issuing_entity: 'GS1',
     product_family: 'Family', product_variant: 'Model', parent_registered: false, parent_post_ready: true,
@@ -21,7 +21,9 @@ test('models sharing the same issuer-qualified parent form one row, while issuer
   assert.equal(parents[0].total, 110);
   assert.equal(parents[0].awaiting, 110);
   assert.deepEqual(parents[0].groupKeys, ['model1', 'model2']);
-  assert.equal(parents[0].models.length, 2);
+  assert.deepEqual(parents[0].models, ['Model', 'Other']);
+  assert.equal(parents[0].scopes[1].productVariant, 'Other');
+  assert.equal(parents[1].scopes[0].issuer, 'HIBCC');
 });
 test('a seed acceptance changes the next step from parent POST to remaining child POST', () => {
   const before = registrationParents([group()])[0];
@@ -48,4 +50,14 @@ test('child XML labels distinguish seed, child-only POST, updates and unavailabl
   assert.equal(childXmlActions({post_ready: true, child_post_ready: true}), 'Child POST ready');
   assert.equal(childXmlActions({patch_ready: true, market_info_ready: true}), 'PATCH ready · Market Info ready');
   assert.equal(childXmlActions({}), 'No available XML action');
+});
+
+
+test('review handover refuses another environment, parent, variant or issuing entity', () => {
+  const scope = { environment: 'dev', productFamily: 'Family', productVariant: 'Linx', basicUdiDi: 'B1', issuer: 'GS1' };
+  const current = { ...scope, issuers: ['GS1'] };
+  assert.equal(matchesPatchReviewScope(scope, current), true);
+  for (const changed of [{ environment: 'prod' }, { productFamily: 'Other' }, { productVariant: 'Javelin' }, { basicUdiDi: 'B2' }, { issuers: ['HIBCC'] }, { issuers: [] }]) {
+    assert.equal(matchesPatchReviewScope(scope, { ...current, ...changed }), false);
+  }
 });

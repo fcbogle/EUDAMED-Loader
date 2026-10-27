@@ -797,6 +797,7 @@ export type BulkPatchPostedEntry = {
 };
 
 export type BulkPatchCurrentState = {
+  version?: string | null;
   trade_name?: string | null;
   base_quantity?: number | null;
   sterile?: boolean | null;

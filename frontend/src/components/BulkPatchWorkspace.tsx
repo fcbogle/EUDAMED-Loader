@@ -1,7 +1,7 @@
 import { CatalogueSelection } from "./CatalogueSelection";
 import type { Dispatch, SetStateAction } from "react";
 
-import type { BulkPatchPostedEntry, BulkPatchPostedParentGroup, CriticalWarningCodeOption, XmlValidationResult } from "../types";
+import type { BulkPatchPreview, BulkPatchPostedEntry, BulkPatchPostedParentGroup, CriticalWarningCodeOption, XmlValidationResult } from "../types";
 import { XmlAssessmentCard } from "./XmlAssessmentCard";
 import { XmlStatusStrip } from "./XmlStatusStrip";
 import { XmlWorkspaceHeader } from "./XmlWorkspaceHeader";
@@ -14,6 +14,11 @@ type PatchScenarioOption = {
 type BulkPatchScopeMode = "all_posted" | "next_10" | "next_25" | "selected_catalogue_numbers" | "import_catalogue_list";
 
 type BulkPatchWorkspaceProps = {
+  reviewScopeLabel?: string | null;
+  reviewScopeMatches?: boolean;
+  onClearReviewScope?: () => void;
+  selectedEntries?: BulkPatchPostedEntry[];
+  preview?: BulkPatchPreview | null;
   familyVariantLabel: string;
   isRefreshing: boolean;
   displayedBulkPatchParentOptions: BulkPatchPostedParentGroup[];
@@ -60,6 +65,7 @@ type BulkPatchWorkspaceProps = {
 };
 
 export function BulkPatchWorkspace({
+  reviewScopeLabel, reviewScopeMatches = true, onClearReviewScope, selectedEntries = [], preview,
   familyVariantLabel,
   isRefreshing,
   displayedBulkPatchParentOptions,
@@ -113,6 +119,15 @@ export function BulkPatchWorkspace({
             statusLabel="Bulk PATCH"
             subtitle="Review the registered parent scope, PATCH device selection, and scenario change set for this family and variant."
           />
+          {reviewScopeLabel ? <div className="workflow-note" role={reviewScopeMatches ? "status" : "alert"}>
+            <strong>Reviewed group: {reviewScopeLabel}</strong>
+            <span>{reviewScopeMatches ? "Select the devices to assess. No devices were selected automatically." : "The current selection differs from the reviewed group. Return to that group or clear this review before generating XML."}</span>
+            <button type="button" className="ghost-button" onClick={onClearReviewScope}>Clear reviewed group</button>
+          </div> : null}
+          <div className="workflow-note">
+            <strong>{familyVariantLabel} · Basic UDI-DI: {selectedBulkPatchParentGroup?.basic_udi_di ?? "Loading / unavailable"}</strong>
+            <span>{selectedBulkPatchSelectedCount} selected · {bulkPatchPostedEntries.length} registered candidates · Scenario: {patchScenarioOptions.find(option => option.id === selectedPatchScenarioId)?.label}</span>
+          </div>
           <div className="bulk-patch-layout">
             <div className="bulk-patch-config-column">
               <XmlAssessmentCard
@@ -191,7 +206,7 @@ export function BulkPatchWorkspace({
                   <CatalogueSelection
                     key={`${familyVariantLabel}|${selectedBulkPatchParentGroup?.basic_udi_di}`}
                     label={familyVariantLabel}
-                    entries={bulkPatchPostedEntries.map(entry => ({ ...entry, detail: `Current version ${entry.latest_version ?? "Unconfirmed"}` }))}
+                    entries={bulkPatchPostedEntries.map(entry => ({ ...entry, detail: `Current version ${entry.current_state?.version ?? entry.latest_version ?? "Unconfirmed"}` }))}
                     selected={selectedBulkPatchCatalogueNumbers}
                     onApply={values => setSelectedBulkPatchCatalogueNumbers(values)}
                   />
@@ -419,6 +434,30 @@ export function BulkPatchWorkspace({
               </XmlAssessmentCard>
             </div>
           </div>
+          <section aria-label="PATCH device review">
+            <h3>Review devices before generation</h3>
+            <p className="panel-copy">Registered candidates for this group. Preview rechecks the selected devices and shows exclusions; download rechecks eligibility again.</p>
+            <p className="panel-copy">Proposed change: {selectedPatchScenarioSummary} Review the scenario values above before previewing.</p>
+            <div className="testing-summary-table-shell bulk-patch-device-review">
+              <table className="workbook-files-table">
+                <caption className="visually-hidden">Bulk PATCH device identities and accepted versions</caption>
+                <thead><tr><th>Catalogue number</th><th>Device UDI-DI</th><th>Accepted version</th><th>Current trade name / quantity</th><th>Review result</th></tr></thead>
+                <tbody>{bulkPatchPostedEntries.map((entry, index) => {
+                  const selected = selectedEntries.some(item => item.catalogue_number === entry.catalogue_number && item.primary_udi_di === entry.primary_udi_di);
+                  const included = preview?.included_records.find(item => item.catalogue_number === entry.catalogue_number && item.primary_udi_di === entry.primary_udi_di);
+                  const excluded = preview?.excluded_records.find(item => item.catalogue_number === entry.catalogue_number && (!item.primary_udi_di || item.primary_udi_di === entry.primary_udi_di));
+                  return <tr key={`${entry.catalogue_number}|${entry.primary_udi_di}|${index}`}>
+                    <td>{entry.catalogue_number ?? "Unavailable"}</td><td><code>{entry.primary_udi_di ?? "Unavailable"}</code></td>
+                    <td>{entry.current_state?.version ?? entry.latest_version ?? "Unconfirmed"}</td>
+                    <td>{entry.current_state?.trade_name ?? "Unavailable"} / {entry.current_state?.base_quantity ?? "Unavailable"}</td>
+                    <td>{excluded ? excluded.reason_message : included ? `Included · version ${included.base_version ?? "?"} → ${included.derived_version ?? "?"}` : selected ? "Selected · preview required" : "Not selected"}</td>
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>
+            {!bulkPatchPostedEntries.length ? <p>No registered candidates loaded for this group. Refresh or review the parent selection.</p> : null}
+            {preview?.excluded_records.length ? <div role="status"><strong>Excluded from this preview</strong><ul>{preview.excluded_records.map((entry, index) => <li key={index}>{entry.catalogue_number ?? "Unavailable"} · {entry.primary_udi_di ?? "UDI-DI unavailable"}: {entry.reason_message}</li>)}</ul></div> : null}
+          </section>
           <XmlStatusStrip
             validationValid={selectedBatchValidation?.valid ?? null}
             validationStatusLabel={selectedBatchValidation ? (selectedBatchValidation.valid ? "Schema valid" : "Schema invalid") : "Awaiting preview"}

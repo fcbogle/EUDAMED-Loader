@@ -1,8 +1,11 @@
 import type { RegistrationChild, RegistrationSummaryGroup } from "./types";
 
+export type PatchReviewScope = { productFamily: string; productVariant: string; basicUdiDi: string; issuer: string };
+
 export type RegistrationParent = {
   key: string; basicUdiDi: string; issuer: string | null; models: string[]; groupKeys: string[];
   registered: boolean; registrationStatus: "Registered" | "Unregistered" | "Unknown"; total: number; registeredChildren: number; awaiting: number; unknown: number;
+  scopes: Array<PatchReviewScope & { patchReady: number; registeredChildren: number }>;
   childPostReady: number; awaitingBlocked: number; parentPostReady: boolean;
   patchReady: number; marketInfoReady: number;
 };
@@ -13,11 +16,12 @@ export function registrationParents(groups: RegistrationSummaryGroup[]): Registr
     const key = group.parent_key || group.key;
     const parent = parents.get(key) ?? {
       key, basicUdiDi: group.basic_udi_di, issuer: group.parent_issuing_entity,
-      models: [], groupKeys: [], registered: false, registrationStatus: "Unknown", total: 0, registeredChildren: 0,
+      models: [], scopes: [], groupKeys: [], registered: false, registrationStatus: "Unknown", total: 0, registeredChildren: 0,
       awaiting: 0, unknown: 0, childPostReady: 0, awaitingBlocked: 0, parentPostReady: false,
       patchReady: 0, marketInfoReady: 0,
     };
-    const model = `${group.product_family} / ${group.product_variant}`;
+    const model = group.product_variant;
+    if (group.parent_issuing_entity && group.parent_key) parent.scopes.push({ productFamily: group.product_family, productVariant: group.product_variant, basicUdiDi: group.basic_udi_di, issuer: group.parent_issuing_entity, patchReady: group.patch_ready, registeredChildren: group.registered_devices });
     if (!parent.models.includes(model)) parent.models.push(model);
     parent.groupKeys.push(group.key);
     parent.registered ||= group.parent_registered;
@@ -53,4 +57,8 @@ export function childXmlActions(child: RegistrationChild): string {
   if (child.patch_ready) actions.push("PATCH ready");
   if (child.market_info_ready) actions.push("Market Info ready");
   return actions.join(" · ") || "No available XML action";
+}
+
+export function matchesPatchReviewScope(target: (PatchReviewScope & { environment: string }) | null, current: { environment: string | null; productFamily: string | null; productVariant: string | null; basicUdiDi: string; issuers: Array<string | null> }): boolean {
+  return !target || (target.environment === current.environment && target.productFamily === current.productFamily && target.productVariant === current.productVariant && target.basicUdiDi === current.basicUdiDi && current.issuers.length > 0 && current.issuers.every(issuer => issuer === target.issuer));
 }

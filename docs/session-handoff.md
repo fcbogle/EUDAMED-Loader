@@ -1,6 +1,49 @@
 # Session Handoff
 
-Updated October 25, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated October 27, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## October 27 — Identify Groups and Review Bulk PATCH Devices
+
+Implemented on `feature/import-management-reporting` in the development worktree.
+Parents & Children now leads with variant names (for example Linx), with family
+and issuer-qualified Basic UDI-DI underneath. Parent pills explicitly say Parent
+registered/unregistered/unknown, independently of child registration. The table
+adds PATCH-ready counts alongside child POST readiness.
+
+Review PATCH devices opens the exact family, variant and Basic UDI-DI in Bulk
+PATCH. Shared parents offer separate review actions for their model scopes.
+Groups without registered children have the review button disabled. Handover
+starts in manual catalogue selection with no devices selected, clears the old
+preview/assessment, and preserves the requested parent while cohorts load rather
+than falling back to another parent. Environment, family, variant, parent and
+issuer checks block generation if the reviewed scope no longer matches. Clearing
+the reviewed group explicitly releases that navigation context; choosing another
+parent also clears it. No new registration or scenario eligibility rules were added.
+
+Bulk PATCH displays the active model/parent, selected count and scenario. Its
+device review table lists the registered candidates, catalogue numbers, Device
+UDI-DIs, current accepted snapshot versions, trade names and quantities, plus
+selection status. Preview supplies exact included base/derived versions and
+excluded identifiers/reasons. Registered candidates are not a promise of scenario
+eligibility; preview and download retain existing server-side eligibility,
+accepted-state, XSD, lineage and stale-state checks.
+
+Verification: **128 frontend tests**, TypeScript/Vite build and **37 backend
+tests** passed (`test_xml_preparation.py`, `test_bulk_parent_selection.py`). Tests
+cover exact group action arguments, issuer-separated parents, cross-environment
+and changed-scope rejection, accepted versions, included/excluded device display,
+and the existing backend bulk preparation/selection safeguards. Main remains
+clean; Production's database matches the previously recorded fingerprint. This
+increment changed frontend code/docs/tests only and did not open operational
+databases through application services. The existing bundle-size and FastAPI
+deprecation warnings remain. Changes are uncommitted.
+
+Owner browser review: restart Dev/refresh; open Registration State → Parents &
+Children → Review PATCH devices for a model; confirm the parent and empty manual
+selection; choose catalogue numbers and scenario values; preview and inspect
+device identifiers, versions and exclusions before downloading. Playground upload
+and subsequent success-XML review remain manual. The shared UI will reach
+Production only through a separately reviewed merge/release, using its own data.
 
 ## Important — Dev Test Cleanup Changed Legacy POST-Review Entries
 

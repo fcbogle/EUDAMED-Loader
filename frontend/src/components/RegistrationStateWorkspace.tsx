@@ -27,6 +27,7 @@ type RegistrationStateRow = {
 };
 
 type RegistrationStateWorkspaceProps = {
+  onReviewPatch?: (scope: import("../registrationParents").PatchReviewScope) => void;
   registrationSummary: RegistrationSummary | null;
   isLoadingRegistrationSummary: boolean;
   registrationSummaryError: string | null;
@@ -50,6 +51,7 @@ type RegistrationStateWorkspaceProps = {
 
 export function RegistrationStateWorkspace({
   registrationSummary,
+  onReviewPatch,
   isLoadingRegistrationSummary,
   registrationSummaryError,
   onRefreshCounts,
@@ -220,7 +222,7 @@ export function RegistrationStateWorkspace({
             <button type="button" className="ghost-button" disabled={isLoadingRegistrationSummary} onClick={onRefreshCounts}>Refresh counts</button>
           </div>
           {!isLoadingRegistrationSummary && !registrationSummaryError && registrationSummary?.import_batch_id != null ?
-            <RegistrationParentsChildren key={registrationSummary.calculated_at} summary={registrationSummary} /> :
+            <RegistrationParentsChildren key={registrationSummary.calculated_at} summary={registrationSummary} onReviewPatch={onReviewPatch} /> :
             !isLoadingRegistrationSummary && !registrationSummaryError ? <p>Import a workbook to view parents and children.</p> : null}
         </>}
         </div>

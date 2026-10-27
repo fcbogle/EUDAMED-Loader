@@ -4415,3 +4415,7 @@ a.ghost-button:visited {
 
 .registration-count-details { margin: 10px 0; font-size: 0.82rem; }
 .registration-count-details > summary { width: fit-content; cursor: pointer; font-weight: 600; }
+
+.registration-group-family { display: block; margin-top: 4px; color: #527580; font-weight: 400; }
+.registration-patch-review { display: block; margin-top: 8px; }
+.bulk-patch-device-review { max-height: 420px; overflow: auto; margin-top: 12px; }

@@ -9,6 +9,21 @@ in [production-importer-design.md](production-importer-design.md).
 
 ## Registration views
 
+Updated 27 October 2026: Parents & Children shows variant names prominently,
+with family and Basic UDI-DI beneath. Parent status pills explicitly name the
+parent. PATCH-ready counts and a **Review PATCH devices** action complement the
+existing POST guidance. For models sharing a parent, separate actions preserve
+the exact family/variant scope. A PATCH review opens Bulk PATCH with that parent
+and an empty manual selection; no devices are selected automatically.
+
+In Bulk PATCH, review registered candidates by catalogue number, Device UDI-DI,
+accepted snapshot version, current trade name and quantity. Select devices and
+scenario values, then preview to see included versions and excluded devices with
+reasons. Candidate registration and PATCH eligibility remain separate. A changed
+reviewed scope blocks generation until restored or explicitly cleared. Existing
+backend preview/download checks remain authoritative. This applies to the shared
+feature code for Dev and Production; main/Production rollout is separate.
+
 Registration State has two internal tabs in both Dev and Production. **Registration
 State** is the existing counts and operation table and remains the default.
 **Parents & Children** groups the currently filtered model rows by issuer plus

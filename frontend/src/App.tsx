@@ -1,3 +1,4 @@
+import { matchesPatchReviewScope } from "./registrationParents";
 import { postSourceSelectable, hasRegistrationEvidence, registrationOperation } from "./postSourceSelection";
 import { renderMarkdownDocument } from "./markdownDocument";
 import { productionImportNotes } from "./productionImportNotes";
@@ -657,6 +658,7 @@ export function App() {
   const [selectedValidationReviewTab, setSelectedValidationReviewTab] = useState<ValidationReviewTab>("sourceSheetBasicUdi");
   const [selectedDeviceSubjectFamily, setSelectedDeviceSubjectFamily] = useState<string>("");
   const [selectedDeviceSubjectVariant, setSelectedDeviceSubjectVariant] = useState<string>("");
+  const [patchReviewTarget, setPatchReviewTarget] = useState<(import("./registrationParents").PatchReviewScope & { environment: string }) | null>(null);
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
   const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
   const [selectedRegistrationStateFamily, setSelectedRegistrationStateFamily] = useState<string>("");
@@ -1776,7 +1778,7 @@ export function App() {
   const displayedBulkPatchParentOptions = bulkPatchPostedParents;
   const selectedBulkPatchParentGroup =
     displayedBulkPatchParentOptions.find((group) => group.basic_udi_di === selectedBulkPatchBasicUdiDi) ??
-    displayedBulkPatchParentOptions[0] ??
+    (patchReviewTarget ? null : displayedBulkPatchParentOptions[0]) ??
     null;
   const displayedBulkMarketInfoParentOptions =
     bulkMarketInfoPostedParents;
@@ -1889,7 +1891,8 @@ export function App() {
   const selectedBulkPatchEligibleCount =
     selectedBulkPatchParentGroup?.posted_child_count ??
     bulkPatchPostedEntries.length;
-  const canRunBulkPatch =
+  const patchReviewMatches = matchesPatchReviewScope(patchReviewTarget, { environment: activeEnvironment, productFamily: selectedXmlFamily, productVariant: selectedXmlVariant, basicUdiDi: selectedBulkPatchBasicUdiDi, issuers: selectedXmlVariantRecords.map(record => record.issuing_entity) });
+  const canRunBulkPatch = patchReviewMatches &&
     Boolean(selectedBulkPatchParentGroup) &&
     (
       (bulkPatchScopeMode === "all_posted" && selectedBulkPatchEligibleCount > 0) ||
@@ -2128,6 +2131,7 @@ export function App() {
       )
     : [];
   useEffect(() => {
+    if (patchReviewTarget) return; // Preserve the requested parent while the new cohort loads.
     const parentOption = displayedBulkPatchParentOptions[0]?.basic_udi_di ?? "";
     if (
       selectedBulkPatchBasicUdiDi &&
@@ -2136,7 +2140,7 @@ export function App() {
       return;
     }
     setSelectedBulkPatchBasicUdiDi(parentOption);
-  }, [displayedBulkPatchParentOptions, selectedBulkPatchBasicUdiDi]);
+  }, [displayedBulkPatchParentOptions, selectedBulkPatchBasicUdiDi, patchReviewTarget]);
   useEffect(() => {
     const parentOption = displayedBulkMarketInfoParentOptions[0]?.basic_udi_di ?? "";
     if (
@@ -4840,11 +4844,17 @@ export function App() {
                 ) : xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo" ? (
                   xmlMode === "bulkPatch" ? (
                     <BulkPatchWorkspace
+                      reviewScopeLabel={patchReviewTarget ? `${patchReviewTarget.productVariant} · ${patchReviewTarget.issuer}: ${patchReviewTarget.basicUdiDi}` : null}
+                      reviewScopeMatches={patchReviewMatches}
+                      onClearReviewScope={() => { setPatchReviewTarget(null); setSelectedBulkPatchCatalogueNumbers([]); setXmlBulkPatchPreview(null); }}
+                      selectedEntries={selectedBulkPatchEntries}
+                      preview={xmlBulkPatchPreview}
                       familyVariantLabel={`${selectedXmlFamilyLabel} / ${selectedXmlVariantLabel}`}
                       isRefreshing={isLoadingXmlOperationAssessment}
                       displayedBulkPatchParentOptions={displayedBulkPatchParentOptions}
                       selectedBulkPatchParentGroup={selectedBulkPatchParentGroup}
                       onSelectParent={(basicUdiDi) => {
+                        setPatchReviewTarget(null);
                         setSelectedBulkPatchBasicUdiDi(basicUdiDi);
                         setSelectedXmlChunkSequence(1);
                         setXmlBulkPatchPreview(null);
@@ -5083,6 +5093,21 @@ export function App() {
           )
         ) : (
           <RegistrationStateWorkspace
+            onReviewPatch={scope => {
+              if (!activeEnvironment) return;
+              setPatchReviewTarget({ ...scope, environment: activeEnvironment });
+              setSelectedXmlFamily(scope.productFamily);
+              setSelectedXmlVariant(scope.productVariant);
+              setSelectedBulkPatchBasicUdiDi(scope.basicUdiDi);
+              setBulkPatchScopeMode("selected_catalogue_numbers");
+              setSelectedBulkPatchCatalogueNumbers([]);
+              setBulkPatchImportText("");
+              setSelectedXmlChunkSequence(1);
+              setXmlBulkPatchPreview(null);
+              setXmlOperationAssessment(null);
+              setXmlMode("bulkPatch");
+              setActiveTab("xml");
+            }}
             registrationSummary={registrationSummary}
             isLoadingRegistrationSummary={isLoadingRegistrationSummary}
             registrationSummaryError={registrationSummaryError}
