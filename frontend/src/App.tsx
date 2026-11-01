@@ -19,6 +19,8 @@ import documentationIndexDocumentation from "../../docs/README.md?raw";
 import projectInstructionsDocumentation from "../../AGENTS.md?raw";
 import schemaProfilesDocumentation from "../../data/schema_profiles/README.md?raw";
 import environmentProfilesDocumentation from "../../docs/environment-profiles.md?raw";
+import developmentProductionDocumentation from "../../docs/development-and-production.md?raw";
+import registrationPolicyDocumentation from "../../docs/registration-driven-operation-policy.md?raw";
 import productionWorkbookContractDocumentation from "../../docs/production-import-workbook-design.md?raw";
 import productionPreparationDocumentation from "../../docs/production-import-preparation.md?raw";
 import productionImporterDesignDocumentation from "../../docs/production-importer-design.md?raw";
@@ -501,6 +503,8 @@ type DocumentationSection = {
     | "sessionHandoff"
     | "softwareEngineeringPatterns"
     | "documentationIndex"
+    | "developmentProduction"
+    | "registrationPolicy"
     | "environmentProfiles"
     | "devImportGuide"
     | "devImportSafety"
@@ -796,6 +800,18 @@ export function App() {
       markdown: documentationIndexDocumentation,
     },
     {
+      id: "developmentProduction",
+      title: "Development And Production Worktrees",
+      sourcePath: "docs/development-and-production.md",
+      markdown: developmentProductionDocumentation,
+    },
+    {
+      id: "registrationPolicy",
+      title: "Registration And Operation Policy",
+      sourcePath: "docs/registration-driven-operation-policy.md",
+      markdown: registrationPolicyDocumentation,
+    },
+    {
       id: "environmentProfiles",
       title: "Dev and Prod Configuration",
       sourcePath: "docs/environment-profiles.md",
@@ -995,7 +1011,7 @@ export function App() {
     {
       id: "verification",
       title: "Verification And Decision Support",
-      sectionIds: ["registrationCounts", "marketInfoParity", "testingScenarios", "softwareEngineeringPatterns"],
+      sectionIds: ["registrationPolicy", "registrationCounts", "marketInfoParity", "testingScenarios", "softwareEngineeringPatterns"],
     },
     {
       id: "production",
@@ -1005,7 +1021,7 @@ export function App() {
     {
       id: "operations",
       title: "Configuration And Publishing",
-      sectionIds: ["environmentProfiles", "schemaProfiles", "publishingRemotes"],
+      sectionIds: ["developmentProduction", "environmentProfiles", "schemaProfiles", "publishingRemotes"],
     },
     {
       id: "historical",

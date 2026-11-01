@@ -1,5 +1,10 @@
 # Playground baseline assessment — October 25, 2026
 
+> Historical checkpoint. Counts, findings and applied/no-write outcomes below
+> describe this dated operation. Its older UI instructions are superseded by
+> [Import Data in Dev](source-batch-receipt.md); do not rerun it as the current
+> workflow or treat it as new authorization to reconcile a database.
+
 The approved first stage is implemented: **read-only comparison**, with Excel and
 JSON audit downloads in Dev. No accepted baseline or review approval has been
 written. Bringing Dev into line with these exports remains a subsequent reviewed

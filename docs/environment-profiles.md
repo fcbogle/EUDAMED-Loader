@@ -4,7 +4,7 @@ Implemented 19 September 2026: explicit startup profile selection, separate stor
 configuration, and checks before services open SQLite. The current environment is
 **Dev**, targeting Playground. UI environment labels are implemented through
 `GET /api/environment` and the shared EnvironmentBanner. The controlled Production
-baseline importer is implemented as a separate service module. Documentation reviewed 9 October 2026.
+baseline importer is implemented as a separate service module. Documentation reviewed 1 November 2026 against the feature worktree.
 
 ## Select a profile at startup
 
@@ -57,12 +57,21 @@ disabled: use literal values, not `${VARIABLE}` references.
 | Backups | `data/testing/backups` | `data/prod/backups` |
 | Normalization rules | `config/normalization` | `data/prod/normalization` |
 | Reports | `docs/reports` | `data/prod/reports` |
+| Dev batch root | `data/dev/import-batches` | The new upload flow is Dev-only; Production rollout is separate. |
 | Artifact directory | `data/dev/artifacts` | `data/prod/artifacts` |
 
 The existing `EUDAMED_TESTING_STATE_DB_PATH` and
 `EUDAMED_TESTING_STATE_BACKUP_DIR` names remain supported for both environments to
 avoid changing persistence callers. They select separate databases, not a separate
 schema design. Source exclusions, including Accessories/Footspares, remain unchanged.
+
+`EUDAMED_DEV_INPUT_BATCH_ROOT` selects the new Dev upload/review/batch storage.
+The current worktree profile points to the original project data directory, keeping
+one existing Playground database. Uploaded working revisions live under
+`source-reviews/`; published batches use dated subdirectories. See
+[Import Data in Dev](source-batch-receipt.md) and
+[Development and Production](development-and-production.md). This does not move
+legacy Dev inputs or any Production files.
 
 `EUDAMED_NORMALIZATION_DIR`, `EUDAMED_REPORTS_DIR` and `EUDAMED_ARTIFACTS_DIR`
 are configurable. Normalization rules must be isolated because the API can edit
@@ -105,8 +114,9 @@ import acceptance data. Production preparation inputs have since been supplied:
 `data/prod/template/` (including the updated parent reference),
 `data/prod/eudamed_xml/` and generated outputs in `data/prod/import_file/`. See
 [preparation instructions](production-import-preparation.md) and the
-[importer design](production-importer-design.md). Backend-confirmed Prod selects the prepared-workbook importer; Dev keeps raw
-workbook import. `.env.prod.example` now includes:
+[importer design](production-importer-design.md). Backend-confirmed Prod selects the configured prepared-workbook importer.
+The legacy Dev raw-workbook importer remains separate from the new Import Data
+workflow, which receives browser files and prepares a reviewed batch/workbook. `.env.prod.example` now includes:
 
 ```dotenv
 EUDAMED_PRODUCTION_IMPORT_WORKBOOK=data/prod/import_file/production-import.xlsx
@@ -126,8 +136,9 @@ it; confirmation initializes tables and persists the import transaction.
 Production UI uses Import Production Workbook, assessment, confirmation and JSON
 reports. Accepted export baselines remain separate from successful upload events.
 Synthetic regression covers the official Prod 3.0.30 schema and existing Dev
-workflows; the supplied workbook was assessed without database population. First
-local Production startup and reviewed import remain pending.
+workflows; the original assessment was read-only. The first local Production startup and
+owner-reviewed import subsequently completed on 10 October. Do not repeat initial
+population or replace the existing database merely to follow this older checkpoint.
 
 The Dev package is explicitly a **3.0.30-derived bundle with a 3.0.32 message
 constraint**, not an official 3.0.32 release. See

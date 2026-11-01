@@ -1,4 +1,13 @@
-# Testing Dev batch checks and workbook creation
+# Superseded Dev workbook preparation test procedure
+
+> Superseded 1 November 2026. The complete procedure below is retained as a
+> historical file-only implementation/test checkpoint. Its old menus, disabled
+> import controls, assessment panel and download endpoints are no longer the
+> current Dev workflow. Do not use it as an operator runbook. Use
+> [Import Data in Dev](source-batch-receipt.md) and
+> [Dev import safeguards](dev-workbook-confirmation.md) instead.
+
+## Historical test record
 
 This increment connects Import Management to existing verified Dev batches. It
 does not upload new browser files, assess the workbook against SQLite, import

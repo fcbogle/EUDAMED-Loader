@@ -15,7 +15,7 @@ Prepared 19 September 2026.
 
 ## Profile selection
 
-Dev/Prod configuration now selects these profile directories. Dev defaults to `dev-3.0.32-derived`; Prod requires explicit configuration selecting `prod-3.0.30`. The old `data/schemas` tree is retained. Separate roots keep recursive schema inventory scans limited to the selected bundle. See [environment profiles](../../docs/environment-profiles.md) for startup commands and isolation checks. No production database or baseline has been created.
+Dev/Prod configuration now selects these profile directories. Dev defaults to `dev-3.0.32-derived`; Prod requires explicit configuration selecting `prod-3.0.30`. The old `data/schemas` tree is retained. Separate roots keep recursive schema inventory scans limited to the selected bundle. See [environment profiles](../../docs/environment-profiles.md) for startup commands and isolation checks. Creating the schema profiles did not create a database or baseline at that September checkpoint. The separately reviewed first local Production import completed on 10 October; schema provenance is not a database-initialization procedure.
 
 The selected environment binds these settings together:
 

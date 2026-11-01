@@ -19,9 +19,10 @@ The current data needs to be read at several levels:
 - physical manufactured unit
   - not the main target of current registration messages; this would be distinguished by production identifiers such as serial or batch context
 
-## Current Dataset Reading
+## Historical Dev dataset example
 
-The current in-scope workbook set contains:
+The retained Dev Template checkpoint described here contained the following;
+these are not live totals for every environment or import:
 
 - `8424` in-scope device rows
 - `8424` distinct primary `UDI-DI` values
@@ -53,83 +54,41 @@ Example:
 
 Both records can share the same Basic UDI while still having different UDI-DIs.
 
-## What Current XML Generation Targets
+## Message targets and selection
 
-Current XML generation targets one individual UDI-DI device record at a time.
+Parent identity is issuing entity plus Basic UDI-DI; child identity is issuing
+entity plus UDI-DI. DEVICE.POST can seed a parent with its first child; child-only
+UDI_DI.POST adds a device under a registered parent. A separate parent-only bulk
+backend/API operation exists. UDI_DI.PATCH updates a device and MARKET_INFO.PUT
+maintains that device's market-information collection. Bulk packaging does not
+turn a catalogue number into regulatory identity.
 
-That means:
+The shared Device Model selector sets family/variant context. Catalogue numbers
+are business references and selection aids. Review exact UDI-DIs when selecting
+individual or bulk targets. Unresolved catalogue collisions block the new Dev
+source import; existing ambiguous selection/readiness guards remain separate.
 
-- `POST` targets one individual UDI-DI device record being created
-- `PATCH` targets one individual UDI-DI device record being updated
-- `BATCH` generation is only a packaging convenience that emits many record-level messages for one selected variant scope
+## Proposed values and accepted evidence
 
-So the batch scope is variant-level, but the message scope remains record-level.
+Templates/BasicUDI sources describe proposed data. XML extracts provide a dated
+view of recorded EUDAMED state; they do not provide live synchronization or prove
+parent-only registration absence. Explicit imported baselines remain distinguishable
+from actual successful acknowledgements. Neither a source POST/PATCH field nor
+preview generation establishes registration.
 
-## Selection Keys In The App
+The current labels are Registered when supported by recorded EUDAMED evidence,
+Unregistered when present in imported Template/BasicUDI data but absent from that
+evidence, and Unknown outside those sources. Identity problems and XML readiness
+are separate. Interpret each label in the active environment and agreed source scope.
 
-The current app typically selects a record using:
+## PATCH and Market Info
 
-- `Product Family`
-- `Product Variant`
-- `Catalogue Number`
+The former paired POST/equivalent-PATCH comparison is historical. Patch XML is a
+controlled scenario workflow using the selected device's accepted lineage.
+Equivalent First Patch has a special version-2 contract; other operations use
+their assessed state/version controls. PATCH must retain applicable accepted
+countries. Single and Bulk Market Info are implemented standalone operations with
+separate accepted/observed market-version handling.
 
-But the actual EUDAMED-facing record identity inside the XML is the UDI-DI identifier, not the catalogue number.
-
-Current working distinction:
-
-- `catalogue_number`
-  - business/source reference and app selection aid
-- `udidi:identifier`
-  - the actual UDI-DI record identity in XML
-- `udidi:basicUDIIdentifier`
-  - the shared Basic UDI parent context
-
-## Current POST/PATCH Pairing
-
-The current paired XML path is a test and comparison flow.
-
-It does not claim that all future update behavior should be modeled this way.
-
-Current pair behavior:
-
-- generate one `POST` message for a current XML-ready POST-classified record
-- generate one equivalent first `PATCH` message for the same record
-- keep the `PATCH` structurally close to the `POST` for comparison
-
-This is useful for validating the first-update representation alongside the now-separate standalone market-info service flow.
-
-## Current MarketInfos Handling
-
-Within the current `POST` and equivalent first `PATCH`, `marketInfos` is rendered as a repeated child collection inside the UDI-DI payload.
-
-For the current paired test path:
-
-- the `POST` includes the current `marketInfos` structure
-- the equivalent first `PATCH` intentionally repeats the same `marketInfos` structure unchanged
-- this is a deliberate comparison/testing choice
-
-So the current pairing logic treats `marketInfos` as part of the equivalent first update representation, even though a separate standalone market-information message flow now also exists in the XML layer.
-
-## Future Market Information Direction
-
-The current evidence and implementation now support a separate market-information service path:
-
-- `MARKET_INFO`
-- operation `PUT`
-- payload entity `DTXMarketInfo`
-
-That future service still appears to target one UDI-DI record at a time, identified by `uDIDIIdentifier`, but it targets that record's market-information collection rather than the broader UDI-DI representation.
-
-So the likely long-term interpretation is:
-
-- `POST` and `UDI_DI.PATCH` operate on one UDI-DI device record
-- `MARKET_INFO.PUT` operates on one UDI-DI device record's market-info collection
-
-## Summary
-
-- family and variant are grouping scopes in the app
-- Basic UDI-DI is shared parent regulatory context
-- UDI-DI is the current record-level XML target
-- batch generation groups many record-level messages under one variant selection
-- paired `POST`/`PATCH` generation is currently a structural comparison flow
-- current `marketInfos` duplication between paired `POST` and `PATCH` is intentional for testing, not yet the final standalone market-info design
+See [XML Generation](xml-generation.md), [Testing Scenarios](testing-scenarios.md)
+and [registration policy](../../../../docs/registration-driven-operation-policy.md).

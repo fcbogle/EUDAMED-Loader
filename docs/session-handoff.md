@@ -1,6 +1,54 @@
 # Session Handoff
 
-Updated October 31, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated November 1, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## November 1 — Documentation remediation
+
+Implemented the owner-requested audit remediation on the feature worktree.
+Current guides now describe the three-stage Dev Import Data flow, automatic
+saving, exact identity/catalogue showstoppers and optional downloads. Production
+configured-file import and the legacy Dev raw importer remain distinct. Publishing
+instructions identify the intended worktree/branch before staging, committing or
+publishing. Embedded Help now matches actual XML navigation, scenario availability,
+accepted evidence, source-membership labels and environment-specific schemas.
+Canonical documentation reflects declared-path regression checks without claiming
+all identity/alias work complete. Index/onboarding/architecture/roadmap guidance
+and old Production-first-run statements were refreshed.
+
+Historical test/batch/baseline procedures have clear superseded banners; dated
+counts, incident findings and approved evidence were preserved. Local Production
+workbook links are documented as original-checkout file references, not portable
+Help downloads. The audit report retains its initial snapshot and records closure
+of Markdown findings. The current worktree and operation-policy guides were added
+to Help navigation so the new links work there as well as in the repository.
+
+Formal Word/PDF/PPT content was not edited in this remediation. The previously
+owner-selected Word/PDF copies stay synchronized with main; the authoritative
+screenshot PPT choice and any formal extension for new Dev workflows remain open.
+No operational database, application business rule, Production configuration or
+main-checkout file was changed by this documentation work.
+
+Validation: all 122 existing frontend tests passed, the frontend build passed
+(with its bundle-size advisory), and local documentation links/whitespace were
+checked. No operational database tests or services were run.
+
+## November 1 — Authoritative Work Instruction copies selected
+
+The owner selected the newer Work Instruction DOCX and PDF in the original/main
+checkout as the authoritative starting files:
+
+```text
+/Users/frankbogle/PycharmProjects/Eudamed/EudamedUploader/docs/work instruction/
+BQP 06-20 Annex B Issue D WI SOP EUDAMED Loader.docx
+BQP 06-20 Annex B Issue D WI SOP EUDAMED Loader.pdf
+```
+
+Both were copied byte-for-byte into the matching development-worktree paths;
+SHA-256 checks verified the copies and confirmed the originals unchanged. Future
+feature documentation edits should start from these synchronized copies. This was
+copy alignment only: no Word content editing or PDF regeneration was performed.
+The screenshot PPT was not selected or synchronized; its differing copies remain
+an open audit item. The Master Validation DOCX was already identical and unchanged.
 
 ## Latest checkpoint — minimal Import Data flow (October 31)
 
@@ -82,8 +130,10 @@ limited finding categories and full literal-text findings export, old source-cop
 compatibility, retired endpoint removal, transaction/backup/idempotency guards,
 and unchanged Production defaults. Vite retains the existing bundle-size warning.
 Read-only file fingerprints confirmed both operational database files unchanged
-across the full suite. No commit was created. Earlier Word/validation document
-changes remain separate pre-existing work.
+across the full suite. At that October 31 checkpoint no commit had been created and the document edits
+were separate work. The feature was subsequently committed as 1e5c395; current
+document remediation and master-copy selection are recorded in the November 1
+checkpoint above.
 
 Catalogue/pill follow-up validation: **56 focused backend tests passed**, including
 Production regression and rejection of prior warning-only approvals; **122 frontend
@@ -1725,8 +1775,8 @@ Elan MAX / MAX Liners / MAX Sleeves. A new workbook records the inclusion in
 Summary, clears the optional-only review flags and leaves those URL fields blank.
 Original placeholder values remain in the audit; no source file was changed.
 
-- [Current workbook](../data/prod/import_file/production-import-20261009-114955-299236.xlsx).
-- [Current audit](../data/prod/import_file/production-import-20261009-114955-299236.audit.json).
+- `data/prod/import_file/production-import-20261009-114955-299236.xlsx` (original Production checkout).
+- `data/prod/import_file/production-import-20261009-114955-299236.audit.json` (original Production checkout).
 - All 940 affected rows have Review Required = No. Summary groups them as Included
   with optional URL omitted, rather than exceptions. Market choices are unchanged.
 - To Register: 9,672 No / two Yes. Registered: 356 No / four Yes.

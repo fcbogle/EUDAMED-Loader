@@ -2,7 +2,7 @@
 
 ## Document Status And Purpose
 
-Reviewed and updated 11 October 2026 against current source and the [session handoff](session-handoff.md). Production preparation, importing and exported-baseline evidence are implemented. The first local Production startup and reviewed import were completed on 10 October. Dated counts below are checkpoints, not live inventory.
+Reviewed and updated 1 November 2026 against current source and the [session handoff](session-handoff.md). Production preparation, importing and exported-baseline evidence are implemented. The first local Production startup and reviewed import were completed on 10 October. Dated counts below are checkpoints, not live inventory.
 
 This document describes the application's architecture, responsibilities, state transitions and design boundaries. Implemented behavior is distinguished from future deployment, audit and transport proposals. The handoff contains session continuity and verification details; the [Playground test report](eudamed-playground-test-report.md) contains execution evidence. Historical Playground findings do not establish current production registration state.
 
@@ -64,7 +64,7 @@ These are responsibility assignments, not a claim that application role-based ac
 4. Centralize operation readiness in backend assessment services and preserve exact device/parent identity across the UI workflow.
 5. Keep parent POST, child POST, PATCH and Market Info as distinct operations, including in bulk processing.
 6. Derive PATCH from accepted device state and retain the separately accepted Market Info countries.
-7. Preview generation is a check and ZIP download confirms review of the packaged contents. Validated Production exports establish initial accepted baselines with explicit provenance; subsequent successful acknowledgements advance accepted state.
+7. Preview generation is a check and ZIP download confirms review of the packaged contents. Explicit validated export imports in the active environment establish imported baselines with provenance; subsequent successful acknowledgements advance accepted state.
 8. Preserve immutable historical evidence while preventing old acknowledgements from rolling back newer accepted projections.
 9. Use direct Device Model selection over existing family/variant identity, while preserving operation-specific controls and exact-device context.
 10. Evolve the existing SQLite model incrementally, without silently reinterpreting historical data.
@@ -73,16 +73,21 @@ These are responsibility assignments, not a claim that application role-based ac
 
 The application consists of a Python 3.11/FastAPI backend, a React/TypeScript/Vite frontend, source/reference/schema assets and SQLite persistence. The active operational services use the existing SQLite connection and schema-initialization mechanisms; this change does not replace them with a new database or persistence framework.
 
-The shared operator areas are Submission Data, Canonical Validation, Registration State, the XML workspaces, Submission/Testing Summary and Documentation. Labels follow the active backend environment. Registration State contains Registration State and Parents & Children tabs in both profiles.
+The shared operator areas are Import Management, Data Views (Submission Data, Canonical Validation and Registration State), EUDAMED, Reporting and Help. Import Data is implemented in Dev; Reporting generation and Production rollout of the new import UI remain separate work. Labels follow the active backend environment. Registration State contains Registration State and Parents & Children tabs in both profiles.
 
 ```mermaid
 flowchart TD
-    Files["Workbooks, references and mapping assets"] --> Import["Import and canonical projection"]
+    Files["Legacy Dev raw templates and references"] --> Import["Legacy raw import and canonical projection"]
     Import --> Proposed["Source-derived canonical data in SQLite"]
     Exports["Production templates, reference and exported XML"] --> Preparation["Prepared workbook and source/hash audit"]
     Preparation --> ProdImport["Assessed and confirmed Production import"]
     ProdImport --> Proposed
     ProdImport --> Accepted
+    DevFiles["Uploaded Dev Templates, BasicUDI and XML extracts"] --> Review["Saved source revisions and review policy"]
+    Review --> DevWorkbook["Dated batch, workbook and source/hash audit"]
+    DevWorkbook --> DevImport["Confirmed additive Dev import and verified backup"]
+    DevImport --> Proposed
+    DevImport --> Accepted
     Proposed --> Assess["Operation assessment"]
     Accepted["Accepted device and Market Info projections"] --> Assess
     Proposed --> Generate["Operation-specific XML and XSD validation"]
@@ -104,7 +109,7 @@ flowchart TD
 
 | Boundary | Current implementation and responsibility |
 | --- | --- |
-| Source import | Dev uses `WorkbookImportService` for raw templates. Prod uses `ProductionWorkbookImporter` for the prepared workbook/audit pair. Both populate the shared SQLite schema with source lineage and identity checks. |
+| Source import | Dev ImportWorkflow coordinates saved source reviews, batch/workbook preparation and DevWorkbookImporter. Legacy WorkbookImportService remains separate. Prod uses ProductionWorkbookImporter for the configured pair. All use the existing SQLite schema and explicit source/identity safeguards. |
 | Canonical interpretation/projection | Canonical services normalize source concepts and persist XML-relevant fields with workbook/sheet/row lineage. |
 | Canonical validation | SQLite projections expose canonical completeness separately from XML readiness. Prod presents nonblocking completeness notes and XML-ready/blocked status; Dev retains its completeness-oriented labels. Message-specific assessment and XSD validation remain separate checks. |
 | Operation assessment | `OperationAssessmentService` evaluates single POST, single PATCH, single Market Info, bulk POST, bulk PATCH and bulk Market Info. It returns status, blocking reasons, eligible counts, next action, identity scope and evidence. |
@@ -114,7 +119,7 @@ flowchart TD
 | Acknowledgement reconciliation | `TestingSuccessXmlService` records response entities, correlates generated context and updates eligible accepted-state projections. |
 | Operational read models | `TestingReadModelService`, import read models and `RegistrationSummaryService` supply device/history/monitoring views, uncapped reconciled counts and paged parent-child details. |
 
-Source normalization occurs before generation. For example, `ON_THE_EU` and `ON_THE_EU_MARKET` map to `ON_THE_MARKET`. Import refresh is required for mapping corrections to reach the persisted canonical projection. [identity.py](../backend/app/services/identity.py) consolidates family/identity normalization across selection, generation, testing state and read models; it does not yet eliminate text-based identity matching.
+Source normalization occurs before generation. For example, `ON_THE_EU` and `ON_THE_EU_MARKET` map to `ON_THE_MARKET`. Changing source/mapping files does not automatically refresh the saved projection. Use the applicable reviewed import/maintenance workflow and verify its result; the additive Dev batch importer retains existing canonical and accepted values rather than silently rebuilding them. [identity.py](../backend/app/services/identity.py) consolidates family/identity normalization across selection, generation, testing state and read models; it does not yet eliminate text-based identity matching.
 
 ## Data Architecture
 
@@ -122,7 +127,26 @@ Source normalization occurs before generation. For example, `ON_THE_EU` and `ON_
 
 File-backed inputs include Excel workbooks, Basic UDI reference data, mapping/configuration assets and the local EUDAMED schema pack. SQLite stores the imported source evidence and canonical projection used by the testing workflows.
 
-Canonical records retain source lineage, catalogue/Device UDI-DI/Basic UDI-DI identity, regulatory field paths and readiness results. They are source-derived data used for proposed XML. Dev source imports do not establish acceptance. Production imports separately persist trusted exported baselines; repeat-import safeguards protect newer locally accepted state and report changed existing devices instead of silently overwriting them.
+Canonical records retain source lineage, catalogue/Device UDI-DI/Basic UDI-DI identity, regulatory field paths and readiness results. They are source-derived data used for proposed XML. Raw Template values alone do not establish acceptance. Explicit reviewed Dev and Production export imports can separately persist imported baselines; repeat-import safeguards protect newer locally accepted state and report changed existing devices instead of silently overwriting them.
+
+### Dev file and review lifecycle
+
+The configured data/dev/import-batches root retains working source reviews under
+source-reviews and published batches under dated IDs. Each saved revision keeps
+its source copies and each review keeps its complete findings. Batch manifests,
+review approvals and workbook/audit hashes bind the source scope and checked
+import plan. Originals and earlier revisions remain; no automatic retention or
+cleanup policy is implemented. These local files are Git-ignored, not Git-backed-up.
+The browser uploads bytes, so server storage need not share the operator's local
+folders. Hosted deployments still require persistent storage and access controls.
+
+Review has three overall messages and at most eight finding categories. Template
+duplicates and unresolved catalogue/identity collisions are showstoppers; ordinary
+value differences and missing optional information warn. The UI shows compact
+red/amber/green labels and one primary action per current stage. Confirmation
+rechecks files, rules and database state under the transaction and verifies a
+backup before writes. See [Import Data in Dev](source-batch-receipt.md) and
+[Dev import safeguards](dev-workbook-confirmation.md).
 
 ### Implemented SQLite Model
 
@@ -133,7 +157,7 @@ Database and backups are profile-selected through `EUDAMED_TESTING_STATE_DB_PATH
 | Import evidence | `import_batch`, `source_workbook`, `source_row` preserve imported source context. |
 | Stable identity and issues | `device_subject`, `device_identity_issue` link source rows to devices and retain conflicts requiring attention. |
 | Canonical projection | `canonical_device_record`, `canonical_field_value`, `canonical_projection_snapshot` persist interpreted/validated source data. |
-| Accepted projections | `testing_subjects` holds registration flags, separate accepted POST/PATCH/Market Info versions and snapshots, and observed Market Info version evidence. Prod also records imported export baselines with separate provenance. |
+| Accepted projections | `testing_subjects` holds registration flags, separate accepted POST/PATCH/Market Info versions and snapshots, and observed Market Info version evidence. Explicit Dev and Prod export imports record imported baselines with separate provenance. |
 | Per-device history | `testing_events` stores generated contexts and acknowledgement events with envelope, scenario, version and before/after metadata. |
 | Batch lineage | `testing_batches`, `testing_batch_devices` group envelopes and per-device outcomes. Batch read APIs and a backfill service are implemented. |
 | Package/review evidence | `generated_packages` stores package metadata, archive fingerprints and exact-member review receipts. |
@@ -147,7 +171,8 @@ The model is an operational projection plus recorded history. It is not a claim 
 
 | Action | Persisted meaning | Effect on accepted state |
 | --- | --- | --- |
-| Import/re-import Dev source data | Source/canonical projection and import evidence. | Does not establish regulatory acceptance. |
+| Legacy Dev raw-template import | Source/canonical projection and import evidence. | Raw workbook fields alone do not establish acceptance. |
+| Confirm reviewed Dev batch import | Additive source/canonical records, linked file/review/workbook evidence and verified pre-import backup. | May add explicit imported baselines for genuinely new registered identities; existing accepted histories are retained and no successful upload is fabricated. |
 | Confirm assessed Production import | Eligible source/canonical records plus explicitly identified export baselines. | Establishes imported acceptance evidence for exported devices/parents; does not create successful upload events. |
 | Generate ordinary preview | Candidate XML and validation feedback; no ZIP review receipt or ordinary submission-context write. | None. |
 | Log generation context | Append-only generated payload context. This alone does not prove review. | None. |

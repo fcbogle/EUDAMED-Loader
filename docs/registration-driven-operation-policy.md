@@ -71,6 +71,7 @@ this feature change is not a Production data reconciliation.
 
 The latest source-label verification passed 344 backend tests (234.94 seconds),
 40 focused registration tests, 123 frontend tests and the build. Both operational
-database fingerprints are unchanged during this label clarification. Main is
-clean, and the feature changes are not yet committed. Operator browser acceptance
+database fingerprints are unchanged during this label clarification. Those repository-status observations belong to the original verification checkpoint.
+The feature implementation was subsequently committed as 1e5c395; current working
+status should be checked with Git in the intended worktree. Operator browser acceptance
 and a separately reviewed Production rollout remain outstanding.

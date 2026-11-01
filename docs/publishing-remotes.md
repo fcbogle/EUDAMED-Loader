@@ -1,10 +1,29 @@
 # Publishing to the business repository and GitHub
 
-Reviewed 9 October 2026 against `scripts/publish-remotes.sh` and its Python
+Reviewed 1 November 2026 against `scripts/publish-remotes.sh` and its Python
 implementation. This procedure publishes committed code; ignored Production
 inputs/workbook/audit files are not repository backups.
 
-Work in the original **EudamedUploader** checkout. Commit once, then run:
+Work in the checkout/worktree containing the changes you intend to publish.
+For current feature development that is `.worktrees/development`, not the original
+checkout on main. Verify before staging or committing:
+
+```bash
+pwd
+git branch --show-current
+git status --short
+```
+
+For this installation, the development branch is
+`feature/import-management-reporting`. The original checkout is the Production
+main worktree. Both share Git history but have separate working files. A commit
+made in main does not include uncommitted application edits in development.
+See [Development and Production](development-and-production.md).
+
+Stage intended files in the correct worktree, including deliberate additions and
+removals; inspect `git diff --cached --stat` before committing. Keep unrelated
+formal-document changes separate when appropriate. Commit once, then run from
+that same worktree:
 
 ```bash
 ./scripts/publish-remotes.sh
@@ -16,7 +35,7 @@ The script publishes the current branch to the same branch name on both destinat
 - `backup`: personal GitHub repository, cleaned history.
 
 It does not use or update the separate `EUDAMED-Loader-GitHub` checkout. Do not run
-`git push backup` directly from the original checkout: its historical databases
+`git push backup` directly from either working checkout: its historical databases
 still exceed GitHub's file-size limit.
 
 ## One-time setup

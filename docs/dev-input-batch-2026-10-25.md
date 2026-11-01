@@ -1,5 +1,10 @@
 # Dev input batch — 25 October 2026
 
+> Historical checkpoint. Counts, findings and applied/no-write outcomes below
+> describe this dated operation. Its older UI instructions are superseded by
+> [Import Data in Dev](source-batch-receipt.md); do not rerun it as the current
+> workflow or treat it as new authorization to reconcile a database.
+
 ## Established batch
 
 The first batch is in the original project's data area, outside the development
