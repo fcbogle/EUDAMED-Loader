@@ -4,19 +4,18 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime, UTC
 import hashlib
-import io
 import json
 from pathlib import Path
 import re
 import tempfile
 from uuid import uuid4
-import zipfile
 
 from app.config import Settings
 from app.services.dev_input_batches import fingerprint, inspect_dev_batch, verify_dev_batch_inputs
 from app.services.production_workbook_preparation import prepare_workbook
+from app.services.source_batch_review import review_sources, review_summary
 
-PREPARATION_CONTRACT = "dev-review-v2-export-absence-unknown"
+PREPARATION_CONTRACT = "dev-import-v3-minimal-review"
 
 class DevBatchPreparation:
     def __init__(self, settings: Settings):
@@ -55,10 +54,10 @@ class DevBatchPreparation:
         batch, manifest, exclusions, _ = self._inputs(batch_id)
         files = [{"name": Path(entry["path"]).name, "role": entry["role"], "size_bytes": entry["size_bytes"],
                   "sha256": entry["sha256"], "source_modified_at": entry["source_modified_at"],
-                  "excluded": entry["role"] == "templates" and Path(entry["path"]).name in exclusions}
+                  "original_name": entry.get("original_name", Path(entry["path"]).name), "excluded": entry["role"] == "templates" and Path(entry["path"]).name in exclusions}
                  for entry in manifest["files"]]
         return {"batch_id": batch_id, "created_at": manifest["created_at"], "manufacturer_srn": manifest["manufacturer_srn"],
-                "environment": "dev", "file_integrity": "verified", "files": files}
+                "environment": "dev", "source_reviewed": (batch / "source-review.json").is_file(), "file_integrity": "verified", "files": files, "receipt": manifest.get("receipt"), "has_prepared_workbook": any((batch / "prepared").glob("*/preparation.json"))}
 
     def list_batches(self) -> dict:
         batches = []
@@ -74,9 +73,20 @@ class DevBatchPreparation:
     def inspect(self, batch_id: str) -> dict:
         batch, _, exclusions, before = self._inputs(batch_id)
         result = inspect_dev_batch(batch, excluded_workbook_names=exclusions)
+        source_review = review_sources(batch, exclusions)
         if self._inputs(batch_id)[3] != before:
             raise ValueError("Inputs changed during checking; select and check the batch again")
-        return {**result, "inspection_token": before if result["inspection_complete"] else None}
+        record = {**result, "source_review": review_summary(source_review), "inspection_token": before if result["inspection_complete"] else None}
+        # Retain full findings with their exact input token, independently of UI truncation.
+        checks = batch / "checks"
+        if checks.is_symlink():
+            raise ValueError("Source-check output must not be a symlink")
+        checks.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".checking-", dir=checks) as temporary:
+            path = Path(temporary) / "source-checks.json"
+            path.write_text(json.dumps({**record, "source_review": source_review, "input_token": before}, indent=2) + "\n")
+            path.rename(checks / f"{uuid4().hex}.json")
+        return record
 
     @contextmanager
     def _writer(self, prepared: Path):
@@ -112,6 +122,14 @@ class DevBatchPreparation:
             evidence["dev_input_batch"] = {"batch_id": batch_id, "inspection_token": token,
                 "manifest": manifest, "excluded_template_workbooks": list(exclusions),
                 "scope_limitation": "Export absence is not proof of non-registration. To Register is a preparation grouping requiring later assessment."}
+            review_path = batch / 'source-review.json'
+            if review_path.is_file():
+                if review_path.is_symlink():
+                    raise ValueError('Source review must not be redirected')
+                approval = json.loads(review_path.read_text())
+                if approval['manifest_sha256'] != fingerprint(batch / 'manifest.json'):
+                    raise ValueError('Source review no longer matches batch inputs; return to Step 1')
+                evidence['dev_input_batch']['source_review'] = approval
             audit.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n")
             artifact_id = uuid4().hex
             record = {"batch_id": batch_id, "artifact_id": artifact_id, "environment": "dev",
@@ -147,11 +165,3 @@ class DevBatchPreparation:
         if json.loads(paths[1].read_text())["workbook_sha256"] != record["workbook_sha256"]:
             raise ValueError("Prepared audit does not belong to this workbook")
         return record, paths[0], paths[1]
-
-    def package(self, batch_id: str, artifact_id: str) -> bytes:
-        _, workbook, audit = self.artifact(batch_id, artifact_id)
-        target = io.BytesIO()
-        with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            archive.write(workbook, workbook.name)
-            archive.write(audit, audit.name)
-        return target.getvalue()

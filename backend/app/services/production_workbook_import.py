@@ -60,6 +60,8 @@ class ProductionWorkbookImporter:
     _pending: dict[str, PreparedImport] = {}
     _mutex = Lock()
     assessment_seconds = 900
+    template_only_status = "Not registered"
+    subject_key_prefix = "PROD"
 
     def __init__(self):
         # Assessment does not instantiate a service which creates tables/directories.
@@ -74,6 +76,9 @@ class ProductionWorkbookImporter:
             raise ValueError('Production workbook and audit must share a directory.')
         if self.workbook.resolve() == self.audit_path.resolve():
             raise ValueError('Workbook and audit paths must differ.')
+
+    def _review_blocks(self, reasons):
+        return bool(reasons)
 
     def _pair(self):
         if (self.workbook.parent / '.production-import.lock').exists() or self.workbook.with_name('~$'+self.workbook.name).exists():
@@ -159,10 +164,10 @@ class ProductionWorkbookImporter:
                     review = row['Review Required']
                     if review not in ('Yes','No') or (review=='Yes') != bool(recorded['review_reasons']):
                         raise ValueError(f'Invalid review flag or contradictory audit: {name}!{number}.')
-                    if review == 'Yes':
+                    if review == 'Yes' and self._review_blocks(recorded['review_reasons']):
                         skipped.append({'issuer':key[0],'udi_di':key[1],'sheet':name,'row':number,'reasons':recorded['review_reasons']})
                         continue
-                    status = 'Registered' if name=='Registered' else 'Not registered'
+                    status = 'Registered' if name=='Registered' else self.template_only_status
                     if row['Registration Status'] != status:
                         raise ValueError(f'Eligible row has invalid registration classification: {name}!{number}.')
                     snapshot = None
@@ -193,7 +198,7 @@ class ProductionWorkbookImporter:
                         raise ValueError(f'Eligible device lacks a catalogue identity: {key}.')
                     business = {k:v for k,v in row.items() if k.startswith(('Proposed: ','Proposed Parent: ','Accepted Parent: ','Accepted Device: ')) or k in ('Registration Status','Issuing Entity','UDI-DI','Proposed Basic UDI-DI','Proposed Parent Issuer')}
                     fingerprint = sha(dump(semantic(business)).encode())
-                    rows.append({'key': key, 'subject_key': 'PROD|'+key[0]+'|'+key[1], 'sheet':name,'number':number,
+                    rows.append({'key': key, 'subject_key': self.subject_key_prefix+'|'+key[0]+'|'+key[1], 'sheet':name,'number':number,
                                  'values':row,'fingerprint':fingerprint,'record':record,'snapshot':snapshot,
                                  'provenance':{'templates':templates.get(key,[]),'export':export}})
             if identities != set(outputs):
@@ -341,9 +346,9 @@ class ProductionWorkbookImporter:
             (subject,snapshot['version'],dump(snapshot),market['version'],dump(market),testing))
 
     @staticmethod
-    def _snapshot(connection,batch):
+    def _snapshot(connection,batch, family_scope="Production devices"):
         records=[json.loads(r[0]) for r in connection.execute('SELECT record_json FROM canonical_device_record')]
         total=len(records);ready=sum(r['completeness']['status']=='complete' for r in records);xml_ready=sum(r['xml_readiness']['status']=='complete' for r in records)
         fields=records[0]['fields'] if records else []
         connection.execute('INSERT INTO canonical_projection_snapshot(source_import_batch_id,family_scope,scope_note,validation_note,total_source_records,validation_subset_records,excluded_records,matched_reference_records,tracked_required_fields,tracked_xml_required_fields,ready_records,blocked_records,xml_ready_records,xml_blocked_records) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            (batch,'Production devices','Current complete projection includes retained earlier devices.','Prepared workbook eligibility is separate from XML readiness.',total,total,0,total,sum(f['required'] for f in fields),sum(f['xml_required'] for f in fields),ready,total-ready,xml_ready,total-xml_ready))
+            (batch,family_scope,'Current complete projection includes retained earlier devices.','Prepared workbook eligibility is separate from XML readiness.',total,total,0,total,sum(f['required'] for f in fields),sum(f['xml_required'] for f in fields),ready,total-ready,xml_ready,total-xml_ready))

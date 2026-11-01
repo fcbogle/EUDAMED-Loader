@@ -192,13 +192,9 @@ select {
   outline-offset: 3px;
 }
 
-.import-management-workspace { margin-bottom: 24px; }
-.import-batch-notice { margin: 0; padding: 10px 14px; border: 1px solid #b9d3db; border-radius: 10px; background: #edf5f7; color: #355864; font-size: 0.88rem; }
 .import-batch-selector { display: grid; gap: 6px; max-width: 520px; margin-bottom: 12px; font-size: 0.88rem; font-weight: 600; color: #00445a; }
 .import-batch-selector select { padding: 9px 12px; border: 1px solid #b5cbd3; border-radius: 8px; background: #f5f9fa; color: #355864; font: inherit; }
 .import-batch-selector select:focus-visible { outline: 2px solid #005f99; outline-offset: 3px; }
-.import-batch-file-groups { margin: 16px 0; }
-.import-retained-file { display: block; margin-top: 4px; font-size: 0.75rem; }
 .import-preview-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 16px; border: 1px solid #d8c6a7; border-radius: 12px; background: #fff8eb; color: #705022; font-size: 0.88rem; }
 .import-source-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .import-source-field { display: grid; align-content: start; gap: 12px; min-width: 0; padding: 18px; border: 1px solid #d4e2e6; border-radius: 12px; background: #f5f9fa; }
@@ -213,11 +209,7 @@ select {
 .import-selected-files small { flex-shrink: 0; color: #4c6f7a; }
 .import-action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 18px 0 12px; }
 .import-action-row .panel-copy { font-size: 0.84rem; }
-.import-management-workspace button:disabled { opacity: 0.5; cursor: not-allowed; }
 .import-empty-state { margin: 18px 0; padding: 22px; border: 1px dashed #b5cbd3; border-radius: 10px; color: #4c6f7a; text-align: center; }
-.import-output-summary { margin-top: 18px; padding: 14px 16px; border-radius: 10px; background: #edf4f6; }
-.import-output-summary strong { display: block; margin-bottom: 4px; }
-.import-example-results { margin-top: 18px; }
 .import-example-label { color: #8a4b00; font-size: 0.88rem; font-weight: 600; }
 .import-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
 .import-metric { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid #d4e2e6; border-radius: 10px; background: #f5f9fa; }
@@ -228,16 +220,6 @@ select {
 .import-exception-table caption { padding: 0 0 10px; text-align: left; font-weight: 700; color: #00445a; }
 .import-exception-table th, .import-exception-table td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid #d4e2e6; }
 .import-exception-table th { background: #edf4f6; }
-.assessment-primary-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.assessment-primary-metrics .import-metric:first-child { border-color: #6c9fac; background: #edf5f7; }
-.assessment-differences { margin: 18px 0; padding: 16px; border: 1px solid #b9d3db; border-left: 4px solid #00445a; border-radius: 10px; }
-.assessment-differences h3 { margin: 0 0 8px; }
-.assessment-differences td { overflow-wrap: anywhere; }
-.assessment-supporting-details { margin: 16px 0; }
-.assessment-supporting-details > summary { cursor: pointer; color: #355864; font-weight: 600; }
-.assessment-supporting-details[open] > summary { margin-bottom: 12px; }
-.import-review-confirmation { display: flex; align-items: start; gap: 8px; margin-top: 20px; color: #355864; font-size: 0.9rem; }
-.import-review-confirmation input { margin-top: 4px; }
 @media (max-width: 1000px) { .import-source-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .import-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
@@ -4419,3 +4401,53 @@ a.ghost-button:visited {
 .registration-group-family { display: block; margin-top: 4px; color: #527580; font-weight: 400; }
 .registration-patch-review { display: block; margin-top: 8px; }
 .bulk-patch-device-review { max-height: 420px; overflow: auto; margin-top: 12px; }
+
+.source-batch-fields { border: 0; padding: 0; margin: 16px 0; min-width: 0; }
+.source-batch-fields legend { font-weight: 700; margin: 12px 0; }
+.source-batch-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 16px 0; }
+.source-batch-details label { display: flex; flex-direction: column; gap: 6px; }
+.source-batch-details input { padding: 10px; border: 1px solid #c9d8dc; border-radius: 8px; font: inherit; }
+.source-batch-confirmation { display: flex; gap: 10px; align-items: flex-start; margin: 16px 0; }
+.source-review-group { border-top: 1px solid #dce6e9; padding: 14px 0; }
+.source-review-group p { margin: 6px 0; }
+
+.source-batch-details--source-review {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.source-batch-details--source-review label { min-width: 0; }
+.source-batch-details--source-review input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+
+.source-batch-correction-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 16px 0;
+}
+
+
+@media (max-width: 760px) {
+  .source-batch-details--source-review { grid-template-columns: 1fr; }
+}
+
+.import-flow-stages { display: flex; flex-wrap: wrap; gap: 16px; list-style: none; padding: 0; margin: 24px 0; color: #4c6f7a; }
+.import-flow-stages li { padding-bottom: 8px; border-bottom: 3px solid transparent; }
+.import-flow-stages [aria-current="step"] { color: #00475a; border-color: #89bc00; font-weight: 700; }
+.import-flow-review details { margin: 10px 0; }
+.import-flow-links { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 16px; }
+.import-flow-links a { color: #00596c; text-decoration: underline; }
+.import-flow .source-batch-correction-note input { font: inherit; padding: 10px; border: 1px solid #c9d8dc; border-radius: 8px; }
+
+.import-flow .import-source-field > label { display: grid; gap: 8px; }
+.import-flow .import-selected-files label { display: flex; align-items: flex-start; gap: 8px; font-weight: 400; overflow-wrap: anywhere; }
+.import-flow .import-source-field input[type="checkbox"] { width: auto; min-width: auto; margin-top: 4px; }
+
+.import-review-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 16px 0 10px; }
+.import-review-heading h3 { margin: 0; }
+.import-flow-review summary .status-pill { margin-left: 10px; vertical-align: middle; }

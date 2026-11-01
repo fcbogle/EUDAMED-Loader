@@ -1,6 +1,136 @@
 # Session Handoff
 
-Updated October 27, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated October 31, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## Latest checkpoint — minimal Import Data flow (October 31)
+
+The owner-approved refactor replaces the earlier draft/batch/workbook UI. Open
+**Import Management → Import Data**. One primary action is shown at a time:
+
+1. **Review source data** — copies and progress save automatically; review results
+   are Ready to continue, Ready to continue — warnings found, or Source corrections
+   required. Corrected sources can be supplied days later without starting over.
+2. **Create Import Workbook** — creates the dated batch and associated workbook/
+   audit automatically. There is no separate Create Batch or Continue button.
+3. **Import Batch Data** — brief summary, target Dev environment and explicit
+   confirmation. Fresh checks and a verified backup run internally. Workbook
+   download is optional and never a prerequisite.
+
+There is one Import selector for new/current/older imports. The remembered import
+reopens at its saved stage. No Save draft, Resume, artifact selector, manual Assess
+or extra confirmation screen remains. Replace files is a secondary link.
+Source-data contact/name/email controls and the correction-note textarea were
+removed. Unknown dates and incomplete contact details can be saved; operator
+attribution and confirmation are required for the actual import.
+
+### Review policy
+
+At most eight grouped categories are shown. Required files/structure/identifiers,
+Template Device UDI-DI duplicates (including identical rows and duplicates across
+workbooks), conflicting identities, wrong manufacturer/environment and incomplete/
+conflicting XML page sets block. Ordinary differences and missing optional
+information warn. Basic/device accepted-state metadata must remain usable; missing
+essential accepted data cannot be invented. Category details show up to ten
+examples. If truncated, a secondary findings download gives all rows as literal
+Excel text. Required input corrections are the only operator data-review gate.
+
+Owner follow-up: unresolved catalogue collisions now **block** this Dev import.
+EC27LN7S and its two different Device UDI-DIs are one identity finding, rather than
+three warnings. All involved identifiers and selected workbook/row references are
+retained. Existing-source value differences remain warnings; no existing canonical
+or accepted values are overwritten, and no device is deleted/merged to clear the
+finding. Production defaults remain unchanged. Review policy is now
+`minimal-import-v2`; earlier warning-only approvals cannot authorize an import and
+must be reviewed again. Review results and individual categories have compact
+labelled pills: green Good data, amber Warning and red Showstopper.
+
+### Cleanup and compatibility
+
+Removed the superseded CreateSourceBatch, SourceCheckSummary,
+WorkbookImportConfirmation, DevBatchPreparationWorkspace and placeholder
+ImportManagementWorkspace components, their types, buttons, API methods and
+superseded UI tests. Replaced them with ImportFlowWorkspace and a single workflow
+API. Old receipt/inspect/prepare/resume/assess/confirm/package/correction-summary
+and standalone draft-review endpoints were removed. Internal receipt, analysis,
+preparation, audit and transaction services remain because the replacement uses
+them. The independently used read-only Playground baseline-assessment API is
+retained; it is not another Import Data control.
+
+Saved inputs, dated batches, old workbooks/audits and review histories were not
+removed. Old batches/reviews reopen via their source copies and require review
+under the new policy; earlier approval cannot bypass it. New workbooks use the
+`dev-import-v3-minimal-review` preparation contract. Drafts remain within the
+already ignored `data/dev/import-batches/source-reviews/` tree. Dated batches
+remain in `data/dev/import-batches/YYYY-MM-DD-NNN/` with review/source/workbook links.
+
+Dev confirmation retains exact-path guards, BEGIN IMMEDIATE, full database-state
+checks, verified backup, atomic additive writes, durable history and idempotency.
+No operational database import, schema change, source-file migration, Production
+file change, main-branch code change or M2M integration was performed.
+
+Current operator instructions: [Import data in Dev](source-batch-receipt.md).
+Technical safety details: [Dev workbook import](dev-workbook-confirmation.md).
+Restart the Dev backend and refresh the frontend before testing this replacement;
+older clients intentionally cannot call the retired endpoints.
+
+Validation: **387 backend tests passed** (full suite, 241.08 seconds),
+**122 frontend tests passed**, and the TypeScript/Vite build passed. Superseded
+UI tests were replaced by tests for the single current flow. Coverage includes
+one primary action, optional downloads, autosave/reopen, edits during uploads,
+identical duplicates within/across Templates, warnings that permit progression,
+limited finding categories and full literal-text findings export, old source-copy
+compatibility, retired endpoint removal, transaction/backup/idempotency guards,
+and unchanged Production defaults. Vite retains the existing bundle-size warning.
+Read-only file fingerprints confirmed both operational database files unchanged
+across the full suite. No commit was created. Earlier Word/validation document
+changes remain separate pre-existing work.
+
+Catalogue/pill follow-up validation: **56 focused backend tests passed**, including
+Production regression and rejection of prior warning-only approvals; **122 frontend
+tests passed**, covering the red/amber/green labels, and the build passed. Catalogue
+collisions are grouped by normalized family/variant/catalogue address, listing all
+involved issuer-qualified UDI-DIs and selected Template row references exactly
+once. Existing XML and database records were not corrected by assumption. Read-only
+fingerprints confirmed both operational databases unchanged. Restart Dev, refresh
+the browser and review the saved import again to apply the new classification.
+
+## Historical evidence and earlier delivery checkpoints
+
+The dated entries below retain investigation/audit context. Their older menu
+names, buttons and API examples are historical, not current operator instructions.
+Use the checkpoint above and linked current instructions for the implemented flow.
+
+## October 30 — Fresh Playground Batch Ready for Operator Testing
+
+Use **2026-10-30-001** for the next Dev Import Management test. Original downloads
+are in `data/testing/playground-extracts/30-10-2026/` in the original checkout.
+Five PullResponse files, APP-DTX-000120542 through APP-DTX-000120546, declare pages
+0–4 of 5 (50/50/50/50/41 devices), schema 3.0.32 and manufacturer UK-MF-000033261.
+They contain 241 unique devices across 11 parents, without duplicate identities.
+All 241 export identities occur in the active Dev Template scope.
+
+Created `data/dev/import-batches/2026-10-30-001/` using the existing file-only
+batch tool: six copied Dev Templates, one BasicUDIs.xlsx and five XML exports,
+with byte/hash-verified manifest. Existing Accessories exclusion is retained;
+the active five-Template scope has 8,424 distinct devices and no source findings.
+The October 25 batch and original input folders are preserved. Batch files remain
+ignored by Git. No Import Workbook has yet been created for the new batch; leave
+that action to the owner's UI test.
+
+Read-only reconciliation report `a367a25b3cfe482cb649c8e921279bd3`, under this
+batch's `reconciliation/` folder, compares 241 full local device snapshots:
+215 Matches, 26 Update proposed; 9,614 matching fields, **zero value differences**,
+and 26 Missing local evidence fields. All missing fields are the same Echelon
+parent's `parent_version`, repeated for its 26 devices; the exports record
+version 1 while the local comparison has no parent-version evidence. There are
+no version/identity warnings. This is an evidence gap, not 26 conflicting device
+values. No baseline update or review approval was applied. Whole-file fingerprints
+of both Dev and Production databases are unchanged through preparation/assessment.
+
+Owner next: in Dev Source Files select 2026-10-30-001, check sources, then Create
+Import Workbook and inspect its workbook/audit. Assess Playground baseline is
+read-only and should show the above result unless accepted evidence changes.
+Final workbook database assessment/confirmation remains disabled in the UI.
 
 ## October 27 — Identify Groups and Review Bulk PATCH Devices
 

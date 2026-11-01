@@ -13,6 +13,8 @@ import { useBulkPostedCohorts } from "./useBulkPostedCohorts";
 import { ApiError, api, type RecordReadiness } from "./api";
 import architectureDefinitionDocumentation from "../../docs/architecture-definition-draft.md?raw";
 import sessionHandoffDocumentation from "../../docs/session-handoff.md?raw";
+import devImportGuideDocumentation from "../../docs/source-batch-receipt.md?raw";
+import devImportSafetyDocumentation from "../../docs/dev-workbook-confirmation.md?raw";
 import documentationIndexDocumentation from "../../docs/README.md?raw";
 import projectInstructionsDocumentation from "../../AGENTS.md?raw";
 import schemaProfilesDocumentation from "../../data/schema_profiles/README.md?raw";
@@ -49,10 +51,9 @@ import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
 import { EnvironmentBanner } from "./components/EnvironmentBanner";
 import { ApplicationNavigation, type NavigationPage } from "./components/ApplicationNavigation";
-import { ImportManagementWorkspace } from "./components/ImportManagementWorkspace";
 import { ReportingWorkspace } from "./components/ReportingWorkspace";
-import { DevBatchPreparationWorkspace } from "./components/DevBatchPreparationWorkspace";
-import type { DevBatchContext } from "./devInputBatchTypes";
+import { ImportFlowWorkspace } from "./components/ImportFlowWorkspace";
+import type { ImportFlowContext } from "./importFlowTypes";
 import { DeviceModelSelector } from "./components/DeviceModelSelector";
 import { XmlValidationStack } from "./components/XmlValidationStack";
 import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
@@ -132,12 +133,10 @@ import {
   resolvePostWorkspaceRecord,
 } from "./xmlWorkspace";
 
-type PlannedTab = "sourceFiles" | "createImportWorkbook" | "assessmentImport" | "importHistory" | "registrationSnapshot" | "eudamedComparison";
+type PlannedTab = "sourceFiles" | "importHistory" | "registrationSnapshot" | "eudamedComparison";
 type MainTab = NavigationPage;
 const PLANNED_WORKSPACES: { id: PlannedTab; group: "Import Management" | "Reporting"; title: string; description: string }[] = [
-  { id: "sourceFiles", group: "Import Management", title: "Import Source Files", description: "Select Template workbooks, the Basic UDI-DI reference and EUDAMED XML extracts." },
-  { id: "createImportWorkbook", group: "Import Management", title: "Create Import Workbook", description: "Check source data and prepare the Excel Import Workbook." },
-  { id: "assessmentImport", group: "Import Management", title: "Assess & Import Workbook", description: "Assess the prepared workbook and confirm database import." },
+  { id: "sourceFiles", group: "Import Management", title: "Import Data", description: "Review source files, create the Import Workbook and import batch data." },
   { id: "importHistory", group: "Import Management", title: "Import History", description: "View previous imports and their result reports." },
   { id: "registrationSnapshot", group: "Reporting", title: "Registration Snapshot", description: "Create a dated registration report by device model." },
   { id: "eudamedComparison", group: "Reporting", title: "EUDAMED Comparison", description: "Compare EUDAMED XML extracts with a saved registration snapshot." },
@@ -503,6 +502,8 @@ type DocumentationSection = {
     | "softwareEngineeringPatterns"
     | "documentationIndex"
     | "environmentProfiles"
+    | "devImportGuide"
+    | "devImportSafety"
     | "productionWorkbookContract"
     | "productionPreparation"
     | "productionImporterDesign"
@@ -633,7 +634,7 @@ export function App() {
   const [isLoadingReadiness, setIsLoadingReadiness] = useState(true);
   const [readinessError, setReadinessError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<MainTab>("workbooks");
-  const [devBatchContext, setDevBatchContext] = useState<DevBatchContext>({ batchId: "", valid: false, checked: false, prepared: false });
+  const [importFlowContext, setImportFlowContext] = useState<ImportFlowContext>({ batchId: "", status: "Select source files" });
   const [submissionDataTab, setSubmissionDataTab] = useState<SubmissionDataTab>("snapshot");
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
     DocumentationSection["id"]
@@ -799,6 +800,18 @@ export function App() {
       title: "Dev and Prod Configuration",
       sourcePath: "docs/environment-profiles.md",
       markdown: environmentProfilesDocumentation,
+    },
+    {
+      id: "devImportGuide",
+      title: "Import Data in Dev",
+      sourcePath: "docs/source-batch-receipt.md",
+      markdown: devImportGuideDocumentation,
+    },
+    {
+      id: "devImportSafety",
+      title: "Dev Import Safeguards",
+      sourcePath: "docs/dev-workbook-confirmation.md",
+      markdown: devImportSafetyDocumentation,
     },
     {
       id: "productionWorkbookContract",
@@ -986,8 +999,8 @@ export function App() {
     },
     {
       id: "production",
-      title: "Production Preparation And Import Design",
-      sectionIds: ["productionWorkbookContract", "productionPreparation", "productionImporterDesign"],
+      title: "Import Design And Safeguards",
+      sectionIds: ["devImportGuide", "devImportSafety", "productionWorkbookContract", "productionPreparation", "productionImporterDesign"],
     },
     {
       id: "operations",
@@ -3146,11 +3159,9 @@ export function App() {
   });
 
   const plannedWorkspace = PLANNED_WORKSPACES.find((workspace) => workspace.id === activeTab);
-  const isImportUiPreview = activeTab === "sourceFiles" || activeTab === "createImportWorkbook" || activeTab === "assessmentImport";
+  const isImportManagement = activeTab === "sourceFiles";
   const isReportingUiPreview = activeTab === "registrationSnapshot" || activeTab === "eudamedComparison";
-  const importStep = activeTab === "sourceFiles" ? 1 : activeTab === "createImportWorkbook" ? 2 : activeTab === "assessmentImport" ? 3 : null;
-  const locationLabel = importStep ? `Import Management / Step ${importStep} of 3`
-    : plannedWorkspace?.group ?? (activeTab === "xml" || activeTab === "testingSummary" ? "EUDAMED" : activeTab === "documentation" ? "Help" : "Data Views");
+  const locationLabel = plannedWorkspace?.group ?? (activeTab === "xml" || activeTab === "testingSummary" ? "EUDAMED" : activeTab === "documentation" ? "Help" : "Data Views");
 
 
   return (
@@ -3233,16 +3244,7 @@ export function App() {
         <aside className="hero-status" aria-label="Workspace status">
           {plannedWorkspace ? (
             <span className="status-pill neutral">
-              {activeEnvironment === "dev" && isImportUiPreview
-                ? activeTab === "sourceFiles" ? devBatchContext.valid ? "Batch files verified" : "Select a Dev batch"
-                  : activeTab === "createImportWorkbook" ? devBatchContext.prepared ? "Workbook created" : devBatchContext.checked ? "Sources checked" : "Source checks required"
-                  : devBatchContext.prepared ? "Workbook ready for review" : "No workbook prepared"
-                : activeTab === "sourceFiles" ? "No files uploaded"
-                : activeTab === "createImportWorkbook" ? "No workbook created"
-                : activeTab === "assessmentImport" ? "No workbook prepared"
-                : activeTab === "registrationSnapshot" ? "No snapshot created"
-                : activeTab === "eudamedComparison" ? "No comparison run"
-                : "Not yet available"}
+              {activeEnvironment === "dev" && isImportManagement ? importFlowContext.status : "Under development"}
             </span>
           ) : null}
           {activeTab === "workbooks" ? (
@@ -3325,16 +3327,12 @@ export function App() {
 
       <div className="workspace-content">
       {error ? <div className="panel error-banner">{error}</div> : null}
-      <div hidden={!isImportUiPreview}>
-        {activeEnvironment === "dev" ? <DevBatchPreparationWorkspace
-          page={activeTab === "assessmentImport" || activeTab === "createImportWorkbook" ? activeTab : "sourceFiles"}
-          enabled={isImportUiPreview}
-          onPageChange={setActiveTab}
-          onContextChange={setDevBatchContext}
-        /> : <ImportManagementWorkspace
-          page={activeTab === "assessmentImport" || activeTab === "createImportWorkbook" ? activeTab : "sourceFiles"}
-          onPageChange={setActiveTab}
-        />}
+      <div hidden={!isImportManagement}>
+        {activeEnvironment === "dev" ? <ImportFlowWorkspace
+          enabled={isImportManagement}
+          onContextChange={setImportFlowContext}
+          onDatabaseImported={() => { void loadWorkbookImportMonitoring(); void loadCanonicalValidationBundle(true); void loadCanonicalReviewBundle(true); setRegistrationSummaryRefresh(value => value + 1); }}
+        /> : <section className="panel"><p>Import Management is currently available in Dev. Continue using the existing Production import workflow.</p></section>}
       </div>
       <div hidden={!isReportingUiPreview}>
         <ReportingWorkspace

@@ -1,3 +1,4 @@
+import type { ImportSession, ImportChoice, ImportMetadata, ImportSources } from "./importFlowTypes";
 import type {
   BulkPatchPostedEntriesResponse,
   BulkPatchPostedParentsResponse,
@@ -27,7 +28,6 @@ import type {
   WorkbookImportSnapshotSummary,
   SuccessXmlUploadResult,
 } from "./types";
-import type { DevBatch, DevBatchInspection, DevPreparedWorkbook, PlaygroundAssessment } from "./devInputBatchTypes";
 
 const API_ROOT = "http://localhost:8000/api";
 
@@ -125,13 +125,26 @@ export type RecordReadiness = {
   market_info_ready: boolean;
 };
 
+async function encodeBatchFiles(groups: { templates: File[]; basic: File[]; xml: File[] }) {
+  const entries = [...groups.templates.map(file => ({ role: "templates", file })), ...groups.basic.map(file => ({ role: "basic-udi", file })), ...groups.xml.map(file => ({ role: "eudamed-xml", file }))];
+  if (entries.length > 100 || entries.some(({ file }) => !file.size || file.size > 20 * 1024 * 1024) || entries.reduce((sum, { file }) => sum + file.size, 0) > 60 * 1024 * 1024) throw new Error("Select up to 100 non-empty files, at most 20 MB each and 60 MB in total.");
+  const result = [];
+  for (const { role, file } of entries) {
+    const data = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1]); reader.onerror = () => reject(new Error(`Could not read ${file.name}`)); reader.readAsDataURL(file); });
+    result.push({ role, name: file.name, content_base64: data, modified_at: new Date(file.lastModified).toISOString() });
+  }
+  return result;
+}
+
 export const api = {
-  devInputBatches: () => getJson<{ batches: DevBatch[] }>("/dev-input-batches"),
-  inspectDevInputBatch: (id: string) => sendJson<DevBatchInspection>(`/dev-input-batches/${encodeURIComponent(id)}/inspect`, "POST", {}),
-  prepareDevInputBatch: (id: string, inspectionToken: string) => sendJson<DevPreparedWorkbook>(`/dev-input-batches/${encodeURIComponent(id)}/prepare`, "POST", { inspection_token: inspectionToken }),
-  downloadDevInputWorkbook: (id: string, artifactId: string, kind: "workbook" | "audit" | "package") => sendDownload(`/dev-input-batches/${encodeURIComponent(id)}/prepared/${encodeURIComponent(artifactId)}/${kind}`, "GET"),
-  assessPlaygroundBaseline: (id: string) => sendJson<PlaygroundAssessment>(`/dev-input-batches/${encodeURIComponent(id)}/baseline-assessment`, "POST", {}),
-  downloadPlaygroundAssessment: (id: string, reportId: string, kind: "json" | "xlsx") => sendDownload(`/dev-input-batches/${encodeURIComponent(id)}/baseline-assessment/${encodeURIComponent(reportId)}/${kind}`, "GET"),
+  importSessions: () => getJson<{imports: ImportChoice[]}>("/dev-input-batches/sessions"),
+  importSession: (id: string) => getJson<ImportSession>(`/dev-input-batches/sessions/${encodeURIComponent(id)}`),
+  saveImportSession: async (id: string, revision: string | undefined, metadata: ImportMetadata, files: ImportSources, removed: string[]) => sendJson<ImportSession>(`/dev-input-batches/sessions/${encodeURIComponent(id)}`, "PUT", {metadata, expected_revision:revision, files:await encodeBatchFiles(files), remove_paths:removed, replace_roles:files.xml.length?["eudamed-xml"]:[]}),
+  reviewImportSession: (id: string, revision: string) => sendJson<ImportSession>(`/dev-input-batches/sessions/${encodeURIComponent(id)}/review`, "POST", {revision}),
+  createImportWorkbook: (id: string, revision: string) => sendJson<ImportSession>(`/dev-input-batches/sessions/${encodeURIComponent(id)}/workbook`, "POST", {revision}),
+  importBatchData: (id: string, revision: string, confirmedBy: string, confirmed: boolean) => sendJson<ImportSession>(`/dev-input-batches/sessions/${encodeURIComponent(id)}/import`, "POST", {revision,confirmed_by:confirmedBy,confirmed}),
+  downloadImportFindings: (id: string) => sendDownload(`/dev-input-batches/sessions/${encodeURIComponent(id)}/findings`, "GET"),
+  downloadImportWorkbook: (id: string) => sendDownload(`/dev-input-batches/sessions/${encodeURIComponent(id)}/workbook`, "GET"),
   async environment(signal?: AbortSignal): Promise<{
     environment: string; message_schema_version: string; schema_package: string;
     manufacturer_srn?: string | null; authorised_representative_srn?: string | null;

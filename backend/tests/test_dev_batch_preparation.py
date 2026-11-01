@@ -1,8 +1,6 @@
-"""Real batch/preparation HTTP flow against synthetic files and no database services."""
-import io
+"""Internal immutable preparation and Dev API guards over synthetic source files."""
 import json
 from pathlib import Path
-import zipfile
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -30,27 +28,17 @@ def setup(project, monkeypatch):
 def test_real_check_prepare_and_paired_download_without_database_access(setup):
     client, service, batch, sentinel, _ = setup
     before = sentinel.read_bytes()
-    prefix = f"/api/dev-input-batches/{batch.name}"
-    inventory = client.get("/api/dev-input-batches").json()["batches"]
-    assert inventory[0]["file_integrity"] == "verified"
-    response = client.post(prefix + "/inspect")
-    assert response.status_code == 200
-    checked = response.json(); assert checked["inspection_complete"]
-    response = client.post(prefix + "/prepare", json={"inspection_token": checked["inspection_token"]})
-    assert response.status_code == 200, response.text
-    result = response.json()
+    assert service.list_batches()["batches"][0]["file_integrity"] == "verified"
+    checked = service.inspect(batch.name)
+    assert checked["inspection_complete"]
+    result = service.prepare(batch.name, checked["inspection_token"])
     assert result["summary"]["registered_tab_rows"] == 1
-    assert result["workbook_name"].startswith("dev-import-")
     assert result["database_changed"] is False
-    artifact = prefix + "/prepared/" + result["artifact_id"]
-    assert client.get(artifact + "/workbook").content.startswith(b"PK")
-    audit = client.get(artifact + "/audit").json()
-    assert audit["workbook_sha256"] == result["workbook_sha256"]
-    assert audit["dev_input_batch"]["batch_id"] == batch.name
-    package = client.get(artifact + "/package")
-    assert package.status_code == 200
-    with zipfile.ZipFile(io.BytesIO(package.content)) as archive:
-        assert set(archive.namelist()) == {result["workbook_name"], result["audit_name"]}
+    _, workbook, audit = service.artifact(batch.name, result["artifact_id"])
+    assert workbook.read_bytes().startswith(b"PK")
+    evidence = json.loads(audit.read_text())
+    assert evidence["workbook_sha256"] == result["workbook_sha256"]
+    assert evidence["dev_input_batch"]["batch_id"] == batch.name
     assert sentinel.read_bytes() == before
     assert not (batch / "prepared/.preparing.lock").exists()
 
@@ -70,9 +58,9 @@ def test_production_endpoints_are_forbidden(setup, monkeypatch):
     client, _, batch, sentinel, settings = setup
     monkeypatch.setattr(routes, "get_settings", lambda: settings.model_copy(update={"environment": "prod"}))
     before = sentinel.read_bytes()
-    assert client.get("/api/dev-input-batches").status_code == 403
-    assert client.post(f"/api/dev-input-batches/{batch.name}/inspect").status_code == 403
-    assert client.post(f"/api/dev-input-batches/{batch.name}/prepare", json={"inspection_token": "x"}).status_code == 403
+    assert client.get("/api/dev-input-batches/sessions").status_code == 403
+    assert client.post(f"/api/dev-input-batches/sessions/{batch.name}/review",json={"revision":"f"*32}).status_code == 403
+    assert client.put("/api/dev-input-batches/sessions/new",json={}).status_code == 403
     assert sentinel.read_bytes() == before
     assert not list((batch / "prepared").iterdir())
 
@@ -120,7 +108,8 @@ def test_output_and_batch_path_guards_and_download_integrity(setup):
     result = service.prepare(batch.name, checked["inspection_token"])
     _, workbook, _ = service.artifact(batch.name, result["artifact_id"])
     workbook.write_bytes(b"tampered workbook")
-    assert client.get(f"/api/dev-input-batches/{batch.name}/prepared/{result['artifact_id']}/package").status_code == 409
+    with pytest.raises(ValueError, match="integrity"):
+        service.artifact(batch.name,result["artifact_id"])
     assert not list(batch.parent.glob(".preparing-*"))
 
 
