@@ -4,6 +4,7 @@ export type BulkScopeMode =
   | "all_posted"
   | "next_10"
   | "next_25"
+  | "next_300"
   | "selected_catalogue_numbers"
   | "import_catalogue_list";
 

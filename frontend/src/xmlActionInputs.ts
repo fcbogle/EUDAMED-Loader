@@ -36,7 +36,7 @@ export function resolveBulkCatalogueNumbers(args: {
   if (args.scopeMode === "all_posted") {
     return args.postedCatalogueNumbers;
   }
-  if (args.scopeMode === "next_10" || args.scopeMode === "next_25") return args.effectiveCatalogueNumbers;
+  if (args.scopeMode === "next_10" || args.scopeMode === "next_25" || args.scopeMode === "next_300") return args.effectiveCatalogueNumbers;
   if (args.scopeMode === "selected_catalogue_numbers") return args.selectedCatalogueNumbers;
   return args.importedMatchedCatalogueNumbers;
 }

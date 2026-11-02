@@ -2,6 +2,23 @@
 
 Updated October 24, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+## November 2 — Production bulk selection update
+
+The owner explicitly authorised a small update on main for immediate Production
+use, separate from the development Import Management feature. Bulk UDI-DI POST,
+Bulk PATCH and Bulk Market Info now offer **Next 300 devices**. This selects up to
+300 currently eligible records in the existing order; fewer are selected if fewer
+are available. Existing parent, accepted-state, version and schema guards remain.
+The existing backend chunk limit is unchanged (default 300 records per XML
+message). This update does not import data, open an operational database, change
+profiles or merge the development feature. The feature branch will need to take
+this main-branch change during later integration. Review and commit the main
+changes before publishing; no commit or remote push is performed automatically.
+Verification: 101 frontend tests passed, including synthetic selection-boundary
+and request-payload checks for all three modes. TypeScript/Vite build passed
+with its existing bundle-size advisory. No backend services or database tests
+were run for this frontend-only change.
+
 ## October 24 — Next Development Wave And Production Isolation
 
 The owner's next-session instruction is to **review and update the Git branching

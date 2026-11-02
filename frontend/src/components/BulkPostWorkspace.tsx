@@ -121,6 +121,7 @@ export function BulkPostWorkspace({
                     <option value="next_10">Next 10 devices</option>
                     <option value="next_25">Next 25 devices</option>
                     <option value="next_100">Next 100 records</option>
+                    <option value="next_300">Next 300 devices</option>
                     <option value="selected_catalogue_numbers">Select catalogue numbers</option>
                     <option value="import_catalogue_list">Import catalogue list</option>
                   </select>

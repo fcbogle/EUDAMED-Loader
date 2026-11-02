@@ -1759,9 +1759,11 @@ export function App() {
           ? bulkUdidiPostCatalogueNumbers.slice(0, 25)
           : bulkUdidiPostScopeMode === "next_100"
             ? bulkUdidiPostCatalogueNumbers.slice(0, 100)
-            : bulkUdidiPostScopeMode === "selected_catalogue_numbers"
-              ? selectedBulkUdidiPostCatalogueNumbers.filter((catalogueNumber) => bulkUdidiPostCatalogueNumberSet.has(catalogueNumber))
-              : bulkUdidiPostImportedMatchedCatalogueNumbers;
+            : bulkUdidiPostScopeMode === "next_300"
+              ? bulkUdidiPostCatalogueNumbers.slice(0, 300)
+              : bulkUdidiPostScopeMode === "selected_catalogue_numbers"
+                ? selectedBulkUdidiPostCatalogueNumbers.filter((catalogueNumber) => bulkUdidiPostCatalogueNumberSet.has(catalogueNumber))
+                : bulkUdidiPostImportedMatchedCatalogueNumbers;
   const displayedBulkPatchParentOptions = bulkPatchPostedParents;
   const selectedBulkPatchParentGroup =
     displayedBulkPatchParentOptions.find((group) => group.basic_udi_di === selectedBulkPatchBasicUdiDi) ??
@@ -1867,9 +1869,11 @@ export function App() {
         ? bulkPatchPostedCatalogueNumbers.slice(0, 10)
         : bulkPatchScopeMode === "next_25"
           ? bulkPatchPostedCatalogueNumbers.slice(0, 25)
-      : bulkPatchScopeMode === "selected_catalogue_numbers"
-        ? selectedBulkPatchCatalogueNumbers
-        : bulkPatchImportedMatchedCatalogueNumbers;
+          : bulkPatchScopeMode === "next_300"
+            ? bulkPatchPostedCatalogueNumbers.slice(0, 300)
+            : bulkPatchScopeMode === "selected_catalogue_numbers"
+              ? selectedBulkPatchCatalogueNumbers
+              : bulkPatchImportedMatchedCatalogueNumbers;
   const effectiveBulkPatchCatalogueSet = new Set(effectiveBulkPatchCatalogueNumbers);
   const selectedBulkPatchEntries = bulkPatchPostedEntries.filter(
     (entry) => entry.catalogue_number && effectiveBulkPatchCatalogueSet.has(entry.catalogue_number),
@@ -1882,7 +1886,7 @@ export function App() {
     Boolean(selectedBulkPatchParentGroup) &&
     (
       (bulkPatchScopeMode === "all_posted" && selectedBulkPatchEligibleCount > 0) ||
-      ((bulkPatchScopeMode === "next_10" || bulkPatchScopeMode === "next_25") && selectedBulkPatchSelectedCount > 0) ||
+      ((bulkPatchScopeMode === "next_10" || bulkPatchScopeMode === "next_25" || bulkPatchScopeMode === "next_300") && selectedBulkPatchSelectedCount > 0) ||
       (bulkPatchScopeMode !== "all_posted" && selectedBulkPatchSelectedCount > 0)
     );
   const bulkPatchReadinessReason = !selectedBulkPatchParentGroup
@@ -1893,6 +1897,8 @@ export function App() {
         ? "No posted child devices are currently available for the next 10-device PATCH scope."
       : bulkPatchScopeMode === "next_25" && selectedBulkPatchSelectedCount < 1
         ? "No posted child devices are currently available for the next 25-device PATCH scope."
+      : bulkPatchScopeMode === "next_300" && selectedBulkPatchSelectedCount < 1
+        ? "No posted child devices are currently available for the next 300-device PATCH scope."
       : bulkPatchScopeMode === "selected_catalogue_numbers" && selectedBulkPatchSelectedCount < 1
         ? "Select at least one posted catalogue number."
       : bulkPatchScopeMode === "import_catalogue_list" && selectedBulkPatchSelectedCount < 1
@@ -1905,6 +1911,8 @@ export function App() {
         ? "Next 10 devices"
       : bulkPatchScopeMode === "next_25"
         ? "Next 25 devices"
+      : bulkPatchScopeMode === "next_300"
+        ? "Next 300 devices"
       : bulkPatchScopeMode === "selected_catalogue_numbers"
         ? "Selected catalogue numbers"
         : "Import catalogue list";
@@ -1915,9 +1923,11 @@ export function App() {
         ? bulkMarketInfoPostedCatalogueNumbers.slice(0, 10)
         : bulkMarketInfoScopeMode === "next_25"
           ? bulkMarketInfoPostedCatalogueNumbers.slice(0, 25)
-          : bulkMarketInfoScopeMode === "selected_catalogue_numbers"
-            ? selectedBulkMarketInfoCatalogueNumbers
-            : bulkMarketInfoImportedMatchedCatalogueNumbers;
+          : bulkMarketInfoScopeMode === "next_300"
+            ? bulkMarketInfoPostedCatalogueNumbers.slice(0, 300)
+            : bulkMarketInfoScopeMode === "selected_catalogue_numbers"
+              ? selectedBulkMarketInfoCatalogueNumbers
+              : bulkMarketInfoImportedMatchedCatalogueNumbers;
   const effectiveBulkMarketInfoCatalogueSet = new Set(effectiveBulkMarketInfoCatalogueNumbers);
   const selectedBulkMarketInfoEntries = bulkMarketInfoPostedEntries.filter(
     (entry) => entry.catalogue_number && effectiveBulkMarketInfoCatalogueSet.has(entry.catalogue_number),
@@ -1949,7 +1959,7 @@ export function App() {
     Boolean(selectedBulkMarketInfoParentGroup) &&
     (
       (bulkMarketInfoScopeMode === "all_posted" && selectedBulkMarketInfoEligibleCount > 0) ||
-      ((bulkMarketInfoScopeMode === "next_10" || bulkMarketInfoScopeMode === "next_25") && selectedBulkMarketInfoSelectedCount > 0) ||
+      ((bulkMarketInfoScopeMode === "next_10" || bulkMarketInfoScopeMode === "next_25" || bulkMarketInfoScopeMode === "next_300") && selectedBulkMarketInfoSelectedCount > 0) ||
       (bulkMarketInfoScopeMode !== "all_posted" && selectedBulkMarketInfoSelectedCount > 0)
     );
   const bulkMarketInfoReadinessReason = !selectedBulkMarketInfoParentGroup
@@ -1960,6 +1970,8 @@ export function App() {
         ? "No posted child devices are currently available for the next 10-device Market Info scope."
       : bulkMarketInfoScopeMode === "next_25" && selectedBulkMarketInfoSelectedCount < 1
         ? "No posted child devices are currently available for the next 25-device Market Info scope."
+      : bulkMarketInfoScopeMode === "next_300" && selectedBulkMarketInfoSelectedCount < 1
+        ? "No posted child devices are currently available for the next 300-device Market Info scope."
       : bulkMarketInfoScopeMode === "selected_catalogue_numbers" && selectedBulkMarketInfoSelectedCount < 1
         ? "Select at least one posted catalogue number."
       : bulkMarketInfoScopeMode === "import_catalogue_list" && selectedBulkMarketInfoSelectedCount < 1

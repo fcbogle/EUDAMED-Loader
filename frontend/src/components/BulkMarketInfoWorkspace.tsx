@@ -12,7 +12,7 @@ import { PanelRefreshShell } from "./PanelRefreshShell";
 import { XmlStatusStrip } from "./XmlStatusStrip";
 import { XmlWorkspaceHeader } from "./XmlWorkspaceHeader";
 
-type BulkMarketInfoScopeMode = "all_posted" | "next_10" | "next_25" | "selected_catalogue_numbers" | "import_catalogue_list";
+type BulkMarketInfoScopeMode = "all_posted" | "next_10" | "next_25" | "next_300" | "selected_catalogue_numbers" | "import_catalogue_list";
 
 type MarketInfoScenarioItem = {
   id: string;
@@ -173,6 +173,7 @@ export function BulkMarketInfoWorkspace({
                       <option value="all_posted">All posted devices</option>
                       <option value="next_10">Next 10 devices</option>
                       <option value="next_25">Next 25 devices</option>
+                      <option value="next_300">Next 300 devices</option>
                       <option value="selected_catalogue_numbers">Select catalogue numbers</option>
                       <option value="import_catalogue_list">Import catalogue list</option>
                     </select>
