@@ -14,6 +14,8 @@ import { ApiError, api, type RecordReadiness } from "./api";
 import architectureDefinitionDocumentation from "../../docs/architecture-definition-draft.md?raw";
 import sessionHandoffDocumentation from "../../docs/session-handoff.md?raw";
 import devImportGuideDocumentation from "../../docs/source-batch-receipt.md?raw";
+import submissionActivityDocumentation from "../../docs/submission-activity-report.md?raw";
+import raReportDocumentation from "../../docs/ra-report-first-iteration.md?raw";
 import devImportSafetyDocumentation from "../../docs/dev-workbook-confirmation.md?raw";
 import documentationIndexDocumentation from "../../docs/README.md?raw";
 import projectInstructionsDocumentation from "../../AGENTS.md?raw";
@@ -53,6 +55,7 @@ import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
 import { EnvironmentBanner } from "./components/EnvironmentBanner";
 import { ApplicationNavigation, type NavigationPage } from "./components/ApplicationNavigation";
+import { SubmissionActivityWorkspace } from "./components/SubmissionActivityWorkspace";
 import { ReportingWorkspace } from "./components/ReportingWorkspace";
 import { ImportFlowWorkspace } from "./components/ImportFlowWorkspace";
 import type { ImportFlowContext } from "./importFlowTypes";
@@ -135,13 +138,14 @@ import {
   resolvePostWorkspaceRecord,
 } from "./xmlWorkspace";
 
-type PlannedTab = "sourceFiles" | "importHistory" | "registrationSnapshot" | "eudamedComparison";
+type PlannedTab = "submissionActivity" | "sourceFiles" | "importHistory" | "registrationSnapshot" | "eudamedComparison";
 type MainTab = NavigationPage;
 const PLANNED_WORKSPACES: { id: PlannedTab; group: "Import Management" | "Reporting"; title: string; description: string }[] = [
   { id: "sourceFiles", group: "Import Management", title: "Import Data", description: "Review source files, create the Import Workbook and import batch data." },
   { id: "importHistory", group: "Import Management", title: "Import History", description: "View previous imports and their result reports." },
-  { id: "registrationSnapshot", group: "Reporting", title: "Registration Snapshot", description: "Create a dated registration report by device model." },
-  { id: "eudamedComparison", group: "Reporting", title: "EUDAMED Comparison", description: "Compare EUDAMED XML extracts with a saved registration snapshot." },
+  { id: "submissionActivity", group: "Reporting", title: "Submission Activity", description: "Review recorded ZIP downloads and EUDAMED responses by model." },
+  { id: "registrationSnapshot", group: "Reporting", title: "Stored Device Data Comparison", description: "Compare stored accepted device attributes with EUDAMED extracts by model." },
+  { id: "eudamedComparison", group: "Reporting", title: "Stored Device Data Comparison", description: "Compare stored accepted device attributes with EUDAMED extracts by model." },
 ];
 type SubmissionDataTab = "activity" | "snapshot";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
@@ -508,6 +512,8 @@ type DocumentationSection = {
     | "environmentProfiles"
     | "devImportGuide"
     | "devImportSafety"
+    | "raReport"
+    | "submissionActivityGuide"
     | "productionWorkbookContract"
     | "productionPreparation"
     | "productionImporterDesign"
@@ -830,6 +836,18 @@ export function App() {
       markdown: devImportSafetyDocumentation,
     },
     {
+      id: "submissionActivityGuide",
+      title: "Submission Activity Report",
+      sourcePath: "docs/submission-activity-report.md",
+      markdown: submissionActivityDocumentation,
+    },
+    {
+      id: "raReport",
+      title: "Stored Device Data Comparison",
+      sourcePath: "docs/ra-report-first-iteration.md",
+      markdown: raReportDocumentation,
+    },
+    {
       id: "productionWorkbookContract",
       title: "Production Workbook Contract",
       sourcePath: "docs/production-import-workbook-design.md",
@@ -1011,7 +1029,7 @@ export function App() {
     {
       id: "verification",
       title: "Verification And Decision Support",
-      sectionIds: ["registrationPolicy", "registrationCounts", "marketInfoParity", "testingScenarios", "softwareEngineeringPatterns"],
+      sectionIds: ["submissionActivityGuide", "raReport", "registrationPolicy", "registrationCounts", "marketInfoParity", "testingScenarios", "softwareEngineeringPatterns"],
     },
     {
       id: "production",
@@ -3176,7 +3194,7 @@ export function App() {
 
   const plannedWorkspace = PLANNED_WORKSPACES.find((workspace) => workspace.id === activeTab);
   const isImportManagement = activeTab === "sourceFiles";
-  const isReportingUiPreview = activeTab === "registrationSnapshot" || activeTab === "eudamedComparison";
+  const isReporting = activeTab === "registrationSnapshot" || activeTab === "eudamedComparison";
   const locationLabel = plannedWorkspace?.group ?? (activeTab === "xml" || activeTab === "testingSummary" ? "EUDAMED" : activeTab === "documentation" ? "Help" : "Data Views");
 
 
@@ -3350,8 +3368,10 @@ export function App() {
           onDatabaseImported={() => { void loadWorkbookImportMonitoring(); void loadCanonicalValidationBundle(true); void loadCanonicalReviewBundle(true); setRegistrationSummaryRefresh(value => value + 1); }}
         /> : <section className="panel"><p>Import Management is currently available in Dev. Continue using the existing Production import workflow.</p></section>}
       </div>
-      <div hidden={!isReportingUiPreview}>
+      <SubmissionActivityWorkspace enabled={activeTab === "submissionActivity"} environment={activeEnvironment} />
+      <div hidden={!isReporting}>
         <ReportingWorkspace
+          enabled={isReporting}
           page={activeTab === "eudamedComparison" ? "eudamedComparison" : "registrationSnapshot"}
           environment={activeEnvironment}
           onPageChange={setActiveTab}

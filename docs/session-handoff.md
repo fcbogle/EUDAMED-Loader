@@ -1,6 +1,197 @@
 # Session Handoff
 
-Updated November 1, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated November 8, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## November 8 — Submission Activity report by model
+
+Implemented the owner-requested **Reporting → Submission Activity** report in Dev.
+One hyperlink per model opens its latest and previous activity, including the same
+latest record shown in the summary. The full model list remains visible; there is
+no separate model selector/button. Latest recorded activity/type, latest ZIP download
+and latest EUDAMED response timestamps are separate, displayed in UTC. Unusable or
+missing timestamps remain unordered history, not inferred upload dates.
+
+ZIP records and message batches remain separate because the database does not
+consistently link packages to batches. No joining by nearby model/date/filename.
+Batch outcomes are calculated per entity, preserving pending/partial/error/conflict
+states and model-specific counts for mixed-model batches. Response-only evidence is
+explicitly unlinked; export baseline imports are not counted as upload activity.
+
+Record evidence exposes filenames/hashes, message/correlation and available
+transaction/submission references, errors, and read-only retained response XML
+downloads. Entity outcomes stay hidden until requested and are paged. Full-report
+Excel has separate summary/history/response/notes sheets; entity detail is opt-in.
+Portal upload time/uploader, ZIP generator, Success XML importer and separate XML
+application import time remain Not recorded. No attribution is invented.
+
+See [Submission Activity instructions](submission-activity-report.md). Generation
+uses a read-only database snapshot and does not migrate/import/update accepted state.
+Dev-only, browser review pending; no Production services, main source changes,
+authentication, M2M, commit or push. Registration Evidence remains a separate planned
+report; Stored Device Data Comparison is unchanged.
+
+Verification: full backend suite **439 passed in 250.07 seconds** with its two
+existing FastAPI deprecation warnings; **8 focused activity regressions passed**.
+All **136 frontend tests** and the TypeScript/Vite build passed with the existing
+bundle-size advisory. Tests cover latest/history consistency, repeated ZIP names,
+pending/partial/conflicting outcomes, cross-model batch scoping, unlinked/duplicate
+responses, unresolved dates, optional literal-text entity Excel, read-only response
+downloads, model hyperlinks, hidden entity lists and obsolete UI requests. These are
+synthetic automated checks; owner browser verification remains pending.
+
+## November 8 — Model names link directly to report detail
+
+Owner-requested UI refinement: the model summary now renders each model name as
+a hyperlink to its scoped detail section. Removed the separate model dropdown and
+model buttons. The complete model summary/totals remain visible while findings
+and coverage follow the selected model. A link restores all-model detail. Individual
+device rows remain opt-in; changing models clears their open state and pagination.
+
+Verification: **131 frontend tests passed** and TypeScript/Vite build passed with
+the existing bundle-size advisory. This frontend/docs-only change did not start
+services, open operational databases or change backend/reporting rules. Browser
+review is pending; no commit or push.
+
+## November 8 — Reporting upload removed; automatic retained-extract selection
+
+The owner clarified that **all newer extracts come through Data Import**, not
+Reporting. Implemented removal of the extract selector/upload from Stored Device
+Data Comparison. Reporting automatically previews and uses the latest suitable
+complete retained set; only report options are accepted by its API. There is no
+manual extract override, file/path input or upload action in Reporting.
+
+Selection reads published dated source manifests/XML only, checking hash/inventory,
+environment/manufacturer/schema, timezone-bearing dates, complete pages and unique
+identities. XML files are never combined between batches. Recorded export dates
+rank sets; identical copies are deduplicated. Conflicting overlapping-date sets
+block selection. Unusable sets are explained, with a suitable older set used where
+available. Missing evidence is unassessed, not zero. New/corrected evidence is managed
+through Data Import. Source-only retained batches are explicitly distinguished from
+completed database imports; unpublished drafts are excluded. No original source or
+operational database is modified by report selection/generation.
+
+The screen and Excel show actual source batch, date range, hashes, scope and
+excluded-set context. Source checks refresh on returning to Reporting, and generation
+reselects so newer retained data is reflected. Existing stored-data comparison rules
+and separate planned registration-evidence/audit reports remain. Their design now
+also excludes reporting uploads/manual source selection. See [report instructions](ra-report-first-iteration.md).
+
+Dev-only; no main source change, Production service, schema change, operational
+import, accepted-state update, commit, push or M2M work. Browser review is pending.
+
+Verification: full backend suite **429 passed in 244.48 seconds**, with the two
+existing FastAPI deprecation warnings. Final focused reporting/source checks:
+**33 passed**, including malformed/redirected/changed sources, date-based selection,
+duplicate copies, incomplete fallback, conflicting sets, no cross-batch page mixing,
+no SQLite access during source selection and no reporting upload inputs. All
+**130 frontend tests** and the TypeScript/Vite build passed with the existing
+bundle-size advisory. Source status is not browser-cached; stale responses cannot
+replace current context. These are synthetic automated checks, not live inventory
+or browser verification.
+
+## November 8 — Registration Evidence defaults to retained extracts (design)
+
+The owner requested a design update: the planned **Registration Evidence** report
+must use the latest suitable complete EUDAMED extract set already retained, rather
+than demand a fresh upload. Rank by recorded export dates within matching
+manufacturer/environment/scope, never by file modification/import time. Validate
+set membership, availability/hashes and completeness; do not mix unrelated pages.
+Show dates, scope, selection reason and any newer incomplete excluded set.
+
+Later successful per-device registration evidence is reported separately and must
+not be overridden by absence from an older extract. Distinguish additional evidenced
+identities from subsequent updates to already evidenced devices; avoid double
+counting. Partial successes, delayed imports and uncertain timestamps need explicit
+handling. Missing suitable extracts show unavailable/unassessed coverage, not zero;
+local evidence can still be summarized separately. A newer extract is optional.
+
+Detailed source selection, model categories, exceptions, date rules and synthetic
+verification cases are in [report design](ra-report-first-iteration.md#registration-evidence--retained-extract-design-november-8).
+This is a documentation-only update. The Registration Evidence report is still
+planned; the implemented Stored Device Data Comparison upload behavior is unchanged.
+No application source, database, services, migration, import, commit or push changed.
+
+## November 7 — Stored-data comparison replaces payload-proof summary
+
+The owner clarified that the first report must compare **stored accepted device
+values** with dated EUDAMED extracts. Original outgoing XML and Success XML are no
+longer required inputs. Registration proof belongs in separate reports. This entry
+supersedes the earlier November 7 payload-based report description below.
+
+Open **Reporting → Stored Device Data Comparison** in Dev. Upload the extract page
+set and generate. Existing accepted-device and Market Info readers provide stored
+values, including accepted export baselines and successful updates. Canonical data
+supplies stable identity/model grouping and provenance, never replacement proposed
+values. Missing stored fields are separate from known attribute differences; known
+differences remain counted even when other fields are incomplete. An all-match
+result requires every listed supported field to agree with usable stored data.
+
+Model summaries, grouped unique affected-entry counts, optional paged device detail
+and full-report Excel remain. Details now show Stored versus Extract values and
+stored-state provenance. Comparison-source coverage does not claim registration
+proof. Parent attributes/versions and unsupported export projection remain outside
+the supported device scope; limitations and field lists are shown explicitly.
+Newer stored activity is date context, not a requirement to supply upload files.
+Known newer successful versions without matching snapshots cannot reuse older data.
+
+The earlier original-payload comparison controls/API were replaced. The separate
+Registration Evidence and Registration Activity/Audit reports are specified as next
+increments in [report instructions](ra-report-first-iteration.md), not claimed as
+implemented. No schema or workflow change, operational import, Production service,
+main source change, commit, push or M2M work. Browser review remains pending.
+
+Verification: the full backend suite passed **416 tests in 248.65 seconds** with
+its two existing FastAPI deprecation warnings. After final required-value and
+unsupported-translation refinements, all **21 focused report tests passed**.
+All **129 frontend tests** and the TypeScript/Vite build passed, retaining the
+existing bundle-size advisory. Tests cover accepted baselines without original
+XML, successful updates, missing/stale accepted snapshots, drafts/errors, known
+differences alongside missing fields, optional null versus blank required values,
+structured lists, unsupported translations, grouped counts, optional Excel details,
+extract guards and stale UI responses. No live inventory or browser result implied.
+
+## November 7 — First RA registration and evidence report
+
+Implemented in the development worktree on `feature/import-management-reporting`.
+Open **Reporting → Registration and Evidence Summary** after restarting the Dev
+backend and refreshing the frontend. The single report replaces the synthetic
+reporting previews. It starts with database entries by existing family/model and
+counts exact attribute matches, differences, unable to verify and absent from the
+selected extract. Grouped attribute/evidence findings show unique affected entry
+counts; individual device details are optional and paged. Full-report Excel includes
+device details only when requested before generation.
+
+The owner directed comparison against submitted payloads supported by equivalent
+Success XML, rather than current proposed workbook values. Supply extract pages
+and original outgoing XML (unpack submission ZIPs first). Retained Success XML is
+checked automatically; additional response XML can be supplied. Matching service,
+correlation, entity, versions and timing qualify the payload. Failed entities,
+ambiguous/missing proof, known newer successful history without supplied payloads
+and stale extracts cannot establish exact matches. Parent/device/Market Info have
+separate evidence. Server version dates and schema type annotations are excluded;
+initial Market Info version is not inferred. See the precise scope and limitations
+in [first-report instructions](ra-report-first-iteration.md).
+
+Source coverage distinguishes recorded workbook links from supplied payload proof
+and extract membership; original source availability, Basic UDI reference and
+review coverage remain unverified. Reports are generated from one read-only SQLite
+snapshot and temporary XML inputs, with no import or accepted-state changes. Dev
+only; Production rejects this reporting API. Reports are not retained server-side;
+download Excel to preserve a result. No operational database or application service
+was opened/started by Codex, and no main checkout source was changed. Existing
+`docs/.DS_Store` changes were left alone. Owner browser verification remains pending.
+
+The audit/activity report, improved saved-evidence selection, Production rollout,
+PDF and RA access remain later increments. No commit, push, merge or M2M work.
+
+Verification: full backend suite **410 passed in 245.68 seconds**, with the two
+existing FastAPI startup deprecation warnings. After final report refinements,
+all **16 focused reporting tests passed**. All **127 frontend tests passed** and
+the TypeScript/Vite build passed with the existing bundle-size advisory. Coverage
+includes real-renderer XML, partial success, retained responses, newer missing
+payloads, stale/incomplete extracts, conflicting and issuer-ambiguous identities,
+attribute grouping, optional literal-text Excel, pagination and obsolete UI requests.
+These are automated synthetic checks, not live inventory or browser verification.
 
 ## November 1 — Documentation remediation
 

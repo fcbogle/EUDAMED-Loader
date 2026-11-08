@@ -4,7 +4,7 @@ export type NavigationPage =
   | "sourceFiles" | "importHistory"
   | "workbooks" | "canonicalValidation" | "registrationState"
   | "xml" | "testingSummary"
-  | "registrationSnapshot" | "eudamedComparison" | "documentation";
+  | "submissionActivity" | "registrationSnapshot" | "eudamedComparison" | "documentation";
 
 type Area = "imports" | "data" | "eudamed" | "reporting" | "help";
 type NavigationGroup = { id: Area; label: string; pages: { id: NavigationPage; label: string }[] };
@@ -31,16 +31,17 @@ export function ApplicationNavigation({ activePage, onSelect, xmlWorkspaceLabel,
       { id: "testingSummary", label: summaryWorkspaceLabel },
     ] },
     { id: "reporting", label: "Reporting", pages: [
-      { id: "registrationSnapshot", label: "Registration Snapshot" },
-      { id: "eudamedComparison", label: "EUDAMED Comparison" },
+      { id: "registrationSnapshot", label: "Stored Device Data Comparison" },
+      { id: "submissionActivity", label: "Submission Activity" },
     ] },
     { id: "help", label: "Help", pages: [{ id: "documentation", label: "Documentation" }] },
   ];
-  const activeGroup = groups.find((group) => group.pages.some((page) => page.id === activePage))!;
+  const displayedActivePage = activePage === "eudamedComparison" ? "registrationSnapshot" : activePage;
+  const activeGroup = groups.find((group) => group.pages.some((page) => page.id === displayedActivePage))!;
 
   function selectArea(group: NavigationGroup) {
-    setLastPages((previous) => ({ ...previous, [activeGroup.id]: activePage }));
-    onSelect(group.id === activeGroup.id ? activePage : lastPages[group.id] ?? group.pages[0].id);
+    setLastPages((previous) => ({ ...previous, [activeGroup.id]: displayedActivePage }));
+    onSelect(group.id === activeGroup.id ? displayedActivePage : lastPages[group.id] ?? group.pages[0].id);
   }
 
   return (
@@ -63,8 +64,8 @@ export function ApplicationNavigation({ activePage, onSelect, xmlWorkspaceLabel,
           <button
             key={page.id}
             type="button"
-            className={page.id === activePage ? "navigation-page active" : "navigation-page"}
-            aria-current={page.id === activePage ? "page" : undefined}
+            className={page.id === displayedActivePage ? "navigation-page active" : "navigation-page"}
+            aria-current={page.id === displayedActivePage ? "page" : undefined}
             onClick={() => onSelect(page.id)}
           >
             {page.label}

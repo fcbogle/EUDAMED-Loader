@@ -1,4 +1,6 @@
+import type { SubmissionActivityReport } from "./submissionActivityTypes";
 import type { ImportSession, ImportChoice, ImportMetadata, ImportSources } from "./importFlowTypes";
+import type { StoredDeviceComparison, RetainedExtractStatus } from "./reportingTypes";
 import type {
   BulkPatchPostedEntriesResponse,
   BulkPatchPostedParentsResponse,
@@ -137,6 +139,11 @@ async function encodeBatchFiles(groups: { templates: File[]; basic: File[]; xml:
 }
 
 export const api = {
+  submissionActivityReport: (request: {include_device_details:boolean}) => sendJson<SubmissionActivityReport>("/reporting/submission-activity", "POST", request),
+  submissionActivityResponse: (eventId:number) => sendDownload(`/reporting/submission-activity/responses/${eventId}`, "GET"),
+  storedDeviceComparisonSource: () => getJson<RetainedExtractStatus>("/reporting/device-comparison/source"),
+  storedDeviceComparison: (request: {include_device_details: boolean}) =>
+    sendJson<StoredDeviceComparison>("/reporting/device-comparison", "POST", request),
   importSessions: () => getJson<{imports: ImportChoice[]}>("/dev-input-batches/sessions"),
   importSession: (id: string) => getJson<ImportSession>(`/dev-input-batches/sessions/${encodeURIComponent(id)}`),
   saveImportSession: async (id: string, revision: string | undefined, metadata: ImportMetadata, files: ImportSources, removed: string[]) => sendJson<ImportSession>(`/dev-input-batches/sessions/${encodeURIComponent(id)}`, "PUT", {metadata, expected_revision:revision, files:await encodeBatchFiles(files), remove_paths:removed, replace_roles:files.xml.length?["eudamed-xml"]:[]}),

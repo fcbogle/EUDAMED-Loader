@@ -44,7 +44,7 @@ test('navigation displays only the selected area pages and marks both navigation
   assert.equal(h.nodes().find(n => n.props?.['aria-pressed'] === true).props.children, 'Import Management');
   assert.equal(h.nodes().find(n => n.props?.['aria-current'] === 'page').props.children, 'Import Data');
   h.click('Reporting');
-  assert.deepEqual(h.pages(), ['Registration Snapshot', 'EUDAMED Comparison']);
+  assert.deepEqual(h.pages(), ['Stored Device Data Comparison', 'Submission Activity']);
   h.click('Help');
   assert.deepEqual(h.pages(), ['Documentation']);
 });
@@ -54,12 +54,12 @@ test('switching areas restores each previous page, including after clicking the 
   h.click('Registration State');
   h.click('EUDAMED'); h.click('Testing Summary');
   h.click('Import Management'); h.click('Import History');
-  h.click('Reporting'); h.click('EUDAMED Comparison');
+  h.click('Reporting'); h.click('Stored Device Data Comparison');
   h.click('Data Views'); assert.equal(h.props.activePage, 'registrationState');
   h.click('EUDAMED'); assert.equal(h.props.activePage, 'testingSummary');
   h.click('EUDAMED'); assert.equal(h.props.activePage, 'testingSummary');
   h.click('Import Management'); assert.equal(h.props.activePage, 'importHistory');
-  h.click('Reporting'); assert.equal(h.props.activePage, 'eudamedComparison');
+  h.click('Reporting'); assert.equal(h.props.activePage, 'registrationSnapshot');
 });
 
 for (const labels of [
@@ -75,3 +75,12 @@ for (const labels of [
     assert.equal(h.props.activePage, 'testingSummary');
   });
 }
+
+test('the former comparison page resolves to the single report without losing navigation', () => {
+  const h = harness();
+  h.props.activePage = 'eudamedComparison';
+  h.click('Reporting');
+  assert.equal(h.props.activePage, 'registrationSnapshot');
+  assert.deepEqual(h.pages(), ['Stored Device Data Comparison', 'Submission Activity']);
+  assert.equal(h.nodes().find(n => n.props?.['aria-current'] === 'page').props.className, 'navigation-page active');
+});

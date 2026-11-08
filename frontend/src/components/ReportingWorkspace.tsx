@@ -1,170 +1,122 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { api } from "../api";
+import type { StoredDeviceComparison, ReportDetail, RetainedExtractStatus } from "../reportingTypes";
 
-type RegistrationStatus = "Registered" | "Unregistered" | "Unknown";
-type ExampleDevice = { model: string; catalogue: string; parent: RegistrationStatus; device: RegistrationStatus; parentVersion: string; version: string; marketVersion: string };
-const EXAMPLE_DEVICES: ExampleDevice[] = [
-  { model: "Example Model A", catalogue: "DEMO-001", parent: "Registered", device: "Registered", parentVersion: "1", version: "2", marketVersion: "1" },
-  { model: "Example Model A", catalogue: "DEMO-002", parent: "Registered", device: "Unregistered", parentVersion: "1", version: "—", marketVersion: "—" },
-  { model: "Example Model A", catalogue: "DEMO-003", parent: "Unknown", device: "Unknown", parentVersion: "Unknown", version: "—", marketVersion: "—" },
-  { model: "Example Model B", catalogue: "DEMO-004", parent: "Registered", device: "Registered", parentVersion: "1", version: "1", marketVersion: "Unknown" },
-  { model: "Example Model B", catalogue: "DEMO-005", parent: "Unregistered", device: "Unregistered", parentVersion: "—", version: "—", marketVersion: "—" },
-  { model: "Example Model B", catalogue: "DEMO-006", parent: "Registered", device: "Registered", parentVersion: "1", version: "3", marketVersion: "2" },
-];
-type ComparisonOutcome = "Matches" | "Difference found" | "Unable to compare";
-const EXAMPLE_COMPARISON: { model: string; catalogue: string; outcome: ComparisonOutcome; detail: string; action: string; owner: string }[] = [
-  { model: "Example Model A", catalogue: "DEMO-001", outcome: "Matches", detail: "Device version and recorded market information agree.", action: "No action for the compared fields.", owner: "—" },
-  { model: "Example Model B", catalogue: "DEMO-006", outcome: "Difference found", detail: "Device version: snapshot 3; XML extract 4.", action: "Review the response history and the dates of both inputs.", owner: "Enterprise Solutions" },
-  { model: "Example Model A", catalogue: "DEMO-003", outcome: "Unable to compare", detail: "Device absent from the supplied export; export coverage is unconfirmed.", action: "Confirm export scope and obtain missing pages if needed.", owner: "Enterprise Solutions" },
-];
+function download(report: StoredDeviceComparison) {
+  const bytes = Uint8Array.from(atob(report.excel_base64), character => character.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  const link = document.createElement("a");
+  link.href = url; link.download = `stored-device-comparison-${report.generated_at.replace(/[:.]/g, "-")}.xlsx`;
+  link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+const outcomeLabel: Record<string, string> = {exact: "All compared attributes match", different: "Differences found", unable: "Insufficient stored data / scope", absent: "Absent from extract"};
 
-export function ReportingWorkspace({ page, environment, onPageChange }: {
+export function ReportingWorkspace({ environment, enabled = true }: {
   page: "registrationSnapshot" | "eudamedComparison";
   environment: "dev" | "prod" | null;
+  enabled?: boolean;
   onPageChange: (page: "registrationSnapshot" | "eudamedComparison") => void;
 }) {
+  const [source, setSource] = useState<RetainedExtractStatus | null>(null);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [includeDetails, setIncludeDetails] = useState(false);
+  const [report, setReport] = useState<StoredDeviceComparison | null>(null);
   const [model, setModel] = useState("");
-  const [status, setStatus] = useState("");
-  const [snapshotExample, setSnapshotExample] = useState(false);
-  const [comparisonExample, setComparisonExample] = useState(false);
-  const [selectedSnapshot, setSelectedSnapshot] = useState("");
-  const [xmlFiles, setXmlFiles] = useState<File[]>([]);
-  const [outcome, setOutcome] = useState("");
-  const rows = EXAMPLE_DEVICES.filter((row) => (!model || row.model === model) && (!status || row.device === status));
-  const comparisonRows = EXAMPLE_COMPARISON.filter((row) => !outcome || row.outcome === outcome);
-  const invalidXml = xmlFiles.some((file) => !/\.xml$/i.test(file.name));
-  const environmentLabel = environment === "dev" ? "Dev / Playground" : environment === "prod" ? "Production" : "Unconfirmed";
+  const [showDevices, setShowDevices] = useState(false);
+  const [showEvidence, setShowEvidence] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const generation = useRef(0);
+  const sourceGeneration = useRef(0);
+  useEffect(() => {
+    const current = ++sourceGeneration.current;
+    generation.current += 1;
+    setReport(null); setError(""); setBusy(false); setShowDevices(false); setOffset(0); setSource(null);
+    if (environment !== "dev" || !enabled) { setSourceLoading(false); return; }
+    setSourceLoading(true);
+    void api.storedDeviceComparisonSource().then(result => {
+      if (current !== sourceGeneration.current) return;
+      if (result.environment !== environment) throw new Error("Extract source environment changed. Reopen Reporting.");
+      setSource(result);
+    }).catch(reason => {
+      if (current === sourceGeneration.current) setError(reason instanceof Error ? reason.message : "Retained extracts could not be checked");
+    }).finally(() => { if (current === sourceGeneration.current) setSourceLoading(false); });
+    return () => { sourceGeneration.current += 1; generation.current += 1; };
+  }, [environment, enabled]);
+  useEffect(() => () => { generation.current += 1; sourceGeneration.current += 1; }, []);
 
-  return (
-    <section className="tab-stack reporting-workspace" aria-label={page === "registrationSnapshot" ? "Registration Snapshot workspace" : "EUDAMED Comparison workspace"}>
-      <div className="import-preview-notice" role="note">
-        <span className="status-pill warn">UI preview</span>
-        <span>Examples are synthetic. Snapshot creation, XML upload, comparison and report downloads are not yet available.</span>
-      </div>
-      {page === "registrationSnapshot" ? (
-        <>
-          <section className="panel">
-            <div className="section-heading">
-              <div><span className="section-kicker">Scope</span><h2>Snapshot scope</h2></div>
-              <span className="status-pill compact">{environmentLabel}</span>
-            </div>
-            <p className="panel-copy">Choose the models and registration position to include in a dated Excel snapshot.</p>
-            <div className="reporting-controls">
-              <label htmlFor="snapshot-model">Device model
-                <select id="snapshot-model" value={model} onChange={(event) => setModel(event.target.value)}>
-                  <option value="">All models</option>
-                  <option value="Example Model A">Example Model A (synthetic)</option>
-                  <option value="Example Model B">Example Model B (synthetic)</option>
-                </select>
-              </label>
-              <label htmlFor="snapshot-status">Device registration
-                <select id="snapshot-status" value={status} onChange={(event) => setStatus(event.target.value)}>
-                  <option value="">All statuses</option>
-                  <option>Registered</option><option>Unregistered</option><option>Unknown</option>
-                </select>
-              </label>
-            </div>
-            <div className="import-action-row">
-              <button className="action-button" type="button" disabled>Create Excel Snapshot</button>
-              <button className="ghost-button" type="button" onClick={() => setSnapshotExample((previous) => !previous)}>{snapshotExample ? "Hide example snapshot" : "View example snapshot"}</button>
-              <button className="ghost-button" type="button" onClick={() => { setModel(""); setStatus(""); }}>Reset filters</button>
-            </div>
-            <p className="panel-copy">One worksheet per device model, using its Template layout. Parent and device registration remain separate.</p>
-          </section>
-          <section className="panel">
-            <div className="section-heading"><div><span className="section-kicker">Preview</span><h2>Registration position</h2></div></div>
-            {snapshotExample ? (
-              <>
-                <p className="import-example-label" role="note">Synthetic example — these devices and counts are not application records.</p>
-                <Metrics values={[
-                  ["Visible devices", rows.length],
-                  ["Registered", rows.filter((row) => row.device === "Registered").length],
-                  ["Unregistered", rows.filter((row) => row.device === "Unregistered").length],
-                  ["Unknown", rows.filter((row) => row.device === "Unknown").length],
-                ]} />
-                <div className="reporting-status-legend" aria-label="Registration status legend">
-                  {(["Registered", "Unregistered", "Unknown"] as const).map((value) => <RegistrationBadge key={value} value={value} />)}
-                </div>
-                <div className="import-exception-table">
-                  <table>
-                    <caption>Illustrative preview — Excel worksheets will retain each model’s Template columns</caption>
-                    <thead><tr><th scope="col">Model</th><th scope="col">Catalogue</th><th scope="col">Basic UDI-DI status</th><th scope="col">Device UDI-DI status</th><th scope="col">Parent version</th><th scope="col">Device version</th><th scope="col">Market Info version</th></tr></thead>
-                    <tbody>{rows.map((row) => <tr key={row.catalogue}><td>{row.model}</td><td>{row.catalogue}</td><td><RegistrationBadge value={row.parent} /></td><td><RegistrationBadge value={row.device} /></td><td>{row.parentVersion}</td><td>{row.version}</td><td>{row.marketVersion}</td></tr>)}</tbody>
-                  </table>
-                </div>
-                {!rows.length ? <p className="import-empty-state">No example devices match these filters.</p> : null}
-                <p className="panel-copy">Unknown means evidence is unresolved. A registered parent can have unregistered children.</p>
-              </>
-            ) : <p className="import-empty-state">No snapshot generated. View the synthetic example to explore the layout.</p>}
-          </section>
-          <section className="panel">
-            <div className="section-heading"><div><span className="section-kicker">Saved reports</span><h2>Snapshot history</h2></div></div>
-            <p className="panel-copy">Saved snapshots will retain the date, environment, manufacturer, scope and source references for reproducible comparison.</p>
-            <p className="import-empty-state">No saved snapshots are connected in this preview.</p>
-            <div className="import-action-row"><button className="ghost-button" type="button" onClick={() => onPageChange("eudamedComparison")}>Go to EUDAMED Comparison</button></div>
-          </section>
-        </>
-      ) : (
-        <>
-          <section className="panel">
-            <div className="section-heading">
-              <div><span className="section-kicker">Inputs</span><h2>Select snapshot and XML extracts</h2></div>
-              <span className="status-pill compact">{environmentLabel}</span>
-            </div>
-            <div className="reporting-controls">
-              <label htmlFor="comparison-snapshot">Saved application snapshot
-                <select id="comparison-snapshot" value={selectedSnapshot} onChange={(event) => setSelectedSnapshot(event.target.value)}>
-                  <option value="">Select a snapshot</option>
-                  <option value="synthetic">Synthetic example snapshot (not a saved report)</option>
-                </select>
-              </label>
-              <div className="reporting-file-field">
-                <label htmlFor="comparison-xml">EUDAMED XML extracts</label>
-                <input id="comparison-xml" type="file" accept=".xml" multiple aria-invalid={invalidXml || undefined} aria-describedby="comparison-xml-status" onChange={(event) => setXmlFiles(Array.from(event.target.files ?? []))} />
-                <p id="comparison-xml-status" className="panel-copy" aria-live="polite">{invalidXml ? "Unsupported file type. Select XML files." : xmlFiles.length ? `${xmlFiles.length} selected locally · Not uploaded` : "No XML files selected."}</p>
-                {xmlFiles.length ? <ul className="import-selected-files">{xmlFiles.map((file, index) => <li key={`${file.name}-${index}`}><span>{file.name}</span><small>{Math.ceil(file.size / 1024)} KB</small></li>)}</ul> : null}
-              </div>
-            </div>
-            <div className="import-action-row">
-              <button className="action-button" type="button" disabled>Upload and compare</button>
-              <button className="ghost-button" type="button" onClick={() => setComparisonExample((previous) => !previous)}>{comparisonExample ? "Hide example comparison" : "View example comparison"}</button>
-              <button className="ghost-button" type="button" onClick={() => onPageChange("registrationSnapshot")}>Go to Registration Snapshot</button>
-            </div>
-            <p className="panel-copy">Use exports from the same environment and manufacturer. Retain all pages and record export dates and filters.</p>
-          </section>
-          <section className="panel">
-            <div className="section-heading"><div><span className="section-kicker">Results</span><h2>Comparison outcomes</h2></div><button className="ghost-button" type="button" disabled>Download comparison report</button></div>
-            {comparisonExample ? (
-              <>
-                <p className="import-example-label" role="note">Synthetic example — results are independent of the selected snapshot and XML files.</p>
-                <Metrics values={[["Records reviewed", 3], ["Matches", 1], ["Differences found", 1], ["Unable to compare", 1]]} />
-                <div className="reporting-controls">
-                  <label htmlFor="comparison-outcome">Outcome
-                    <select id="comparison-outcome" value={outcome} onChange={(event) => setOutcome(event.target.value)}>
-                      <option value="">All outcomes</option><option>Matches</option><option>Difference found</option><option>Unable to compare</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="import-exception-table">
-                  <table>
-                    <caption>Example comparison details · {comparisonRows.length} visible</caption>
-                    <thead><tr><th scope="col">Model / device</th><th scope="col">Outcome</th><th scope="col">Finding</th><th scope="col">Required action</th><th scope="col">Owner</th></tr></thead>
-                    <tbody>{comparisonRows.map((row) => <tr key={row.catalogue}><td>{row.model}<br />{row.catalogue}</td><td><span className={`status-pill compact ${row.outcome === "Matches" ? "ok" : row.outcome === "Difference found" ? "warn" : "reporting-status-unknown"}`}>{row.outcome}</span></td><td>{row.detail}</td><td>{row.action}</td><td>{row.owner}</td></tr>)}</tbody>
-                  </table>
-                </div>
-                <p className="panel-copy">Missing export coverage means Unable to compare, not proof of non-registration. Unknown versions remain unknown.</p>
-              </>
-            ) : <p className="import-empty-state">No comparison has been performed. View the synthetic example to explore the results.</p>}
-          </section>
-        </>
-      )}
+  function invalidate() {
+    generation.current += 1; setReport(null); setBusy(false); setError(""); setShowDevices(false); setOffset(0);
+  }
+  async function generate() {
+    const current = ++generation.current;
+    setBusy(true); setReport(null); setError(""); setShowDevices(false); setOffset(0);
+    try {
+      const result = await api.storedDeviceComparison({include_device_details: includeDetails});
+      if (current !== generation.current) return;
+      if (result.environment !== environment) throw new Error("Report environment changed. Refresh and generate again.");
+      setReport(result); setSource({environment: result.environment, available: true, selected: result.extract_source, excluded_sets: result.excluded_extract_sets}); setModel("");
+    } catch (reason) {
+      if (current === generation.current) setError(reason instanceof Error ? reason.message : "Report could not be generated");
+    } finally { if (current === generation.current) setBusy(false); }
+  }
+  const models = report?.models.filter(row => !model || row.key === model) ?? [];
+  const findings = report?.findings.filter(row => !model || row.model_key === model) ?? [];
+  const details = report?.details.filter(row => !model || row.model_key === model) ?? [];
+  const selectedModel = report?.models.find(row => row.key === model);
+  function openModel(key: string) { setModel(key); setShowDevices(false); setOffset(0); }
+  const total = (key: "total" | "exact" | "different" | "unable" | "absent") => (report?.models ?? []).reduce((sum, row) => sum + row[key], 0);
+  if (!enabled) return null;
+  if (environment !== "dev") return <section className="panel"><h2>Stored Device Data Comparison</h2><p>This first reporting iteration is available in Dev / Playground.</p></section>;
+  return <section className="tab-stack reporting-workspace" aria-label="Stored Device Data Comparison">
+    <section className="panel">
+      <div className="section-heading"><div><span className="section-kicker">Reporting · Dev / Playground</span><h2>Stored Device Data Comparison</h2></div></div>
+      <p>Compare stored accepted device values with a dated EUDAMED extract, grouped by the same models as EUDAMED Submission. This report does not import or update application data.</p>
+      <p className="panel-copy">Uses application data and the latest suitable complete EUDAMED extract retained through Data Import. Extracts are added or corrected only in Data Import; registration proof belongs in a separate report.</p>
+      {sourceLoading && <p role="status">Checking retained Data Import extracts…</p>}
+      {source?.available && source.selected && <div className="panel-copy" role="status">
+        <p>Retained extract batch: <strong>{source.selected.batch_id}</strong> · Export dates: {source.selected.exported_from} to {source.selected.exported_to} · {source.selected.file_count} files · Complete declared page set</p>
+        <p>{source.selected.selection_reason}. {source.selected.scope}</p>
+        <p>{source.selected.source_status}</p>
+      </div>}
+      {source && !source.available && <p role="status">{source.reason}</p>}
+      {!!source?.excluded_sets.length && <details><summary>{source.excluded_sets.length} retained sets excluded</summary><ul>{source.excluded_sets.map(item => <li key={item.batch_id}>{item.batch_id}: {item.reason}</li>)}</ul></details>}
+      <label><input type="checkbox" checked={includeDetails} onChange={event => { invalidate(); setIncludeDetails(event.target.checked); }} /> Include individual device details in the Excel download</label>
+      <div className="import-action-row"><button type="button" className="action-button" disabled={!source?.available || sourceLoading || busy} onClick={() => { void generate(); }}>{busy ? "Comparing stored values…" : "Generate report"}</button></div>
+      {error && <p role="alert">{error}</p>}
+      {!report && !busy && <p className="import-empty-state">Not assessed. Reporting uses retained Data Import extracts; generate when suitable evidence is available.</p>}
     </section>
-  );
+    {report && <>
+      <section className="panel">
+        <div className="section-heading"><h2>Model summary</h2><button type="button" className="ghost-button" onClick={() => download(report)}>Download full report Excel</button></div>
+        <p>Dev / Playground · Manufacturer {report.manufacturer} · Import batch {report.import_batch_id} · Generated {report.generated_at} (UTC)</p>
+        <p className="panel-copy">Extract batch {report.extract_source.batch_id} · Complete retained page set. Export dates: {[...new Set(report.export_files.map(file => file.created_at))].join(", ")}. Export scope beyond the supplied pages is not established.</p>
+
+        <div className="import-exception-table"><table><caption>Database entries compared against the selected extract</caption><thead><tr><th>Model</th><th>Database devices</th><th>All compared attributes match</th><th>Differences found</th><th>Insufficient stored data / scope</th><th>Absent from extract</th></tr></thead><tbody>
+          {report.models.map(row => <tr key={row.key}><td><a href="#report-model-detail" aria-label={`${row.model} · ${row.family} details`} aria-current={model === row.key ? "true" : undefined} onClick={() => openModel(row.key)}>{row.model}</a></td><td>{row.total}</td><td>{row.exact}</td><td>{row.different}</td><td>{row.unable}</td><td>{row.absent}</td></tr>)}
+          <tr><th>All models total</th>{(["total", "exact", "different", "unable", "absent"] as const).map(key => <td key={key}>{total(key)}</td>)}</tr>
+        </tbody></table></div>
+        <p>{report.extract_only} extract identities have no matching active database identity (whole report).</p>
+      </section>
+      <section className="panel" id="report-model-detail" tabIndex={-1} aria-labelledby="report-model-detail-title"><h2 id="report-model-detail-title">{selectedModel ? `${selectedModel.model} · ${selectedModel.family} — details` : "All models — details"}</h2>{selectedModel && <p><a href="#report-model-detail" onClick={() => openModel("")}>View details for all models</a></p>}<h3>Grouped exceptions</h3><p className="panel-copy">Counts are unique affected database entries within each finding. Findings overlap. Known differences remain visible even when other stored fields are missing.</p>
+        <div className="import-exception-table"><table><thead><tr><th>Model</th><th>Category</th><th>Finding</th><th>Affected entries</th></tr></thead><tbody>{findings.map((row, index) => <tr key={index}><td>{report.models.find(item => item.key === row.model_key)?.model} · {report.models.find(item => item.key === row.model_key)?.family}</td><td>{row.category}</td><td>{row.finding}</td><td>{row.affected}</td></tr>)}</tbody></table></div>
+        {!findings.length && <p>No findings in this view.</p>}
+      </section>
+      <section className="panel"><h2>Comparison coverage</h2><div className="import-exception-table"><table><thead><tr><th>Model</th><th>Entries linked to source workbook</th><th>Entries with stored accepted device values</th><th>Entries matched to extract</th></tr></thead><tbody>{models.map(row => <tr key={row.key}><td>{row.model} · {row.family}</td><td>{row.source_linked} / {row.total}</td><td>{row.stored_available} / {row.total}</td><td>{row.extract_matched} / {row.total}</td></tr>)}</tbody></table></div>
+        <p className="panel-copy">Source links are recorded provenance. Stored accepted values support this comparison; they do not, by themselves, establish proof of upload or registration.</p>
+        <button type="button" className="ghost-button" onClick={() => setShowEvidence(value => !value)}>{showEvidence ? "Hide comparison sources" : "View comparison sources"}</button>
+        {showEvidence && <div className="import-exception-table"><table><caption>Whole-report comparison sources</caption><thead><tr><th>Evidence</th><th>File</th><th>Date</th><th>SHA-256</th></tr></thead><tbody>{report.evidence.map((row, index) => <tr key={index}><td>{row.kind}</td><td>{row.name}</td><td>{row.created_at || "Not recorded"}</td><td>{row.sha256}</td></tr>)}</tbody></table></div>}
+      </section>
+      <section className="panel"><h2>Comparison scope</h2><p>Compared fields: {report.comparison_fields.join(", ")}</p><ul>{report.limitations.map(note => <li key={note}>{note}</li>)}</ul></section>
+      <section className="panel"><button type="button" className="ghost-button" onClick={() => { setShowDevices(value => !value); setOffset(0); }}>{showDevices ? "Hide device details" : "View affected entries"}</button>
+        {showDevices && <DeviceDetails rows={details.filter(row => row.outcome !== "exact" || row.notes.length > 0 || row.issues.length > 0)} offset={offset} setOffset={setOffset} />}
+      </section>
+    </>}
+  </section>;
 }
 
-function RegistrationBadge({ value }: { value: RegistrationStatus }) {
-  return <span className={`status-pill compact reporting-status-${value.toLowerCase()}`}>{value}</span>;
-}
-
-function Metrics({ values }: { values: [string, number][] }) {
-  return <div className="import-metric-grid">{values.map(([label, value]) => <div className="import-metric" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>;
+function DeviceDetails({rows, offset, setOffset}: {rows: ReportDetail[]; offset: number; setOffset: (value: number) => void}) {
+  return <><p>{rows.length} affected entries · showing {rows.length ? offset + 1 : 0}–{Math.min(offset + 25, rows.length)}</p><div className="import-exception-table"><table><thead><tr><th>Model / catalogue</th><th>Issuer / Device UDI-DI</th><th>Outcome</th><th>Stored and extracted values</th></tr></thead><tbody>{rows.slice(offset, offset + 25).map((row, index) => <tr key={index}><td>{row.model}<br />{row.catalogue}</td><td>{row.issuer}: {row.udi_di}</td><td>{outcomeLabel[row.outcome]}</td><td>{row.issues.map(issue => <p key={issue}>{issue}</p>)}{row.differences.map((difference, i) => <details key={i}><summary>{difference.field}</summary><p>Stored: {JSON.stringify(difference.stored)}</p><p>Extract: {JSON.stringify(difference.extracted)}</p></details>)}<p>Missing stored fields: {row.missing_fields.join(", ") || "None"}</p>{row.notes.map(note => <p key={note}>{note}</p>)}<p>Stored state source: {row.state_source}</p></td></tr>)}</tbody></table></div>
+    <button type="button" className="ghost-button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous entries</button><button type="button" className="ghost-button" disabled={offset + 25 >= rows.length} onClick={() => setOffset(offset + 25)}>Next entries</button></>;
 }

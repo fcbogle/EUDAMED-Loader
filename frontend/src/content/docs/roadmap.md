@@ -29,8 +29,16 @@ requires a verified backup and unchanged reviewed state. Old parallel UI/endpoin
 were removed. Legacy raw import remains separately available. See
 [Import Data in Dev](../../../../docs/source-batch-receipt.md).
 
-Reporting generation, persistent hosted storage, authentication and the Production
-rollout remain unfinished. This implemented Dev feature does not complete formal
+The first Dev Stored Device Data Comparison compares accepted database device
+values with the latest suitable complete extracts retained through Data Import,
+grouped by model. Reporting has no file upload or manual extract selector;
+outgoing/Success XML is not required for this comparison. See the
+[report instructions and exact comparison scope](../../../../docs/ra-report-first-iteration.md).
+The first [Submission Activity report](../../../../docs/submission-activity-report.md)
+shows model-linked ZIP/message history and recorded timing/outcomes without inventing
+portal upload times or operators. Separate registration-evidence reporting, broader
+audit attribution, persistent hosted storage, authentication
+and the Production reporting rollout remain unfinished. This implemented Dev feature does not complete formal
 Production validation or authorize new live submissions.
 
 ## Implemented — Production workbook importer
