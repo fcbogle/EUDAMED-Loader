@@ -4,7 +4,7 @@ Implemented 19 September 2026: explicit startup profile selection, separate stor
 configuration, and checks before services open SQLite. The current environment is
 **Dev**, targeting Playground. UI environment labels are implemented through
 `GET /api/environment` and the shared EnvironmentBanner. The controlled Production
-baseline importer is implemented as a separate service module. Documentation reviewed 1 November 2026 against the feature worktree.
+baseline importer is implemented as a separate service module. Documentation reviewed 12 November 2026 against the feature worktree.
 
 ## Select a profile at startup
 
@@ -49,8 +49,8 @@ disabled: use literal values, not `${VARIABLE}` references.
 
 | Setting | Dev defaults | Prod example / requirement |
 |---|---|---|
-| XML version | 3.0.32 | Explicit 3.0.30 |
-| Schema directory | `data/schema_profiles/dev-3.0.32-derived` | `data/schema_profiles/prod-3.0.30` |
+| XML version | 3.0.36.1 | Explicit 3.0.30 |
+| Schema directory | `data/schema_profiles/dev-3.0.36.1-official` | `data/schema_profiles/prod-3.0.30` |
 | Device workbooks | `data/source_excel` | `data/prod/source_excel` |
 | Basic UDI workbooks | `data/basic_udi_reference` | `data/prod/basic_udi_reference` |
 | SQLite | `data/testing/testing-state.sqlite3` | `data/prod/application.sqlite3` |
@@ -140,10 +140,12 @@ workflows; the original assessment was read-only. The first local Production sta
 owner-reviewed import subsequently completed on 10 October. Do not repeat initial
 population or replace the existing database merely to follow this older checkpoint.
 
-The Dev package is explicitly a **3.0.30-derived bundle with a 3.0.32 message
-constraint**, not an official 3.0.32 release. See
-[`data/schema_profiles/README.md`](../data/schema_profiles/README.md) for provenance
-and the four-file comparison with the downloaded official Production bundle.
+Dev now uses the **official Playground 3.0.36.1 package**. The former
+3.0.32-derived package is retained as historical evidence. Update existing local
+Dev profile schema path/version together and clear stale process overrides before
+restarting; source checks and retained extract selection require the current version.
+See [upgrade findings](playground-schema-upgrade-2026-11-12.md) and
+[schema provenance](../data/schema_profiles/README.md). Production remains 3.0.30.
 
 ## Verification — September 19 checkpoint
 

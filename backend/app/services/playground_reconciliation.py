@@ -91,7 +91,7 @@ class PlaygroundReconciliation:
             raise ValueError("Duplicate exported device identity requires source review")
         for path in (batch / "eudamed-xml").glob("*.xml"):
             tree = etree.parse(str(path), etree.XMLParser(resolve_entities=False, no_network=True))
-            if tree.getroot().get("version") != "3.0.32" or set(tree.xpath('//*[local-name()="MFActorCode"]/text()')) != {manifest["manufacturer_srn"]}:
+            if tree.getroot().get("version") != self.settings.eudamed_message_schema_version or set(tree.xpath('//*[local-name()="MFActorCode"]/text()')) != {manifest["manufacturer_srn"]}:
                 raise ValueError("Export schema/manufacturer does not match the selected Playground batch")
         database = self.settings.testing_state_db_path.resolve()
         if any(database.parts[i:i+2] == ("data", "prod") for i in range(len(database.parts)-1)):

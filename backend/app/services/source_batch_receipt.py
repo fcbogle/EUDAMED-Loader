@@ -13,6 +13,7 @@ from zipfile import ZipFile, BadZipFile
 import lxml.etree as etree
 from pydantic import BaseModel, Field
 
+from app.config import DEV_MESSAGE_SCHEMA_VERSION
 from app.services.dev_batch_preparation import DevBatchPreparation
 from app.services.dev_input_batches import fingerprint
 
@@ -124,7 +125,8 @@ def write_inputs(service, request, staged: Path, batch_id: str, decoded, *, vali
         path = staged / item.role / name
         path.write_bytes(data)
         if validate_content:
-            validate_received_content(path, item, manifest['manufacturer_srn'])
+            validate_received_content(path, item, manifest['manufacturer_srn'],
+                                      schema_version=service.settings.eudamed_message_schema_version)
         manifest['files'].append({'role': item.role, 'path': f'{item.role}/{name}', 'original_name': item.name,
             'source_path': None, 'source_modified_at': (item.modified_at or now).isoformat(),
             'received_at': now.isoformat(), 'size_bytes': len(data), 'sha256': fingerprint(path)})
@@ -132,7 +134,7 @@ def write_inputs(service, request, staged: Path, batch_id: str, decoded, *, vali
     return manifest
 
 
-def validate_received_content(path, item, manufacturer):
+def validate_received_content(path, item, manufacturer, *, schema_version=DEV_MESSAGE_SCHEMA_VERSION):
     if item.role == 'eudamed-xml':
         try:
             tree = etree.parse(str(path), etree.XMLParser(resolve_entities=False, no_network=True))
@@ -141,7 +143,7 @@ def validate_received_content(path, item, manufacturer):
         export_root = tree.getroot()
         if export_root is None or tree.docinfo.doctype or etree.QName(export_root).localname != 'PullResponse':
             raise ValueError(f'{item.name}: select device extracts, not Success XML acknowledgements')
-        if export_root.get('version') != '3.0.32' or set(tree.xpath('//*[local-name()="MFActorCode"]/text()')) != {manufacturer}:
+        if export_root.get('version') != schema_version or set(tree.xpath('//*[local-name()="MFActorCode"]/text()')) != {manufacturer}:
             raise ValueError(f'{item.name}: export schema/manufacturer does not match Dev')
     else:
         try:

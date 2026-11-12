@@ -23,7 +23,7 @@ def project(tmp_path):
     from lxml import etree
     from app.services.production_workbook_preparation import NS
     tree = etree.parse(str(xml))
-    tree.getroot().set("version", "3.0.32")
+    tree.getroot().set("version", "3.0.36.1")
     basic = tree.find("message:payload/device:Device/device:MDRBasicUDI", NS)
     etree.SubElement(basic, f"{{{NS['basic']}}}MFActorCode").text = "GB-MF-000000001"
     tree.write(str(xml), encoding="utf-8", xml_declaration=True)

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-stylesheet type="text/xsl" href="/tools/eudamed/dtx/xslt/index.xsl"?>
+<xs:schema targetNamespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/SSCP/PostSSCPType/v1"
+           xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:postsscp="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/SSCP/PostSSCPType/v1"
+           xmlns:e="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/v1"
+           xmlns:doct="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/Document/v1"
+           xmlns:commonbasic="https://ec.europa.eu/tools/eudamed/dtx/datamodel/CommonBasic/v1"
+           xmlns:commondi="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/CommonDevice/v1"
+           xmlns:legislation="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/Legislation/v1"
+           elementFormDefault="qualified">
+
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/v1" schemaLocation="../Entity.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/Document/v1" schemaLocation="../Common/DocumentType.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/CommonBasic/v1" schemaLocation="../Common/CommonBasicType.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/CommonDevice/v1" schemaLocation="../Device/CommonDeviceType.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/Legislation/v1" schemaLocation="../Common/LegislationType.xsd"/>
+
+    <xs:complexType name="StoredDocument">
+        <xs:complexContent>
+            <xs:extension base="doct:DocumentType"/>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="PostSSCPDocumentType">
+        <xs:sequence>
+            <xs:element name="Document" type="postsscp:StoredDocument" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="Master" type="xs:boolean" minOccurs="1" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="PostSSCPDocumentsType">
+        <xs:sequence>
+            <xs:element name="SSCPDocument" type="postsscp:PostSSCPDocumentType" minOccurs="1" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="SSCPBasicUDIDIsType">
+        <xs:sequence>
+            <xs:element name="BasicUDIDI" type="commondi:DIIdentifierType" minOccurs="1" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="PostSSCPType">
+        <xs:complexContent>
+            <xs:extension base="e:Entity">
+                <xs:sequence>
+                    <xs:element name="SSCPApplicableRegulation" type="legislation:ApplicableLegislationType" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="SSCPReferenceNumber" type="commonbasic:stringSType" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="SSCPRevisionNumber" type="commonbasic:stringSType" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="issueDate" type="xs:date" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="NBActorCode" type="commonbasic:stringNBActorCodeType" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="MFActorCode" type="commonbasic:stringSRNType" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="SSCPBasicUDIDIs" type="postsscp:SSCPBasicUDIDIsType" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="SSCPDocuments" type="postsscp:PostSSCPDocumentsType" minOccurs="1" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:element name="PostSSCP">
+        <xs:complexType>
+            <xs:complexContent>
+                <xs:extension base="postsscp:PostSSCPType"/>
+            </xs:complexContent>
+        </xs:complexType>
+    </xs:element>
+</xs:schema>

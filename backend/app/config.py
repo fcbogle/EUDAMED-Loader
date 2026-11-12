@@ -11,6 +11,8 @@ from dotenv import dotenv_values
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEV_MESSAGE_SCHEMA_VERSION = "3.0.36.1"
+DEV_SCHEMA_PROFILE = "dev-3.0.36.1-official"
 
 
 class Settings(BaseModel):
@@ -90,7 +92,7 @@ def _overlap(a: Path, b: Path) -> bool:
 
 
 def _validate_profile(settings: Settings, values: dict[str, str]) -> None:
-    expected = "3.0.30" if settings.environment == "prod" else "3.0.32"
+    expected = "3.0.30" if settings.environment == "prod" else DEV_MESSAGE_SCHEMA_VERSION
     if settings.eudamed_message_schema_version != expected:
         raise ValueError(f"{settings.environment} requires message schema {expected}")
     schema = settings.schema_dir / "service" / "Message" / "MessageType.xsd"
@@ -191,7 +193,7 @@ def get_settings() -> Settings:
         return _path_setting(project_root, values, key, default)
     basic_dir = path("EUDAMED_BASIC_UDI_REFERENCE_DIR", project_root / "data/basic_udi_reference")
     legacy_service_id = values.get("EUDAMED_SERVICE_ID")
-    schema_profile = "prod-3.0.30" if environment == "prod" else "dev-3.0.32-derived"
+    schema_profile = "prod-3.0.30" if environment == "prod" else DEV_SCHEMA_PROFILE
     settings = Settings(
         environment=environment,
         environment_file=env_file,
@@ -212,7 +214,7 @@ def get_settings() -> Settings:
         canonical_mapping_dir=project_root / "config/canonical_mapping",
         reports_dir=path("EUDAMED_REPORTS_DIR", project_root / "docs/reports"),
         artifacts_dir=path("EUDAMED_ARTIFACTS_DIR", project_root / "data/dev/artifacts"),
-        eudamed_message_schema_version=values.get("EUDAMED_MESSAGE_SCHEMA_VERSION", "3.0.32" if environment == "dev" else "3.0.30"),
+        eudamed_message_schema_version=values.get("EUDAMED_MESSAGE_SCHEMA_VERSION", DEV_MESSAGE_SCHEMA_VERSION if environment == "dev" else "3.0.30"),
         eudamed_manufacturer_srn_override=values.get("EUDAMED_MANUFACTURER_SRN_OVERRIDE") or None,
         eudamed_authorised_representative_srn_override=values.get("EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE") or None,
         eudamed_suppress_authorised_representative=_bool_setting(values, "EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE", False),

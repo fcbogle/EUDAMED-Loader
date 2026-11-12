@@ -64,6 +64,7 @@ def environment_context() -> dict[str, str | bool | None]:
     """Expose the active target and configured public actor SRNs, without storage paths."""
     settings = get_settings()
     packages = {
+        (PROJECT_ROOT / "data/schema_profiles/dev-3.0.36.1-official").resolve(): "Official package",
         (PROJECT_ROOT / "data/schema_profiles/dev-3.0.32-derived").resolve(): "Derived package",
         (PROJECT_ROOT / "data/schema_profiles/prod-3.0.30").resolve(): "Official package",
     }

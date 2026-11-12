@@ -26,7 +26,7 @@ def test_default_settings_use_project_local_data_dirs(monkeypatch, tmp_path) -> 
 
     assert settings.excel_dir == project_root / "data" / "source_excel"
     assert settings.dev_input_batch_root == project_root / "data/dev/import-batches"
-    assert settings.schema_dir == project_root / "data/schema_profiles/dev-3.0.32-derived"
+    assert settings.schema_dir == project_root / "data/schema_profiles/dev-3.0.36.1-official"
     assert settings.basic_udi_reference_dir == project_root / "data" / "basic_udi_reference"
     assert settings.basic_udi_reference_workbook == project_root / "data" / "basic_udi_reference" / "BasicUDIs.xlsx"
     assert settings.legacy_basic_udi_reference_workbook == (

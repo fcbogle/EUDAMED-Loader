@@ -76,8 +76,8 @@ Historical paired examples do not define current country or version selection.
    workflow and check the recorded outcome and refreshed next-operation state.
 
 Use synthetic isolated data for automated regressions. Manual Playground outcomes
-are separate from Production acceptance and formal validation. The derived Dev
-3.0.32 profile and official Prod 3.0.30 profile are selected by configuration.
+are separate from Production acceptance and formal validation. The official Dev
+3.0.36.1 profile and official Prod 3.0.30 profile are selected by configuration.
 
 For recorded executions, see the [Playground report](../../../../docs/eudamed-playground-test-report.md).
 For current readiness and message boundaries, see [XML Generation](xml-generation.md)

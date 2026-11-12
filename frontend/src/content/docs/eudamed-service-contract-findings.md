@@ -1,13 +1,13 @@
 # EUDAMED Service Contract Findings
 
-Updated 1 November 2026. This guide describes the implemented manual XML
+Updated 12 November 2026. This guide describes the implemented manual XML
 preparation workflows, not an automatic EUDAMED transport service.
 
 ## Environment-specific schema profiles
 
 | Environment | Configured message version | Schema provenance |
 | --- | --- | --- |
-| Dev / Playground | 3.0.32 | Preserved 3.0.30-derived project bundle with a changed message constraint; not an official 3.0.32 release. |
+| Dev / Playground | 3.0.36.1 | Official downloaded Playground package; prior derived profile retained as historical evidence. |
 | Production | 3.0.30 | Separate official downloaded Production package. |
 
 Check the active environment banner and startup configuration. Local validation

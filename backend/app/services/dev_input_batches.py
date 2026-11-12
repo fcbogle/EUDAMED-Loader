@@ -19,6 +19,7 @@ from dotenv import dotenv_values
 from lxml import etree
 from openpyxl.utils.exceptions import InvalidFileException
 
+from app.config import DEV_MESSAGE_SCHEMA_VERSION
 from app.services.production_workbook_preparation import _exports, _parent_reference, _templates
 
 
@@ -106,7 +107,8 @@ def verify_dev_batch_inputs(batch_dir: Path) -> dict:
     return manifest
 
 
-def inspect_dev_batch(batch_dir: Path, *, excluded_workbook_names: tuple[str, ...] = ()) -> dict:
+def inspect_dev_batch(batch_dir: Path, *, excluded_workbook_names: tuple[str, ...] = (),
+                      schema_version: str = DEV_MESSAGE_SCHEMA_VERSION) -> dict:
     """Return source findings only; does not create reports or write any inputs."""
     batch = batch_dir.resolve()
     manifest = verify_dev_batch_inputs(batch)
@@ -127,8 +129,8 @@ def inspect_dev_batch(batch_dir: Path, *, excluded_workbook_names: tuple[str, ..
         exports, export_files = _exports(batch / "eudamed-xml", {})
         for path in (batch / "eudamed-xml").glob("*.xml"):
             tree = etree.parse(str(path), etree.XMLParser(resolve_entities=False, no_network=True))
-            if tree.getroot().get("version") != "3.0.32":
-                raise ValueError(f"Dev export must declare version 3.0.32: {path.name}")
+            if tree.getroot().get("version") != schema_version:
+                raise ValueError(f"Dev export must declare version {schema_version}: {path.name}")
             actors = set(tree.xpath('//*[local-name()="MFActorCode"]/text()'))
             if actors != {manifest["manufacturer_srn"]}:
                 raise ValueError(f"Export manufacturer differs from the selected Dev actor: {path.name}")

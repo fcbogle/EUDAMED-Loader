@@ -46,7 +46,8 @@ class DevBatchPreparation:
         filenames = {entry["path"].split("/")[-1] for entry in manifest["files"] if entry["role"] == "templates"}
         exclusions = tuple(name for name in self.settings.excluded_excel_workbook_names if name in filenames)
         evidence = {"manifest_sha256": fingerprint(batch / "manifest.json"), "exclusions": exclusions,
-                    "manufacturer": manifest["manufacturer_srn"], "preparation_contract": PREPARATION_CONTRACT}
+                    "manufacturer": manifest["manufacturer_srn"], "preparation_contract": PREPARATION_CONTRACT,
+                    "message_schema_version": self.settings.eudamed_message_schema_version}
         token = hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
         return batch, manifest, exclusions, token
 
@@ -72,7 +73,8 @@ class DevBatchPreparation:
 
     def inspect(self, batch_id: str) -> dict:
         batch, _, exclusions, before = self._inputs(batch_id)
-        result = inspect_dev_batch(batch, excluded_workbook_names=exclusions)
+        result = inspect_dev_batch(batch, excluded_workbook_names=exclusions,
+                                   schema_version=self.settings.eudamed_message_schema_version)
         source_review = review_sources(batch, exclusions)
         if self._inputs(batch_id)[3] != before:
             raise ValueError("Inputs changed during checking; select and check the batch again")

@@ -26,7 +26,7 @@ from test_production_workbook_preparation import child
 @pytest.fixture
 def reconciliation(project, monkeypatch):
     settings = get_settings().model_copy(update={"environment": "dev", "dev_input_batch_root": project / "data/dev/import-batches",
-        "eudamed_message_schema_version": "3.0.32", "eudamed_manufacturer_srn_override": "GB-MF-000000001",
+        "eudamed_message_schema_version": "3.0.36.1", "eudamed_manufacturer_srn_override": "GB-MF-000000001",
         "eudamed_suppress_authorised_representative": True, "testing_state_db_path": project / "dev.sqlite3"})
     rendered = etree.fromstring(EudamedMessageRenderer(settings).render_message(DeviceXmlProjectionBuilder().build_device_record(synthetic_record(0))))
     device = rendered.find('message:payload/device:Device', NS)
@@ -36,7 +36,7 @@ def reconciliation(project, monkeypatch):
             existing = node.find('entity:' + name, NS)
             if existing is None: child(node, 'entity', name, value)
             else: existing.text = value
-    root = etree.Element('{' + NS['message'] + '}PullResponse', nsmap=rendered.nsmap, version='3.0.32')
+    root = etree.Element('{' + NS['message'] + '}PullResponse', nsmap=rendered.nsmap, version='3.0.36.1')
     child(root, 'message', 'creationDateTime', '2026-10-25T10:00:00Z')
     child(root, 'message', 'payload').append(device)
     for name, value in (("pageNumber", "0"), ("numberOfPages", "1"), ("pageSize", "50")):

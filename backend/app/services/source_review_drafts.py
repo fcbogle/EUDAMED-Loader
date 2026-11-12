@@ -163,7 +163,8 @@ class SourceReviewDrafts:
                 findings.add('files','Source files',[{'detail':'Select Template workbooks, one BasicUDI workbook and all XML pages.'}])
             for entry in manifest['files']:
                 item=ReceivedFile(role=entry['role'],name=entry.get('original_name',Path(entry['path']).name),content_base64='')
-                try:validate_received_content(inputs/entry['path'],item,manifest['manufacturer_srn'])
+                try:validate_received_content(inputs/entry['path'],item,manifest['manufacturer_srn'],
+                                              schema_version=self.settings.eudamed_message_schema_version)
                 except ValueError as exc:
                     code='environment' if 'schema/manufacturer' in str(exc) else 'files'
                     findings.add(code,{'templates':'Template','basic-udi':'BasicUDI','eudamed-xml':'EUDAMED'}[entry['role']],

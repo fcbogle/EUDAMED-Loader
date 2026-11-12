@@ -12,6 +12,9 @@ import { useBulkPostedCohorts } from "./useBulkPostedCohorts";
 
 import { ApiError, api, type RecordReadiness } from "./api";
 import architectureDefinitionDocumentation from "../../docs/architecture-definition-draft.md?raw";
+import schemaUpgradeDocumentation from "../../docs/playground-schema-upgrade-2026-11-12.md?raw";
+import templateSourceReviewDocumentation from "../../docs/template-source-review-2026-11-12.md?raw";
+import playgroundXmlReviewDocumentation from "../../docs/playground-xml-review-2026-11-12.md?raw";
 import sessionHandoffDocumentation from "../../docs/session-handoff.md?raw";
 import devImportGuideDocumentation from "../../docs/source-batch-receipt.md?raw";
 import submissionActivityDocumentation from "../../docs/submission-activity-report.md?raw";
@@ -512,6 +515,9 @@ type DocumentationSection = {
     | "environmentProfiles"
     | "devImportGuide"
     | "devImportSafety"
+    | "schemaUpgrade"
+    | "templateSourceReview"
+    | "playgroundXmlReview"
     | "raReport"
     | "submissionActivityGuide"
     | "productionWorkbookContract"
@@ -788,6 +794,25 @@ export function App() {
   const [isLoadingCanonicalValidation, setIsLoadingCanonicalValidation] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
+      id: "schemaUpgrade",
+      title: "Playground Schema Upgrade — November 12",
+      sourcePath: "docs/playground-schema-upgrade-2026-11-12.md",
+      markdown: schemaUpgradeDocumentation,
+    },
+    {
+      id: "templateSourceReview",
+      title: "Template Source Review — November 12",
+      sourcePath: "docs/template-source-review-2026-11-12.md",
+      markdown: templateSourceReviewDocumentation,
+    },
+    {
+      id: "playgroundXmlReview",
+      title: "Playground XML Review — November 12",
+      sourcePath: "docs/playground-xml-review-2026-11-12.md",
+      markdown: playgroundXmlReviewDocumentation,
+    },
+
+    {
       id: "projectInstructions",
       title: "Project Development Guidelines",
       sourcePath: "AGENTS.md",
@@ -1029,7 +1054,7 @@ export function App() {
     {
       id: "verification",
       title: "Verification And Decision Support",
-      sectionIds: ["submissionActivityGuide", "raReport", "registrationPolicy", "registrationCounts", "marketInfoParity", "testingScenarios", "softwareEngineeringPatterns"],
+      sectionIds: ["schemaUpgrade", "templateSourceReview", "playgroundXmlReview", "submissionActivityGuide", "raReport", "registrationPolicy", "registrationCounts", "marketInfoParity", "testingScenarios", "softwareEngineeringPatterns"],
     },
     {
       id: "production",

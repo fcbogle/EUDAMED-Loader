@@ -1,6 +1,162 @@
 # Session Handoff
 
-Updated November 8, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated November 12, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## November 12 — Dev 3.0.36.1 integration and regression verification
+
+The owner authorised schema-impact review, Dev integration and automated checks
+(steps 1–3), before any new data import. Dev defaults, the example profile and
+ignored local development-worktree `.env.dev` now select the official
+`dev-3.0.36.1-official` package and message version 3.0.36.1. Production remains
+on its existing 3.0.30 settings/package; the original main checkout is unchanged.
+The environment API/banner labels the new Dev package Official package.
+
+Core Basic UDI, UDI-DI, common device and Market Info constraints are unchanged
+apart from documentation/formatting. Shared reuse-count limits and general
+country lists changed; existing offered market-country codes remain valid.
+The message envelope fixes 3.0.36.1, with additional unrelated payload choices
+and optional search fields. Existing mappings, flow separation, accepted-state
+lineage and manual submission workflow remain unchanged. See
+[upgrade findings](playground-schema-upgrade-2026-11-12.md).
+
+Receipt/draft checks, batch inspection and Playground reconciliation use the
+selected schema version; retained reporting already checks that active setting.
+Unsupported/old/missing versions and wrong manufacturers remain rejected.
+Source-check tokens now include message schema version. Prior source bytes and
+accepted evidence remain historical; old 3.0.32 extracts do not qualify for
+current-version source review/report selection. Re-review with the fresh whole
+XML set; do not rewrite old XML versions or reuse previous review approval.
+
+Read-only local Dev `--check-config` reports 3.0.36.1 and compiles the official
+package without services or SQLite access. All five fresh extracts pass source
+admission and official XSD validation; 241 accepted snapshots project without
+unsupported-field notes. Synthetic checks cover single/bulk DEVICE.POST,
+UDI_DI.POST, UDI_DI.PATCH and MARKET_INFO.PUT in both official profiles, version
+rejection, provenance hashes, country support and reuse-count limits. New working
+inspection/upgrade documents are available in embedded Help.
+
+Verification: full backend suite **460 passed in 241.27 seconds**, with the two
+existing FastAPI deprecation warnings. All **136 frontend tests** and the
+TypeScript/Vite build passed, retaining the existing bundle-size advisory.
+Focused integration checks passed (110 tests), and the 30 new schema regressions
+passed before the full run. All 143 protected file hashes (including both
+operational database files, original/main configuration/source checkpoints and
+existing schema profiles) remain unchanged after testing. Original supplied
+XMLs and the Template ZIP also retain their inspection hashes.
+No application service, manual Playground submission, operational import or
+migration was started. Next after checks: owner restarts Dev, confirms the banner,
+and begins the fresh source review; database conflicts still require assessment.
+
+## November 12 — Official 3.0.36.1 bundle stored alongside existing profiles
+
+At the owner's request, retained the official package permanently within the
+**development worktree**: `data/schema_profiles/dev-3.0.36.1-official/` contains
+69 XSD files and the bundled Dossier sample XML, with original file bytes.
+The original download is in
+`data/schema_profiles/archives/eudamed-playground-3.0.36.1-xsd.zip`.
+Schema-profile README and manifest record provenance, SHA-256 hashes and
+validation. This supersedes the earlier temporary-only storage checkpoint.
+
+Verified the stored Message.xsd compiles and all five fresh extracts validate
+with zero errors. All 136 existing Dev/Production profile files retain their
+prior hashes. No active configuration, application rules, database or original
+main-checkout file changed. The new profile is stored but not activated;
+controlled Dev integration and outgoing workflow checks are still next.
+
+## November 12 — Official Playground 3.0.36.1 schemas downloaded and verified
+
+Following the owner's portal notice and request to obtain/use the XSD files,
+downloaded the official package from the Playground help files directory.
+Archive SHA-256 is caeb50507b578078853ebb34430e1e075e43381f054e14c7ee6692166be4cf43.
+The package contains 69 XSD files; its MessageType fixes version 3.0.36.1.
+`service/Message.xsd` compiled successfully, and all five fresh Playground
+extracts passed full XSD validation with zero errors. Files are retained as
+temporary inspection artifacts under `/private/tmp/eudamed-playground-3.0.36.1-xsd*`;
+see [XML inspection](playground-xml-review-2026-11-12.md) for provenance/limits.
+
+This confirms the package is obtainable and usable, and supersedes the earlier
+inspection's lack of full XSD validation for these five extracts. It does not
+remove the application's current admission blocker: no active schema profile,
+configuration, import rules or outgoing generation behavior was changed. Next:
+controlled Dev integration and outgoing POST/PATCH/Market Info verification.
+Production and both operational databases remain untouched. No application
+services or full test suites were run for this package-validation step.
+
+## November 12 — Fresh Playground XML inspected; schema compatibility blocks import
+
+The owner supplied Downloads files APP-DTX-000123104.xml, 000123105.xml,
+000123107.xml, 000123108.xml and 000123109.xml (each full filename starts
+APP-DTX-). They declare pages 0–4 of 5, containing 50/50/50/50/41 devices:
+241 unique device identities across 11 parents, manufacturer UK-MF-000033261.
+All observed parent/device/Market Info states are REGISTERED, with usable
+versions and consistent parent links. Creation dates span November 12,
+15:55:41.274–15:56:50.613 UTC. No duplicate identities or missing declared pages.
+Filename gaps are not page gaps.
+
+All parents match the October 9 BasicUDI reference. 240 extract identities match
+the fresh active Templates, with matching parents/catalogues. One extract-only
+Echelon VAC device is GS1 05050649062025, catalogue EVAC22L1S. The 9,121 active
+Template identities absent from this extract are not declared unregistered;
+business search-filter coverage is unknown. Full attribute comparison and
+existing database assessment remain outstanding.
+
+**Blocker:** all five declare schema 3.0.36.1. Current Dev source admission
+requires 3.0.32; retained report selection also checks the active version.
+The source parser reads the structure/pages/identities without missing metadata,
+but the real admission guard rejects the version. Readability does not establish
+full compatibility. Next: agree a controlled incoming-extract compatibility
+assessment before modifying version/rule strategy. Outgoing XML generation and
+Production schema must not be changed incidentally. Do not relabel source XMLs
+or bypass the guard to proceed.
+
+See [XML inspection](playground-xml-review-2026-11-12.md) for hashes, dates,
+model counts, coverage and limits. No operational database was opened, no batch
+was created/imported, no services started, and no application rules/configuration
+were changed. Verification used read-only originals and disposable copies with
+the existing source parser and admission validator. Only development inspection
+documentation was added/updated; no full test suite was needed for this review.
+
+## November 12 — Fresh Template inventory and BasicUDI coverage
+
+The owner supplied `/Users/frankbogle/Downloads/OneDrive_1_11-12-2026.zip`
+for inspection before restarting Dev Data Import. Eight expected Template groups
+contain 9,681 populated rows and 9,679 distinct device identities. All rows have
+explicit Basic UDI-DIs resolving to the October 9 retained reference. Existing
+application source parsers independently confirmed these counts and parent links.
+See [source inspection](template-source-review-2026-11-12.md) for inventory,
+source hashes, worksheet references and limits.
+
+The latest dated reference located is the original checkout's
+`data/prod/template/BasicUDIs 9th October.xlsx` (50 parents). Earlier Dev reference
+copies contain 47 parents; all common entries have unchanged field values.
+October 9 adds Elan MAX, MAX Liners and MAX Sleeves, covering 940 fresh Template
+rows absent from the old reference. Use a retained copy of the October 9 reference
+as input to the new Dev source review; no configuration/reference replacement
+has been performed. Its market fields are blank for Elan MAX and `France?` for
+MAX Liners/Sleeves. These remain warnings under current Dev policy, with XML
+readiness separate. Do not infer countries. Optional placeholder URLs are handled
+by existing omission/audit logic.
+
+The supplied Echelon source fixes the previous catalogue collision: UDI
+05050649030901 is EC24R1S (row 86), while 05050649032462 remains EC27LN7S
+(row 242). This is a source correction, not a database correction. Existing Dev
+identity/catalogue conflicts still require normal assessment because the importer
+retains existing values.
+
+Current Accessories/Footspares exclusion leaves 9,361 unique devices across 17
+models in seven workbooks, without duplicate device identifiers. If Accessories
+is included, EP-FSR and EP-MSR each repeat an Epirus Device UDI-DI under a different
+Basic UDI-DI (Socket Adaptors versus Epirus). Resolve those parent assignments
+before broadening scope; exclusions and rules are unchanged.
+
+Next: owner supplies all pages of one fresh Playground XML export; run normal
+Dev source review with the fresh Templates and October 9 reference, assess all
+source/database findings, then prepare and explicitly confirm the new import.
+The unrelated single-device 109408 workbook is excluded from this source set.
+No import, application service, database access/write, main source edit or workflow
+change was made. Only development inspection documentation was added/updated;
+parsing used temporary copies removed on completion. Full tests were not rerun
+for this source-only inspection.
 
 ## November 8 — Submission Activity report by model
 
