@@ -23,6 +23,9 @@ export type ImportChoice = {
     status: string;
 };
 export type ImportSession = {
+    environment?: "dev" | "prod";
+    legacy?: boolean;
+    legacy_workbooks?: string[];
     id: string;
     revision: string | null;
     batch_id: string | null;
@@ -82,6 +85,6 @@ export type ImportSession = {
         confirmed_by: string;
         backup: {
             path: string;
-        };
+        } | null;
     } | null;
 };

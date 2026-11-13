@@ -4,18 +4,18 @@ const saved={id:'saved',revision:'revision',batch_id:null,stage:'review',metadat
 const ready={...saved,stage:'workbook',review:{message:'Ready to continue',can_create:true,groups:[]}};
 const workbook={...ready,stage:'import',batch_id:'2026-10-31-002',workbook:{artifact_id:'artifact',workbook_name:'import.xlsx'},summary:{new_count:2,existing_retained_count:5,omitted_retained_count:1}};
 const complete={...workbook,stage:'complete',result:{import_batch_id:5,created_count:2,existing_retained_count:5,omitted_retained_count:1,confirmed_at:'2026-10-31T18:40:00Z',confirmed_by:'RA',backup:{path:'backup.sqlite3'}}};
-function harness(overrides={},initial=null,initialView='data'){
+function harness(overrides={},initial=null,initialView='data',environment='dev'){
  let view=initialView;
- const states=[],effects=[],timers=new Map(),calls=[];let cursor=0,tree,nextTimer=0;const memory=new Map(initial?[['eudamed-dev-current-import',initial.id]]:[]);
+ const states=[],effects=[],timers=new Map(),calls=[];let cursor=0,tree,nextTimer=0;const memory=new Map(initial?[[`eudamed-${environment}-current-import`,initial.id]]:[]);
  const api={importSessions:async()=>({imports:initial?[{id:initial.id,description:'Current extract',status:initial.stage}]:[]}),importSession:async()=>initial,saveImportSession:async(id,revision,metadata,files)=>({...saved,metadata}),reviewImportSession:async()=>ready,createImportWorkbook:async()=>workbook,importBatchData:async()=>complete,downloadImportWorkbook:async()=>{throw Error('Download must be optional');},...overrides};
  for(const [key,value] of Object.entries(api))api[key]=(...args)=>{calls.push([key,...args]);return value(...args);};
  const react={useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==='function'?initial():initial;return[states[i],value=>{states[i]=typeof value==='function'?value(states[i]):value;}];},useRef(initial){const i=cursor++;return states[i]??={current:initial};},useEffect(fn,deps){const i=cursor++,old=states[i];if(!old||deps.some((value,n)=>value!==old.deps[n]))effects.push(()=>{old?.cleanup?.();states[i]={deps,cleanup:fn(),effect:fn};});}};
  const source=fs.readFileSync(require.resolve('../src/components/ImportFlowWorkspace.tsx'),'utf8');const output=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;const module={exports:{}};
  const win={setTimeout(fn){const id=++nextTimer;timers.set(id,fn);return id;},clearTimeout(id){timers.delete(id);}};
  new Function('require','module','exports','window','localStorage',output)(name=>name==='react'?react:name==='../api'?{api}:require(name),module,module.exports,win,{getItem:key=>memory.get(key),setItem:(key,value)=>memory.set(key,value)});
- function nodes(node=tree){if(!node||typeof node!=='object')return[];if(Array.isArray(node))return node.flatMap(nodes);return[node,...nodes(node.props?.children??null)];}
+ function nodes(node=tree){if(!node||typeof node!=='object')return[];if(Array.isArray(node))return node.flatMap(child=>nodes(child??null));return[node,...nodes(node.props?.children??null)];}
  let imported=0;const context=()=>{};
- function render(){cursor=0;tree=module.exports.ImportFlowWorkspace({enabled:true,view,onViewHistory:()=>{view='history';},onContextChange:context,onDatabaseImported:()=>imported++});while(effects.length)effects.shift()();}
+ function render(){cursor=0;tree=module.exports.ImportFlowWorkspace({enabled:true,environment,view,onViewHistory:()=>{view='history';},onContextChange:context,onDatabaseImported:()=>imported++});while(effects.length)effects.shift()();}
  function primary(){return nodes().find(node=>node.type==='button'&&node.props.className==='action-button');}
  function click(){const node=primary();assert.ok(node&&!node.props.disabled);node.props.onClick();render();}
  function field(label,value){const found=nodes().find(node=>node.type==='label'&&node.props.children?.[0]===label);assert.ok(found,label);nodes(found).find(node=>node.type==='input').props.onChange({target:{value}});render();}
@@ -131,4 +131,37 @@ test('browsing history preserves the separately remembered ongoing import',async
  assert.equal(h.memory.get('eudamed-dev-current-import'),'saved');
  assert.equal(h.memory.get('eudamed-dev-current-import-history'),'done');
  assert.ok(!h.calls.some(c=>['saveImportSession','reviewImportSession','createImportWorkbook','importBatchData'].includes(c[0])));
+});
+
+
+test('Production requires its named confirmation and keeps selection separate from Dev',async()=>{
+ const initial={...workbook,environment:'prod'};
+ const h=harness({importBatchData:async()=>({...complete,environment:'prod'})},initial,'data','prod');await h.settle();
+ assert.match(h.text(),/Production/);assert.ok(!h.text().includes('Dev database'));
+ assert.equal(h.primary().props.disabled,true);
+ h.nodes().find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});h.render();h.click();await h.settle();
+ const call=h.calls.find(c=>c[0]==='importBatchData');assert.equal(call[5],'prod');
+ assert.equal(h.memory.get('eudamed-prod-current-import'),'saved');assert.equal(h.memory.get('eudamed-dev-current-import'),undefined);
+});
+
+test('earlier Production receipts remain read-only without invented downloads',async()=>{
+ const legacy={...complete,environment:'prod',legacy:true,legacy_workbooks:['Earlier production workbook.xlsx'],review:null,workbook:null,result:{...complete.result,backup:null}};
+ const h=harness({},legacy,'history','prod');await h.settle();
+ assert.match(h.text(),/Earlier Production import/);assert.match(h.text(),/Earlier production workbook.xlsx/);
+ assert.equal(h.nodes().filter(n=>n.type==='button'||n.type==='input'||n.type==='a').length,0);
+});
+
+test('Production rejects a saved import returned for another environment',async()=>{
+ const h=harness({importSession:async()=>({...workbook,environment:'dev'})},{...workbook,environment:'prod'},'data','prod');await h.settle();
+ assert.match(h.text(),/Import environment changed/);
+ assert.equal(h.calls.filter(call=>call[0]==='importBatchData').length,0);
+});
+
+
+test('Production autosave binds the environment and displays the larger bounded source allowance',async()=>{
+ const h=harness({saveImportSession:async(id,revision,m)=>({...saved,metadata:m,environment:'prod'})},null,'data','prod');await h.settle();
+ assert.match(h.text(),/500 files \/ 256 MB/);
+ h.field('Your name','Production operator');h.flushTimers();await h.settle();
+ assert.equal(h.calls.find(call=>call[0]==='saveImportSession')[6],'prod');
+ assert.equal(h.memory.get('eudamed-dev-current-import'),undefined);
 });

@@ -11,9 +11,9 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 from app.services.import_review_policy import Findings, category, POLICY_VERSION
-from app.services.dev_batch_preparation import DevBatchPreparation
+from app.services.dev_batch_preparation import DevBatchPreparation, batch_preparation
 from app.services.dev_input_batches import fingerprint
-from app.services.dev_workbook_import import DevWorkbookImporter
+from app.services.dev_workbook_import import DevWorkbookImporter, workbook_importer
 from app.services.source_batch_receipt import (ReceivedFile, ReceiptMetadata,
     ReceiptRequest, decode_files, write_inputs, receive_batch, MAX_TOTAL_BYTES, validate_received_content)
 
@@ -24,17 +24,20 @@ class DraftMetadata(ReceiptMetadata):
 
 class DraftRequest(BaseModel):
     metadata: DraftMetadata
-    files: list[ReceivedFile] = Field(default_factory=list, max_length=100)
+    files: list[ReceivedFile] = Field(default_factory=list, max_length=500)
     expected_revision: str | None = None
     # A replacement XML set must replace every page together; Templates can be replaced individually.
     replace_roles: list[str] = Field(default_factory=list, max_length=3)
-    remove_paths: list[str] = Field(default_factory=list, max_length=100)
+    remove_paths: list[str] = Field(default_factory=list, max_length=500)
     correction_note: str = Field(default='', max_length=2000)
 
 
 class DraftPreparation(DevBatchPreparation):
     def __init__(self, settings, path, draft_id):
-        super().__init__(settings)
+        prepared = batch_preparation(settings)
+        self.__dict__.update(prepared.__dict__)
+        for name in ('audit_key', 'output_prefix', 'environment_label', 'unmatched_status', 'max_files', 'max_total_bytes'):
+            setattr(self, name, getattr(prepared, name))
         self.path, self.draft_id = path, draft_id
 
     def _batch(self, batch_id):
@@ -58,7 +61,7 @@ def atomic_json(path, data):
 
 class SourceReviewDrafts:
     def __init__(self, settings):
-        self.batches = DevBatchPreparation(settings)  # Dev-only, before filesystem/database access.
+        self.batches = batch_preparation(settings)
         self.settings = settings
         self.root = self.batches.root / 'source-reviews'
         self._safe(self.root)
@@ -114,7 +117,7 @@ class SourceReviewDrafts:
         return {**state,'metadata':manifest['receipt'],'files':manifest['files'],'review':review}
 
     def save(self, request, draft_id=None):
-        decoded = decode_files(request.files,require_complete=False)
+        decoded = decode_files(request.files,require_complete=False,max_files=self.batches.max_files,max_total_bytes=self.batches.max_total_bytes)
         if set(request.replace_roles)-{'templates','basic-udi','eudamed-xml'}:
             raise ValueError('Invalid replacement file group')
         draft_id = draft_id or uuid4().hex
@@ -137,8 +140,8 @@ class SourceReviewDrafts:
             for item,name,data in decoded:
                 existing[(item.role,name.casefold())]=(item,name,data)
             merged=list(existing.values())
-            if len(merged)>100 or sum(len(data) for _,_,data in merged)>MAX_TOTAL_BYTES:
-                raise ValueError('Retained files must total at most 100 files and 60 MB')
+            if len(merged)>self.batches.max_files or sum(len(data) for _,_,data in merged)>self.batches.max_total_bytes:
+                raise ValueError(f'Retained files must total at most {self.batches.max_files} files and {self.batches.max_total_bytes // (1024*1024)} MB')
             revision=uuid4().hex
             directory=path/'revisions'/revision
             self._safe(directory);directory.mkdir(parents=True)
@@ -181,7 +184,7 @@ class SourceReviewDrafts:
                 if inspection['inspection_token'] and findings.result()['can_create']:
                     try:
                         artifact=prep.prepare(draft_id,inspection['inspection_token'])
-                        importer=DevWorkbookImporter(self.settings)
+                        importer=workbook_importer(self.settings)
                         plan,prepared,_,_=importer._plan(draft_id,artifact['artifact_id'],source_batches=prep)
                         for row in prepared.skipped:
                             for reason in row['reasons']:
@@ -223,10 +226,10 @@ class SourceReviewDrafts:
             report=json.loads((path/'reviews'/(review_id+'.json')).read_text())
             prep=self._prep(path,state);inputs,manifest,_,token=prep._inputs(draft_id)
             if report.get('policy_version')!=POLICY_VERSION or not report['can_create'] or token!=report['input_token']:raise ValueError('Resolve Step 1 findings and review again before creating a batch')
-            importer=DevWorkbookImporter(self.settings)
+            importer=workbook_importer(self.settings)
             with importer._connect() as c:marker=importer._marker(c)
             if marker!=report['plan']['database_marker'] or importer._configuration()!=report['plan']['configuration']:
-                raise ValueError('Dev data or configuration changed; review the saved sources again in Step 1')
+                raise ValueError('Database state or configuration changed; review the saved sources again in Step 1')
             # Recover publication if a process stopped after the dated batch was saved.
             existing=next((p for p in self.batches.root.glob('*/source-review.json')
                 if json.loads(p.read_text()).get('review_id')==review_id),None)

@@ -35,6 +35,12 @@ class _DevReader(ProductionWorkbookImporter):
 
 
 class DevWorkbookImporter:
+    backup_prefix = 'testing-state'
+    source_type = 'dev_prepared_workbook'
+    payload_key = 'dev_prepared_import'
+    accepted_source = 'playground_export'
+    baseline_event = 'PLAYGROUND_EXPORT.SNAPSHOT'
+    reader_type = _DevReader
     def __init__(self, settings):
         self.batches = DevBatchPreparation(settings)
         self.settings = settings
@@ -77,7 +83,7 @@ class DevWorkbookImporter:
                 if path.is_file():rules.update(str(path).encode());rules.update(fingerprint(path).encode())
         if self.settings.environment_file and self.settings.environment_file.is_file():
             rules.update(fingerprint(self.settings.environment_file).encode())
-        return [rules.hexdigest()] + [str(value) for value in (self.settings.environment, self.database, self.batches.root,
+        return [rules.hexdigest()] + [str(value) for value in (self.settings.environment, self.database, self.batches.root, self.backups,
             self.settings.eudamed_manufacturer_srn_override, self.settings.eudamed_authorised_representative_srn_override,
             self.settings.eudamed_suppress_authorised_representative, self.settings.eudamed_message_schema_version)]
 
@@ -95,7 +101,7 @@ class DevWorkbookImporter:
         artifacts = self._artifacts(batch_id)
         results = []
         with closing(self._connect()) as c:
-            for row in c.execute("SELECT notes FROM import_batch WHERE source_type='dev_prepared_workbook' ORDER BY id DESC"):
+            for row in c.execute("SELECT notes FROM import_batch WHERE source_type=? ORDER BY id DESC", (self.source_type,)):
                 result = json.loads(row['notes'])
                 if result.get('batch_id') == batch_id:results.append(result)
         return {'batch_id':batch_id, 'artifacts':artifacts, 'imports':results}
@@ -170,8 +176,8 @@ class DevWorkbookImporter:
         if artifact['inspection_token'] != input_token:
             raise ValueError('Batch inputs changed since workbook creation; create a fresh workbook')
         if workbook.with_name('~$'+workbook.name).exists():raise ValueError('Close the prepared workbook before assessing/importing')
-        try:prepared = _DevReader(self.settings, workbook, audit_path)._prepare()
-        except ValueError as exc:raise ValueError(str(exc).replace('Production','Dev')) from exc
+        try:prepared = self.reader_type(self.settings, workbook, audit_path)._prepare()
+        except ValueError as exc:raise ValueError(str(exc).replace('Production','Dev') if self.settings.environment == 'dev' else str(exc)) from exc
         own = connection is None
         c = connection or self._connect()
         if own:c.execute('BEGIN')
@@ -204,7 +210,7 @@ class DevWorkbookImporter:
                     new.append(row);continue
                 row['existing_id']=previous['id'];existing_rows.append(row)
                 old=json.loads(previous['raw_payload_json'] or '{}')
-                saved=old.get('dev_prepared_import')
+                saved=old.get(self.payload_key)
                 proposed={k:v for k,v in row['values'].items() if k.startswith(('Proposed: ', 'Proposed Parent: '))}
                 if saved:
                     before=saved['proposed_values'];after=proposed
@@ -259,10 +265,10 @@ class DevWorkbookImporter:
                     record.xml_readiness.status='incomplete'
             keys={tuple(row['key']) for row in prepared.rows}
             already=None
-            for entry in c.execute("SELECT notes FROM import_batch WHERE source_type='dev_prepared_workbook' ORDER BY id DESC"):
+            for entry in c.execute("SELECT notes FROM import_batch WHERE source_type=? ORDER BY id DESC", (self.source_type,)):
                 previous=json.loads(entry['notes'])
                 if (previous.get('batch_id'),previous.get('artifact_id'))==(batch_id,artifact_id):already=previous;break
-            report={'batch_id':batch_id,'artifact_id':artifact_id,'environment':'dev','workbook_name':workbook.name,
+            report={'batch_id':batch_id,'artifact_id':artifact_id,'environment':self.settings.environment,'workbook_name':workbook.name,
                 'workbook_sha256':prepared.workbook_hash,'audit_sha256':prepared.audit_hash,'input_token':input_token,
                 'eligible_count':len(prepared.rows),'new_count':len(new),'existing_retained_count':len(existing_rows),
                 'omitted_retained_count':len(set(lookup)-keys),'skipped_count':len(prepared.skipped),
@@ -293,7 +299,7 @@ class DevWorkbookImporter:
     def _backup(self,run_id):
         if self.backups.is_symlink() or self.backups.resolve()!=self.backups:raise ValueError('Backup directory must not be redirected')
         self.backups.mkdir(exist_ok=True)
-        path=self.backups/f'testing-state-before-workbook-import-{run_id}.sqlite3'
+        path=self.backups/f'{self.backup_prefix}-before-workbook-import-{run_id}.sqlite3'
         if path.exists():raise ValueError('Backup already exists')
         with closing(self._connect()) as source,closing(sqlite3.connect(path)) as target:
             source.backup(target)
@@ -321,7 +327,7 @@ class DevWorkbookImporter:
                 artifact,_,_=self.batches.artifact(batch_id,artifact_id)
                 if input_token!=saved['input_token'] or (artifact['workbook_sha256'],artifact['audit_sha256'])!=(saved['workbook_sha256'],saved['audit_sha256']):raise ValueError('Workbook or source files changed; assess again')
                 # A committed repeat is a no-op, even when the old assessment predates its own import.
-                for entry in c.execute("SELECT notes FROM import_batch WHERE source_type='dev_prepared_workbook' ORDER BY id DESC"):
+                for entry in c.execute("SELECT notes FROM import_batch WHERE source_type=? ORDER BY id DESC", (self.source_type,)):
                     result=json.loads(entry['notes'])
                     if (result.get('batch_id'),result.get('artifact_id'))==(batch_id,artifact_id):
                         c.rollback();return {**result,'already_imported':True}
@@ -332,7 +338,7 @@ class DevWorkbookImporter:
                 if backup['database_marker']!=saved['database_marker']:raise ValueError('Backup does not match the assessed database; import cancelled')
                 result={**current,'confirmed_by':confirmed_by,'confirmed_at':now,'assessment_id':assessment_id,'backup':backup,'run_id':run_id,'already_imported':False}
                 # All writes are in this transaction. No store constructors, schema setup, DELETE or pruning.
-                import_id=c.execute('INSERT INTO import_batch(source_type,label,imported_at,imported_by,notes) VALUES(?,?,?,?,?)',('dev_prepared_workbook',f'Dev source batch {batch_id}',now,confirmed_by,'pending')).lastrowid
+                import_id=c.execute('INSERT INTO import_batch(source_type,label,imported_at,imported_by,notes) VALUES(?,?,?,?,?)',(self.source_type,f'{self.batches.environment_label} source batch {batch_id}',now,confirmed_by,'pending')).lastrowid
                 wb=c.execute('INSERT INTO source_workbook(import_batch_id,workbook_name,file_path,file_hash,loaded_at) VALUES(?,?,?,?,?)',(import_id,prepared.report['workbook'],str(self.batches.artifact(batch_id,artifact_id)[1]),saved['workbook_sha256'],now)).lastrowid
                 existing_by_id={r['existing_id']:r for r in existing}
                 retained_workbooks={}
@@ -343,7 +349,7 @@ class DevWorkbookImporter:
                     if source is None:raise ValueError('Existing canonical source row is missing; import rolled back')
                     payload=json.loads(source['raw_payload_json'])
                     if row:
-                        payload['dev_prepared_import']={'batch_id':batch_id,'artifact_id':artifact_id,'proposed_values':{k:v for k,v in row['values'].items() if k.startswith(('Proposed: ','Proposed Parent: '))},'prior_source_row_id':source['id']}
+                        payload[self.payload_key]={'batch_id':batch_id,'artifact_id':artifact_id,'proposed_values':{k:v for k,v in row['values'].items() if k.startswith(('Proposed: ','Proposed Parent: '))},'prior_source_row_id':source['id']}
                     else:payload['retained_source_row_id']=source['id']
                     old_workbook_id=source['source_workbook_id']
                     if old_workbook_id not in retained_workbooks:
@@ -354,7 +360,7 @@ class DevWorkbookImporter:
                     c.execute('UPDATE canonical_device_record SET source_row_id=?,source_import_batch_id=? WHERE id=?',(source_id,import_id,device['canonical_id']))
                 for row in new:self._insert(c,row,wb,import_id,now,batch_id,artifact_id)
                 # Current canonical rows are unique per device; the existing snapshot builder is read/append only.
-                ProductionWorkbookImporter._snapshot(c,import_id, family_scope="Dev devices")
+                ProductionWorkbookImporter._snapshot(c,import_id, family_scope=f"{self.batches.environment_label} devices")
                 result.update(import_batch_id=import_id,created_count=len(new),database_changed=True,retained_source_workbook_ids=list(retained_workbooks))
                 c.execute('UPDATE import_batch SET notes=? WHERE id=?',(dump(result),import_id))
                 if self.batches._inputs(batch_id)[3]!=saved['input_token']:raise ValueError('Batch changed during import; rolled back')
@@ -369,7 +375,7 @@ class DevWorkbookImporter:
         return result
 
     def _insert(self,c,row,workbook,import_id,now,batch_id,artifact_id):
-        record=row['record'];payload={'prepared_values':row['values'],'dev_prepared_import':{'batch_id':batch_id,'artifact_id':artifact_id,'proposed_values':{k:v for k,v in row['values'].items() if k.startswith(('Proposed: ','Proposed Parent: '))}},'provenance':row['provenance']}
+        record=row['record'];payload={'prepared_values':row['values'],self.payload_key:{'batch_id':batch_id,'artifact_id':artifact_id,'proposed_values':{k:v for k,v in row['values'].items() if k.startswith(('Proposed: ','Proposed Parent: '))}},'provenance':row['provenance']}
         source=c.execute('''INSERT INTO source_row(source_workbook_id,sheet_name,row_index,product_family,product_variant,catalogue_number,primary_udi_di,submission_operation,raw_payload_json,canonical_status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',(workbook,row['sheet'],row['number'],record.product_family,record.product_variant,record.catalogue_number,record.primary_udi_di,record.submission_operation,dump(payload),'xml_ready' if record.xml_readiness.status=='complete' else 'xml_blocked',now)).lastrowid
         parent=row['values'].get('Proposed Basic UDI-DI') or row['values'].get('Accepted Basic UDI-DI')
         subject=c.execute('INSERT INTO device_subject(subject_key,product_family,product_variant,catalogue_number,primary_udi_di,basic_udi_di,current_source_row_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)',(row['subject_key'],record.product_family,record.product_variant,record.catalogue_number,record.primary_udi_di,parent,source,now,now)).lastrowid
@@ -377,8 +383,60 @@ class DevWorkbookImporter:
         for field in record.fields:
             c.execute('INSERT INTO canonical_field_value(canonical_device_record_id,canonical_path,field_status,required,value_json,source_headers_json,review_note) VALUES(?,?,?,?,?,?,?)',(canonical,field.canonical_path,'populated' if field.value is not None else 'missing',int(field.required),dump(field.value) if field.value is not None else None,dump([field.source_detail]),field.review_note))
         if row['snapshot'] is None:return
-        snapshot={**row['snapshot'],'accepted_state_source':'playground_export','import_batch_id':import_id};full=snapshot['device_record']
+        snapshot={**row['snapshot'],'accepted_state_source':self.accepted_source,'import_batch_id':import_id};full=snapshot['device_record']
         testing=c.execute('''INSERT INTO testing_subjects(subject_key,device_subject_id,normalized_product_family,normalized_product_variant,normalized_catalogue_number,normalized_primary_udi_di,normalized_basic_udi_di,product_family,product_variant,catalogue_number,primary_udi_di,basic_udi_di) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''',(row['subject_key'],subject,normalize_identity(record.product_family),normalize_identity(record.product_variant),normalize_identity(record.catalogue_number),normalize_identity(record.primary_udi_di),normalize_identity(parent),record.product_family,record.product_variant,record.catalogue_number,record.primary_udi_di,parent)).lastrowid
-        market={'version':snapshot['market_info_version'],'market_countries':snapshot['market_countries'],'accepted_state_source':'playground_export'}
-        c.execute("INSERT INTO testing_events(subject_id,event_index,message_type,status,event_kind,accepted_state_source,version,source_file_name,state_after_json,raw_event_json) VALUES(?,1,'PLAYGROUND_EXPORT.SNAPSHOT','IMPORTED','BASELINE_IMPORT','playground_export',?,?,?,?)",(testing,snapshot['version'],snapshot['export_source']['file'],dump(snapshot),dump({'import_batch_id':import_id,'batch_id':batch_id,'artifact_id':artifact_id,'export_source':snapshot['export_source']})))
+        market={'version':snapshot['market_info_version'],'market_countries':snapshot['market_countries'],'accepted_state_source':self.accepted_source}
+        c.execute("INSERT INTO testing_events(subject_id,event_index,message_type,status,event_kind,accepted_state_source,version,source_file_name,state_after_json,raw_event_json) VALUES(?,1,?,'IMPORTED','BASELINE_IMPORT',?,?,?,?,?)",(testing,self.baseline_event,self.accepted_source,snapshot['version'],snapshot['export_source']['file'],dump(snapshot),dump({'import_batch_id':import_id,'batch_id':batch_id,'artifact_id':artifact_id,'export_source':snapshot['export_source']})))
         c.execute("UPDATE testing_subjects SET registration_status='child_registered',latest_successful_version=?,latest_successful_state_json=?,latest_successful_market_info_version=?,latest_successful_market_info_state_json=? WHERE id=?",(snapshot['version'],dump(snapshot),market['version'],dump(market),testing))
+
+
+class _ProductionManagedReader(_DevReader):
+    template_only_status = 'Not registered'
+    subject_key_prefix = 'PROD'
+
+
+class ProductionManagedImporter(DevWorkbookImporter):
+    backup_prefix = 'production-application'
+    source_type = 'production_managed_workbook'
+    payload_key = 'production_managed_import'
+    accepted_source = 'production_export'
+    baseline_event = 'PRODUCTION_EXPORT.SNAPSHOT'
+    reader_type = _ProductionManagedReader
+
+    def __init__(self, settings):
+        from app.services.managed_import_paths import production_paths
+        from app.services.dev_batch_preparation import ProductionBatchPreparation
+        _, self.database, self.backups, _ = production_paths(settings)
+        self.settings = settings
+        self.batches = ProductionBatchPreparation(settings)
+
+    def _connect(self, write=False):
+        from app.services.managed_import_paths import production_paths
+        _, database, backups, batches = production_paths(self.settings)
+        if (database, backups, batches) != (self.database, self.backups, self.batches.root):
+            raise PermissionError('Production import target changed; reopen and review sources')
+        connection = sqlite3.connect(database.as_uri() + ('?mode=rw' if write else '?mode=ro'), uri=True, timeout=10)
+        connection.row_factory = sqlite3.Row
+        connection.execute('PRAGMA foreign_keys=ON')
+        if not write: connection.execute('PRAGMA query_only=ON')
+        return connection
+
+    def _insert(self, connection, row, workbook, import_id, now, batch_id, artifact_id):
+        if row['snapshot'] is not None:
+            record = row['record']
+            row = {**row, 'snapshot': {**row['snapshot'], 'device_record': {**row['snapshot']['device_record'],
+                'product_family': record.product_family, 'product_variant': record.product_variant}}}
+        super()._insert(connection, row, workbook, import_id, now, batch_id, artifact_id)
+        # Preserve compatibility with the earlier Production workbook provenance reader.
+        source = connection.execute('SELECT id,raw_payload_json FROM source_row WHERE source_workbook_id=? AND primary_udi_di=?',
+                                    (workbook, row['key'][1])).fetchone()
+        payload = json.loads(source['raw_payload_json'])
+        record = row['record']
+        payload['production_import'] = {'fingerprint': row['fingerprint'], 'issuer': row['key'][0], 'udi_di': row['key'][1],
+            'registration_status': row['values']['Registration Status'], 'family': record.product_family,
+            'model': record.product_variant, 'catalogue': record.catalogue_number, 'provenance': row['provenance']}
+        connection.execute('UPDATE source_row SET raw_payload_json=? WHERE id=?', (dump(payload), source['id']))
+
+
+def workbook_importer(settings):
+    return ProductionManagedImporter(settings) if settings.environment == 'prod' else DevWorkbookImporter(settings)

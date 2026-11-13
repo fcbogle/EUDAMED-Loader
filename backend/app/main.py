@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import PROJECT_ROOT, get_settings, validate_schema_package
 from app.routers import canonical, normalization, profiling, schemas, xml_generation
-from app.routers import dev_input_batches
+from app.routers import dev_input_batches, managed_import
 from app.routers import ra_reporting
 from app.services.workbook_import import WorkbookImportService
 from app.services.testing_state_store import TestingStateStore
@@ -35,6 +35,7 @@ app.include_router(canonical.router, prefix="/api")
 app.include_router(schemas.router, prefix="/api")
 app.include_router(xml_generation.router, prefix="/api")
 app.include_router(dev_input_batches.router, prefix="/api")
+app.include_router(managed_import.router, prefix="/api")
 app.include_router(ra_reporting.router, prefix="/api")
 
 

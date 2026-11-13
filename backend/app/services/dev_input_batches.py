@@ -86,12 +86,12 @@ def create_dev_batch(*, project_root: Path, xml_dir: Path, batch_id: str) -> Pat
     return destination
 
 
-def verify_dev_batch_inputs(batch_dir: Path) -> dict:
+def verify_dev_batch_inputs(batch_dir: Path, *, environment: str = "dev") -> dict:
     """Verify the immutable file inventory before any source reading or preparation."""
     batch = batch_dir.resolve()
     manifest = json.loads((batch / "manifest.json").read_text())
-    if manifest.get("environment") != "dev" or manifest.get("format_version") != 1:
-        raise ValueError("Expected a version-1 Dev input batch")
+    if manifest.get("environment") != environment or manifest.get("format_version") != 1:
+        raise ValueError("Expected a version-1 input batch for the active environment")
     expected = set()
     for entry in manifest["files"]:
         path = batch / entry["path"]
@@ -108,13 +108,13 @@ def verify_dev_batch_inputs(batch_dir: Path) -> dict:
 
 
 def inspect_dev_batch(batch_dir: Path, *, excluded_workbook_names: tuple[str, ...] = (),
-                      schema_version: str = DEV_MESSAGE_SCHEMA_VERSION) -> dict:
+                      schema_version: str = DEV_MESSAGE_SCHEMA_VERSION, environment: str = "dev") -> dict:
     """Return source findings only; does not create reports or write any inputs."""
     batch = batch_dir.resolve()
-    manifest = verify_dev_batch_inputs(batch)
+    manifest = verify_dev_batch_inputs(batch, environment=environment)
     expected = {entry["path"] for entry in manifest["files"]}
     reference = batch / "basic-udi/BasicUDIs.xlsx"
-    findings = {"batch_id": manifest["batch_id"], "environment": "dev",
+    findings = {"batch_id": manifest["batch_id"], "environment": environment,
                 "manufacturer_srn": manifest["manufacturer_srn"],
                 "assessed_at": datetime.now(UTC).isoformat(), "file_integrity": "verified",
                 "file_count": len(expected), "errors": [], "inspection_complete": False,
@@ -130,10 +130,10 @@ def inspect_dev_batch(batch_dir: Path, *, excluded_workbook_names: tuple[str, ..
         for path in (batch / "eudamed-xml").glob("*.xml"):
             tree = etree.parse(str(path), etree.XMLParser(resolve_entities=False, no_network=True))
             if tree.getroot().get("version") != schema_version:
-                raise ValueError(f"Dev export must declare version {schema_version}: {path.name}")
+                raise ValueError(f"Export must declare version {schema_version}: {path.name}")
             actors = set(tree.xpath('//*[local-name()="MFActorCode"]/text()'))
             if actors != {manifest["manufacturer_srn"]}:
-                raise ValueError(f"Export manufacturer differs from the selected Dev actor: {path.name}")
+                raise ValueError(f"Export manufacturer differs from the configured actor: {path.name}")
         proposed = {tuple(row["key"]) for row in templates if all(row["key"])}
         accepted = {tuple(row["key"]) for row in exports}
         reasons = Counter(reason for row in templates for reason in row["reasons"])

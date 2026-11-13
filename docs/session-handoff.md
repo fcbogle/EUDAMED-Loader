@@ -4,6 +4,45 @@ Updated November 13, 2026. This document distinguishes implemented behavior, dat
 
 
 
+
+## November 13 — Production Import Management support
+
+Owner authorised implementing Production support while leaving the live database
+unchanged. Implementation was isolated on feature/production-import-management before local promotion to main.
+The shared browser flow now uses environment-neutral `/api/input-batches/sessions`
+endpoints. Old `/api/dev-input-batches` endpoints retain their Dev-only guards.
+Production permits 500 source files / 256 MB total (20 MB per file), with Dev
+remaining at 100 files / 60 MB. Both browser and server enforce these bounds.
+Production sources/history are beneath its configured data root's `import-batches`;
+Dev retains its existing storage. Production paths reject escaping/overlapping,
+symlink and hard-link aliases; the existing database, manufacturer and schema
+3.0.30 are required. No profile file or schema migration is introduced.
+
+The first two stages do not write SQLite. Explicit environment-bound confirmation
+and importer attribution are required for the third stage; it creates a verified
+backup, rechecks source/configuration/database markers and imports atomically.
+Existing device attributes and acceptance/submission evidence are retained. New
+Production extract baselines use PRODUCTION_EXPORT.SNAPSHOT / production_export.
+Earlier Production workbook receipts remain readable; missing historic source
+reviews/downloads are identified honestly. Browser memory is environment-specific.
+
+A read-only SQLite backup of live Production was used solely in an isolated sandbox.
+The full workflow added one synthetic registered device there, with a verified
+backup and zero updates to existing accepted state. Verified preservation:
+10,026 device identities and canonical records, 641,664 canonical fields,
+20,101 events, 10,024 testing subjects, 68 generated packages and 17 reviewed
+baselines. All 106 protected live Production files retained their hashes.
+The live Production database has not been imported into, migrated or reset.
+
+Validation: 542 backend tests, 167 frontend tests and frontend build passed.
+Production-profile application startup and both earlier/new history receipts were
+also exercised against the isolated copy without changing its SQLite bytes.
+Code activation requires a backend restart; no live import has been performed.
+Production reporting remains outside this change. Audit evidence is in
+data/testing/backups/production-import-management-20261113-u6ubmidb.
+The separate temporary SQLite copies remain under
+/private/tmp/eudamed-production-import-u6ubmidb and are not operational databases.
+
 ## November 13 — Feature branch merged into main; Production files protected
 
 Merged feature/import-management-reporting into main after a separate-checkout

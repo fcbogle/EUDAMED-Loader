@@ -1,4 +1,4 @@
-"""Receive browser-selected Dev files as a dated immutable batch; never access SQLite."""
+"""Receive browser-selected environment-bound files as a dated immutable batch; never access SQLite."""
 from __future__ import annotations
 
 import base64
@@ -47,15 +47,16 @@ class ReceivedFile(BaseModel):
 
 class ReceiptRequest(BaseModel):
     metadata: ReceiptMetadata
-    files: list[ReceivedFile] = Field(min_length=3, max_length=100)
+    files: list[ReceivedFile] = Field(min_length=3, max_length=500)
 
 
 def receive_batch(service: DevBatchPreparation, request: ReceiptRequest, *, source_review: dict | None = None) -> dict:
-    # Service construction enforces Dev-only. Guard symlinks before mkdir/writes.
+    # Service construction enforces the configured environment boundary. Guard symlinks before mkdir/writes.
     root = service.root
-    if any(p.is_symlink() for p in [root, *root.parents]) or root.parts[-3:] != ('data', 'dev', 'import-batches'):
-        raise ValueError('Batch storage must be a real Dev data/import-batches directory')
-    decoded = decode_files(request.files)
+    expected = service.settings.data_root / 'import-batches' if service.settings.environment == 'prod' else root
+    if any(p.is_symlink() for p in [root, *root.parents]) or (service.settings.environment == 'dev' and root.parts[-3:] != ('data', 'dev', 'import-batches')) or root != expected:
+        raise ValueError('Batch storage must be the configured environment-specific import-batches directory')
+    decoded = decode_files(request.files, max_files=service.max_files, max_total_bytes=service.max_total_bytes)
     root.mkdir(parents=True, exist_ok=True)
     lock = root / '.receiving.lock'
     try:
@@ -83,7 +84,9 @@ def receive_batch(service: DevBatchPreparation, request: ReceiptRequest, *, sour
     return service.describe(batch_id)
 
 
-def decode_files(files: list[ReceivedFile], *, require_complete=True):
+def decode_files(files: list[ReceivedFile], *, require_complete=True, max_files=100, max_total_bytes=MAX_TOTAL_BYTES):
+    if len(files) > max_files:
+        raise ValueError(f'At most {max_files} source files are allowed in this environment')
     roles = [f.role for f in files]
     if roles.count('basic-udi') > 1 or (require_complete and (roles.count('basic-udi') != 1 or not {'templates', 'eudamed-xml'} <= set(roles))):
         raise ValueError('Select Template workbooks, exactly one BasicUDI workbook and XML extracts')
@@ -106,19 +109,19 @@ def decode_files(files: list[ReceivedFile], *, require_complete=True):
         except (binascii.Error, ValueError) as exc:
             raise ValueError(f'Unable to receive {item.name}; select the file again') from exc
         total += len(data)
-        if not data or len(data) > MAX_FILE_BYTES or total > MAX_TOTAL_BYTES:
-            raise ValueError('Files must be non-empty, at most 20 MB each and 60 MB per batch')
+        if not data or len(data) > MAX_FILE_BYTES or total > max_total_bytes:
+            raise ValueError(f'Files must be non-empty, at most 20 MB each and {max_total_bytes // (1024*1024)} MB per batch')
         decoded.append((item, stored_name, data))
     return decoded
 
 
 def write_inputs(service, request, staged: Path, batch_id: str, decoded, *, validate_content=True):
     now = datetime.now(UTC)
-    manifest = {'format_version': 1, 'environment': 'dev', 'batch_id': batch_id,
+    manifest = {'format_version': 1, 'environment': service.settings.environment, 'batch_id': batch_id,
                 'created_at': now.isoformat(), 'manufacturer_srn': service.settings.eudamed_manufacturer_srn_override,
                 'receipt': {**request.metadata.model_dump(mode='json'), 'identity_source': 'user_supplied', 'transport': 'browser_upload'}, 'files': []}
     if not manifest['manufacturer_srn']:
-        raise ValueError('Configure the Dev manufacturer before receiving files')
+        raise ValueError('Configure the active manufacturer before receiving files')
     for role in ('templates', 'basic-udi', 'eudamed-xml', 'prepared'):
         (staged / role).mkdir()
     for item, name, data in decoded:
@@ -144,7 +147,7 @@ def validate_received_content(path, item, manufacturer, *, schema_version=DEV_ME
         if export_root is None or tree.docinfo.doctype or etree.QName(export_root).localname != 'PullResponse':
             raise ValueError(f'{item.name}: select device extracts, not Success XML acknowledgements')
         if export_root.get('version') != schema_version or set(tree.xpath('//*[local-name()="MFActorCode"]/text()')) != {manufacturer}:
-            raise ValueError(f'{item.name}: export schema/manufacturer does not match Dev')
+            raise ValueError(f'{item.name}: export schema/manufacturer does not match the active environment')
     else:
         try:
             with ZipFile(path) as book:

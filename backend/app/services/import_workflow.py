@@ -3,7 +3,7 @@ import json
 import re
 
 from app.services.source_review_drafts import SourceReviewDrafts, DraftMetadata, atomic_json
-from app.services.dev_workbook_import import DevWorkbookImporter
+from app.services.dev_workbook_import import workbook_importer
 from app.services.dev_input_batches import fingerprint
 from app.services.import_review_policy import POLICY_VERSION
 
@@ -12,7 +12,7 @@ class ImportWorkflow:
     def __init__(self, settings):
         self.drafts=SourceReviewDrafts(settings)
         self.batches=self.drafts.batches
-        self.importer=DevWorkbookImporter(settings)
+        self.importer=workbook_importer(settings)
 
     def _files(self, files):
         return [{**entry,'excluded':entry['role']=='templates' and entry['path'].split('/')[-1] in self.batches.settings.excluded_excel_workbook_names} for entry in files]
@@ -34,13 +34,29 @@ class ImportWorkflow:
             if batch.get('error') or batch['batch_id'] in linked:continue
             items.append({'id':batch['batch_id'],'description':(batch.get('receipt') or {}).get('description') or batch['batch_id'],
                 'status':'Review sources','updated_at':batch.get('created_at','')})
+        if self.drafts.settings.environment == 'prod':
+            with self.importer._connect() as connection:
+                for row in connection.execute("SELECT id,label,imported_at FROM import_batch WHERE source_type='production_workbook'"):
+                    items.append({'id':f"production-import-{row['id']}", 'description':row['label'], 'status':'complete', 'updated_at':row['imported_at']})
         return {'imports':sorted(items,key=lambda x:x['updated_at'],reverse=True)}
 
     def get(self, identifier):
+        if self.drafts.settings.environment == 'prod' and re.fullmatch(r'production-import-\d+',identifier):
+            with self.importer._connect() as connection:
+                row=connection.execute("SELECT * FROM import_batch WHERE id=? AND source_type='production_workbook'",(int(identifier.rsplit('-',1)[1]),)).fetchone()
+                if row is None:raise FileNotFoundError('Earlier Production import not found')
+                report=json.loads(row['notes'] or '{}')
+                workbooks=[item[0] for item in connection.execute('SELECT workbook_name FROM source_workbook WHERE import_batch_id=?',(row['id'],))]
+            return dict(environment='prod',id=identifier,revision=None,batch_id=None,stage='complete',legacy=True,
+                legacy_workbooks=workbooks,metadata={'creator':{'name':row['imported_by'] or '', 'email':'','team_role':''},
+                    'description':row['label'],'source_date':None,'export_date':None},files=[],review=None,workbook=None,summary=None,
+                result={'import_batch_id':row['id'],'created_count':report.get('created_count',0),
+                    'existing_retained_count':report.get('unchanged_count',0),'omitted_retained_count':report.get('retained_count',0),
+                    'confirmed_at':row['imported_at'],'confirmed_by':row['imported_by'] or 'Not recorded','backup':None})
         if re.fullmatch(r'\d{4}-\d{2}-\d{2}-\d{3}',identifier):
             _,manifest,_,_=self.batches._inputs(identifier)
             metadata=DraftMetadata.model_validate(manifest.get('receipt',{})).model_dump(mode='json')
-            return dict(id=identifier,revision=None,source_batch_id=identifier,batch_id=None,stage='review',
+            return dict(environment=self.drafts.settings.environment,id=identifier,revision=None,source_batch_id=identifier,batch_id=None,stage='review',
                 metadata=metadata,files=self._files(manifest['files']),review=None,workbook=None,result=None,summary=None)
         draft=self.drafts.describe(identifier)
         workbook=None;result=None;summary=None
@@ -59,7 +75,7 @@ class ImportWorkflow:
             workbook=self.batches.artifact(draft['batch_id'],artifact_id)[0]
             stage='complete' if result else 'import'
             summary=draft.get('import_summary')
-        return dict(id=identifier,revision=draft['revision'],batch_id=draft.get('batch_id'),stage=stage,
+        return dict(environment=self.drafts.settings.environment,id=identifier,revision=draft['revision'],batch_id=draft.get('batch_id'),stage=stage,
             metadata=draft['metadata'],files=self._files(draft['files']),review=draft.get('review'),workbook=workbook,result=result,summary=summary)
 
     def save(self, identifier, request):
@@ -86,7 +102,7 @@ class ImportWorkflow:
         report=self.importer.assess(batch_id,artifact_id)
         if not report['already_imported'] and (not report['can_import'] or
             any(report[key]!=approval[key] for key in ('database_marker','configuration','plan_sha256'))):
-            raise ValueError('Dev data or rules changed; review source data again before importing')
+            raise ValueError('Database state or rules changed; review source data again before importing')
         return report
 
     def prepare(self, identifier, revision):
@@ -108,10 +124,13 @@ class ImportWorkflow:
             atomic_json(path/'draft.json',state)
         return self.get(identifier)
 
-    def confirm(self,identifier,revision,confirmed_by,confirmed):
+    def confirm(self,identifier,revision,confirmed_by,confirmed,target_environment=None):
+        environment = self.drafts.settings.environment
+        if (environment == 'prod' or target_environment is not None) and target_environment != environment:
+            raise ValueError('Explicitly confirm the active target environment before importing')
         path,state=self.drafts._load(identifier)
         if state['revision']!=revision or not state.get('artifact_id'):raise ValueError('Create the workbook for this import first')
-        if not confirmed or not confirmed_by.strip():raise ValueError('Confirm the Dev import and enter your name and work email')
+        if not confirmed or not confirmed_by.strip():raise ValueError('Confirm the import and enter your name and work email')
         with self.drafts._lock(path):
             assessment=self._assessment(state['batch_id'],state['artifact_id'])
             self.importer.confirm(state['batch_id'],state['artifact_id'],assessment['assessment_id'],confirmed_by,confirmed)

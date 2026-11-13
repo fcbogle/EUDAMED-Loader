@@ -19,6 +19,12 @@ from app.services.source_batch_review import review_sources, review_summary
 PREPARATION_CONTRACT = "dev-import-v3-minimal-review"
 
 class DevBatchPreparation:
+    max_files = 100
+    max_total_bytes = 60 * 1024 * 1024
+    audit_key = 'dev_input_batch'
+    output_prefix = 'dev-import'
+    environment_label = 'Dev'
+    unmatched_status = 'Not evidenced by supplied exports'
     def __init__(self, settings: Settings):
         if settings.environment != "dev":
             raise PermissionError("Batch preparation is currently available only in Dev")
@@ -41,7 +47,7 @@ class DevBatchPreparation:
 
     def _inputs(self, batch_id: str) -> tuple[Path, dict, tuple[str, ...], str]:
         batch = self._batch(batch_id)
-        manifest = verify_dev_batch_inputs(batch)
+        manifest = verify_dev_batch_inputs(batch, environment=self.settings.environment)
         if manifest["batch_id"] != batch_id or manifest["manufacturer_srn"] != self.settings.eudamed_manufacturer_srn_override:
             raise ValueError("Batch environment, identity or manufacturer does not match current Dev configuration")
         filenames = {entry["path"].split("/")[-1] for entry in manifest["files"] if entry["role"] == "templates"}
@@ -59,7 +65,7 @@ class DevBatchPreparation:
                   "original_name": entry.get("original_name", Path(entry["path"]).name), "excluded": entry["role"] == "templates" and Path(entry["path"]).name in exclusions}
                  for entry in manifest["files"]]
         return {"batch_id": batch_id, "created_at": manifest["created_at"], "manufacturer_srn": manifest["manufacturer_srn"],
-                "environment": "dev", "source_reviewed": (batch / "source-review.json").is_file(), "file_integrity": "verified", "files": files, "receipt": manifest.get("receipt"), "has_prepared_workbook": any((batch / "prepared").glob("*/preparation.json"))}
+                "environment": self.settings.environment, "source_reviewed": (batch / "source-review.json").is_file(), "file_integrity": "verified", "files": files, "receipt": manifest.get("receipt"), "has_prepared_workbook": any((batch / "prepared").glob("*/preparation.json"))}
 
     def list_batches(self) -> dict:
         batches = []
@@ -75,7 +81,7 @@ class DevBatchPreparation:
     def inspect(self, batch_id: str) -> dict:
         batch, _, exclusions, before = self._inputs(batch_id)
         result = inspect_dev_batch(batch, excluded_workbook_names=exclusions,
-                                   schema_version=self.settings.eudamed_message_schema_version)
+                                   schema_version=self.settings.eudamed_message_schema_version, environment=self.settings.environment)
         source_review = review_sources(batch, exclusions)
         if self._inputs(batch_id)[3] != before:
             raise ValueError("Inputs changed during checking; select and check the batch again")
@@ -116,13 +122,13 @@ class DevBatchPreparation:
             output = Path(temporary) / "output"
             result = prepare_workbook(template_dir=batch / "templates", xml_dir=batch / "eudamed-xml",
                 parent_reference=batch / "basic-udi/BasicUDIs.xlsx", output_dir=output,
-                excluded_workbook_names=exclusions, output_prefix="dev-import", environment_label="Dev",
-                unmatched_status_label="Not evidenced by supplied exports")
+                excluded_workbook_names=exclusions, output_prefix=self.output_prefix, environment_label=self.environment_label,
+                unmatched_status_label=self.unmatched_status)
             if self._inputs(batch_id)[3] != token:
                 raise ValueError("Inputs changed during preparation; check the batch again")
             workbook, audit = Path(result.pop("workbook")), Path(result.pop("audit"))
             evidence = json.loads(audit.read_text())
-            evidence["dev_input_batch"] = {"batch_id": batch_id, "inspection_token": token,
+            evidence[self.audit_key] = {"batch_id": batch_id, "inspection_token": token,
                 "manifest": manifest, "excluded_template_workbooks": list(exclusions),
                 "scope_limitation": "Export absence is not proof of non-registration. To Register is a preparation grouping requiring later assessment."}
             review_path = batch / 'source-review.json'
@@ -132,10 +138,10 @@ class DevBatchPreparation:
                 approval = json.loads(review_path.read_text())
                 if approval['manifest_sha256'] != fingerprint(batch / 'manifest.json'):
                     raise ValueError('Source review no longer matches batch inputs; return to Step 1')
-                evidence['dev_input_batch']['source_review'] = approval
+                evidence[self.audit_key]['source_review'] = approval
             audit.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n")
             artifact_id = uuid4().hex
-            record = {"batch_id": batch_id, "artifact_id": artifact_id, "environment": "dev",
+            record = {"batch_id": batch_id, "artifact_id": artifact_id, "environment": self.settings.environment,
                 "created_at": datetime.now(UTC).isoformat(), "inspection_token": token,
                 "workbook_name": workbook.name, "audit_name": audit.name,
                 "workbook_sha256": fingerprint(workbook), "audit_sha256": fingerprint(audit),
@@ -156,7 +162,7 @@ class DevBatchPreparation:
         record = json.loads((directory / "preparation.json").read_text())
         if record.get("preparation_contract") != PREPARATION_CONTRACT:
             raise ValueError("Earlier preparation format; check sources and create a fresh workbook")
-        if record["batch_id"] != batch_id or record["artifact_id"] != artifact_id or record["environment"] != "dev":
+        if record["batch_id"] != batch_id or record["artifact_id"] != artifact_id or record["environment"] != self.settings.environment:
             raise ValueError("Prepared artifact identity does not match this Dev batch")
         paths = []
         for kind in ("workbook", "audit"):
@@ -168,3 +174,21 @@ class DevBatchPreparation:
         if json.loads(paths[1].read_text())["workbook_sha256"] != record["workbook_sha256"]:
             raise ValueError("Prepared audit does not belong to this workbook")
         return record, paths[0], paths[1]
+
+
+class ProductionBatchPreparation(DevBatchPreparation):
+    max_files = 500
+    max_total_bytes = 256 * 1024 * 1024
+    audit_key = 'production_input_batch'
+    output_prefix = 'production-import'
+    environment_label = 'Production'
+    unmatched_status = 'Not registered'
+
+    def __init__(self, settings):
+        from app.services.managed_import_paths import production_paths
+        _, _, _, self.root = production_paths(settings)
+        self.settings = settings
+
+
+def batch_preparation(settings):
+    return ProductionBatchPreparation(settings) if settings.environment == 'prod' else DevBatchPreparation(settings)

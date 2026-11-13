@@ -850,7 +850,7 @@ export function App() {
     },
     {
       id: "devImportGuide",
-      title: "Import Data in Dev",
+      title: "Import Data — Development and Production",
       sourcePath: "docs/source-batch-receipt.md",
       markdown: devImportGuideDocumentation,
     },
@@ -3320,7 +3320,7 @@ export function App() {
         <aside className="hero-status" aria-label="Workspace status">
           {plannedWorkspace ? (
             <span className="status-pill neutral">
-              {activeEnvironment === "dev" && isImportManagement ? activeTab === "importHistory" ? "Read-only history" : importFlowContext.status : activeEnvironment === "dev" && isReporting ? "Read-only comparison" : "Under development"}
+              {activeEnvironment !== null && isImportManagement ? activeTab === "importHistory" ? "Read-only history" : importFlowContext.status : activeEnvironment === "dev" && isReporting ? "Read-only comparison" : "Under development"}
             </span>
           ) : null}
           {activeTab === "workbooks" ? (
@@ -3404,15 +3404,16 @@ export function App() {
       <div className="workspace-content">
       {error ? <div className="panel error-banner">{error}</div> : null}
       <div hidden={activeTab !== "sourceFiles"}>
-        {activeEnvironment === "dev" ? <ImportFlowWorkspace
+        {activeEnvironment !== null ? <ImportFlowWorkspace
           enabled={activeTab === "sourceFiles"}
+          environment={activeEnvironment}
           onViewHistory={() => setActiveTab("importHistory")}
           onContextChange={setImportFlowContext}
           onDatabaseImported={() => { void loadWorkbookImportMonitoring(); void loadCanonicalValidationBundle(true); void loadCanonicalReviewBundle(true); setRegistrationSummaryRefresh(value => value + 1); }}
-        /> : <section className="panel"><p>Import Management is currently available in Dev. Continue using the existing Production import workflow.</p></section>}
+        /> : <section className="panel"><p>Confirm the backend environment before opening Import Management.</p></section>}
       </div>
       {activeTab === "importHistory" && <>
-        {activeEnvironment === "dev" ? <ImportFlowWorkspace enabled view="history" /> : <section className="panel"><p>Import History is currently available in Dev.</p></section>}
+        {activeEnvironment !== null ? <ImportFlowWorkspace enabled view="history" environment={activeEnvironment} /> : <section className="panel"><p>Confirm the backend environment before opening Import History.</p></section>}
       </>}
       <div hidden={!isReporting}>
         <ReportingWorkspace

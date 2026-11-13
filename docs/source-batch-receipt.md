@@ -1,7 +1,7 @@
-# Import data in Dev
+# Import Data — Development and Production
 
-Restart the Dev backend and refresh the browser after updating the feature
-branch. Open **Import Management → Import Data**. There is one ongoing import,
+Restart the backend for the intended environment and refresh the browser after
+updating the application. Open **Import Management → Import Data** and confirm the environment banner. There is one ongoing import,
 with one primary action at its current stage:
 
 1. **Review source data** — select Template workbooks, the BasicUDI workbook and
@@ -9,7 +9,7 @@ with one primary action at its current stage:
    copies save automatically; wait for **Saved automatically** before closing.
 2. **Create Import Workbook** — creates the dated batch and its workbook/audit
    from the reviewed copies. There is no separate Create Batch button.
-3. **Import Batch Data** — shows the target Dev environment and new/retained
+3. **Import Batch Data** — shows the target environment and new/retained
    counts. Check the importer details, tick confirmation and import. A verified
    backup is created automatically before the transaction.
 
@@ -29,6 +29,35 @@ downloads as read-only audit evidence. Historical findings are labelled as the
 review at import, not current cleanup tasks. Browsing history does not change
 the remembered ongoing import. Use **Canonical Validation** for current database
 data quality and XML readiness; successful import does not establish XML readiness.
+
+## Production
+
+The same three-stage workspace is available with the Production backend profile.
+Its sources and history are separate from Playground: `EUDAMED_DATA_ROOT/import-batches`.
+Production permits up to 500 source files and 256 MB total (20 MB per file),
+so complete paged exports can be selected. Dev retains 100 files/60 MB total.
+Production requires its configured manufacturer and schema **3.0.30**. Playground
+XMLs, changed source manifests, redirected database/backup paths and stale reviews
+are rejected. The existing Production database must already exist; the workflow
+never creates a replacement database during source review.
+
+Source review and workbook creation read the database without changing it. Step 3
+names **Production**, requires importer attribution and an explicit Production
+confirmation, creates an integrity-checked SQLite backup under the configured
+Production backup directory, and applies an atomic additive import. Existing device
+values, accepted state and submission history are retained. New registered-device
+extract baselines are tagged `production_export`, never `playground_export`.
+
+Import History also shows earlier Production workbook import receipts read-only.
+When an earlier import has no managed source review or verified retained download,
+the UI states that limitation rather than fabricating evidence. Browser selection
+memory is separate for Production and Dev. Existing Production preparation/import
+endpoints remain available for compatibility.
+
+Enabling this workspace does not import anything. A live import is a separate
+operator action and intentionally changes the Production database after confirmation.
+The Production profile, database, schema and existing input files are not modified
+by installing the UI/API support. Restart the backend to load `/api/input-batches`.
 
 ## Select source files
 

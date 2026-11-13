@@ -1,6 +1,6 @@
-# Import a reviewed Dev batch
+# Import a reviewed batch
 
-Use [Import data in Dev](source-batch-receipt.md) for the current three-stage flow.
+Use [Import Data](source-batch-receipt.md) for the current three-stage flow in Dev or Production. Confirm the active environment before importing.
 The only primary actions are Review source data, Create Import Workbook and
 Import Batch Data. Downloads are optional.
 
@@ -11,7 +11,7 @@ records, without deleting records or rewriting their original source evidence.
 Blank country lists remain a separate warning. Completed imports retain their
 receipts; pending approvals under older policies must be reviewed again.
 Step 2 creates the dated batch, associated workbook/audit and saved import summary.
-Step 3 confirms the target Dev environment, operator attribution and the import.
+Step 3 confirms the target environment, operator attribution and the import.
 A fresh assessment is an internal safety check; there is no assessment screen,
 assessment selector or extra approval action.
 
