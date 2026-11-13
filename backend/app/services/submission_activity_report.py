@@ -64,7 +64,9 @@ def outcome(states):
 
 class SubmissionActivityReport:
     def __init__(self, settings):
-        StoredDeviceComparisonReport(settings)  # Same Dev/database path guard; no stores initialized.
+        if settings.environment != 'dev':
+            raise PermissionError('Submission Activity is available only in Dev')
+        StoredDeviceComparisonReport(settings)  # Dev/database path guard; no stores initialized.
         self.settings = settings
         self.database = settings.testing_state_db_path.resolve()
 

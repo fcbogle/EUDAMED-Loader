@@ -17,6 +17,7 @@ from fastapi.encoders import jsonable_encoder
 from openpyxl import Workbook
 from pydantic import BaseModel, ConfigDict
 
+from app.services.managed_import_paths import production_paths
 from app.services.current_device_comparison import current_device_values
 from app.services.accepted_state import accepted_device_state, accepted_market_state, json_state
 from app.services.playground_reconciliation import normalized, positive_version, timestamp
@@ -99,14 +100,18 @@ def snapshot_identity(subject):
 
 class StoredDeviceComparisonReport:
     def __init__(self, settings):
-        if settings.environment != 'dev':
-            raise PermissionError('Stored Device Data Comparison is currently available only in Dev')
+        if settings.environment == 'prod':
+            production_paths(settings)  # Validate existing storage; never initialise a store.
+        elif settings.environment != 'dev':
+            raise PermissionError('A confirmed application environment is required')
         self.settings = settings
         self.database = settings.testing_state_db_path.resolve()
-        if any(self.database.parts[i:i+2] == ('data', 'prod') for i in range(len(self.database.parts)-1)):
+        if settings.environment == 'dev' and any(self.database.parts[i:i+2] == ('data', 'prod') for i in range(len(self.database.parts)-1)):
             raise PermissionError('Dev reporting cannot use the Production database')
 
     def generate(self, request):
+        if self.settings.environment == 'prod' and not request.summary_only:
+            raise PermissionError('Production reporting supports the model reconciliation summary only')
         if not self.settings.eudamed_manufacturer_srn_override:
             raise ValueError('A configured manufacturer is required for comparison')
         selection = RetainedEudamedExtracts(self.settings).select()

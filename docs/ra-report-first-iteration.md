@@ -77,7 +77,20 @@ and live portal changes are also outside scope. Missing values and unsupported p
 Optional nulls agree only when explicitly stored; ordering alone does not change
 code/country sets. No source values, accepted state or workflow history are updated.
 
-Reporting remains Dev-only. Production configuration and data are unchanged.
+Reporting supports both Dev / Playground and Production, with separate database
+and retained extract sources. Production uses its existing schema 3.0.30 profile;
+no schema, profile, migration or database import is needed to enable reporting.
+Database connections use SQLite read-only mode and query-only transactions.
+The active Production endpoint accepts the model summary only; archived detailed
+and Submission Activity reports remain unavailable in Production.
+
+A suitable Production extract must already be retained through Production Data
+Import. Dev extracts and historical acceptance snapshots are never substituted.
+If none is available, generation stays disabled and the operator is directed to
+Data Import. Source review and workbook preparation can retain the XML set without
+confirming a database import; confirmation of the final import is a separate action.
+Production source limits follow Data Import: 500 files / 256 MB per set, with
+20 MB per XML file. Dev retains its existing 100-file / 60 MB set limits.
 
 Current stored boolean/quantity values are parsed without defaulting missing values
 to false or zero. Number of reuses supports the official schema's `-1` not-applicable

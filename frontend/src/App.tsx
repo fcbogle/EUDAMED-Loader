@@ -3320,7 +3320,7 @@ export function App() {
         <aside className="hero-status" aria-label="Workspace status">
           {plannedWorkspace ? (
             <span className="status-pill neutral">
-              {activeEnvironment !== null && isImportManagement ? activeTab === "importHistory" ? "Read-only history" : importFlowContext.status : activeEnvironment === "dev" && isReporting ? "Read-only comparison" : "Under development"}
+              {activeEnvironment !== null && isImportManagement ? activeTab === "importHistory" ? "Read-only history" : importFlowContext.status : activeEnvironment !== null && isReporting ? "Read-only comparison" : "Under development"}
             </span>
           ) : null}
           {activeTab === "workbooks" ? (

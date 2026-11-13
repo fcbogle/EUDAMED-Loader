@@ -31,7 +31,7 @@ export function ReportingWorkspace({ environment, enabled = true }: {
     const current = ++sourceGeneration.current;
     generation.current += 1;
     setReport(null); setError(""); setBusy(false); setSource(null);
-    if (environment !== "dev" || !enabled) { setSourceLoading(false); return; }
+    if (environment === null || !enabled) { setSourceLoading(false); return; }
     setSourceLoading(true);
     void api.storedDeviceComparisonSource().then(result => {
       if (current !== sourceGeneration.current) return;
@@ -58,11 +58,12 @@ export function ReportingWorkspace({ environment, enabled = true }: {
     } finally { if (current === generation.current) setBusy(false); }
   }
   if (!enabled) return null;
-  if (environment !== "dev") return <section className="panel"><h2>Model Reconciliation Summary</h2><p>This report is available in Dev / Playground.</p></section>;
+  if (environment === null) return <section className="panel"><h2>Model Reconciliation Summary</h2><p>Confirming the application environment…</p></section>;
   const total = (key: "total" | "compared" | "matching" | "exceptions" | "absent" | "extract_only" | "unresolved") => (report?.models ?? []).reduce((sum, row) => sum + row[key], 0);
   return <section className="tab-stack reporting-workspace" aria-label="Model Reconciliation Summary">
     <section className="panel">
       <h2>Model Reconciliation Summary</h2>
+      <p className="panel-copy">{environment === "prod" ? "Production" : "Dev / Playground"} · Read-only comparison</p>
       <p>Compare current stored device attributes with the latest suitable EUDAMED extract retained through Data Import, grouped by model.</p>
       {sourceLoading && <p role="status">Checking retained Data Import extracts…</p>}
       {source?.available && source.selected && <p className="panel-copy">EUDAMED extract: {date(source.selected.exported_from)}{date(source.selected.exported_from) !== date(source.selected.exported_to) ? ` to ${date(source.selected.exported_to)}` : ""} (UTC)</p>}

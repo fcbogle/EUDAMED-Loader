@@ -9,7 +9,7 @@ import tempfile
 
 from lxml import etree
 
-from app.services.dev_batch_preparation import DevBatchPreparation
+from app.services.dev_batch_preparation import batch_preparation
 from app.services.playground_reconciliation import timestamp
 from app.services.production_workbook_preparation import NS, _exports
 
@@ -17,8 +17,8 @@ from app.services.production_workbook_preparation import NS, _exports
 class RetainedEudamedExtracts:
     def __init__(self, settings):
         self.settings = settings
-        self.batches = DevBatchPreparation(settings)  # Path/environment checks only; no stores or mkdir.
-        if any(self.batches.root.parts[i:i+2] == ('data', 'prod') for i in range(len(self.batches.root.parts)-1)):
+        self.batches = batch_preparation(settings)  # Path/environment checks only; no stores or mkdir.
+        if settings.environment == 'dev' and any(self.batches.root.parts[i:i+2] == ('data', 'prod') for i in range(len(self.batches.root.parts)-1)):
             raise ValueError('Dev report sources must not use Production storage')
 
     def _read(self, batch_id):
@@ -36,7 +36,7 @@ class RetainedEudamedExtracts:
                 or manifest.get('manufacturer_srn') != self.settings.eudamed_manufacturer_srn_override):
             raise ValueError('Retained set identity, environment or manufacturer does not match')
         inputs = [item for item in manifest['files'] if item['role'] == 'eudamed-xml']
-        if not inputs or len(inputs) > 100:
+        if not inputs or len(inputs) > self.batches.max_files:
             raise ValueError('Retained set has no usable XML inventory')
         xml_root = batch / 'eudamed-xml'
         if xml_root.is_symlink():
@@ -56,8 +56,8 @@ class RetainedEudamedExtracts:
                 raise ValueError('Retained XML file exceeds the supported 20 MB size')
             data = path.read_bytes()
             size += len(data)
-            if size > 60 * 1024 * 1024:
-                raise ValueError('Retained XML set exceeds the supported 60 MB size')
+            if size > self.batches.max_total_bytes:
+                raise ValueError('Retained XML set exceeds the active environment size limit')
             digest = hashlib.sha256(data).hexdigest()
             if digest != item['sha256'] or len(data) != item['size_bytes']:
                 raise ValueError('Retained XML does not match its Data Import manifest')

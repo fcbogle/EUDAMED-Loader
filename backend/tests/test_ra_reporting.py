@@ -496,3 +496,97 @@ def test_devices_awaiting_registration_are_coverage_not_data_exceptions(current_
     headers = [cell.value for cell in book['Models'][1]]
     assert 'Compared' in headers and 'Data exceptions' in headers and 'Not in extract' in headers
     book.close()
+
+
+@pytest.fixture
+def production_case(current_case, tmp_path):
+    import shutil
+    from pathlib import Path
+    generate(current_case, summary_only=True)
+    original = current_case[0]
+    root = tmp_path / 'production'
+    root.mkdir()
+    database = root / 'application.sqlite3'
+    shutil.copyfile(original.testing_state_db_path, database)
+    batch = root / 'import-batches/2026-10-25-001'
+    shutil.copytree(original.dev_input_batch_root / batch.name, batch)
+    manifest_path = batch / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    manifest['environment'] = 'prod'
+    for item in manifest['files']:
+        if item['role'] != 'eudamed-xml':
+            continue
+        path = batch / item['path']
+        xml = etree.fromstring(path.read_bytes())
+        xml.set('version', '3.0.30')
+        data = etree.tostring(xml)
+        path.write_bytes(data)
+        item.update(sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data))
+    manifest_path.write_text(json.dumps(manifest))
+    schema = Path(__file__).resolve().parents[2] / 'data/schema_profiles/prod-3.0.30'
+    return original.model_copy(update={'environment': 'prod', 'data_root': root,
+        'testing_state_db_path': database, 'testing_state_backup_dir': root / 'backups',
+        'schema_dir': schema, 'eudamed_message_schema_version': '3.0.30'})
+
+
+def test_production_summary_routes_are_readonly_and_keep_retired_reports_closed(production_case, monkeypatch):
+    settings = production_case
+    before = settings.testing_state_db_path.read_bytes()
+    inventory = set(settings.data_root.rglob('*'))
+    connect = sqlite3.connect
+    def readonly(database, *args, **kwargs):
+        assert kwargs.get('uri') and str(database).endswith('?mode=ro')
+        return connect(database, *args, **kwargs)
+    with monkeypatch.context() as patches:
+        patches.setattr(sqlite3, 'connect', readonly)
+        patches.setattr(routes, 'get_settings', lambda: settings)
+        app = FastAPI()
+        app.include_router(routes.router)
+        with TestClient(app) as client:
+            source = client.get('/reporting/device-comparison/source')
+            assert source.status_code == 200 and source.json()['environment'] == 'prod'
+            assert source.json()['available']
+            response = client.post('/reporting/device-comparison', json={'summary_only': True})
+            assert response.status_code == 200, response.text
+            report = response.json()
+            assert report['comparison_basis'] == 'current_device_data'
+            assert report['environment'] == 'prod'
+            assert report['models'][0]['status'] == 'match'
+            assert report['models'][0]['matching'] == 1
+            assert report['details'] == report['findings'] == []
+            book = load_workbook(BytesIO(base64.b64decode(report['excel_base64'])))
+            assert book.sheetnames == ['Context', 'Models']
+            book.close()
+            assert client.post('/reporting/device-comparison', json={}).status_code == 403
+            assert client.post('/reporting/submission-activity', json={}).status_code == 403
+        assert settings.testing_state_db_path.read_bytes() == before
+        assert set(settings.data_root.rglob('*')) == inventory
+
+
+def test_production_does_not_fall_back_to_dev_extracts(production_case):
+    import shutil
+    from app.services.retained_eudamed_extracts import RetainedEudamedExtracts
+    shutil.rmtree(production_case.data_root / 'import-batches')
+    assert production_case.dev_input_batch_root.exists()
+    assert not RetainedEudamedExtracts(production_case).status()['available']
+    with pytest.raises(ValueError):
+        StoredDeviceComparisonReport(production_case).generate(ReportRequest(summary_only=True))
+
+
+def test_production_report_rejects_database_outside_its_data_root(production_case, tmp_path):
+    outside = production_case.model_copy(update={'testing_state_db_path': tmp_path / 'outside.sqlite3'})
+    with pytest.raises(PermissionError):
+        StoredDeviceComparisonReport(outside)
+    assert not outside.testing_state_db_path.exists()
+
+
+
+def test_production_missing_database_is_reported_without_creating_it(production_case, monkeypatch):
+    production_case.testing_state_db_path.unlink()
+    monkeypatch.setattr(routes, 'get_settings', lambda: production_case)
+    app = FastAPI()
+    app.include_router(routes.router)
+    with TestClient(app) as client:
+        assert client.get('/reporting/device-comparison/source').status_code == 409
+        assert client.post('/reporting/device-comparison', json={'summary_only': True}).status_code == 409
+    assert not production_case.testing_state_db_path.exists()

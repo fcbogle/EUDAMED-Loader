@@ -1,4 +1,4 @@
-"""Read-only Dev reports from application data and retained Data Import extracts."""
+"""Read-only model reconciliation from application data and retained Data Import extracts."""
 import sqlite3
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -18,7 +18,7 @@ def device_comparison_source(response: Response):
     response.headers['Cache-Control'] = 'no-store'
     try:
         settings = get_settings()
-        StoredDeviceComparisonReport(settings)  # Dev/path guard before source access.
+        StoredDeviceComparisonReport(settings)  # Environment/path guard before source access.
         return {'environment': settings.environment, **RetainedEudamedExtracts(settings).status()}
     except PermissionError as exc:
         raise HTTPException(403, str(exc)) from exc
@@ -32,6 +32,8 @@ async def device_comparison(request: Request):
         service = StoredDeviceComparisonReport(get_settings())
     except PermissionError as exc:
         raise HTTPException(403, str(exc)) from exc
+    except (ValueError, OSError) as exc:
+        raise HTTPException(409, 'Reporting storage cannot be read; no application data was changed') from exc
     content = bytearray()
     async for chunk in request.stream():
         if len(content) + len(chunk) > 16 * 1024:
@@ -43,6 +45,8 @@ async def device_comparison(request: Request):
         raise HTTPException(422, 'Reporting accepts report options only. Manage EUDAMED extracts through Data Import.') from exc
     try:
         return await run_in_threadpool(service.generate, payload)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
     except (ValueError, KeyError, TypeError, etree.XMLSyntaxError) as exc:
         raise HTTPException(409, str(exc)) from exc
     except (sqlite3.Error, OSError) as exc:

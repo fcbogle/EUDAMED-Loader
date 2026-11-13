@@ -5,6 +5,38 @@ Updated November 13, 2026. This document distinguishes implemented behavior, dat
 
 
 
+## November 13 — Production model reconciliation summary
+
+Owner authorised enabling the Dev model reconciliation summary in Production,
+with no changes to the live Production database. Work was isolated on
+feature/production-model-reconciliation before local promotion to main.
+The same model table and summary Excel now support both environments. Current
+canonical device attributes are compared against the latest suitable complete
+retained XML set for that environment and manufacturer. Green/amber/neutral rules,
+registration coverage and omission of individual device lists remain unchanged.
+Archived detailed and Submission Activity reports remain unavailable in Production.
+
+Reporting opens SQLite with mode=ro and PRAGMA query_only, without store
+initialisation, migrations or write-back. Production storage is checked using the
+existing configured data-root boundary and schema 3.0.30. Retained source limits
+follow the existing Production import limits. No profile or schema was changed.
+
+Read-only integration verification generated 46 model rows over 10,027 device
+records in the earlier isolated Production test copy (including its one synthetic
+record), leaving its database bytes unchanged. All 106 protected live Production
+files retained their SHA-256 hashes. The live Production database was never opened
+by this reporting verification; source availability was checked from files only.
+Production currently has no suitable managed retained extract set, so the UI will
+require Production XML sources through Data Import before generating a summary.
+No live source batch or database import was created by this work.
+
+Validation: full backend suite 545 passed; focused reporting checks 66 passed
+(including the subsequently added missing-database check); frontend 169 passed
+and frontend build passed. Production configuration-only validation selected the
+same database and schema without opening SQLite. Preservation evidence is retained
+in `data/testing/backups/production-model-reconciliation-20261113-l2zzb040`.
+Restart the Production backend and refresh the browser to activate the code.
+
 ## November 13 — Production Import Management support
 
 Owner authorised implementing Production support while leaving the live database

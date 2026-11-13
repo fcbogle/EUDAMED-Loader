@@ -9,9 +9,9 @@ const result={report_type:'model_reconciliation_summary',comparison_basis:'curre
  findings:[{model_key:'model-a',category:'Attribute difference',finding:'Trade name',affected:30}],
  details:[{model_key:'model-a',family:'Family',model:'Linx',issuer:'GS1',udi_di:'SECRET-DEVICE-ID',catalogue:'CATALOGUE',outcome:'different',issues:[],differences:[{field:'Trade name',stored:'Old',extracted:'New'}],missing_fields:[],notes:[],state_source:'Stored accepted device snapshot'}],
  extract_only:3,evidence:[{kind:'Retained Data Import extract',name:'extract.xml',sha256:'abc',created_at:'2026-11-07'}],export_files:[{created_at:'2026-11-07T10:00:00Z'}],limitations:['Missing stored data prevents a full match'],excel_base64:'AA=='};
-function harness(action=async()=>result,sourceAction=async()=>sourceResult){
+function harness(action=async()=>result,sourceAction=async()=>sourceResult,environment='dev'){
  const states=[],effects=[],calls=[],sourceCalls=[];let cursor=0,tree;
- const props={environment:'dev',enabled:true};
+ const props={environment,enabled:true};
  const react={useState(initial){const i=cursor++;if(!(i in states))states[i]=initial;return[states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},
  useRef(initial){const i=cursor++;return states[i]??={current:initial};},
  useEffect(fn,deps){const i=cursor++,old=states[i];if(!old||deps.some((v,n)=>v!==old.deps[n]))effects.push(()=>{old?.cleanup?.();states[i]={deps,cleanup:fn()};});}};
@@ -63,7 +63,7 @@ test('leaving Reporting invalidates in-flight results and returning rechecks Dat
 
 test('environment changes reject in-flight source and report results',async()=>{
  let finish;const h=harness(undefined,()=>new Promise(resolve=>finish=resolve));
- h.props.environment='prod';h.render();finish(sourceResult);await h.settle();assert.equal(h.button('Generate summary'),undefined);
+ h.props.environment=null;h.render();finish(sourceResult);await h.settle();assert.equal(h.button('Generate summary'),undefined);
  let finishReport;const other=harness(()=>new Promise(resolve=>finishReport=resolve));await other.settle();other.click('Generate summary');await other.settle();
  other.props.environment='prod';other.render();finishReport(result);await other.settle();assert.doesNotMatch(other.text(),/950/);
 });
@@ -109,4 +109,21 @@ test('models with no devices compared use neutral status and show registration c
  assert.ok(h.nodes().some(n=>n.type==='span'&&n.props.children==='No devices compared'&&n.props.className.includes('neutral')));
  assert.ok(!h.nodes().some(n=>n.type==='span'&&['Registered data matches','Data exceptions'].includes(n.props.children)));
  assert.match(h.text(),/Not in extract/);assert.match(h.text(),/does not make a model amber/);
+});
+
+
+test('Production offers the same read-only model summary without device controls',async()=>{
+ const h=harness(async()=>({...result,environment:'prod'}),async()=>({...sourceResult,environment:'prod'}),'prod');
+ await h.settle();h.click('Generate summary');await h.settle();
+ assert.deepEqual(h.calls,[{summary_only:true,include_device_details:false}]);
+ assert.match(h.text(),/Production/);assert.match(h.text(),/950/);
+ assert.equal(h.nodes().filter(n=>n.type==='table').length,1);
+ assert.doesNotMatch(h.text(),/SECRET-DEVICE-ID/);
+ assert.ok(h.button('Download summary Excel'));
+});
+
+test('Production never accepts Dev extract availability',async()=>{
+ const h=harness(undefined,async()=>sourceResult,'prod');await h.settle();
+ assert.match(h.text(),/Extract source environment changed/);
+ assert.equal(h.button('Generate summary').props.disabled,true);
 });
