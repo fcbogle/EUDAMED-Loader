@@ -50,9 +50,44 @@ def market_country_reference_payload() -> list[dict[str, object]]:
     return [asdict(entry) for entry in MARKET_COUNTRY_REFERENCE]
 
 
+UNCONFIRMED_COUNTRY_REASON = "Proposed market country contains '?'; confirmation required"
+
+
+def tentative_market_fields(fields: dict) -> list[tuple[str, object]]:
+    """Find uncertainty in source market-country columns, never unrelated free text."""
+    found = []
+    for name, value in fields.items():
+        label = " ".join(str(name).casefold().split())
+        if (("member state" in label and "market" in label) or "market countr" in label):
+            if isinstance(value, str) and '?' in value:
+                found.append((str(name), value))
+    return found
+
+
+def market_country_errors(record) -> list[str]:
+    values = [item.country for item in record.market_availability_items]
+    values += [field.value for field in record.fields
+               if field.canonical_path == 'device_record.market_availability.first_eu_market_country']
+    return [f"Market country {value!r} contains '?'. Confirm the country before importing or generating XML."
+            for value in sorted({value for value in values if isinstance(value, str) and '?' in value})]
+
+
+def apply_market_country_readiness(record) -> bool:
+    errors = market_country_errors(record)
+    if not errors:
+        return False
+    for error in errors:
+        if error not in record.xml_blockers:
+            record.xml_blockers.append(error)
+    record.xml_readiness.status = 'incomplete'
+    return True
+
+
 def normalize_market_country_code(value: str | None) -> str | None:
     if value in (None, ""):
         return None
+    if "?" in value:
+        raise ValueError(f"Market country {value!r} contains '?'. Confirm the country before XML generation.")
     token = value.strip()
     if not token:
         return None

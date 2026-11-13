@@ -1,124 +1,53 @@
-# EUDAMED Testing And Generation UI Note
+# EUDAMED Workspaces And Outcome Capture
 
-## Purpose
+Updated 1 November 2026 against the implemented feature-branch navigation.
+Production rollout is separate; use the code and configuration of the running
+checkout when checking its available controls.
 
-This note describes the current UI direction for:
+## Navigation
 
-- operationally accurate XML assessment
-- controlled XML preview and validation
-- successful Playground outcome capture
-- separation between testing workflows and accepted-only generation workflows
+The application areas are Import Management, Data Views, EUDAMED, Reporting and
+Help. Within EUDAMED, labels follow the active environment: Testing in Dev and
+Submission in Production, with the corresponding summary. There is no separate
+accepted-only EUDAMED Generation navigation page.
 
-## Top-Level Areas
+The six visible XML modes are POST, Patch XML, Market Info, Bulk UDI-DI POST,
+Bulk PATCH and Bulk Market Info. Parent-only Bulk Basic UDI POST remains a separate
+backend/API capability; do not instruct operators to find a removed mode button.
 
-Two top-level areas remain:
+## Operational pattern
 
-- `EUDAMED Testing`
-- `EUDAMED Generation`
+Select the Device Model and operation, obtain an assessment, review the actual
+candidate or registered device IDs, inspect the changes and validation results,
+then download/review the exact ZIP. Supported response-upload controls record
+returned outcomes and refresh the operation's state. A preview or download does
+not itself establish EUDAMED acceptance.
 
-`EUDAMED Testing` is the active operator workspace for assessment, preview, validation, download, and success-XML upload.
+Single POST distinguishes parent seeding from child registration. Patch XML is
+the only single-device scenario-based PATCH workspace. Bulk UDI-DI POST is
+child-only. Bulk PATCH and Bulk Market Info apply operation-specific changes to
+explicit registered-device selections using their individual accepted states.
 
-`EUDAMED Generation` remains the accepted-only area.
+## Status and evidence
 
-## Current EUDAMED Testing Modes
+Registered, Unregistered and Unknown are source-membership labels, independent
+of XML readiness and canonical completeness. Contextual Candidate/Accepted badges
+are not a replacement for those labels or for the operation assessment.
 
-The current testing modes are:
+Accepted evidence can be a successful returned acknowledgement or an explicitly
+imported EUDAMED export baseline in the active environment. Imported baseline
+records do not count as successful POST/PATCH operations. Missing evidence must
+not be reconstructed from an unrelated draft or an old source label.
 
-- `POST`
-- `Patch XML`
-- `Market Info`
-- `Bulk Basic UDI-DI POST`
-- `Bulk Device UDI-DI POST`
-- `Bulk PATCH`
+## Response capture
 
-The older `Post + Patch` and `Single XML` labels are no longer the current user-facing design.
+Operators submit XML manually in the intended EUDAMED environment and retain the
+returned response. Upload Success XML uses the existing parser, correlation,
+identity, version and duplicate/delayed-response guards. Reported errors remain
+error evidence; they do not accept the rejected payload. Follow the workspace
+feedback and check refreshed registration/accepted-version state afterward.
 
-## Current Workspace Pattern
-
-The active UI direction is to keep each operation workspace aligned around the same pattern:
-
-- an assessment card
-- a preview card
-- a compact metadata strip
-- explicit action buttons
-- XML structure and raw XML review
-- success upload where the workflow supports it
-
-This pattern has already been applied substantially to single `POST` and single `PATCH` and is being extended across the bulk workspaces.
-
-## Status Labels
-
-Only two business-status labels should be presented consistently:
-
-- `EUDAMED Candidate`
-- `EUDAMED Accepted`
-
-Intended meaning:
-
-- `EUDAMED Candidate`
-  - ready for local review and Playground testing
-  - not yet confirmed as accepted by EUDAMED
-- `EUDAMED Accepted`
-  - confirmed through user-provided returned success XML
-  - suitable to act as tracked accepted lineage
-
-## `POST` Workspace
-
-Single `POST` is now a unified workspace that can produce:
-
-- the next Basic UDI-DI parent-seeding registration
-- or the next Device UDI-DI child registration
-
-The UI should explain which situation applies and should not present a misleading generic device candidate when the Basic UDI-DI parent is already tracked as registered.
-
-The workspace should therefore:
-
-- assess availability first
-- explain whether the next candidate is parent-seeding or child-only
-- generate preview only for the current next valid candidate
-- allow success-XML upload after confirmed Playground success
-
-## `Patch XML` Workspace
-
-Single `PATCH` is a controlled scenario-driven workspace.
-
-The UI should:
-
-- identify the next eligible accepted-state device
-- show the scenario being prepared
-- display concise before/after business meaning
-- generate the derived PATCH from the latest successful tracked version
-- allow success-XML upload after confirmed Playground success
-
-This workspace is not intended to be a freeform PATCH editor.
-
-## Bulk Workspaces
-
-Bulk workspaces should follow the same UI language as the single-device workspaces while preserving operation-specific controls.
-
-Important distinctions remain:
-
-- `Bulk Basic UDI-DI POST` is parent-only
-- `Bulk Device UDI-DI POST` is child-only
-- `Bulk PATCH` depends on tracked accepted device state
-
-Bulk status messaging should stay tied to the selected operation, not broad XML-ready counts that can mislead the operator.
-
-## Success Upload Direction
-
-Where success upload is available, the UI should make three things clear:
-
-- the returned XML is evidence of success
-- upload updates tracked SQLite operational state
-- the workspace should refresh so the next available candidate and remaining counts change immediately
-
-## Why This UI Direction
-
-The UI is no longer just a document viewer around generated XML. It is an operational testing surface.
-
-That means the interface must:
-
-- reflect backend-assessed truth
-- explain regulatory meaning clearly
-- distinguish parent, child, and PATCH lineage correctly
-- stay visually consistent across single and bulk workflows
+The application has no M2M transport or live EUDAMED lookup. Reporting generation
+remains under development. See [XML Generation](xml-generation.md),
+[Testing Scenarios](testing-scenarios.md) and
+[registration policy](../../../../docs/registration-driven-operation-policy.md).

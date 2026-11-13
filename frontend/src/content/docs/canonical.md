@@ -1,52 +1,46 @@
-# Canonical
+# Canonical Interpretation
 
-## Purpose
+Updated 1 November 2026. The canonical layer separates source evidence from the
+regulatory meaning used by validation, operation assessment and XML projection.
 
-This tab is the review layer between workbook structure and XML generation. It shows how workbook fields and reference data are interpreted as stable regulatory meaning.
+## Current implementation
 
-## Current Implementation
+The review covers source-sheet/model/Basic UDI linkage, field mappings,
+direct/normalized/derived/repeated values, schema targets and visible gaps.
+Domain concepts include Manufacturer, BasicDevice, DeviceRecord,
+MarketAvailability, StorageCondition and CriticalWarning.
 
-The review artifact covers:
+Current emitted validation field paths are checked against the declared canonical
+model vocabulary. For example, basic_device.device_type,
+basic_device.administering_medicinal_product and
+basic_device.reusable_surgical_instrument are the current names. Older examples
+using type, administering_medicine or reusable are not the current emitted paths.
+This does not claim every legacy alias or text-matched identity path is removed,
+or that the canonical model is identical to the XML transport representation.
 
-- source sheet to product-variant linkage
-- field-level canonical mappings
-- direct, normalized, derived, repeated, and gap classifications
-- schema-target references
+## Source and environment scope
 
-The current domain concepts are:
+The new Dev Import Data workflow retains uploaded Templates, BasicUDI reference
+and EUDAMED extracts with a manifest, review and workbook/audit. The legacy Dev
+raw-template importer remains available separately. Its configured BasicUDIs.xlsx
+and historical fallback handling must not be assumed to define every import path.
+Production uses its own approved preparation inputs and configured workbook/audit.
+Actor settings and accepted export evidence must belong to the active environment;
+legacy Playground/tracekey values must not fill Production actor gaps.
 
-- `Manufacturer`
-- `BasicDevice`
-- `DeviceRecord`
-- `MarketAvailability`
-- `StorageCondition`
-- `CriticalWarning`
+Canonical records retain source lineage and proposed business values. Explicit
+export-baseline import can separately record accepted evidence; raw workbook
+values or POST/PATCH source labels do not prove registration. Existing accepted
+history is protected by the applicable import and acknowledgement rules.
 
-## Current Source Strategy
+## Identity and supported scope
 
-- workbook rows provide device-row evidence
-- `BasicUDIs.xlsx` provides authoritative variant linkage and core Basic UDI context
-- the legacy tracekey workbook still supplies SRN fallback values
+Device identity includes issuing entity plus UDI-DI; parent identity includes
+issuing entity plus Basic UDI-DI. Family, model and catalogue names are review and
+selection context, not substitutes for regulatory identifiers. Parent seeding,
+child registration, device PATCH and Market Info are distinct supported flows.
+The parent-only bulk operation is retained as a separate backend/API capability.
 
-## Important Note
-
-The canonical review artifact is a review contract, not yet a strict runtime mirror of the declared Pydantic models. Some XML-facing field paths in validation/XML still use alternate names that should later be normalized.
-
-Examples of current drift:
-
-- `basic_device.type` vs `basic_device.device_type`
-- `basic_device.administering_medicine` vs `basic_device.administering_medicinal_product`
-- `basic_device.reusable` vs `basic_device.reusable_surgical_instrument`
-
-## Current Scope
-
-- `MDR` only
-- first-phase focus: `UDI-DI` details and market information
-- `Basic UDI` remains upstream context, not the primary first-phase upload object
-
-## Current Output
-
-- variant mapping review
-- canonical mapping review
-- visible assumptions and gaps
-- schema-informed field targets
+See [Canonical Validation](canonical-validation.md), [Data Interpretation](data-interpretation.md)
+and [Import Data in Dev](../../../../docs/source-batch-receipt.md). Completeness,
+XML readiness and recorded registration remain separate assessments.

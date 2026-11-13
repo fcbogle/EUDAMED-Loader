@@ -151,7 +151,7 @@ def main():
     # Keep actors, schema version and batch limits identical across revisions.
     os.environ['EUDAMED_MANUFACTURER_SRN_OVERRIDE'] = 'GB-MF-000000001'
     os.environ['EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE'] = 'true'
-    os.environ['EUDAMED_MESSAGE_SCHEMA_VERSION'] = '3.0.32'
+    os.environ['EUDAMED_MESSAGE_SCHEMA_VERSION'] = '3.0.36.1'
     os.environ['EUDAMED_MAX_BATCH_RECORDS'] = '300'
     rows = []
     for flow in ('single_post', 'basic_post', 'udidi_post', 'patch'):

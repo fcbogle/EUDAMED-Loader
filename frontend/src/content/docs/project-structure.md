@@ -18,17 +18,26 @@ The application supports source workbook analysis, canonical regulatory modellin
 - `config/normalization/` normalization rules
 - `data/source_excel/` source workbooks
 - `data/basic_udi_reference/` Basic UDI reference workbooks
-- `data/schemas/` local EUDAMED schemas
+- `data/schema_profiles/` active environment-specific XSD profiles; `data/schemas/` is retained legacy evidence
+- `data/dev/import-batches/` configured Dev batches, prepared workbooks and source-review revisions (ignored)
+- `data/testing/` and `data/prod/` separate configured operational data roots
 - `docs/` reports and sample XML
 
 ## Current Flow
 
-Dev: `Raw templates + reference -> SQLite import -> canonical validation -> operation assessment -> XML preview/download`
+Dev feature: `Uploaded Templates + BasicUDI + XML extracts -> automatically saved source review -> dated batch/workbook/audit -> confirmed additive SQLite import -> operation assessment -> XML preview/download`
+
+Legacy Dev: `Configured raw templates + reference -> source/canonical SQLite import`.
+The legacy path remains available; it is not the new source-batch workflow.
 
 Production: `Templates + reference + exported XML -> prepared workbook/audit -> assessed import -> SQLite canonical data and export baselines -> operation assessment -> XML preview/download`
 
 Successful acknowledgement uploads update accepted state and recorded history
 in the active environment. Downloading XML does not submit it.
+
+Configured local data roots can point to the original checkout while development
+code runs in a separate worktree. Do not move/copy the operational databases when
+switching environments. See [Development and Production](../../../../docs/development-and-production.md).
 
 ## Current State
 
@@ -37,7 +46,7 @@ in the active environment. Downloading XML does not submit it.
 - Production importing and export-baseline evidence are implemented; initial local startup/import completed on 10 October 2026
 - Registration State includes a Parents & Children view with lazy-loaded 20-child pages in both environments
 - canonical completeness, XML eligibility and registration evidence remain separate
-- the main remaining cleanup includes canonical/XML field-name consistency and transitional text/alias identity paths
+- emitted canonical paths have declared-model regression checks; remaining text/alias identity paths, source-quality and deployment controls still need targeted work
 
 See [Architecture Position](architecture-position.md), the
 [architecture definition](../../../../docs/architecture-definition-draft.md) and

@@ -19,6 +19,11 @@ def json_state(value: object) -> dict[str, Any] | None:
 
 
 def accepted_post_state(connection: sqlite3.Connection, subject: sqlite3.Row) -> dict[str, Any] | None:
+    # A reviewed Playground export is current-state evidence, not a historical POST.
+    from app.services.accepted_evidence import imported_baseline
+    baseline = imported_baseline(connection, int(subject['id']))
+    if baseline and baseline.get('accepted_state_source') == 'playground_export':
+        return baseline
     state = json_state(subject['latest_successful_post_state_json'])
     if state is not None:
         return state
@@ -45,12 +50,29 @@ def accepted_post_state(connection: sqlite3.Connection, subject: sqlite3.Row) ->
 
 
 def accepted_device_state(connection: sqlite3.Connection, subject: sqlite3.Row) -> dict[str, Any] | None:
+    current = json_state(subject['latest_successful_state_json'])
+    if current and current.get('accepted_state_source') == 'playground_export':
+        # A later uncorrelated acknowledgement may advance the version without a
+        # usable payload. Never reuse the older export as that newer snapshot.
+        return current if state_matches_version(current, subject['latest_successful_version']) else None
     state = (json_state(subject['latest_successful_patch_state_json'])
             or json_state(subject['latest_successful_state_json'])
             or accepted_post_state(connection, subject))
     versions = [subject[key] for key in ('latest_successful_version', 'latest_successful_patch_version')
                 if key in subject.keys() and subject[key]]
-    return state if all(state_matches_version(state, version) for version in versions) else None
+    if not all(state_matches_version(state, version) for version in versions):
+        return None
+    from app.services.accepted_evidence import imported_baseline
+    baseline = imported_baseline(connection, int(subject['id']))
+    if baseline and baseline.get('accepted_state_source') == 'playground_export' and state:
+        # Later successful PATCH snapshots can be partial. Retain the export's
+        # unchanged fields while applying the newer, qualified accepted values.
+        full = dict(baseline.get('device_record', {}))
+        full.update({key: value for key, value in state.items() if key in full})
+        full.update(state.get('device_record', {}))
+        return {**baseline, **state, 'device_record': full,
+                'accepted_state_source': 'sqlite_latest_successful_patch'}
+    return state
 
 
 def state_matches_version(state: dict[str, Any] | None, version: object) -> bool:

@@ -132,14 +132,14 @@ def test_next_post_preview_route_returns_payload() -> None:
 
 
 def test_single_record_preview_can_override_manufacturer_srn_for_playground(monkeypatch) -> None:
-    service = XmlGenerationService()
     monkeypatch.setenv("EUDAMED_MANUFACTURER_SRN_OVERRIDE", "UK-MF-000033261")
+    get_settings.cache_clear()
+    service = XmlGenerationService()
     monkeypatch.setattr(
         service.testing_state_store,
         "has_successful_basic_udi_post",
         lambda **_: False,
     )
-    get_settings.cache_clear()
     try:
         preview = service.preview_post_registration(
             product_family="Elan",
@@ -1305,7 +1305,7 @@ def test_generated_patch_scenario_route_requires_tracked_successful_post_for_ver
         XmlGenerationService.preview_generated_patch_scenario = original
 
 
-def test_post_download_records_review_history_without_gating_patch_preview() -> None:
+def test_registered_post_download_is_blocked_without_gating_patch_preview() -> None:
     service = XmlGenerationService()
     service.preview_post_registration(
         product_family="Echelon",
@@ -1318,13 +1318,14 @@ def test_post_download_records_review_history_without_gating_patch_preview() -> 
         product_variant="Echelon VAC",
         catalogue_number="EVAC22L1S",
     )
-    service.download_post_package(
-        product_family="Echelon",
-        product_variant="Echelon VAC",
-        catalogue_number="EVAC22L1S",
-    )
+    with pytest.raises(ValueError, match="already has registration evidence"):
+        service.download_post_package(
+            product_family="Echelon",
+            product_variant="Echelon VAC",
+            catalogue_number="EVAC22L1S",
+        )
 
-    assert service.testing_state_store.has_reviewed_post(
+    assert not service.testing_state_store.has_reviewed_post(
         product_family="Echelon",
         product_variant="Echelon VAC",
         catalogue_number="EVAC22L1S",

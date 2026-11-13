@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from app.config import get_settings
-from app.services.country_reference import normalize_market_country_code
+from app.services.country_reference import normalize_market_country_code, market_country_errors
 from app.validation_models import CanonicalValidationRecord
 from app.xml_models import CriticalWarningXmlItem, PatchStateSnapshot, StorageConditionXmlItem
 
@@ -85,6 +85,9 @@ class DeviceXmlProjectionBuilder:
         self.settings = get_settings()
 
     def build_device_record(self, record: CanonicalValidationRecord) -> DeviceXmlRecord:
+        errors = market_country_errors(record)
+        if errors:
+            raise ValueError(" ".join(errors))
         field_map = {field.canonical_path: field.value for field in record.fields}
         basic_issuing_entity, basic_identifier_code = self._split_di_identifier(
             self._required(field_map, "device_record.basic_udi_identifier")
@@ -346,6 +349,9 @@ class DeviceXmlProjectionBuilder:
         )
 
     def build_market_info_record(self, record: CanonicalValidationRecord) -> MarketInfoXmlRecord:
+        errors = market_country_errors(record)
+        if errors:
+            raise ValueError(" ".join(errors))
         field_map = {field.canonical_path: field.value for field in record.fields}
         device_identifier_issuing_entity, device_identifier_code = self._split_di_identifier(
             self._required(field_map, "device_record.identifier")

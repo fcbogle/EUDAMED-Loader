@@ -11,12 +11,15 @@ from dotenv import dotenv_values
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEV_MESSAGE_SCHEMA_VERSION = "3.0.36.1"
+DEV_SCHEMA_PROFILE = "dev-3.0.36.1-official"
 
 
 class Settings(BaseModel):
     environment: Literal["dev", "prod"] = "dev"
     environment_file: Path | None = None
     data_root: Path | None = None
+    dev_input_batch_root: Path | None = None
     production_import_workbook: Path | None = None
     production_import_audit: Path | None = None
     artifacts_dir: Path
@@ -89,7 +92,7 @@ def _overlap(a: Path, b: Path) -> bool:
 
 
 def _validate_profile(settings: Settings, values: dict[str, str]) -> None:
-    expected = "3.0.30" if settings.environment == "prod" else "3.0.32"
+    expected = "3.0.30" if settings.environment == "prod" else DEV_MESSAGE_SCHEMA_VERSION
     if settings.eudamed_message_schema_version != expected:
         raise ValueError(f"{settings.environment} requires message schema {expected}")
     schema = settings.schema_dir / "service" / "Message" / "MessageType.xsd"
@@ -110,7 +113,7 @@ def _validate_profile(settings: Settings, values: dict[str, str]) -> None:
             prod_values = {k: v for k, v in dotenv_values(prod_file, interpolate=False).items() if v is not None}
             if prod_values.get("EUDAMED_DATA_ROOT"):
                 reserved.append(_path_setting(PROJECT_ROOT, prod_values, "EUDAMED_DATA_ROOT", reserved[0]))
-        for path in _isolated_paths(settings):
+        for path in _isolated_paths(settings) + ([settings.dev_input_batch_root] if settings.dev_input_batch_root else []):
             if any(_overlap(path, root) for root in reserved):
                 raise ValueError(f"Dev storage overlaps reserved Prod storage: {path}")
         return
@@ -190,11 +193,12 @@ def get_settings() -> Settings:
         return _path_setting(project_root, values, key, default)
     basic_dir = path("EUDAMED_BASIC_UDI_REFERENCE_DIR", project_root / "data/basic_udi_reference")
     legacy_service_id = values.get("EUDAMED_SERVICE_ID")
-    schema_profile = "prod-3.0.30" if environment == "prod" else "dev-3.0.32-derived"
+    schema_profile = "prod-3.0.30" if environment == "prod" else DEV_SCHEMA_PROFILE
     settings = Settings(
         environment=environment,
         environment_file=env_file,
         data_root=path("EUDAMED_DATA_ROOT", project_root / "data" / environment),
+        dev_input_batch_root=(path("EUDAMED_DEV_INPUT_BATCH_ROOT", project_root / "data/dev/import-batches") if environment == "dev" else None),
         production_import_workbook=(path("EUDAMED_PRODUCTION_IMPORT_WORKBOOK", path("EUDAMED_DATA_ROOT", project_root / "data/prod") / "import_file/production-import.xlsx") if environment == "prod" else None),
         production_import_audit=(path("EUDAMED_PRODUCTION_IMPORT_AUDIT", path("EUDAMED_DATA_ROOT", project_root / "data/prod") / "import_file/production-import.audit.json") if environment == "prod" else None),
         excel_dir=path("EUDAMED_EXCEL_DIR", project_root / "data/source_excel"),
@@ -210,7 +214,7 @@ def get_settings() -> Settings:
         canonical_mapping_dir=project_root / "config/canonical_mapping",
         reports_dir=path("EUDAMED_REPORTS_DIR", project_root / "docs/reports"),
         artifacts_dir=path("EUDAMED_ARTIFACTS_DIR", project_root / "data/dev/artifacts"),
-        eudamed_message_schema_version=values.get("EUDAMED_MESSAGE_SCHEMA_VERSION", "3.0.32" if environment == "dev" else "3.0.30"),
+        eudamed_message_schema_version=values.get("EUDAMED_MESSAGE_SCHEMA_VERSION", DEV_MESSAGE_SCHEMA_VERSION if environment == "dev" else "3.0.30"),
         eudamed_manufacturer_srn_override=values.get("EUDAMED_MANUFACTURER_SRN_OVERRIDE") or None,
         eudamed_authorised_representative_srn_override=values.get("EUDAMED_AUTHORISED_REPRESENTATIVE_SRN_OVERRIDE") or None,
         eudamed_suppress_authorised_representative=_bool_setting(values, "EUDAMED_SUPPRESS_AUTHORISED_REPRESENTATIVE", False),

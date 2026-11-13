@@ -25,9 +25,14 @@ databases separately exercise persistence and workflows.
   `production-import.audit.json`. Fixed-name staged publication and lock/hash validation are implemented.
   The current pair was published from the validated October 9 preparation.
 
-Current expected first-import input: 9,674 To Register and 357 Registered rows.
+Current expected first-import input at the original preparation checkpoint: 9,674 To Register and 357 Registered rows.
 Eligible: 9,672 + 354 = 10,026. Skipped: two + three = five. These are workbook
 filter counts, not a claim that all 10,026 devices are already XML-ready.
+
+This document governs the Production path. The current feature also has a
+separate [Dev Import Data workflow](source-batch-receipt.md), including stricter
+catalogue showstoppers. Retaining the legacy raw importer does not make it the
+only Dev entry point, nor does a Dev implementation change main automatically.
 
 October 10 verification: the first local import is complete with 10,026 device
 subjects. Production Canonical Validation labels nonblocking source-completeness
@@ -231,7 +236,7 @@ two filenames is not inherently atomic; readers must reject/retry mixed pairs.
 Fail clearly when the current workbook is locked. Retain originals and record input
 hashes/snapshots in the import history even after the current pair is overwritten.
 
-## Implementation checklist (completed; first Prod run pending)
+## Implementation checklist — historical delivery sequence
 
 1. Implement the approved direction: finish fixed-name workbook/audit preparation
    and select the current verified pair.
@@ -246,7 +251,7 @@ hashes/snapshots in the import history even after the current pair is overwritte
    Upload Success XML -> accepted snapshot/version refresh -> next operation.
    Include bulk operations, retained countries/fields, delayed and duplicate responses.
 6. Run the full backend/frontend suites and production build. Validate the Prod
-   profile read-only, then agree first local Prod initialization and reviewed import.
+   profile read-only, then complete the owner-reviewed first local startup/import (completed on 10 October).
 
 For the current pair, assessment should report 10,026 eligible / five skipped before
 any additional integrity failures. Verify all eligible identity/source rows persist,
@@ -256,7 +261,7 @@ no Dev database or files change. No real EUDAMED upload or M2M transport is intr
 
 ## Repository integration points
 
-- `backend/app/routers/profiling.py`: current run route directly invokes Dev importer.
+- `backend/app/routers/profiling.py`: run/assessment routes use the environment-aware importer selector; Dev raw imports and Production prepared imports remain distinct.
 - `backend/app/services/workbook_import.py`: source, identity, projection, monitoring
   and schema initialization; current rebuild clears projection tables.
 - `backend/app/services/testing_state_store.py`, `accepted_state.py`,
@@ -270,22 +275,22 @@ Configured-file flow, exported-baseline provenance and additive repeat-import
 policy are now approved. Detailed imported-event vocabulary and shared
 evidence-resolution mechanics must preserve the existing schema and tested workflows.
 
-## Deferred preparation UI
+## Preparation UI and rollout scope
 
-The owner requested a dedicated UI for new/updated Template workbooks and
-EUDAMED-generated export XMLs, exception reporting and generation of an updated
-import workbook with matching audit. This is a later roadmap item; design and
-implementation are deferred. It does not change the initial configured-file
-import flow. Reuse the preparation utility as the starting point and keep
-preparation distinct from database import. See Roadmap in Documentation.
+The three-stage Dev Import Data UI is implemented on the feature branch: source
+review, batch/workbook creation, then explicit database import. It retains source
+copies and audits, automatic saving and the current showstopper policy. See
+[the Dev guide](source-batch-receipt.md). It does not replace this Production
+configured-file contract or authorize a Production rollout. Production browser
+preparation, deployment, storage/access controls and formal procedure updates
+remain separate reviewed work.
 
 ## Implementation and current assessment
 
 `production_workbook_import.py` performs assessment and transactional import;
 `production_workbook_adapter.py` maps prepared data and reconstructs accepted
 snapshots; `production_import_files.py` publishes the coherent current pair.
-No new package, database schema or dependency was introduced. Dev delegates to
-its existing service through `workbook_import_selector.py`.
+No new package, database schema or dependency was introduced. The retained Dev raw route delegates through `workbook_import_selector.py`; new Dev Import Data uses its separate reviewed-batch workflow.
 
 Assessment tokens expire after 15 minutes, are held in process memory, and bind
 configuration, file hashes and database contents. A new assessment supersedes the
@@ -308,7 +313,7 @@ remain stored, including their newer locally accepted states. Source rows and
 baseline events remain append-only; current projection batch metadata advances to
 keep retained devices available in the shared read model.
 
-Current pair: 10,026 eligible, five skipped; 10,024 XML-ready and two XML-blocked.
+At the dated October 10 checkpoint, the pair had 10,026 eligible and five skipped; 10,024 XML-ready and two XML-blocked.
 Both blocked devices are Echelon catalogue `EC27LN7S`, GS1 UDI-DIs
 `05050649030901` and `05050649032462`. Both are imported, but model/catalogue
 selection cannot distinguish them safely, so XML generation is blocked until
@@ -319,7 +324,7 @@ Synthetic coverage includes imported versions 1/2/3 progressing to PATCH 2/3/4,
 single and bulk PATCH/Market Info, real generated-package Success XML correlation,
 duplicate/delayed responses, retained countries, reimport/additions/changes,
 rollback, expired/configuration/database changes, hash mismatch and pair rollback.
-First local Production startup and owner-reviewed import remain the next operator step.
+First local Production startup and owner-reviewed import completed on 10 October. Subsequent changes follow the reviewed repeat-import policy; do not reinitialize the existing database.
 
 Owner-approved exclusions now remove two Child’s 4-Bar Knee identities and one
 Blatchford App identity from the prepared pair. Six issuer/parent exclusion keys

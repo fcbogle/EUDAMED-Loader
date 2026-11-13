@@ -28,14 +28,14 @@ function render(overrides = {}) {
 test('registration counts distinguish unknown from awaiting and show snapshot provenance and exclusions', () => {
   const { text, nodes } = render();
   assert.match(text, /Devices unknown/);
-  assert.match(text, /A device stays Unknown/);
+  assert.match(text, /Unknown means the identifier/);
   assert.match(text, /Confirm unknown registration status/);
   assert.doesNotMatch(text, /No non-registration reconciliation/);
   assert.match(text, /8 Oct 2026/);
   assert.doesNotMatch(text, /2026-10-08T10:00Z/);
   assert.match(text, /source rows could not be mapped/);
   assert.match(text, /could not be matched to current devices/);
-  assert.deepEqual(nodes.filter(n => n.type === 'strong').map(n => n.props.children), [2,1,1,10,4,6,5,3,2,1]);
+  assert.deepEqual(nodes.filter(n => n.type === 'strong').map(n => n.props.children), [2,1,0,1,10,4,0,6,5,3,2,1]);
 });
 
 test('MAX awaiting counts remain visible while provenance is collapsed and irrelevant unknown warnings are omitted', () => {
@@ -49,9 +49,9 @@ test('MAX awaiting counts remain visible while provenance is collapsed and irrel
   assert.ok(!details.props.open);
   assert.match(JSON.stringify(details), /8 Oct 2026/);
   const paragraphs = nodes.filter(n => n.type === 'p');
-  assert.ok(paragraphs.some(n => JSON.stringify(n.props.children).includes('Awaiting registration:') &&
+  assert.ok(paragraphs.some(n => JSON.stringify(n.props.children).includes('Unregistered:') &&
     JSON.stringify(n.props.children).includes('940')));
-  assert.doesNotMatch(text, /Confirm unknown registration status|A device stays Unknown|Import data needs review/);
+  assert.doesNotMatch(text, /Confirm unknown registration status|Unknown means the identifier|Import data needs review/);
 });
 
 test('nonzero data exceptions stay visible outside collapsed details', () => {
@@ -85,4 +85,16 @@ test('refresh can recover a failed count request', () => {
   const button = nodes.find(n => n.type === 'button');
   assert.equal(button.props.disabled, false);
   button.props.onClick(); assert.equal(refreshed, true);
+});
+
+
+test('complete device coverage is dated and explicitly excludes parent-only registrations', () => {
+  const { text } = render({summary: {...summary, registration_coverage: {
+    environment: 'dev', manufacturer_srn: 'GB-MF-000000001',
+    export_as_of: '2026-10-25T10:00:00Z', covers_parent_only: false,
+  }}});
+  assert.match(text, /Complete manufacturer device coverage confirmed/);
+  assert.match(text, /GB-MF-000000001/);
+  assert.match(text, /do not establish parent-only coverage/);
+  assert.match(text, /Devices unregistered/);
 });

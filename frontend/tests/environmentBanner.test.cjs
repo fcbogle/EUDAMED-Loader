@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
-function harness(response, onEnvironmentChange) {
+function harness(response, onEnvironmentChange, importProps = {}) {
   const state = [null, false, 0]; let cursor = 0; let effect; let mounted = false;
   const source = fs.readFileSync(path.join(__dirname, '../src/components/EnvironmentBanner.tsx'), 'utf8');
   const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -14,18 +14,18 @@ function harness(response, onEnvironmentChange) {
     return require(name);
   }, module, module.exports, { setTimeout, clearTimeout });
   return {
-    render() { cursor=0; return JSON.stringify(module.exports.EnvironmentBanner({ onEnvironmentChange })); },
+    render() { cursor=0; return JSON.stringify(module.exports.EnvironmentBanner({ onEnvironmentChange, ...importProps })); },
     mount() { mounted=true; return effect(); },
   };
 }
 for (const [environment, label] of [['dev','EUDAMED Playground'],['prod','EUDAMED Production']]) {
   test(`banner uses backend ${environment} identity after starting unconfirmed`, async () => {
-    const h=harness(() => Promise.resolve({environment, message_schema_version: environment === "dev" ? "3.0.32" : "3.0.30", schema_package: environment === "dev" ? "Derived package" : "Official package"}));
+    const h=harness(() => Promise.resolve({environment, message_schema_version: environment === "dev" ? "3.0.36.1" : "3.0.30", schema_package: "Official package"}));
     assert.match(h.render(), /UNCONFIRMED/);
     const cleanup=h.mount(); await new Promise(setImmediate);
     assert.ok(h.render().includes(label));
-    assert.ok(h.render().includes(environment === 'dev' ? '3.0.32' : '3.0.30'));
-    assert.ok(h.render().includes(environment === 'dev' ? 'Derived package' : 'Official package')); assert.ok(!h.render().includes('UNCONFIRMED')); cleanup();
+    assert.ok(h.render().includes(environment === 'dev' ? '3.0.36.1' : '3.0.30'));
+    assert.ok(h.render().includes('Official package')); assert.ok(!h.render().includes('UNCONFIRMED')); cleanup();
   });
 }
 for (const response of [() => Promise.resolve({environment:'invalid'}), () => Promise.reject(new Error('offline'))]) {
@@ -40,7 +40,7 @@ test('older backend does not cause the banner to invent schema details', async (
   const h = harness(() => Promise.resolve({ environment: 'dev' }));
   h.render(); const cleanup = h.mount(); await new Promise(setImmediate);
   assert.match(h.render(), /Package unconfirmed/);
-  assert.ok(!h.render().includes('3.0.32'));
+  assert.ok(!h.render().includes('3.0.36.1'));
   cleanup();
 });
 
@@ -83,3 +83,31 @@ test('Invalid environment cannot display supplied SRNs as confirmed',async()=>{
   const h=harness(()=>Promise.resolve({environment:'invalid',manufacturer_srn:'GB-MF-000000001'}));h.render();const cleanup=h.mount();await new Promise(setImmediate);
   assert.ok(!h.render().includes('GB-MF-000000001'));assert.ok(!h.render().includes('environment-details'));cleanup();
 });
+
+test('banner identifies the committed database import after the representative', async () => {
+  const h = harness(() => Promise.resolve({ environment: 'dev' }), undefined, {
+    importLoading: false,
+    importBatch: { import_batch_id: 5, label: 'Dev source batch 2026-11-12-001', imported_at: '2026-11-12T18:40:39+00:00' },
+  });
+  h.render(); const cleanup = h.mount(); await new Promise(setImmediate);
+  const text = h.render();
+  assert.ok(text.indexOf('Current database import') > text.indexOf('Configured authorised representative SRN'));
+  assert.match(text, /#5/);
+  assert.match(text, /12 Nov 2026/);
+  assert.ok(!text.includes('Dev source batch'));
+  assert.ok(!text.includes('18:40'));
+  cleanup();
+});
+
+for (const [props, expected] of [
+  [{ importLoading: true, importBatch: { import_batch_id: 4 } }, 'Loading…'],
+  [{ importLoading: false, importUnavailable: true }, 'Unavailable'],
+  [{ importLoading: false, importBatch: null }, 'No import recorded'],
+]) {
+  test(`banner reports import state: ${expected}`, async () => {
+    const h = harness(() => Promise.resolve({ environment: 'dev' }), undefined, props);
+    h.render(); const cleanup = h.mount(); await new Promise(setImmediate);
+    const text = h.render(); assert.ok(text.includes(expected)); assert.ok(!text.includes('#4'));
+    cleanup();
+  });
+}

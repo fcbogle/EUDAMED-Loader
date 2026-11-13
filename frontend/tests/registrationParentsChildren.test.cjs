@@ -17,7 +17,7 @@ const summary = {import_batch_id: 1, groups: [{key: 'group', parent_key: 'GS1:B1
   parent_registered: true, parent_post_ready: false, total_devices: 107, registered_devices: 1,
   awaiting_devices: 106, unknown_devices: 0, child_post_ready: 106, awaiting_blocked: 0,
   patch_ready: 1, market_info_ready: 1}]};
-function harness(response) {
+function harness(response, viewSummary = summary, onReviewPatch) {
   let current;
   const calls = [];
   function load(file, requireFn = require) {
@@ -43,7 +43,7 @@ function harness(response) {
     return {render() {current = store; store.cursor = 0; return nodes(component(props));},
       effect() {return store.effect();}};
   }
-  const parent = instance(components.RegistrationParentsChildren, {summary});
+  const parent = instance(components.RegistrationParentsChildren, {summary: viewSummary, onReviewPatch});
   return {calls, parent, open() {
     parent.render().find(n => n.props?.className === 'registration-parent-toggle').props.onClick();
     const node = parent.render().find(n => typeof n.type === 'function');
@@ -94,4 +94,34 @@ test('child request errors remain visible and can be retried', async () => {
   fail = false; rendered.find(n => n.type === 'button').props.onClick();
   cleanup(); child.render(); cleanup = child.effect(); await tick();
   assert.match(JSON.stringify(child.render()), /CAT-D1/); cleanup();
+});
+
+
+test('workbook parents and children show Unregistered without extract evidence', async () => {
+  const current = {...summary, registration_coverage: {covers_parent_only: false},
+    groups: [{...summary.groups[0], parent_registered: false}]};
+  const h = harness(() => Promise.resolve({...page(), children: [{...page().children[0], registration_status: 'Unregistered'}]}), current);
+  const parents = h.parent.render();
+  assert.ok(parents.some(n => n.type === 'span' && Array.isArray(n.props.children) && n.props.children.join('') === 'Parent unregistered'));
+  assert.match(JSON.stringify(parents), /Unregistered means present in the imported Template or BasicUDI workbook/);
+  const child = h.open(); child.render(); child.effect(); await tick();
+  const rendered = child.render();
+  assert.ok(rendered.some(n => n.type === 'span' && n.props.children === 'Unregistered'));
+  assert.doesNotMatch(JSON.stringify(rendered), /Confirm registration status before POST/);
+});
+
+
+test('PATCH review carries the exact family, variant, issuer and parent without opening a different group', () => {
+  let selected;
+  const h = harness(() => Promise.resolve(page()), summary, scope => {selected = scope;});
+  const rendered = h.parent.render();
+  const button = rendered.find(n => n.type === 'button' && n.props.children[0] === 'Review PATCH devices');
+  assert.ok(button); assert.equal(button.props.disabled, false);
+  button.props.onClick();
+  assert.equal(selected.productFamily, 'A');
+  assert.equal(selected.productVariant, 'Model');
+  assert.equal(selected.issuer, 'GS1');
+  assert.equal(selected.basicUdiDi, 'B1');
+  assert.match(JSON.stringify(rendered), /PATCH-ready/);
+  assert.match(JSON.stringify(rendered), /Family:/);
 });

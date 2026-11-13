@@ -60,9 +60,9 @@ class ValidationRecordSelector:
                 )
                 and record.catalogue_number == catalogue_number
                 and record.xml_readiness.status == "complete"
-                and ((record.submission_operation or "").upper() == "POST" or self._imported_baseline_record(record))
             ):
-                return record
+                # Operation intent is selected here, without editing imported data.
+                return record.model_copy(update={"submission_operation": "POST"})
         raise ValueError(
             f"Catalogue number {catalogue_number} is not an XML-ready POST record for "
             f"{product_family} / {product_variant}."
@@ -71,12 +71,13 @@ class ValidationRecordSelector:
     def _imported_baseline_record(self, record: CanonicalValidationRecord, *, state_store=None) -> bool:
         from app.config import get_settings
         from app.services.testing_state_store import TestingStateStore
-        if get_settings().environment != "prod":
+        environment = get_settings().environment
+        if environment not in {"dev", "prod"}:
             return False
         store = state_store if state_store is not None else TestingStateStore()
         state = store.accepted_post_state(product_family=record.product_family,
             product_variant=record.product_variant, catalogue_number=record.catalogue_number or "")
-        return bool(state and state.get("accepted_state_source") == "production_export")
+        return bool(state and state.get("accepted_state_source") == ("production_export" if environment == "prod" else "playground_export"))
 
     @staticmethod
     def xml_ready_variant_records(

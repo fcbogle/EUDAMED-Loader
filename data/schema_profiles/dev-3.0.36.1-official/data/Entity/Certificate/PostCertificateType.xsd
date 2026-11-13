@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-stylesheet type="text/xsl" href="/tools/eudamed/dtx/xslt/index.xsl"?>
+<xs:schema targetNamespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/PostCertificateType/v1"
+           xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:postcertificate="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/PostCertificateType/v1"
+           xmlns:issuedcertificate="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/IssuedCertificate/v1"
+           xmlns:e="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/v1"
+           xmlns:lsn="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/LanguageSpecific/v1"
+           xmlns:crtfdecisionupdate="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/CertificateDecisionUpdate/v1"
+           xmlns:commonbasic="https://ec.europa.eu/tools/eudamed/dtx/datamodel/CommonBasic/v1"
+           xmlns:crtf="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/v1"
+           xmlns:commondi="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/CommonDevice/v1"
+           xmlns:actor="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Actor/v1"
+           xmlns:crtfscp="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/Scope/v1"
+           xmlns:crtfcecp="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/Cecp/v1"
+           xmlns:doct="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/Document/v1"
+           elementFormDefault="qualified">
+
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/Document/v1" schemaLocation="../Common/DocumentType.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/v1" schemaLocation="CertificateType.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/IssuedCertificate/v1" schemaLocation="IssuedCertificateType.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/CommonBasic/v1" schemaLocation="../Common/CommonBasicType.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/CertificateDecisionUpdate/v1" schemaLocation="CertificateDecisionUpdateType.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/LanguageSpecific/v1" schemaLocation="../Common/LanguageSpecificNameType.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/v1" schemaLocation="../Entity.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Common/RiskClass/v1" schemaLocation="../Common/RiskClassEnum.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Device/CommonDevice/v1" schemaLocation="../Device/CommonDeviceType.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Actor/v1" schemaLocation="../Actor.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/Scope/v1" schemaLocation="ScopeType.xsd"/>
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/Cecp/v1" schemaLocation="CECPType.xsd"/>
+
+    <xs:complexType name="PostCertificateType">
+        <xs:complexContent>
+            <xs:extension base="e:Entity">
+                <xs:sequence>
+                    <xs:element name="expiryDate" type="xs:date" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="startValidityDate" type="xs:date" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="identifier" type="postcertificate:PostCertificateIdentifierType" minOccurs="1" maxOccurs="1"/>
+                    <xs:choice minOccurs="1" maxOccurs="1">
+                        <xs:element name="productProcedure" type="postcertificate:PostCertificateProductProcedureType" minOccurs="1" maxOccurs="1"/>
+                        <xs:element name="qualityProcedure" type="postcertificate:PostCertificateQualityProcedureType" minOccurs="1" maxOccurs="1"/>
+                    </xs:choice>
+                    <xs:element name="precedingCertificates" type="postcertificate:PostPrecedingCertificateIdentifiersType" minOccurs="0" maxOccurs="1"/>
+                    <xs:choice minOccurs="0" maxOccurs="1">
+                        <xs:element name="mechanismForScrutinyIVDR" type="crtfscp:MechanismForScrutinyIVDRType" minOccurs="1" maxOccurs="1"/>
+                        <xs:element name="mechanismForScrutinyMDR" type="crtfscp:PostMechanismForScrutinyMDRType" minOccurs="1" maxOccurs="1"/>
+                    </xs:choice>
+                    <xs:element name="status" type="postcertificate:PostCertificateStatusType" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="CertificateLanguages" type="crtf:CertificateLanguagesType" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="conditions" type="postcertificate:PostCertificateConditionsType" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="SSCP" type="postcertificate:PostCertificateSSCPType" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="CECP" type="crtfcecp:PostCECPType" minOccurs="0" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    <xs:complexType name="PostCertificateSSCPType">
+        <xs:sequence>
+            <xs:element name="devices" type="postcertificate:PostCertificateSSCPDevicesType" minOccurs="1" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PostCertificateSSCPDevicesType">
+        <xs:sequence>
+            <xs:element name="device" type="postcertificate:PostCertificateSSCPDeviceType" minOccurs="1" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PostCertificateSSCPDeviceType">
+        <xs:sequence>
+            <xs:element name="basicUDI" type="commondi:DIIdentifierType" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="basicUDIDIStatusOnLinkedSSCPVersion" type="postcertificate:BasicUDIDIStatusOnLinkedSSCPVersionEnum" minOccurs="1" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:simpleType name="BasicUDIDIStatusOnLinkedSSCPVersionEnum">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="VALIDATED">
+                <xs:annotation>
+                    <xs:documentation>Validated</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="PARTIALLY_VALIDATED">
+                <xs:annotation>
+                    <xs:documentation>Partially validated</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NOT_VALIDATED">
+                <xs:annotation>
+                    <xs:documentation>Not validated</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:complexType name="PostCertificateConditionsType">
+        <xs:sequence>
+            <xs:element name="condition" type="lsn:LanguageSpecificTextType" minOccurs="1" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PostCertificateIdentifierType">
+        <xs:sequence>
+            <xs:element name="certificateNumber" type="commonbasic:stringXSType" minOccurs="1" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>#FLD-UDID-61# - Certificate Number. When registering the Device, for Devices covered by Product certificates, user will have to provide identification details of the Product Certificate covering the Device. Property stores the Certificate Number of the Product Certificate</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="certificateRevisionNumber" type="commonbasic:stringXSType" minOccurs="0" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>#FLD-UDID-62# - Revision Number. When registering the Device, for Devices covered by Product certificates, user will have to provide identification details of the Product Certificate covering the Device. Property stores the Certificate Revision Number of the Product Certificate.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="NBActorCode" type="commonbasic:stringNBActorCodeType" minOccurs="1" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>#FLD-UDID-63# - Notified Body. When registering the Device, for Devices covered by Product certificates, user will have to provide identification details of the Product Certificate covering the Device. Property stores the reference to the Notified Body that issued the Product Certificate.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="issuedDate" type="xs:date" minOccurs="1" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PrecedingCertificateIdentifierType">
+        <xs:sequence>
+            <xs:element name="certificateNumber" type="commonbasic:stringXSType" minOccurs="1" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>#FLD-UDID-61# - Certificate Number. When registering the Device, for Devices covered by Product certificates, user will have to provide identification details of the Product Certificate covering the Device. Property stores the Certificate Number of the Product Certificate</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="certificateRevisionNumber" type="commonbasic:stringXSType" minOccurs="0" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>#FLD-UDID-62# - Revision Number. When registering the Device, for Devices covered by Product certificates, user will have to provide identification details of the Product Certificate covering the Device. Property stores the Certificate Revision Number of the Product Certificate.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="NBActorCode" type="commonbasic:stringNBActorCodeType" minOccurs="1" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>#FLD-UDID-63# - Notified Body. When registering the Device, for Devices covered by Product certificates, user will have to provide identification details of the Product Certificate covering the Device. Property stores the reference to the Notified Body that issued the Product Certificate.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="precedingCertificateStatus" type="issuedcertificate:CertificateStatusEnum" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="precedingCertificateIssueDate" type="xs:date" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="precedingCertificateStartValidityDate" type="xs:date" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="precedingCertificateExpiryDate" type="xs:date" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PostPrecedingCertificateIdentifiersType">
+        <xs:sequence>
+            <xs:element name="identifier" type="postcertificate:PrecedingCertificateIdentifierType" minOccurs="1" maxOccurs="unbounded"/>
+            <xs:element name="registeredInEudamed" type="xs:boolean"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PostCertificateStatusType">
+        <xs:sequence>
+            <xs:element name="status" type="issuedcertificate:CertificateStatusEnum" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="decision" type="postcertificate:PostCertificateDecisionType" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PostCertificateDecisionType">
+        <xs:sequence>
+            <xs:element name="statusChangeReason" type="crtfdecisionupdate:CertificateStatusChangeReasonEnum" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="otherChangeReason" type="lsn:LanguageSpecificTextsType" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="comments" type="postcertificate:PostCertificateCommentsType" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PostCertificateCommentsType">
+        <xs:sequence>
+            <xs:element name="comment" type="lsn:LanguageSpecificTextType" minOccurs="1" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PostCertificateProductProcedureType">
+        <xs:complexContent>
+            <xs:extension base="crtf:ConformityAssesmentType">
+                <xs:sequence>
+                    <xs:element name="applicableRegulation" type="crtf:ProductRegulationEnum" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="MFActor" type="actor:BaseActorType" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="ARActors" type="actor:ActorCodesType" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="scopes" type="crtfscp:ProductProcedureScopesType" minOccurs="1" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    <xs:complexType name="PostCertificateQualityProcedureSpecialDeviceType">
+        <xs:sequence>
+            <xs:element name="deviceManufTissueAnimal" type="xs:boolean" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="deviceManufTissueHuman" type="xs:boolean" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="deviceInSterileCondition" type="xs:boolean" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="deviceInVitro" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="deviceWithoutMedPurpose" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PostCertificateQualityProcedureDocumentsType">
+        <xs:sequence>
+            <xs:element name="document" type="doct:DocumentType" minOccurs="1" maxOccurs="100"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PostCertificateQualityProcedureType">
+        <xs:complexContent>
+            <xs:extension base="e:Entity">
+                <xs:sequence>
+                    <xs:element name="applicableRegulation" type="crtf:QualityRegulationEnum" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="SPPScope" type="crtf:SPPEnum" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="MFActor" type="actor:PostCertificateActorBaseType" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="ARActors" type="actor:PostCertificateActorBaseType" minOccurs="0" maxOccurs="unbounded"/>
+                    <xs:element name="PRActor" type="actor:PostCertificateActorBaseType" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="scopes" type="crtfscp:QualityProcedureScopesType" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="specialDevice" type="postcertificate:PostCertificateQualityProcedureSpecialDeviceType" minOccurs="1" maxOccurs="1"/>
+                    <xs:element name="documents" type="postcertificate:PostCertificateQualityProcedureDocumentsType" minOccurs="1" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    <xs:element name="PostCertificate">
+        <xs:complexType>
+            <xs:complexContent>
+                <xs:extension base="postcertificate:PostCertificateType">
+                </xs:extension>
+            </xs:complexContent>
+        </xs:complexType>
+    </xs:element>
+</xs:schema>

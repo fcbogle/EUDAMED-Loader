@@ -1,6 +1,6 @@
 # Canonical Validation
 
-Updated 11 October 2026 to reflect the current Dev and Production application.
+Updated 1 November 2026 to reflect the current Dev and Production application.
 
 ## Purpose
 
@@ -19,17 +19,18 @@ validation when XML is generated.
 
 The workspace reads the canonical projection stored in SQLite for the latest
 import in the active environment. It does not reread the Excel files each time
-you open the tab. Import data through **Submission Data** first.
+you open the tab. For the current Dev feature use **Import Management → Import
+Data**; Production retains its assessed prepared-workbook import in Submission
+Data. The legacy Dev raw-template import remains a separate operation.
 
 | Environment | Import source | Validation scope |
 | --- | --- | --- |
-| Dev | Raw template workbooks and the configured Basic UDI reference | Rows covered by the existing Dev mapping; excluded or unmapped sheets remain outside the active scope. |
+| Dev | Reviewed uploaded Templates, BasicUDI reference and EUDAMED extracts through Import Data; legacy raw-template import remains separate. | Current canonical import scope with its source lineage, configured exclusions and reviewed identity guards. |
 | Production | The prepared `production-import.xlsx` and matching audit file | Eligible rows from the prepared workbook, including registered export baselines and devices awaiting registration. Review-required and owner-excluded rows are omitted by the importer. |
 
 The scope follows the imported records; it is not restricted to the original
 five workbook families. Production uses the approved reference and source
-lineage recorded during preparation. The older Dev reference configuration
-remains separate.
+lineage recorded during preparation. The legacy raw-reference configuration remains separate from the uploaded batch copies.
 
 See the [workbook guide](workbooks.md), [Production workbook contract](../../../../docs/production-import-workbook-design.md)
 and [Production importer design](../../../../docs/production-importer-design.md).
@@ -108,7 +109,8 @@ and [XML generation](xml-generation.md).
 
 ## Model boundary
 
-The validation field contract is not a strict one-to-one reflection of the
-Pydantic canonical models. Some XML-facing aliases remain in the validation and
-XML layers. Mapping evidence and generation checks must be read alongside
-completeness results.
+Tests assert that emitted canonical validation paths belong to the declared
+canonical model vocabulary and are unique. The canonical/validation/XML models
+still have distinct responsibilities and some legacy alias/identity paths remain.
+Do not describe corrected path examples as current failures, or infer that this
+contract check resolves every source-mapping or XML-readiness issue.

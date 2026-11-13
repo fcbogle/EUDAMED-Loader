@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-stylesheet type="text/xsl" href="/tools/eudamed/dtx/xslt/index.xsl"?>
+<xs:schema targetNamespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/PutCertificateType/v1"
+           xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:putcertificate="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/PutCertificateType/v1"
+           xmlns:postcertificate="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/PostCertificateType/v1"
+           elementFormDefault="qualified">
+
+    <xs:import namespace="https://ec.europa.eu/tools/eudamed/dtx/datamodel/Entity/Certificate/PostCertificateType/v1" schemaLocation="PostCertificateType.xsd"/>
+
+    <xs:complexType name="PutCertificateType">
+        <xs:complexContent>
+            <xs:extension base="postcertificate:PostCertificateType">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    <xs:element name="PutCertificate">
+        <xs:complexType>
+            <xs:complexContent>
+                <xs:extension base="putcertificate:PutCertificateType">
+                </xs:extension>
+            </xs:complexContent>
+        </xs:complexType>
+    </xs:element>
+</xs:schema>

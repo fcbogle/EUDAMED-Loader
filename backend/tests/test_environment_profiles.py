@@ -16,7 +16,7 @@ def profiles(tmp_path, monkeypatch):
         if name.startswith("EUDAMED_"):
             monkeypatch.delenv(name)
     monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
-    for name, version in [("dev-3.0.32-derived", "3.0.32"), ("prod-3.0.30", "3.0.30")]:
+    for name, version in [("dev-3.0.36.1-official", "3.0.36.1"), ("prod-3.0.30", "3.0.30")]:
         folder = tmp_path / "data/schema_profiles" / name / "service"
         (folder / "Message").mkdir(parents=True)
         schema = f'''<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="message"><xs:complexType><xs:attribute name="version" fixed="{version}"/></xs:complexType></xs:element></xs:schema>'''
@@ -85,8 +85,8 @@ def test_switch_does_not_leak_loaded_dev_values(profiles, monkeypatch):
 
 
 @pytest.mark.parametrize("key,value,reason", [
-    ("EUDAMED_MESSAGE_SCHEMA_VERSION", "3.0.32", "requires message schema"),
-    ("EUDAMED_SCHEMA_DIR", "data/schema_profiles/dev-3.0.32-derived", "package version"),
+    ("EUDAMED_MESSAGE_SCHEMA_VERSION", "3.0.36.1", "requires message schema"),
+    ("EUDAMED_SCHEMA_DIR", "data/schema_profiles/dev-3.0.36.1-official", "package version"),
     ("EUDAMED_TESTING_STATE_DB_PATH", "data/testing/testing-state.sqlite3", "beneath"),
     ("EUDAMED_EXCEL_DIR", "data/source_excel", "beneath"),
     ("EUDAMED_NORMALIZATION_DIR", "config/normalization", "beneath"),
@@ -159,6 +159,12 @@ def test_dev_rejects_prod_storage(profiles, monkeypatch):
         select(monkeypatch,"dev")
 
 
+def test_dev_batch_root_rejects_production_storage(profiles, monkeypatch):
+    monkeypatch.setenv("EUDAMED_DEV_INPUT_BATCH_ROOT", "data/prod/import-batches")
+    with pytest.raises(ValueError, match="Dev storage overlaps"):
+        select(monkeypatch, "dev")
+
+
 def test_schema_dependency_errors_are_reported_before_startup(profiles, monkeypatch):
     root, _, _ = profiles
     settings=select(monkeypatch,"prod")
@@ -174,7 +180,7 @@ def test_check_config_command_does_not_create_database(tmp_path):
     env = {k:v for k,v in os.environ.items() if not k.startswith("EUDAMED_")}
     profile = tmp_path / "dev.env"
     profile.write_text("EUDAMED_ENVIRONMENT=dev\n")
-    env.update(EUDAMED_TESTING_STATE_DB_PATH=str(db), EUDAMED_SCHEMA_DIR=str(project/'data/schema_profiles/dev-3.0.32-derived'))
+    env.update(EUDAMED_TESTING_STATE_DB_PATH=str(db), EUDAMED_SCHEMA_DIR=str(project/'data/schema_profiles/dev-3.0.36.1-official'))
     result=subprocess.run([sys.executable,"-m","app.run","--environment","dev","--env-file",str(profile),"--check-config"],cwd=project/'backend',env=env,capture_output=True,text=True)
     assert result.returncode==0,result.stderr
     assert 'no database opened' in result.stdout

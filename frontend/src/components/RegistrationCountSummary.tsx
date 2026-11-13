@@ -37,10 +37,12 @@ export function RegistrationCountSummary({ summary, isLoading, error, onRefresh 
   const metrics = [
     ["Basic UDI-DI parents", counts?.total_parents, "unique resolved parent identifiers in scope"],
     ["Parents registered", counts?.registered_parents, "confirmed acceptance"],
-    ["Parents unknown", counts?.unknown_parents, "registration not established"],
+    ["Parents unregistered", counts?.unregistered_parents ?? 0, "in workbooks; absent from EUDAMED evidence"],
+    ["Parents unknown", counts?.unknown_parents, "absent from all imported sources"],
     ["UDI-DI devices", counts?.total_devices, "unique identifiers and issuing entities"],
     ["Devices registered", counts?.registered_devices, "confirmed acceptance"],
-    ["Devices unknown", counts?.unknown_devices, "registration not established"],
+    ["Devices unregistered", counts?.awaiting_devices, "in workbooks; absent from EUDAMED evidence"],
+    ["Devices unknown", counts?.unknown_devices, "absent from all imported sources"],
     ["POST XML eligible", counts?.post_ready, "draft eligibility; includes unknown status"],
     ["Child POST XML eligible", counts?.child_post_ready, "drafts with a tracked registered parent"],
     ["PATCH ready", counts?.patch_ready, "current generation assessment"],
@@ -65,7 +67,7 @@ export function RegistrationCountSummary({ summary, isLoading, error, onRefresh 
         ))}
       </div>
       {confirmed && summary && <>
-        <p>Awaiting registration: {counts?.awaiting_devices} · {counts?.awaiting_ready} ready · {counts?.awaiting_blocked} blocked.</p>
+        <p>Unregistered: {counts?.awaiting_devices} · {counts?.awaiting_ready} ready · {counts?.awaiting_blocked} blocked.</p>
         {(counts?.unknown_devices ?? 0) > 0 && <p>Confirm unknown registration status before generating POST.</p>}
         {hasDataExceptions && <p className="status-detail-emphasis">Import data needs review; see Details.</p>}
         <details className="registration-count-details">
@@ -75,8 +77,9 @@ export function RegistrationCountSummary({ summary, isLoading, error, onRefresh 
         <p>{summary.latest_acceptance_at ? <>Latest registration confirmation: {readableDate(summary.latest_acceptance_at)}.</> :
           "Latest registration confirmation date: not available."}
           {" "}These figures use the data and registration confirmations recorded in this environment.</p>
-        {(counts?.unknown_devices ?? 0) > 0 && <p>A device stays Unknown until its registration status is confirmed.
+        {(counts?.unknown_devices ?? 0) > 0 && <p>Unknown means the identifier is absent from recorded EUDAMED evidence and the imported Template and BasicUDI workbooks.
           Being ready for XML does not mean it needs registration.</p>}
+        {summary.registration_coverage && <p>Complete manufacturer device coverage confirmed for {summary.registration_coverage.manufacturer_srn} in {summary.registration_coverage.environment === "dev" ? "Dev / Playground" : "Production"}, from extracts dated {readableDate(summary.registration_coverage.export_as_of)}. These device extracts do not establish parent-only coverage.</p>}
         <p>Across the full import, {readableCount(summary.source_rows)} source rows were read and {readableCount(summary.mapped_rows)} were mapped for review.
           {!hasDataExceptions ? " No outstanding data issues were found." : " The following checks need attention."}</p>
         {dataChecks.length > 0 && <ul>{dataChecks.map(([count, message]) => <li key={message}>{readableCount(Number(count))} {message}.</li>)}</ul>}

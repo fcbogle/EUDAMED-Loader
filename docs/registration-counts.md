@@ -1,6 +1,6 @@
 # Registration counts
 
-Reviewed 11 October 2026 against the current service. Counts use recorded
+Reviewed 1 November 2026 against the current feature-branch service; Production rollout of feature changes remains separate. Counts use recorded
 acceptance evidence and, in Production, the prepared import classification.
 The initial Production import on 10 October contained 10,026 devices, with five
 review rows skipped. These are dated import findings, not live inventory totals.
@@ -8,6 +8,21 @@ Imported-baseline and confirmed template-only classification support is describe
 in [production-importer-design.md](production-importer-design.md).
 
 ## Registration views
+
+Updated 27 October 2026: Parents & Children shows variant names prominently,
+with family and Basic UDI-DI beneath. Parent status pills explicitly name the
+parent. PATCH-ready counts and a **Review PATCH devices** action complement the
+existing POST guidance. For models sharing a parent, separate actions preserve
+the exact family/variant scope. A PATCH review opens Bulk PATCH with that parent
+and an empty manual selection; no devices are selected automatically.
+
+In Bulk PATCH, review registered candidates by catalogue number, Device UDI-DI,
+accepted snapshot version, current trade name and quantity. Select devices and
+scenario values, then preview to see included versions and excluded devices with
+reasons. Candidate registration and PATCH eligibility remain separate. A changed
+reviewed scope blocks generation until restored or explicitly cleared. Existing
+backend preview/download checks remain authoritative. This applies to the shared
+feature code for Dev and Production; main/Production rollout is separate.
 
 Registration State has two internal tabs in both Dev and Production. **Registration
 State** is the existing counts and operation table and remains the default.
@@ -54,13 +69,22 @@ never increase the number of registered devices. Reviewed/generated packages,
 ERROR events, version numbers and the default `unregistered` value alone do not
 prove registration status.
 
-Devices without matched acceptance evidence are **unknown**, unless the trusted
-Production import explicitly classifies their current identities as not registered.
-Those Production identities count as **awaiting registration**, subdivided into
-ready and blocked. Dev's default `unregistered` flag and a workbook POST
-instruction are not negative-registration evidence. An empty database or an
-unsuccessful submission does not establish that an identity is absent from EUDAMED.
-Unknown identities must be checked against the agreed environment evidence.
+The owner-defined labels describe membership in the active environment's recorded
+sources, for both Device UDI-DIs and Basic UDI-DIs:
+
+| Label | Meaning |
+| --- | --- |
+| Registered | Recorded EUDAMED registration evidence matches the identity. |
+| Unregistered | The identity is in imported Template/BasicUDI workbook data but absent from the recorded EUDAMED evidence. |
+| Unknown | The identity is outside those evidence and imported-workbook sources. |
+
+These labels are independent of XML readiness and are not a live EUDAMED lookup.
+Device extracts do not prove absence of parent-only registrations. Identity
+problems remain separate blockers. Legacy flags and source POST/PATCH instructions
+are not acceptance evidence and do not determine operational designation. Read
+[registration-driven operation policy](registration-driven-operation-policy.md)
+for the current contract. Awaiting-registration counts remain operational groupings,
+with readiness reported separately.
 
 POST XML eligibility is shown separately from registration status. Readiness
 uses the same per-record operation assessment as XML generation, with additional
@@ -93,11 +117,11 @@ identities, parent-only success, repeated operations, missing acceptance,
 identifier changes, filtering, uncapped history, snapshot changes, actual POST
 assessment rules, and unavailable UI counts.
 
-## Production imported evidence
+## Imported export evidence
 
-Imported export snapshots count as registration evidence for distinct devices and
+Explicit imported export snapshots in Dev or Production count as registration evidence for distinct devices and
 parents/cohort eligibility. They have `IMPORTED` status and contribute zero upload
 operation successes. Trusted template-only identities count as awaiting registration.
 Actual Upload Success XML events continue to determine POST/PATCH/Market Info
 operation counts and advance accepted states. Import eligibility and XML readiness
-are reported separately; the five review rows are excluded from the initial import.
+are reported separately; the five review rows were excluded from the dated initial Production import.

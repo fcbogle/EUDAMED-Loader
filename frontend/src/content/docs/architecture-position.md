@@ -1,6 +1,6 @@
 # Architecture Position
 
-Updated 11 October 2026 against the implemented Dev and Production application.
+Updated 1 November 2026 against the implemented Dev and Production application.
 See the [architecture definition](../../../../docs/architecture-definition-draft.md)
 for detailed responsibilities and state transitions.
 
@@ -11,11 +11,11 @@ Python/FastAPI backend, React/TypeScript UI and SQLite persistence. Dev and
 Production use the same database design and XML workflow services, with separate
 configuration, source data, actor settings, schemas and databases.
 
-There are two import paths:
+Import paths are distinguished by workflow as well as environment:
 
 | Environment | Source and import flow |
 | --- | --- |
-| Dev | Existing raw-template parsing, Basic UDI reference linkage and source/canonical import. |
+| Dev feature | Upload/review sources, create the dated batch and workbook/audit, then confirm additive import with backup. Legacy raw-template import remains separate. |
 | Production | Templates, approved parent reference and exported XML are reconciled into a prepared workbook/audit pair. The UI assesses that pair before the operator confirms database import. |
 
 The first local Production startup and reviewed import were completed on
@@ -29,16 +29,18 @@ import process; they do not silently overwrite accepted device state.
 - **Operation assessment:** shared backend rules decide availability for POST, child POST, PATCH and Market Info.
 - **XML generation:** six visible workspaces—POST, Patch XML, Market Info, Bulk UDI-DI POST, Bulk PATCH and Bulk Market Info. Bulk Basic UDI POST remains a separate supported backend/API operation.
 - **Review:** ZIP download records review of that exact archive; preview or download does not establish registration.
-- **Accepted evidence:** validated Production exports establish imported baselines. Successful acknowledgement uploads advance the relevant accepted state under correlation and version guards.
+- **Accepted evidence:** explicit validated Dev/Production export imports can establish baselines without fabricating successful submissions. Successful acknowledgement uploads advance the relevant accepted state under correlation and version guards.
 - **History and read models:** SQLite records source imports, generated contexts, packages, response events and batches. These are operational evidence, not a complete formal audit/replay solution.
 
 Imported export baselines are recorded separately from upload successes. A device
 registered outside this application can therefore support the appropriate next
 operation without inventing local POST history. Dev's default unregistered flag
-is not proof that a device needs registration. Trusted Production template-only
-classification supplies awaiting-registration status for the approved import.
+is not proof that a device needs registration. Source membership defines Registered/Unregistered/Unknown in the feature's
+registration views; this is not a live lookup or proof of parent-only coverage.
+See [registration policy](../../../../docs/registration-driven-operation-policy.md).
 
-See [Production importer design](../../../../docs/production-importer-design.md),
+See [Import Data in Dev](../../../../docs/source-batch-receipt.md),
+[Production importer design](../../../../docs/production-importer-design.md),
 [Canonical Validation](canonical-validation.md) and
 [registration evidence](../../../../docs/registration-counts.md).
 

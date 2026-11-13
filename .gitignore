@@ -30,3 +30,4 @@ data/testing/backups/
 .env.*.local
 data/prod/
 data/dev/artifacts/
+data/dev/import-batches/

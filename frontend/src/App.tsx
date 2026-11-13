@@ -1,3 +1,5 @@
+import { matchesPatchReviewScope } from "./registrationParents";
+import { postSourceSelectable, hasRegistrationEvidence, registrationOperation } from "./postSourceSelection";
 import { renderMarkdownDocument } from "./markdownDocument";
 import { productionImportNotes } from "./productionImportNotes";
 import { requestWorkbookImport } from "./workbookImportRequest";
@@ -10,11 +12,20 @@ import { useBulkPostedCohorts } from "./useBulkPostedCohorts";
 
 import { ApiError, api, type RecordReadiness } from "./api";
 import architectureDefinitionDocumentation from "../../docs/architecture-definition-draft.md?raw";
+import schemaUpgradeDocumentation from "../../docs/playground-schema-upgrade-2026-11-12.md?raw";
+import templateSourceReviewDocumentation from "../../docs/template-source-review-2026-11-12.md?raw";
+import playgroundXmlReviewDocumentation from "../../docs/playground-xml-review-2026-11-12.md?raw";
 import sessionHandoffDocumentation from "../../docs/session-handoff.md?raw";
+import devImportGuideDocumentation from "../../docs/source-batch-receipt.md?raw";
+import submissionActivityDocumentation from "../../docs/submission-activity-report.md?raw";
+import raReportDocumentation from "../../docs/ra-report-first-iteration.md?raw";
+import devImportSafetyDocumentation from "../../docs/dev-workbook-confirmation.md?raw";
 import documentationIndexDocumentation from "../../docs/README.md?raw";
 import projectInstructionsDocumentation from "../../AGENTS.md?raw";
 import schemaProfilesDocumentation from "../../data/schema_profiles/README.md?raw";
 import environmentProfilesDocumentation from "../../docs/environment-profiles.md?raw";
+import developmentProductionDocumentation from "../../docs/development-and-production.md?raw";
+import registrationPolicyDocumentation from "../../docs/registration-driven-operation-policy.md?raw";
 import productionWorkbookContractDocumentation from "../../docs/production-import-workbook-design.md?raw";
 import productionPreparationDocumentation from "../../docs/production-import-preparation.md?raw";
 import productionImporterDesignDocumentation from "../../docs/production-importer-design.md?raw";
@@ -46,6 +57,10 @@ import type { RegistrationSummary } from "./types";
 import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
 import { EnvironmentBanner } from "./components/EnvironmentBanner";
+import { ApplicationNavigation, type NavigationPage } from "./components/ApplicationNavigation";
+import { ReportingWorkspace } from "./components/ReportingWorkspace";
+import { ImportFlowWorkspace } from "./components/ImportFlowWorkspace";
+import type { ImportFlowContext } from "./importFlowTypes";
 import { DeviceModelSelector } from "./components/DeviceModelSelector";
 import { XmlValidationStack } from "./components/XmlValidationStack";
 import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
@@ -125,7 +140,15 @@ import {
   resolvePostWorkspaceRecord,
 } from "./xmlWorkspace";
 
-type MainTab = "workbooks" | "canonicalValidation" | "xml" | "registrationState" | "testingSummary" | "documentation";
+type PlannedTab = "submissionActivity" | "sourceFiles" | "importHistory" | "registrationSnapshot" | "eudamedComparison";
+type MainTab = NavigationPage;
+const PLANNED_WORKSPACES: { id: PlannedTab; group: "Import Management" | "Reporting"; title: string; description: string }[] = [
+  { id: "sourceFiles", group: "Import Management", title: "Import Data", description: "Review source files, create the Import Workbook and import batch data." },
+  { id: "importHistory", group: "Import Management", title: "Import History", description: "View previous imports and their result reports." },
+  { id: "submissionActivity", group: "Reporting", title: "Model Reconciliation Summary", description: "Compare application device data with retained EUDAMED extracts by model." },
+  { id: "registrationSnapshot", group: "Reporting", title: "Model Reconciliation Summary", description: "Compare application device data with retained EUDAMED extracts by model." },
+  { id: "eudamedComparison", group: "Reporting", title: "Model Reconciliation Summary", description: "Compare application device data with retained EUDAMED extracts by model." },
+];
 type SubmissionDataTab = "activity" | "snapshot";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
 type PatchScenarioId =
@@ -486,7 +509,16 @@ type DocumentationSection = {
     | "sessionHandoff"
     | "softwareEngineeringPatterns"
     | "documentationIndex"
+    | "developmentProduction"
+    | "registrationPolicy"
     | "environmentProfiles"
+    | "devImportGuide"
+    | "devImportSafety"
+    | "schemaUpgrade"
+    | "templateSourceReview"
+    | "playgroundXmlReview"
+    | "raReport"
+    | "submissionActivityGuide"
     | "productionWorkbookContract"
     | "productionPreparation"
     | "productionImporterDesign"
@@ -617,6 +649,7 @@ export function App() {
   const [isLoadingReadiness, setIsLoadingReadiness] = useState(true);
   const [readinessError, setReadinessError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<MainTab>("workbooks");
+  const [importFlowContext, setImportFlowContext] = useState<ImportFlowContext>({ batchId: "", status: "Select source files" });
   const [submissionDataTab, setSubmissionDataTab] = useState<SubmissionDataTab>("snapshot");
   const [activeDocumentationSection, setActiveDocumentationSection] = useState<
     DocumentationSection["id"]
@@ -641,6 +674,7 @@ export function App() {
   const [selectedValidationReviewTab, setSelectedValidationReviewTab] = useState<ValidationReviewTab>("sourceSheetBasicUdi");
   const [selectedDeviceSubjectFamily, setSelectedDeviceSubjectFamily] = useState<string>("");
   const [selectedDeviceSubjectVariant, setSelectedDeviceSubjectVariant] = useState<string>("");
+  const [patchReviewTarget, setPatchReviewTarget] = useState<(import("./registrationParents").PatchReviewScope & { environment: string }) | null>(null);
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
   const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
   const [selectedRegistrationStateFamily, setSelectedRegistrationStateFamily] = useState<string>("");
@@ -759,6 +793,25 @@ export function App() {
   const [isLoadingCanonicalValidation, setIsLoadingCanonicalValidation] = useState<boolean>(false);
   const documentationSections: DocumentationSection[] = [
     {
+      id: "schemaUpgrade",
+      title: "Playground Schema Upgrade — November 12",
+      sourcePath: "docs/playground-schema-upgrade-2026-11-12.md",
+      markdown: schemaUpgradeDocumentation,
+    },
+    {
+      id: "templateSourceReview",
+      title: "Template Source Review — November 12",
+      sourcePath: "docs/template-source-review-2026-11-12.md",
+      markdown: templateSourceReviewDocumentation,
+    },
+    {
+      id: "playgroundXmlReview",
+      title: "Playground XML Review — November 12",
+      sourcePath: "docs/playground-xml-review-2026-11-12.md",
+      markdown: playgroundXmlReviewDocumentation,
+    },
+
+    {
       id: "projectInstructions",
       title: "Project Development Guidelines",
       sourcePath: "AGENTS.md",
@@ -777,10 +830,46 @@ export function App() {
       markdown: documentationIndexDocumentation,
     },
     {
+      id: "developmentProduction",
+      title: "Development And Production Worktrees",
+      sourcePath: "docs/development-and-production.md",
+      markdown: developmentProductionDocumentation,
+    },
+    {
+      id: "registrationPolicy",
+      title: "Registration And Operation Policy",
+      sourcePath: "docs/registration-driven-operation-policy.md",
+      markdown: registrationPolicyDocumentation,
+    },
+    {
       id: "environmentProfiles",
       title: "Dev and Prod Configuration",
       sourcePath: "docs/environment-profiles.md",
       markdown: environmentProfilesDocumentation,
+    },
+    {
+      id: "devImportGuide",
+      title: "Import Data in Dev",
+      sourcePath: "docs/source-batch-receipt.md",
+      markdown: devImportGuideDocumentation,
+    },
+    {
+      id: "devImportSafety",
+      title: "Dev Import Safeguards",
+      sourcePath: "docs/dev-workbook-confirmation.md",
+      markdown: devImportSafetyDocumentation,
+    },
+    {
+      id: "raReport",
+      title: "Model Reconciliation Summary",
+      sourcePath: "docs/ra-report-first-iteration.md",
+      markdown: raReportDocumentation,
+    },
+    {
+      id: "submissionActivityGuide",
+      title: "Archived Submission Activity Design",
+      sourcePath: "docs/submission-activity-report.md",
+      markdown: submissionActivityDocumentation,
     },
     {
       id: "productionWorkbookContract",
@@ -964,17 +1053,17 @@ export function App() {
     {
       id: "verification",
       title: "Verification And Decision Support",
-      sectionIds: ["registrationCounts", "marketInfoParity", "testingScenarios", "softwareEngineeringPatterns"],
+      sectionIds: ["schemaUpgrade", "templateSourceReview", "playgroundXmlReview", "raReport", "registrationPolicy", "registrationCounts", "marketInfoParity", "testingScenarios", "softwareEngineeringPatterns"],
     },
     {
       id: "production",
-      title: "Production Preparation And Import Design",
-      sectionIds: ["productionWorkbookContract", "productionPreparation", "productionImporterDesign"],
+      title: "Import Design And Safeguards",
+      sectionIds: ["devImportGuide", "devImportSafety", "productionWorkbookContract", "productionPreparation", "productionImporterDesign"],
     },
     {
       id: "operations",
       title: "Configuration And Publishing",
-      sectionIds: ["environmentProfiles", "schemaProfiles", "publishingRemotes"],
+      sectionIds: ["developmentProduction", "environmentProfiles", "schemaProfiles", "publishingRemotes"],
     },
     {
       id: "historical",
@@ -1513,7 +1602,6 @@ export function App() {
   const latestImportBatch = latestWorkbookImportSummary?.import_batch ?? null;
   const importedWorkbooks = latestWorkbookImportSummary?.imported_workbooks ?? [];
   const importTableCounts = latestWorkbookImportSummary?.table_counts ?? [];
-  const importOperationCounts = latestWorkbookImportSummary?.operation_counts ?? [];
   const canonicalProjectionStatus = latestWorkbookImportSummary?.canonical_projection_status ?? "missing";
   const mergedSourceRowCount = latestWorkbookImportSummary?.merged_source_row_count ?? 0;
   const distinctSubjectCount = latestImportBatch?.device_subject_count ?? 0;
@@ -1531,10 +1619,6 @@ export function App() {
   const healthIssues = databaseHealthSummary?.issues ?? [];
   const indexedTableCount = monitoredTables.filter((table) => table.indexes.length > 0).length;
   const foreignKeyCount = monitoredTables.reduce((sum, table) => sum + table.foreign_keys.length, 0);
-  const postDeviceSubjectCount =
-    importOperationCounts.find((entry) => entry.submission_operation === "POST")?.device_subject_count ?? 0;
-  const patchDeviceSubjectCount =
-    importOperationCounts.find((entry) => entry.submission_operation === "PATCH")?.device_subject_count ?? 0;
   const identityIssueTableCount =
     importTableCounts.find((entry) => entry.table_name === "device_identity_issue")?.row_count ??
     0;
@@ -1687,9 +1771,9 @@ export function App() {
   const selectedXmlPairRecord =
     selectedXmlVariantRecords.find(
       (record) =>
-        record.catalogue_number === selectedXmlRecordKey && (record.submission_operation ?? "").toUpperCase() === "POST",
+        record.catalogue_number === selectedXmlRecordKey && postSourceSelectable(activeEnvironment, record.submission_operation),
     ) ??
-    selectedXmlVariantRecords.find((record) => (record.submission_operation ?? "").toUpperCase() === "POST") ??
+    selectedXmlVariantRecords.find((record) => postSourceSelectable(activeEnvironment, record.submission_operation)) ??
     null;
   const readinessByDevice = useMemo(() => {
     const index = new Map<string, RecordReadiness[]>();
@@ -1719,7 +1803,7 @@ export function App() {
     return () => { cancelled = true; };
   }, [activeTab, canonicalValidation, testingSubjectSummaries, testingSummarySubjectSummaries]);
   const selectedBulkEligiblePostRecords = selectedXmlVariantRecords.filter(
-    (record) => (record.submission_operation ?? "").toUpperCase() === "POST",
+    (record) => postSourceSelectable(activeEnvironment) && readinessForRecord(record)?.post_ready,
   );
   const selectedBulkEligiblePostCount = selectedBulkEligiblePostRecords.length;
   const selectedExactAvailablePostCount = selectedBulkEligiblePostRecords.filter((record) => readinessForRecord(record)?.post_ready).length;
@@ -1767,7 +1851,7 @@ export function App() {
   const displayedBulkPatchParentOptions = bulkPatchPostedParents;
   const selectedBulkPatchParentGroup =
     displayedBulkPatchParentOptions.find((group) => group.basic_udi_di === selectedBulkPatchBasicUdiDi) ??
-    displayedBulkPatchParentOptions[0] ??
+    (patchReviewTarget ? null : displayedBulkPatchParentOptions[0]) ??
     null;
   const displayedBulkMarketInfoParentOptions =
     bulkMarketInfoPostedParents;
@@ -1831,7 +1915,7 @@ export function App() {
   const registrationStateRows = summaryGroups.map(group => ({
     key: group.key, productFamily: group.product_family, productVariant: group.product_variant,
     basicUdiDiLabel: group.parent_issuing_entity ? `${group.parent_issuing_entity}: ${group.basic_udi_di}` : group.basic_udi_di,
-    parentStatusLabel: group.parent_registered ? "Registered" : "Unknown",
+    parentStatusLabel: group.parent_registration_status ?? (group.parent_registered ? "Registered" : group.parent_key ? "Unregistered" : "Unknown"),
     parentStatusClassName: group.parent_registered ? "status-pill ok compact" : "status-pill warn compact",
     seedPostCount: group.parent_post_ready ? 1 : 0,
     eligibleChildDeviceCount: group.post_ready, childPostCount: group.child_post_ready,
@@ -1882,7 +1966,8 @@ export function App() {
   const selectedBulkPatchEligibleCount =
     selectedBulkPatchParentGroup?.posted_child_count ??
     bulkPatchPostedEntries.length;
-  const canRunBulkPatch =
+  const patchReviewMatches = matchesPatchReviewScope(patchReviewTarget, { environment: activeEnvironment, productFamily: selectedXmlFamily, productVariant: selectedXmlVariant, basicUdiDi: selectedBulkPatchBasicUdiDi, issuers: selectedXmlVariantRecords.map(record => record.issuing_entity) });
+  const canRunBulkPatch = patchReviewMatches &&
     Boolean(selectedBulkPatchParentGroup) &&
     (
       (bulkPatchScopeMode === "all_posted" && selectedBulkPatchEligibleCount > 0) ||
@@ -2060,10 +2145,12 @@ export function App() {
       (summary) =>
         (summary.catalogue_number === record.catalogue_number ||
           (record.primary_udi_di && summary.primary_udi_di === record.primary_udi_di)) &&
-        (summary.imported_baseline_present || summary.post_success || summary.has_successful_device_post || summary.has_successful_child_post_or_patch),
+        hasRegistrationEvidence(summary),
     ),
   );
   const selectedPatchRecord = findRecordByCatalogueNumber(selectedPatchDeviceRecords, selectedXmlRecordKey);
+  const designationRecord = xmlMode === "post" ? selectedPostCandidateRecord : selectedPatchRecord ?? selectedXmlRecord;
+  const activeRegistrationOperation = registrationOperation(designationRecord ? readinessForRecord(designationRecord)?.registration_known : undefined);
   const selectedPatchWorkspaceRecord = resolvePatchWorkspaceRecord(
     selectedXmlVariantRecords,
     selectedPatchRecord?.catalogue_number ?? assessedPatchCandidateCatalogueNumber,
@@ -2127,6 +2214,7 @@ export function App() {
       )
     : [];
   useEffect(() => {
+    if (patchReviewTarget) return; // Preserve the requested parent while the new cohort loads.
     const parentOption = displayedBulkPatchParentOptions[0]?.basic_udi_di ?? "";
     if (
       selectedBulkPatchBasicUdiDi &&
@@ -2135,7 +2223,7 @@ export function App() {
       return;
     }
     setSelectedBulkPatchBasicUdiDi(parentOption);
-  }, [displayedBulkPatchParentOptions, selectedBulkPatchBasicUdiDi]);
+  }, [displayedBulkPatchParentOptions, selectedBulkPatchBasicUdiDi, patchReviewTarget]);
   useEffect(() => {
     const parentOption = displayedBulkMarketInfoParentOptions[0]?.basic_udi_di ?? "";
     if (
@@ -3140,142 +3228,100 @@ export function App() {
     setIsDownloadingXml,
   });
 
+  const plannedWorkspace = PLANNED_WORKSPACES.find((workspace) => workspace.id === activeTab);
+  const isImportManagement = activeTab === "sourceFiles" || activeTab === "importHistory";
+  const isReporting = activeTab === "registrationSnapshot" || activeTab === "eudamedComparison" || activeTab === "submissionActivity";
+  const locationLabel = plannedWorkspace?.group ?? (activeTab === "xml" || activeTab === "testingSummary" ? "EUDAMED" : activeTab === "documentation" ? "Help" : "Data Views");
+
+
   return (
     <main className="app-shell">
-      <EnvironmentBanner onEnvironmentChange={setActiveEnvironment} />
-      <nav className="top-nav">
+      <EnvironmentBanner
+        onEnvironmentChange={setActiveEnvironment}
+        importBatch={latestImportBatch}
+        importLoading={isLoadingWorkbookImportMonitoring}
+        importUnavailable={Boolean(workbookImportSummaryError)}
+      />
+      <nav className="top-nav" aria-label="Application navigation">
         <div className="brand-block">
-          <span className="brand-kicker">Regulatory Data Preparation</span>
-          <div className="nav-title-block">
-            <strong>EUDAMED Profiling Workspace</strong>
-            <span className="nav-subtitle">
-              Device data, XML preparation, and registration tracking
-            </span>
-          </div>
+          <strong>EUDAMED Profiling Workspace</strong>
         </div>
-        <div className="nav-links nav-links-grouped">
-          <div className="nav-group">
-            <span className="nav-group-label">Data Views</span>
-            <div className="nav-group-buttons">
-              <button
-                className={activeTab === "workbooks" ? "nav-link active" : "nav-link"}
-                type="button"
-                onClick={() => setActiveTab("workbooks")}
-              >
-                Submission Data
-              </button>
-              <button
-                className={activeTab === "canonicalValidation" ? "nav-link active" : "nav-link"}
-                type="button"
-                onClick={() => setActiveTab("canonicalValidation")}
-              >
-                Canonical Validation
-              </button>
-              <button
-                className={activeTab === "registrationState" ? "nav-link active" : "nav-link"}
-                type="button"
-                onClick={() => setActiveTab("registrationState")}
-              >
-                Registration State
-              </button>
-            </div>
-          </div>
-          <div className="nav-group">
-            <span className="nav-group-label">{workspaceActivity} Workspaces</span>
-            <div className="nav-group-buttons">
-              <button
-                className={activeTab === "xml" ? "nav-link active nav-link-primary" : "nav-link nav-link-primary"}
-                type="button"
-                onClick={() => setActiveTab("xml")}
-              >
-                {xmlWorkspaceLabel}
-              </button>
-              <button
-                className={activeTab === "testingSummary" ? "nav-link active" : "nav-link"}
-                type="button"
-                onClick={() => setActiveTab("testingSummary")}
-              >
-                {summaryWorkspaceLabel}
-              </button>
-            </div>
-          </div>
-          <div className="nav-group nav-group-reference">
-            <span className="nav-group-label">Documentation</span>
-            <div className="nav-group-buttons">
-              <button
-                className={activeTab === "documentation" ? "nav-link active nav-link-reference" : "nav-link nav-link-reference"}
-                type="button"
-                onClick={() => setActiveTab("documentation")}
-              >
-                Documentation
-              </button>
-            </div>
-          </div>
-        </div>
+        <ApplicationNavigation
+          activePage={activeTab}
+          onSelect={setActiveTab}
+          xmlWorkspaceLabel={xmlWorkspaceLabel}
+          summaryWorkspaceLabel={summaryWorkspaceLabel}
+        />
       </nav>
 
       <section className={activeTab === "workbooks" ? "hero submission-data-hero" : "hero"}>
         <div className="hero-copy-block">
+          <p className="workspace-location">{locationLabel}</p>
+          {plannedWorkspace ? (
+            <>
+              <h1>{plannedWorkspace.title}</h1>
+              <p className="hero-copy" tabIndex={0}>{activeTab === "sourceFiles" && importFlowContext.status === "Import completed" ? "Import completed. View its receipt, open its history or start a new import." : plannedWorkspace.description}</p>
+            </>
+          ) : null}
           {activeTab === "workbooks" ? (
             <>
-              <p className="eyebrow">Operational Data</p>
               <h1>Submission Data</h1>
-              <p className="hero-copy hero-copy-compact">
+              <p className="hero-copy" tabIndex={0}>
                 Review device coverage, registration status, and XML readiness.
               </p>
             </>
           ) : null}
           {activeTab === "canonicalValidation" ? (
             <>
-              <p className="eyebrow">Canonical Validation</p>
               <h1>Canonical Validation</h1>
-              <p className="hero-copy">
-                Review family and variant readiness, then inspect source-to-canonical mapping before XML generation.
+              <p className="hero-copy" tabIndex={0}>
+                Review data mapping and XML readiness.
               </p>
             </>
           ) : null}
           {activeTab === "xml" ? (
             <>
-              <p className="eyebrow">{xmlWorkspaceLabel}</p>
               <h1>{activeEnvironment === null ? xmlWorkspaceLabel : `${xmlWorkspaceLabel} Workspace`}</h1>
-              <p className="hero-copy">
+              <p className="hero-copy" tabIndex={0}>
                 {activeEnvironment === "prod"
-                  ? "Assess availability, generate POST, PATCH, and bulk XML, validate locally, and prepare controlled EUDAMED submission files."
+                  ? "Prepare and validate XML for EUDAMED submission."
                   : activeEnvironment === "dev"
-                    ? "Assess availability, generate POST, PATCH, and bulk XML, validate locally, and prepare controlled Playground test files."
-                    : "Assess availability, generate POST, PATCH, and bulk XML, and validate locally."}
+                    ? "Prepare and validate XML for Playground testing."
+                    : "Prepare and validate XML files."}
               </p>
             </>
           ) : null}
           {activeTab === "testingSummary" ? (
             <>
-              <p className="eyebrow">{summaryWorkspaceLabel}</p>
               <h1>{activeEnvironment === null ? "EUDAMED Snapshot" : `EUDAMED ${workspaceActivity} Snapshot`}</h1>
-              <p className="hero-copy">
-                Review recorded {activeEnvironment === "prod" ? "submission" : activeEnvironment === "dev" ? "testing" : "operation"} outcomes, Basic UDI-DI registration status, and the next available POST and PATCH actions.
+              <p className="hero-copy" tabIndex={0}>
+                Review recorded {activeEnvironment === "prod" ? "submission" : activeEnvironment === "dev" ? "testing" : "operation"} outcomes and available actions.
               </p>
             </>
           ) : null}
           {activeTab === "registrationState" ? (
             <>
-              <p className="eyebrow">Registration State</p>
               <h1>Registration State</h1>
-              <p className="hero-copy">
-                Review family and variant registration status, Basic UDI-DI coverage, and the next available POST, PATCH, and Market Info actions.
+              <p className="hero-copy" tabIndex={0}>
+                Review registration status and available actions.
               </p>
             </>
           ) : null}
           {activeTab === "documentation" ? (
             <>
-              <p className="eyebrow">Documentation</p>
               <h1>Architecture And Workflow Notes</h1>
-              <p className="hero-copy">
-                Review the current architecture position, workflow design, implementation notes, and roadmap.
+              <p className="hero-copy" tabIndex={0}>
+                Select and view implementation documentation
               </p>
             </>
           ) : null}
         </div>
-        <aside className="status-card">
+        <aside className="hero-status" aria-label="Workspace status">
+          {plannedWorkspace ? (
+            <span className="status-pill neutral">
+              {activeEnvironment === "dev" && isImportManagement ? activeTab === "importHistory" ? "Read-only history" : importFlowContext.status : activeEnvironment === "dev" && isReporting ? "Read-only comparison" : "Under development"}
+            </span>
+          ) : null}
           {activeTab === "workbooks" ? (
             <>
               <button
@@ -3298,47 +3344,47 @@ export function App() {
               <p className="status-detail">
                 {latestImportBatch
                   ? <>
-                      Showing validated data mapped from source Excel for XML generation in{" "}
+                      Validated data from{" "}
                       <span className="status-detail-emphasis">batch #{latestImportBatch.import_batch_id}</span>.
                     </>
-                  : "Showing validated data mapped from source Excel for XML generation."}
+                  : "Review imported data readiness."}
               </p>
             </>
           ) : null}
           {activeTab === "xml" ? (
             <>
-              <span className="status-label">Testing Snapshot</span>
+              <span className="status-label">XML readiness</span>
               <span className={xmlReadyRecords.length ? "status-pill ok" : "status-pill warn"}>
-                {xmlReadyRecords.length ? "Testing workspace ready" : "Testing workspace blocked"}
+                {xmlReadyRecords.length ? "Ready" : "Blocked"}
               </span>
               <p className="status-detail">
                 {xmlReadyRecords.length
                   ? <>
                       <span className="status-detail-emphasis">{xmlReadyRecords.length}</span>{" "}
-                      XML-ready record{xmlReadyRecords.length === 1 ? "" : "s"} available across the testing workspaces.
+                      XML-ready record{xmlReadyRecords.length === 1 ? "" : "s"} available.
                     </>
-                  : "Waiting for validation-ready records."}
+                  : "No validation-ready records."}
               </p>
             </>
           ) : null}
           {activeTab === "testingSummary" ? (
             <>
-              <span className="status-label">Testing state</span>
-              <span className="status-pill ok">SQLite live</span>
+              <span className="status-label">{workspaceActivity} state</span>
+              <span className="status-pill ok">Application data</span>
               <p className="status-detail">
                 {testingSummaryWorkspaceSummary
-                  ? `${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count} successful testing event${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count === 1 ? "" : "s"} recorded in the current scope.`
-                  : "Testing summary loads the current SQLite-backed Playground state."}
+                  ? `${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count} successful POST/PATCH event${testingSummaryWorkspaceSummary.successful_device_post_count + testingSummaryWorkspaceSummary.successful_child_post_count + testingSummaryWorkspaceSummary.successful_patch_count === 1 ? "" : "s"} in scope.`
+                  : "Select a scope to review recorded outcomes."}
               </p>
             </>
           ) : null}
           {activeTab === "registrationState" ? (
             <>
               <span className="status-label">Registration state</span>
-              <span className="status-pill ok">SQLite live</span>
+              <span className="status-pill ok">Application data</span>
               <p className="status-detail">
                 <span className="status-detail-emphasis">{registrationStateRows.length}</span> parent group
-                {registrationStateRows.length === 1 ? "" : "s"} tracked in the current scope.
+                {registrationStateRows.length === 1 ? "" : "s"} in scope.
               </p>
             </>
           ) : null}
@@ -3347,14 +3393,32 @@ export function App() {
               <span className="status-label">Documentation set</span>
               <span className="status-pill ok">{documentationSections.length} sections available</span>
               <p className="status-detail">
-                Each section maps directly to a primary workflow tab in the application.
+                Select perspective to view
               </p>
             </>
           ) : null}
         </aside>
       </section>
 
+      <div className="workspace-content">
       {error ? <div className="panel error-banner">{error}</div> : null}
+      <div hidden={activeTab !== "sourceFiles"}>
+        {activeEnvironment === "dev" ? <ImportFlowWorkspace
+          enabled={activeTab === "sourceFiles"}
+          onViewHistory={() => setActiveTab("importHistory")}
+          onContextChange={setImportFlowContext}
+          onDatabaseImported={() => { void loadWorkbookImportMonitoring(); void loadCanonicalValidationBundle(true); void loadCanonicalReviewBundle(true); setRegistrationSummaryRefresh(value => value + 1); }}
+        /> : <section className="panel"><p>Import Management is currently available in Dev. Continue using the existing Production import workflow.</p></section>}
+      </div>
+      {activeTab === "importHistory" && <>
+        {activeEnvironment === "dev" ? <ImportFlowWorkspace enabled view="history" /> : <section className="panel"><p>Import History is currently available in Dev.</p></section>}
+      </>}
+      <div hidden={!isReporting}>
+        <ReportingWorkspace
+          enabled={isReporting}
+          environment={activeEnvironment}
+        />
+      </div>
       {activeTab === "workbooks" ? (
         <>
           <section className="submission-data-tabs" aria-label="Submission Data workspace">
@@ -3470,14 +3534,14 @@ export function App() {
               <p>Workbook rows merged into an existing device subject</p>
             </div>
             <div className="summary-card summary-card-kpi summary-card-kpi-post">
-              <span className="summary-label">POST</span>
-              <strong>{latestImportBatch ? postDeviceSubjectCount : "N/A"}</strong>
-              <p>Registration subjects</p>
+              <span className="summary-label">Duplicate Rows</span>
+              <strong>{latestImportBatch ? workbookDuplicateRowCount : "N/A"}</strong>
+              <p>Source duplicates requiring review</p>
             </div>
             <div className="summary-card summary-card-kpi summary-card-kpi-patch">
-              <span className="summary-label">PATCH</span>
-              <strong>{latestImportBatch ? patchDeviceSubjectCount : "N/A"}</strong>
-              <p>Update subjects</p>
+              <span className="summary-label">Identity Issues</span>
+              <strong>{latestImportBatch ? unresolvedIdentityRowCount : "N/A"}</strong>
+              <p>Unresolved source identities</p>
             </div>
           </section>
 
@@ -3565,7 +3629,7 @@ export function App() {
                 </div>
                 <div className="queue-chip">
                   <strong>{latestImportBatch ? testingStateTables.reduce((sum, table) => sum + table.row_count, 0) : "N/A"}</strong>
-                  <span>Testing Data Rows</span>
+                  <span>Registration &amp; Audit Rows</span>
                 </div>
               </div>
               {latestImportBatch ? (
@@ -3795,7 +3859,7 @@ export function App() {
                     {selectedValidationRecord
                       ? `${selectedValidationRecord.catalogue_number ?? "No catalogue"} · ${selectedValidationRecord.trade_name ?? "No trade name"}`
                       : selectedVariantSummary
-                        ? `${selectedVariantSummary.submission_operation ?? "N/A"} scope with ${selectedVariantSummary.total_records} rows, ${selectedVariantSummary.xml_ready_records} XML-ready, and ${selectedVariantSummary.xml_blocked_records} XML-blocked.`
+                        ? `${selectedVariantSummary.total_records} rows, ${selectedVariantSummary.xml_ready_records} XML-ready, and ${selectedVariantSummary.xml_blocked_records} XML-blocked.`
                         : selectedFamilySummary
                           ? `${selectedFamilySummary.variant_count} variants in scope, ${selectedFamilySummary.total_records} rows, ${selectedFamilySummary.xml_ready_records} XML-ready.`
                           : `${validationFamilySummaries.length} in-scope families and ${validationVariantSummaries.length} variants are currently represented.`}
@@ -3824,7 +3888,7 @@ export function App() {
                 </div>
                 <div className="device-subject-status-card">
                   <span className={`status-pill ${selectedValidationStatus.className}`}>
-                    {selectedValidationRecord?.submission_operation ?? selectedVariantSummary?.submission_operation ?? "Scope"}
+                    Source data
                   </span>
                 </div>
               </div>
@@ -3947,7 +4011,7 @@ export function App() {
                               <th>Source sheet</th>
                               <th>Basic UDI variant</th>
                               <th>Basic UDI-DI</th>
-                              <th>Registration mode</th>
+                              <th>Historical source label (unused)</th>
                               <th>Review status</th>
                               <th>Review notes</th>
                             </tr>
@@ -4386,7 +4450,7 @@ export function App() {
                       <h3>Registered Anchor</h3>
                     </div>
                     <span className="status-pill ok compact">
-                      {selectedTestingAnchor?.eudamed_status ?? "Loading anchor"}
+                      {activeRegistrationOperation ? `${activeRegistrationOperation} · ${selectedTestingAnchor?.eudamed_status ?? "Active-environment registration assessed"}` : "Checking active-environment registration"}
                     </span>
                   </div>
                   {selectedTestingAnchor ? (
@@ -4856,11 +4920,17 @@ export function App() {
                 ) : xmlMode === "bulkUdidiPost" || xmlMode === "bulkPatch" || xmlMode === "bulkMarketInfo" ? (
                   xmlMode === "bulkPatch" ? (
                     <BulkPatchWorkspace
+                      reviewScopeLabel={patchReviewTarget ? `${patchReviewTarget.productVariant} · ${patchReviewTarget.issuer}: ${patchReviewTarget.basicUdiDi}` : null}
+                      reviewScopeMatches={patchReviewMatches}
+                      onClearReviewScope={() => { setPatchReviewTarget(null); setSelectedBulkPatchCatalogueNumbers([]); setXmlBulkPatchPreview(null); }}
+                      selectedEntries={selectedBulkPatchEntries}
+                      preview={xmlBulkPatchPreview}
                       familyVariantLabel={`${selectedXmlFamilyLabel} / ${selectedXmlVariantLabel}`}
                       isRefreshing={isLoadingXmlOperationAssessment}
                       displayedBulkPatchParentOptions={displayedBulkPatchParentOptions}
                       selectedBulkPatchParentGroup={selectedBulkPatchParentGroup}
                       onSelectParent={(basicUdiDi) => {
+                        setPatchReviewTarget(null);
                         setSelectedBulkPatchBasicUdiDi(basicUdiDi);
                         setSelectedXmlChunkSequence(1);
                         setXmlBulkPatchPreview(null);
@@ -5099,6 +5169,21 @@ export function App() {
           )
         ) : (
           <RegistrationStateWorkspace
+            onReviewPatch={scope => {
+              if (!activeEnvironment) return;
+              setPatchReviewTarget({ ...scope, environment: activeEnvironment });
+              setSelectedXmlFamily(scope.productFamily);
+              setSelectedXmlVariant(scope.productVariant);
+              setSelectedBulkPatchBasicUdiDi(scope.basicUdiDi);
+              setBulkPatchScopeMode("selected_catalogue_numbers");
+              setSelectedBulkPatchCatalogueNumbers([]);
+              setBulkPatchImportText("");
+              setSelectedXmlChunkSequence(1);
+              setXmlBulkPatchPreview(null);
+              setXmlOperationAssessment(null);
+              setXmlMode("bulkPatch");
+              setActiveTab("xml");
+            }}
             registrationSummary={registrationSummary}
             isLoadingRegistrationSummary={isLoadingRegistrationSummary}
             registrationSummaryError={registrationSummaryError}
@@ -5191,6 +5276,7 @@ export function App() {
           </section>
         </section>
       ) : null}
+      </div>
     </main>
   );
 }

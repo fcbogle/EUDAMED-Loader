@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 11 October 2026. Implemented capabilities are separated from approved next
+Updated 1 November 2026. Implemented capabilities are separated from approved next
 work and deferred features. This roadmap does not describe future features as
 already available.
 
@@ -13,6 +13,30 @@ already available.
 - Explicit Dev/Prod configuration and environment labels.
 - Standalone Production preparation of To Register, Registered and Summary tabs,
   with a companion source/hash audit and exception reporting.
+
+## Implemented — Dev Import Data
+
+The feature branch has one resumable Import Data page with three primary actions:
+Review source data, Create Import Workbook and Import Batch Data. Sources and
+progress save automatically; workbook download is optional. Template duplicates,
+unresolved catalogue/identity collisions, unusable required files and incomplete
+or wrong-environment XML sets block. Ordinary differences and optional information
+warn. Red/amber/green labelled pills show the result.
+
+The backend retains source revisions, dated batches, workbook/audit links and
+import evidence. Confirmation retains existing identities/accepted history and
+requires a verified backup and unchanged reviewed state. Old parallel UI/endpoints
+were removed. Legacy raw import remains separately available. See
+[Import Data in Dev](../../../../docs/source-batch-receipt.md).
+
+Reporting now focuses on the [Model Reconciliation Summary](../../../../docs/ra-report-first-iteration.md):
+one row per model, matching/exception counts, green/amber/neutral status and summary Excel.
+No device lists or drill-downs are presented in this first iteration. The comparison
+basis is current stored canonical device values, without accepted-state fallback.
+
+The [Submission Activity design](../../../../docs/submission-activity-report.md)
+is archived and no longer offered under Reporting. Further reports are deferred
+until the model summary is agreed.
 
 ## Implemented — Production workbook importer
 
@@ -45,7 +69,7 @@ for the implemented contract. Shared Registration State / Parents & Children tab
 
 The owner requested a dedicated UI for importing new or updated device Template
 workbooks, the applicable Basic UDI reference, and EUDAMED-generated export XMLs.
-Design and implementation can wait until after the initial Production importer.
+A Dev implementation now exists as described above; Production integration and rollout remain separately reviewed work.
 
 Planned scope:
 
@@ -57,9 +81,7 @@ Planned scope:
 - Maintain the same current workbook/audit pair for subsequent device imports.
 - Keep workbook preparation separate from database import and its confirmation.
 
-UI layout, file handling, exception-resolution controls and regeneration details
-will be designed with the owner later. This feature is deferred and does not add
-EUDAMED upload/M2M transport.
+The remaining Production-specific layout, storage, exception handling and release controls require owner review. Reuse the tested Dev/preparation boundaries where appropriate. Production rollout is deferred and does not add EUDAMED upload/M2M transport.
 
 ## Further workflow and data hardening
 

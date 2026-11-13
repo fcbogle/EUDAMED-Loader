@@ -1,6 +1,1743 @@
 # Session Handoff
 
-Updated October 24, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated November 13, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+
+
+## November 13 — Feature branch merged into main; Production files protected
+
+Merged feature/import-management-reporting into main after a separate-checkout
+review. Main's Next 300 selection controls were retained. Pre-existing uncommitted
+registration-card changes are preserved separately as local changes, with their
+original files and a recovery stash retained. No push or deployment was performed.
+
+Validation: 532 backend tests, 163 frontend tests and frontend build
+passed for the integrated working code. Tests wrote only temporary databases.
+All 107 protected Production/profile/schema files retain their original SHA-256
+fingerprints. Production configuration-only checks before/after select the same
+application.sqlite3 database and official schema 3.0.30, without opening SQLite.
+Production was not started or restarted. The merge adds no startup schema migration.
+
+This verifies database/configuration preservation during the merge. Shared
+registration/XML/UI code changes will take effect when Production is later run;
+this is not a guarantee of identical future application behaviour or formal
+Production release validation. Local audit/recovery evidence is retained under
+data/testing/backups/merge-main-20261113-z1mw-vmi.
+
+## November 13 — Merge-readiness packaging and test isolation
+
+A separate temporary checkout exposed three portability issues before merging:
+Git's newline conversion changed the official Dev schema bytes; the test database
+guard allowed repository data when the repository itself was under /tmp; and one
+manufacturer-override test constructed its service before setting the override.
+
+The official Dev profile now has an explicit Git text-conversion exemption so
+fresh checkouts preserve the existing archive/manifest hashes. The test guard
+rejects repository data paths even inside temporary checkouts, and the override
+test constructs its service after applying the profile. No application database,
+Production configuration or Production schema bytes are changed by these fixes.
+The main merge remains subject to the isolated integration checks documented in
+the merge audit; no Production services were started for those checks.
+
+## November 13 — Reporting narrowed to Model Reconciliation Summary
+
+Owner requested one model-level summary before any further reporting work or
+branch merge. Reporting navigation now contains only Model Reconciliation Summary.
+Submission Activity is removed from navigation/rendering; its code, API and design
+notes remain archived without deleting audit evidence. Earlier comparison aliases
+resolve to the summary.
+
+The summary separates **registration coverage** from **registered data exceptions**.
+Table columns: Model, Database devices, Compared, Matching, Data exceptions,
+Not in extract and Status. EUDAMED-only and unresolved-identity columns appear
+when populated. Matching + Data exceptions = Compared. Compared + Not in extract
++ Unresolved identity = Database devices. Devices awaiting registration/absent
+from the extract are coverage information and never turn a model amber by themselves.
+Green means Registered data matches; amber means Data exceptions; models with no
+compared devices are neutral (No devices compared). Registered EUDAMED-only records
+remain highlighted separately because their application record is missing.
+
+Exceptions count affected compared devices once. No device lists or drill-downs
+are present. Summary-only responses omit per-device details/grouped findings,
+and Excel contains Context and Models only, including the same coverage/count/status
+rules. Comparison scope/source notes are collapsed under Comparison details.
+
+Owner confirmed the comparison basis: **current stored device data versus the
+EUDAMED extract**. The active summary now reads stored canonical fields and
+structured items, without accepted-state/history or source-workbook fallback.
+A matching device needs no submission history. Registration transaction versions
+and dates are excluded because they are not current canonical device attributes.
+Missing/invalid values and unsupported projections remain amber. The frontend
+rejects a result labelled with a different comparison basis.
+
+A read-only report projection maps existing fields and structured items using the
+current country/language/code conventions, without changing canonical storage or
+XML generation. Explicit optional nulls/empty lists can match; missing fields are
+unknown. Boolean/quantity parsing preserves false/zero and the schema's `-1` reuse
+sentinel, rather than supplying defaults. The earlier detailed accepted-state API
+remains compatibility code outside the active reporting UI. No branch merge or
+database update was performed.
+
+The earlier accepted-state checkpoint (241 matching, 9,123 absent) is superseded
+by the current-data verification below.
+
+Read-only verification of import #5: **9,364 devices across 17 models**;
+**241 compared: 109 matching and 132 with data exceptions**. The **9,123 absent
+from the extract** are registration coverage, excluded from the exception count.
+There are zero unable-to-compare and zero EUDAMED-only identities. The earlier
+all-models-amber statement is superseded by the registration-coverage rule. Attribute findings overlap: trade name 109, market countries 42,
+storage conditions 27, critical warnings 18. During verification, the new adapter's
+initial nonnegative-only integer check was corrected to permit the official
+schema's `-1` reuse sentinel; regression coverage now verifies this. The initial
+109 unable count is superseded. Dev database hash is unchanged; no device rows
+are returned by the summary.
+
+After applying the coverage rule, verified model statuses are **3 green, 8 amber
+and 6 neutral**. Compared remains 241; data exceptions are 132 rather than 9,255.
+The 9,123 absent devices remain visible as Not in extract. Counts balance in the
+UI/API and summary Excel. Regression tests verify both a matching model containing
+additional devices awaiting registration and a wholly unrepresented model with
+neutral status. Validation for this adjustment: 42 reporting backend tests, all
+151 frontend tests and frontend build passed (existing bundle-size advisory).
+Validation: 78 targeted backend tests, all 150 frontend tests and the frontend
+build passed. Tests verify current edits despite matching accepted history,
+matching without submission history, no accepted fallback for missing fields,
+country/placement and structured-item exceptions, valid reuse sentinel handling,
+summary-only exports and rejection of the wrong comparison basis in the UI.
+
+## November 13 — Completed imports have a receipt and read-only history
+
+Owner approved separating completed imports from active source cleanup.
+Import Data now displays only the completed receipt (number/date, importer,
+new/retained counts), plus Start new import and View import history. The progress
+steps, old source-review status/pills and downloads are hidden from that receipt.
+The hero copy also reflects completion rather than asking the user to continue.
+
+Import History is implemented for Dev using existing session/read/download APIs.
+It selects completed imports and shows the receipt, source-file inventory, saved
+review and optional workbook/full-findings downloads. Historical findings are
+explicitly labelled as the review at import; there are no editing, review or
+import controls. Current database quality/XML blockers remain in Canonical
+Validation. Browsing history uses separate selection memory and preserves the
+ongoing Import Data draft.
+
+The sessions list now derives completion from committed SQLite receipts, rather
+than relying on an older saved draft status. No import is rerun or changed.
+Read-only check: import #5 is complete, with 941 new and 8,423 retained devices,
+13 retained source files and its original review. Dev database hash unchanged.
+Validation: 52 targeted backend tests, all 149 frontend tests and the frontend
+build passed. The existing bundle-size advisory remains.
+
+## November 13 — Current import visible in the application banner
+
+At the owner's request, the banner now shows **Current data import** immediately
+to the right of Authorised representative SRN. It uses the same committed database
+import summary as Submission Data: import number and date (using the UTC import
+date), together on one line (e.g. **#5 · 12 Nov 2026**). At the owner's request,
+the batch label and time are omitted from the banner.
+Opening an uncommitted import for review does not change it.
+It refreshes after a successful import, and distinguishes loading, unavailable
+and no recorded import. No database or import workflow changes were required.
+Validation: all 144 frontend tests and the production build passed (existing
+bundle-size advisory remains).
+
+## November 12 — Questioned market countries block import and XML generation
+
+Owner direction: reject records when a country contains `?`. Implemented in Dev
+as review policy `minimal-import-v3-confirmed-countries`: Template, BasicUDI and
+extract country values containing `?` block source review and new import. Confirm
+the country before correcting the source; no automatic stripping or guessing.
+Prepared artifacts include the review policy in their input token, so older
+pending approvals/artifacts cannot authorise a new import without current review.
+
+Already imported records remain stored. Canonical readiness reads overlay a
+country blocker without changing persisted data, and device/Market Info XML
+projection independently rejects questioned countries. Committed import receipts
+remain completed when a later review policy is introduced.
+
+Read-only verification of import_batch 5: **9,364 records**, **9,244 XML-ready**
+and **120 XML-blocked** (**MAX Liners 107, MAX Sleeves 13**). All 120 are rejected
+by XML projection; two BasicUDI source rows carry the questioned values. Completed
+import remains complete. Dev/Production database hashes and protected main-checkout
+files are unchanged. Blank Elan MAX country lists (820 records) are a separate
+unresolved source issue; this narrow rule does not newly block blanks.
+
+Validation: 511 backend tests and 140 frontend tests passed; frontend build passed
+with its existing bundle-size advisory. Regression coverage includes questioned
+Template/BasicUDI/XML values, unchanged source evidence, XML projection, read-only
+readiness overlays and completed imports surviving later policy versions.
+
+This supersedes the earlier checkpoint's stored readiness flags and prior treatment
+of tentative countries as warnings. The historical audit below remains valid as
+an observation of the state before this rule.
+
+## November 12 — Owner completed fresh Dev import; read-only verification
+
+The owner completed batch **2026-11-12-001**, artifact
+bc99a4259ff14cd3843158b0402d276f, committed as SQLite import_batch **5** at
+18:40:39 UTC. The saved draft's older status string is not completion evidence;
+the committed database receipt and matching imports JSON establish completion.
+No import was repeated or modified during this verification.
+
+Confirmed **941 new devices**: Echelon 1, Elan MAX 820, MAX Liners 107,
+MAX Sleeves 13. **8,423 existing devices retained** (8,421 covered by current
+inputs plus two omitted Elan devices), giving **9,364 current device entries**.
+The omitted entries ELAN28L5S and ELAN28R6S remain present. There were no skips,
+duplicate issuer-qualified identities, catalogue collisions or broken current
+source/canonical/import links. Current snapshot/source totals balance at 9,364.
+The corrected EC24R1S and newly added EC27LN7S are separate device identities;
+extract-only EVAC22L1S remains retained.
+
+Retained source set has **7 included Templates, 1 BasicUDI reference and 5 XMLs**.
+All copied sources match their manifest hashes and the inspected originals:
+the supplied ZIP's seven in-scope workbooks, October 9 BasicUDI reference and
+five November 12 Playground extracts. Accessories was not selected in this
+batch. Workbook/audit hashes and the pre-import backup hash match their receipts.
+Dev and backup SQLite integrity checks are ok; Dev foreign-key violations are zero.
+
+Compared with the verified pre-import backup: no prior device was deleted or
+changed apart from its current source pointer/update timestamp. Existing canonical
+values, versions and fields, historical source rows/workbooks, testing subjects,
+events/batches, generated packages, reviewed POST baselines and identity issues
+are preserved. Only expected source/import lineage pointers were advanced. The
+941 new records add 60,224 canonical fields. No existing accepted-state snapshots
+were updated and no new registered snapshots were added; the 241 extracted
+devices were already retained. Production's file fingerprint is unchanged;
+no Production SQLite connection was opened.
+
+The actual Stored Device Data Comparison generator reads the new latest batch:
+**17 models, 9,364 entries, 241 exact supported-field matches, zero differences,
+zero unable, 9,123 absent from this extract, zero extract-only identities outside
+the database**. Absence from the extract is not proof of non-registration.
+Report generation left the Dev database unchanged.
+
+### Readiness issue found — do not confuse import success with XML readiness
+
+All 941 new records currently carry complete/XML-ready metadata, but in-memory
+projection/official 3.0.36.1 validation found:
+
+- **107 MAX Liners + 13 MAX Sleeves:** reference market country France? renders
+  as FRANCE? and fails XSD country enumeration validation (120 records).
+- **820 Elan MAX:** no market-country list. XML is structurally XSD-valid because
+  market information can be omitted, but records are ON_THE_MARKET and the source
+  market data still needs confirmation before using their submission XML.
+- The new Echelon record passes projection/XSD with market data present.
+
+This confirms the previously recorded BasicUDI market-data gaps and exposes an
+optimistic readiness flag. Next: agree confirmed market countries with the owner
+and tighten readiness/feedback for missing/tentative country data. Do not strip
+question marks, infer countries or present those 940 records as submission-ready.
+No source value, database status or validation rule was changed in this check.
+No submission package, live upload or M2M activity was created.
+
+Verification report (read-only results, model counts and before/after preservation
+checks) is retained under the original checkout's batch:
+
+```text
+data/dev/import-batches/2026-11-12-001/checks/post-import-verification-20261112T194046Z.json
+```
+
+This checkpoint supersedes earlier statements that the fresh import is pending.
+The new input sources and reporting are usable; source-country clarification and
+readiness correction remain separate follow-up work. No regression suite was
+rerun for this database/source audit; verification used the actual completed Dev
+import, its backup, immutable sources and pure in-memory XML/report readers.
+
+## November 12 — Explain extract-only devices and recognise applied corrections
+
+The owner requested clearer handling of the two remaining warning cases, noting
+that it is impractical to anticipate every source error. The review now uses a
+specific verified rule for each green case, while uncertain differences remain
+warnings/showstoppers. No automatic source repair or database correction is added.
+
+Registered extract-only devices have a dedicated amber **Registered devices
+missing from supplied Templates** group. The record shows model/catalogue,
+Device UDI-DI, filename and device position within the XML, and asks whether the
+device should be included in current Templates. Source membership alone does
+not establish deletion or non-registration. Existing severity remains a warning.
+
+A historical catalogue change gets a separate green **Source correction already
+applied** group only when the incoming catalogue agrees with the device, current
+source-row catalogue projection, canonical JSON/root/field and persisted catalogue
+field for the same issuer-qualified device and model. Missing/corrupt current
+field evidence, inconsistent projections or identity/catalogue ambiguity prevent
+green classification. This compares current proposed device details; it does not
+claim an EUDAMED update or rewrite accepted evidence. Full historical before/after
+values remain in the review and Excel alongside the explanatory text.
+
+Different information groups open their device examples independently. Their
+model/device counts are scoped to each reason and must not be added to infer
+unique devices across groups. The previously verified Basic UDI-DI information
+classification is retained. Generic source differences now instruct review of
+previous/incoming values rather than "Review if useful". The documented review
+vocabulary includes the two new reason groups; approval/identity/import guards
+remain unchanged.
+
+Focused backend checks passed (70 tests before the final corrupt-evidence edge
+case); all 140 frontend tests and the TypeScript/Vite build passed with the
+existing bundle-size advisory. Full backend suite: **496 passed in 241.80
+seconds**, with the two existing FastAPI deprecation warnings. Database/main
+file fingerprints remain unchanged after all checks.
+
+The refreshed current saved review now has one amber extract-only device
+(Echelon VAC EVAC22L1S), 8,420 green verified parent-link additions and one green
+applied catalogue correction (EC24R1S). There are no showstoppers; can_create
+remains true. The re-review did not change the Dev database or create a batch.
+Protected Dev/Production database and original/main file hashes are unchanged.
+Refresh/reopen the same saved import to see the explanatory groups.
+
+## November 12 — Green information for verified Template additions
+
+The owner authorised separating benign additions from warnings and using a green
+Information pill. A newly explicit Template Basic UDI-DI is informational only
+when the previous source omitted it and its value agrees with the stored device
+parent, canonical Basic UDI-DI, canonical issuer-qualified parent identifier and
+incoming proposed parent/issuer. Existing identity/lineage conflicts suppress
+this informational classification. Other fields and unverified/changed parent
+values retain their existing warning/blocking handling. No device or accepted
+state is updated by this classification.
+
+The information group shows unique issuer-qualified affected-device counts and
+model summaries. Device examples are not rendered until explicitly opened;
+full findings remain available through the existing optional Excel download.
+Excel adds family/model columns after the existing columns and preserves raw
+before/after values with info severity. The assessment retains the complete
+underlying differences for audit; review presentation splits verified fields
+from any remaining warning fields on the same device.
+
+Information-only reviews show Ready to continue — additional source information
+with green Information; real warnings keep the overall review amber, and
+showstoppers still prevent continuation. The bounded vocabulary now includes
+nine categories (the existing eight plus Information). Import confirmation,
+identity guards, accepted-state retention and current policy approval boundaries
+are unchanged. No Production code/configuration or database writes are required.
+
+Refreshed the owner's current saved review without changing SQLite or creating
+a batch. It now has **8,420 distinct devices across 14 models** in green
+Information and **two warning records**, with no showstoppers. The remaining
+warnings are the extract-only Echelon VAC device EVAC22L1S and the recorded
+old-to-new source catalogue correction EC27LN7S to EC24R1S. The latter preserves
+the historical source difference even though the current Dev projection has
+already been corrected. The information count is not a registration count.
+
+Focused backend regressions passed (43 tests), and all 138 frontend tests plus
+the TypeScript/Vite build passed with the existing bundle-size advisory.
+Full backend suite: **476 passed in 242.28 seconds**, with the two
+existing FastAPI deprecation warnings. Protected database/main-checkout
+fingerprints remain unchanged after all tests and the saved-source re-review. The previous one-off Dev correction is recorded
+separately below. Refresh/reopen the same saved import to see the new grouping.
+
+## November 12 — Clarify missing source-field wording
+
+The owner requested clearer wording for review differences such as Basic UDI-DI
+not being an explicit column value in an older Template. Missing before/after
+values now display **Not present in previous source** and **Not present in new
+source**, respectively. Actual recorded values remain displayed. This avoids
+implying that the operational database lacks an already-derived parent link.
+This is a presentation-only change; no database, review severity, comparison,
+import rule or source data changed.
+
+Verification: all six Import Flow UI tests and the TypeScript/Vite build passed
+with the existing bundle-size advisory.
+
+## November 12 — Owner-approved Dev Echelon catalogue correction
+
+The owner encountered one identity showstopper during fresh source review.
+Read-only investigation of the saved sources confirmed the fresh Echelon file
+was correct: GS1 05050649030901 is EC24R1S (row 86), while 05050649032462
+is EC27LN7S (row 242). The conflict came from the retained Dev device 81,
+which still assigned EC27LN7S to 05050649030901. The keep-existing-values
+import policy combined stored and incoming catalogue ownership in this check.
+Source review therefore reported a database conflict as if the source needed
+correction. Its wording/grouping has not been changed in this operation.
+
+The owner explicitly instructed "yes make the change to the database".
+Applied a one-off audited **Dev-only** correction from EC27LN7S to EC24R1S
+for device_subject 81 / GS1 05050649030901. Updated the current device/source-row
+catalogue projections, canonical JSON and catalogue field value consistently;
+advanced canonical version 1 to 2. Stable subject ID/key, Device UDI-DI, Basic
+UDI-DI, source/import links and original raw source values were preserved.
+No linked testing subject or reviewed POST baseline existed for this device;
+no accepted state, response evidence or generated package was changed.
+Four historical identifier-conflict findings for these exact identities were
+marked resolved with a correction reference; their original details remain.
+A resolved source_catalogue_correction journal entry retains before/after state,
+source evidence and the owner's authorisation context (not authenticated identity).
+The ordinary importer remains additive; no general correction workflow or rule
+bypass was implemented.
+
+Before writing, rehearsed the correction on isolated in-memory tables, including
+wrong-identity rejection. Created a SQLite backup and verified integrity, then
+applied the correction under BEGIN IMMEDIATE with exact preconditions and
+concurrent-change checks. Foreign-key checks did not worsen, integrity remained
+ok, and no table counts changed except one appended correction journal entry.
+The backup, audit JSON, exact corrected-source workbook copy and execution script
+are retained together under the original checkout's:
+
+```text
+data/testing/backups/catalogue-correction-20261112T172720Z-bdb4a636/
+```
+
+The backup is before.sqlite3; audit.json records hashes, before/after values,
+resolved issue IDs and source lineage. Production's file fingerprint was confirmed
+unchanged across the operation; no Production SQLite connection was opened.
+
+Reran the current saved source review (c2acdfc33cbe4c0a825c3c86968ce915,
+revision 5da0d252d5094ef7ae1065f20f967a58). Result is **Ready to continue —
+warnings found**, can_create=true, no blocking categories. The 8,421 recorded
+source/database difference findings remain warnings; this count is not a count
+of new or registered devices. The re-review itself left the corrected Dev
+database fingerprint unchanged. No dated batch was created or new device imported.
+
+Next: owner refreshes/reopens that same saved import and chooses Create Import
+Workbook, then reviews the import summary and confirmation before Import Batch
+Data. Do not start another source selection solely to clear this resolved finding.
+Legacy source files and earlier review evidence remain unchanged; future source
+work should use the corrected fresh files rather than reimporting stale workbooks.
+
+## November 12 — Dev 3.0.36.1 integration and regression verification
+
+The owner authorised schema-impact review, Dev integration and automated checks
+(steps 1–3), before any new data import. Dev defaults, the example profile and
+ignored local development-worktree `.env.dev` now select the official
+`dev-3.0.36.1-official` package and message version 3.0.36.1. Production remains
+on its existing 3.0.30 settings/package; the original main checkout is unchanged.
+The environment API/banner labels the new Dev package Official package.
+
+Core Basic UDI, UDI-DI, common device and Market Info constraints are unchanged
+apart from documentation/formatting. Shared reuse-count limits and general
+country lists changed; existing offered market-country codes remain valid.
+The message envelope fixes 3.0.36.1, with additional unrelated payload choices
+and optional search fields. Existing mappings, flow separation, accepted-state
+lineage and manual submission workflow remain unchanged. See
+[upgrade findings](playground-schema-upgrade-2026-11-12.md).
+
+Receipt/draft checks, batch inspection and Playground reconciliation use the
+selected schema version; retained reporting already checks that active setting.
+Unsupported/old/missing versions and wrong manufacturers remain rejected.
+Source-check tokens now include message schema version. Prior source bytes and
+accepted evidence remain historical; old 3.0.32 extracts do not qualify for
+current-version source review/report selection. Re-review with the fresh whole
+XML set; do not rewrite old XML versions or reuse previous review approval.
+
+Read-only local Dev `--check-config` reports 3.0.36.1 and compiles the official
+package without services or SQLite access. All five fresh extracts pass source
+admission and official XSD validation; 241 accepted snapshots project without
+unsupported-field notes. Synthetic checks cover single/bulk DEVICE.POST,
+UDI_DI.POST, UDI_DI.PATCH and MARKET_INFO.PUT in both official profiles, version
+rejection, provenance hashes, country support and reuse-count limits. New working
+inspection/upgrade documents are available in embedded Help.
+
+Verification: full backend suite **460 passed in 241.27 seconds**, with the two
+existing FastAPI deprecation warnings. All **136 frontend tests** and the
+TypeScript/Vite build passed, retaining the existing bundle-size advisory.
+Focused integration checks passed (110 tests), and the 30 new schema regressions
+passed before the full run. All 143 protected file hashes (including both
+operational database files, original/main configuration/source checkpoints and
+existing schema profiles) remain unchanged after testing. Original supplied
+XMLs and the Template ZIP also retain their inspection hashes.
+No application service, manual Playground submission, operational import or
+migration was started. Next after checks: owner restarts Dev, confirms the banner,
+and begins the fresh source review; database conflicts still require assessment.
+
+## November 12 — Official 3.0.36.1 bundle stored alongside existing profiles
+
+At the owner's request, retained the official package permanently within the
+**development worktree**: `data/schema_profiles/dev-3.0.36.1-official/` contains
+69 XSD files and the bundled Dossier sample XML, with original file bytes.
+The original download is in
+`data/schema_profiles/archives/eudamed-playground-3.0.36.1-xsd.zip`.
+Schema-profile README and manifest record provenance, SHA-256 hashes and
+validation. This supersedes the earlier temporary-only storage checkpoint.
+
+Verified the stored Message.xsd compiles and all five fresh extracts validate
+with zero errors. All 136 existing Dev/Production profile files retain their
+prior hashes. No active configuration, application rules, database or original
+main-checkout file changed. The new profile is stored but not activated;
+controlled Dev integration and outgoing workflow checks are still next.
+
+## November 12 — Official Playground 3.0.36.1 schemas downloaded and verified
+
+Following the owner's portal notice and request to obtain/use the XSD files,
+downloaded the official package from the Playground help files directory.
+Archive SHA-256 is caeb50507b578078853ebb34430e1e075e43381f054e14c7ee6692166be4cf43.
+The package contains 69 XSD files; its MessageType fixes version 3.0.36.1.
+`service/Message.xsd` compiled successfully, and all five fresh Playground
+extracts passed full XSD validation with zero errors. Files are retained as
+temporary inspection artifacts under `/private/tmp/eudamed-playground-3.0.36.1-xsd*`;
+see [XML inspection](playground-xml-review-2026-11-12.md) for provenance/limits.
+
+This confirms the package is obtainable and usable, and supersedes the earlier
+inspection's lack of full XSD validation for these five extracts. It does not
+remove the application's current admission blocker: no active schema profile,
+configuration, import rules or outgoing generation behavior was changed. Next:
+controlled Dev integration and outgoing POST/PATCH/Market Info verification.
+Production and both operational databases remain untouched. No application
+services or full test suites were run for this package-validation step.
+
+## November 12 — Fresh Playground XML inspected; schema compatibility blocks import
+
+The owner supplied Downloads files APP-DTX-000123104.xml, 000123105.xml,
+000123107.xml, 000123108.xml and 000123109.xml (each full filename starts
+APP-DTX-). They declare pages 0–4 of 5, containing 50/50/50/50/41 devices:
+241 unique device identities across 11 parents, manufacturer UK-MF-000033261.
+All observed parent/device/Market Info states are REGISTERED, with usable
+versions and consistent parent links. Creation dates span November 12,
+15:55:41.274–15:56:50.613 UTC. No duplicate identities or missing declared pages.
+Filename gaps are not page gaps.
+
+All parents match the October 9 BasicUDI reference. 240 extract identities match
+the fresh active Templates, with matching parents/catalogues. One extract-only
+Echelon VAC device is GS1 05050649062025, catalogue EVAC22L1S. The 9,121 active
+Template identities absent from this extract are not declared unregistered;
+business search-filter coverage is unknown. Full attribute comparison and
+existing database assessment remain outstanding.
+
+**Blocker:** all five declare schema 3.0.36.1. Current Dev source admission
+requires 3.0.32; retained report selection also checks the active version.
+The source parser reads the structure/pages/identities without missing metadata,
+but the real admission guard rejects the version. Readability does not establish
+full compatibility. Next: agree a controlled incoming-extract compatibility
+assessment before modifying version/rule strategy. Outgoing XML generation and
+Production schema must not be changed incidentally. Do not relabel source XMLs
+or bypass the guard to proceed.
+
+See [XML inspection](playground-xml-review-2026-11-12.md) for hashes, dates,
+model counts, coverage and limits. No operational database was opened, no batch
+was created/imported, no services started, and no application rules/configuration
+were changed. Verification used read-only originals and disposable copies with
+the existing source parser and admission validator. Only development inspection
+documentation was added/updated; no full test suite was needed for this review.
+
+## November 12 — Fresh Template inventory and BasicUDI coverage
+
+The owner supplied `/Users/frankbogle/Downloads/OneDrive_1_11-12-2026.zip`
+for inspection before restarting Dev Data Import. Eight expected Template groups
+contain 9,681 populated rows and 9,679 distinct device identities. All rows have
+explicit Basic UDI-DIs resolving to the October 9 retained reference. Existing
+application source parsers independently confirmed these counts and parent links.
+See [source inspection](template-source-review-2026-11-12.md) for inventory,
+source hashes, worksheet references and limits.
+
+The latest dated reference located is the original checkout's
+`data/prod/template/BasicUDIs 9th October.xlsx` (50 parents). Earlier Dev reference
+copies contain 47 parents; all common entries have unchanged field values.
+October 9 adds Elan MAX, MAX Liners and MAX Sleeves, covering 940 fresh Template
+rows absent from the old reference. Use a retained copy of the October 9 reference
+as input to the new Dev source review; no configuration/reference replacement
+has been performed. Its market fields are blank for Elan MAX and `France?` for
+MAX Liners/Sleeves. These remain warnings under current Dev policy, with XML
+readiness separate. Do not infer countries. Optional placeholder URLs are handled
+by existing omission/audit logic.
+
+The supplied Echelon source fixes the previous catalogue collision: UDI
+05050649030901 is EC24R1S (row 86), while 05050649032462 remains EC27LN7S
+(row 242). This is a source correction, not a database correction. Existing Dev
+identity/catalogue conflicts still require normal assessment because the importer
+retains existing values.
+
+Current Accessories/Footspares exclusion leaves 9,361 unique devices across 17
+models in seven workbooks, without duplicate device identifiers. If Accessories
+is included, EP-FSR and EP-MSR each repeat an Epirus Device UDI-DI under a different
+Basic UDI-DI (Socket Adaptors versus Epirus). Resolve those parent assignments
+before broadening scope; exclusions and rules are unchanged.
+
+Next: owner supplies all pages of one fresh Playground XML export; run normal
+Dev source review with the fresh Templates and October 9 reference, assess all
+source/database findings, then prepare and explicitly confirm the new import.
+The unrelated single-device 109408 workbook is excluded from this source set.
+No import, application service, database access/write, main source edit or workflow
+change was made. Only development inspection documentation was added/updated;
+parsing used temporary copies removed on completion. Full tests were not rerun
+for this source-only inspection.
+
+## November 8 — Submission Activity report by model
+
+Implemented the owner-requested **Reporting → Submission Activity** report in Dev.
+One hyperlink per model opens its latest and previous activity, including the same
+latest record shown in the summary. The full model list remains visible; there is
+no separate model selector/button. Latest recorded activity/type, latest ZIP download
+and latest EUDAMED response timestamps are separate, displayed in UTC. Unusable or
+missing timestamps remain unordered history, not inferred upload dates.
+
+ZIP records and message batches remain separate because the database does not
+consistently link packages to batches. No joining by nearby model/date/filename.
+Batch outcomes are calculated per entity, preserving pending/partial/error/conflict
+states and model-specific counts for mixed-model batches. Response-only evidence is
+explicitly unlinked; export baseline imports are not counted as upload activity.
+
+Record evidence exposes filenames/hashes, message/correlation and available
+transaction/submission references, errors, and read-only retained response XML
+downloads. Entity outcomes stay hidden until requested and are paged. Full-report
+Excel has separate summary/history/response/notes sheets; entity detail is opt-in.
+Portal upload time/uploader, ZIP generator, Success XML importer and separate XML
+application import time remain Not recorded. No attribution is invented.
+
+See [Submission Activity instructions](submission-activity-report.md). Generation
+uses a read-only database snapshot and does not migrate/import/update accepted state.
+Dev-only, browser review pending; no Production services, main source changes,
+authentication, M2M, commit or push. Registration Evidence remains a separate planned
+report; Stored Device Data Comparison is unchanged.
+
+Verification: full backend suite **439 passed in 250.07 seconds** with its two
+existing FastAPI deprecation warnings; **8 focused activity regressions passed**.
+All **136 frontend tests** and the TypeScript/Vite build passed with the existing
+bundle-size advisory. Tests cover latest/history consistency, repeated ZIP names,
+pending/partial/conflicting outcomes, cross-model batch scoping, unlinked/duplicate
+responses, unresolved dates, optional literal-text entity Excel, read-only response
+downloads, model hyperlinks, hidden entity lists and obsolete UI requests. These are
+synthetic automated checks; owner browser verification remains pending.
+
+## November 8 — Model names link directly to report detail
+
+Owner-requested UI refinement: the model summary now renders each model name as
+a hyperlink to its scoped detail section. Removed the separate model dropdown and
+model buttons. The complete model summary/totals remain visible while findings
+and coverage follow the selected model. A link restores all-model detail. Individual
+device rows remain opt-in; changing models clears their open state and pagination.
+
+Verification: **131 frontend tests passed** and TypeScript/Vite build passed with
+the existing bundle-size advisory. This frontend/docs-only change did not start
+services, open operational databases or change backend/reporting rules. Browser
+review is pending; no commit or push.
+
+## November 8 — Reporting upload removed; automatic retained-extract selection
+
+The owner clarified that **all newer extracts come through Data Import**, not
+Reporting. Implemented removal of the extract selector/upload from Stored Device
+Data Comparison. Reporting automatically previews and uses the latest suitable
+complete retained set; only report options are accepted by its API. There is no
+manual extract override, file/path input or upload action in Reporting.
+
+Selection reads published dated source manifests/XML only, checking hash/inventory,
+environment/manufacturer/schema, timezone-bearing dates, complete pages and unique
+identities. XML files are never combined between batches. Recorded export dates
+rank sets; identical copies are deduplicated. Conflicting overlapping-date sets
+block selection. Unusable sets are explained, with a suitable older set used where
+available. Missing evidence is unassessed, not zero. New/corrected evidence is managed
+through Data Import. Source-only retained batches are explicitly distinguished from
+completed database imports; unpublished drafts are excluded. No original source or
+operational database is modified by report selection/generation.
+
+The screen and Excel show actual source batch, date range, hashes, scope and
+excluded-set context. Source checks refresh on returning to Reporting, and generation
+reselects so newer retained data is reflected. Existing stored-data comparison rules
+and separate planned registration-evidence/audit reports remain. Their design now
+also excludes reporting uploads/manual source selection. See [report instructions](ra-report-first-iteration.md).
+
+Dev-only; no main source change, Production service, schema change, operational
+import, accepted-state update, commit, push or M2M work. Browser review is pending.
+
+Verification: full backend suite **429 passed in 244.48 seconds**, with the two
+existing FastAPI deprecation warnings. Final focused reporting/source checks:
+**33 passed**, including malformed/redirected/changed sources, date-based selection,
+duplicate copies, incomplete fallback, conflicting sets, no cross-batch page mixing,
+no SQLite access during source selection and no reporting upload inputs. All
+**130 frontend tests** and the TypeScript/Vite build passed with the existing
+bundle-size advisory. Source status is not browser-cached; stale responses cannot
+replace current context. These are synthetic automated checks, not live inventory
+or browser verification.
+
+## November 8 — Registration Evidence defaults to retained extracts (design)
+
+The owner requested a design update: the planned **Registration Evidence** report
+must use the latest suitable complete EUDAMED extract set already retained, rather
+than demand a fresh upload. Rank by recorded export dates within matching
+manufacturer/environment/scope, never by file modification/import time. Validate
+set membership, availability/hashes and completeness; do not mix unrelated pages.
+Show dates, scope, selection reason and any newer incomplete excluded set.
+
+Later successful per-device registration evidence is reported separately and must
+not be overridden by absence from an older extract. Distinguish additional evidenced
+identities from subsequent updates to already evidenced devices; avoid double
+counting. Partial successes, delayed imports and uncertain timestamps need explicit
+handling. Missing suitable extracts show unavailable/unassessed coverage, not zero;
+local evidence can still be summarized separately. A newer extract is optional.
+
+Detailed source selection, model categories, exceptions, date rules and synthetic
+verification cases are in [report design](ra-report-first-iteration.md#registration-evidence--retained-extract-design-november-8).
+This is a documentation-only update. The Registration Evidence report is still
+planned; the implemented Stored Device Data Comparison upload behavior is unchanged.
+No application source, database, services, migration, import, commit or push changed.
+
+## November 7 — Stored-data comparison replaces payload-proof summary
+
+The owner clarified that the first report must compare **stored accepted device
+values** with dated EUDAMED extracts. Original outgoing XML and Success XML are no
+longer required inputs. Registration proof belongs in separate reports. This entry
+supersedes the earlier November 7 payload-based report description below.
+
+Open **Reporting → Stored Device Data Comparison** in Dev. Upload the extract page
+set and generate. Existing accepted-device and Market Info readers provide stored
+values, including accepted export baselines and successful updates. Canonical data
+supplies stable identity/model grouping and provenance, never replacement proposed
+values. Missing stored fields are separate from known attribute differences; known
+differences remain counted even when other fields are incomplete. An all-match
+result requires every listed supported field to agree with usable stored data.
+
+Model summaries, grouped unique affected-entry counts, optional paged device detail
+and full-report Excel remain. Details now show Stored versus Extract values and
+stored-state provenance. Comparison-source coverage does not claim registration
+proof. Parent attributes/versions and unsupported export projection remain outside
+the supported device scope; limitations and field lists are shown explicitly.
+Newer stored activity is date context, not a requirement to supply upload files.
+Known newer successful versions without matching snapshots cannot reuse older data.
+
+The earlier original-payload comparison controls/API were replaced. The separate
+Registration Evidence and Registration Activity/Audit reports are specified as next
+increments in [report instructions](ra-report-first-iteration.md), not claimed as
+implemented. No schema or workflow change, operational import, Production service,
+main source change, commit, push or M2M work. Browser review remains pending.
+
+Verification: the full backend suite passed **416 tests in 248.65 seconds** with
+its two existing FastAPI deprecation warnings. After final required-value and
+unsupported-translation refinements, all **21 focused report tests passed**.
+All **129 frontend tests** and the TypeScript/Vite build passed, retaining the
+existing bundle-size advisory. Tests cover accepted baselines without original
+XML, successful updates, missing/stale accepted snapshots, drafts/errors, known
+differences alongside missing fields, optional null versus blank required values,
+structured lists, unsupported translations, grouped counts, optional Excel details,
+extract guards and stale UI responses. No live inventory or browser result implied.
+
+## November 7 — First RA registration and evidence report
+
+Implemented in the development worktree on `feature/import-management-reporting`.
+Open **Reporting → Registration and Evidence Summary** after restarting the Dev
+backend and refreshing the frontend. The single report replaces the synthetic
+reporting previews. It starts with database entries by existing family/model and
+counts exact attribute matches, differences, unable to verify and absent from the
+selected extract. Grouped attribute/evidence findings show unique affected entry
+counts; individual device details are optional and paged. Full-report Excel includes
+device details only when requested before generation.
+
+The owner directed comparison against submitted payloads supported by equivalent
+Success XML, rather than current proposed workbook values. Supply extract pages
+and original outgoing XML (unpack submission ZIPs first). Retained Success XML is
+checked automatically; additional response XML can be supplied. Matching service,
+correlation, entity, versions and timing qualify the payload. Failed entities,
+ambiguous/missing proof, known newer successful history without supplied payloads
+and stale extracts cannot establish exact matches. Parent/device/Market Info have
+separate evidence. Server version dates and schema type annotations are excluded;
+initial Market Info version is not inferred. See the precise scope and limitations
+in [first-report instructions](ra-report-first-iteration.md).
+
+Source coverage distinguishes recorded workbook links from supplied payload proof
+and extract membership; original source availability, Basic UDI reference and
+review coverage remain unverified. Reports are generated from one read-only SQLite
+snapshot and temporary XML inputs, with no import or accepted-state changes. Dev
+only; Production rejects this reporting API. Reports are not retained server-side;
+download Excel to preserve a result. No operational database or application service
+was opened/started by Codex, and no main checkout source was changed. Existing
+`docs/.DS_Store` changes were left alone. Owner browser verification remains pending.
+
+The audit/activity report, improved saved-evidence selection, Production rollout,
+PDF and RA access remain later increments. No commit, push, merge or M2M work.
+
+Verification: full backend suite **410 passed in 245.68 seconds**, with the two
+existing FastAPI startup deprecation warnings. After final report refinements,
+all **16 focused reporting tests passed**. All **127 frontend tests passed** and
+the TypeScript/Vite build passed with the existing bundle-size advisory. Coverage
+includes real-renderer XML, partial success, retained responses, newer missing
+payloads, stale/incomplete extracts, conflicting and issuer-ambiguous identities,
+attribute grouping, optional literal-text Excel, pagination and obsolete UI requests.
+These are automated synthetic checks, not live inventory or browser verification.
+
+## November 1 — Documentation remediation
+
+Implemented the owner-requested audit remediation on the feature worktree.
+Current guides now describe the three-stage Dev Import Data flow, automatic
+saving, exact identity/catalogue showstoppers and optional downloads. Production
+configured-file import and the legacy Dev raw importer remain distinct. Publishing
+instructions identify the intended worktree/branch before staging, committing or
+publishing. Embedded Help now matches actual XML navigation, scenario availability,
+accepted evidence, source-membership labels and environment-specific schemas.
+Canonical documentation reflects declared-path regression checks without claiming
+all identity/alias work complete. Index/onboarding/architecture/roadmap guidance
+and old Production-first-run statements were refreshed.
+
+Historical test/batch/baseline procedures have clear superseded banners; dated
+counts, incident findings and approved evidence were preserved. Local Production
+workbook links are documented as original-checkout file references, not portable
+Help downloads. The audit report retains its initial snapshot and records closure
+of Markdown findings. The current worktree and operation-policy guides were added
+to Help navigation so the new links work there as well as in the repository.
+
+Formal Word/PDF/PPT content was not edited in this remediation. The previously
+owner-selected Word/PDF copies stay synchronized with main; the authoritative
+screenshot PPT choice and any formal extension for new Dev workflows remain open.
+No operational database, application business rule, Production configuration or
+main-checkout file was changed by this documentation work.
+
+Validation: all 122 existing frontend tests passed, the frontend build passed
+(with its bundle-size advisory), and local documentation links/whitespace were
+checked. No operational database tests or services were run.
+
+## November 1 — Authoritative Work Instruction copies selected
+
+The owner selected the newer Work Instruction DOCX and PDF in the original/main
+checkout as the authoritative starting files:
+
+```text
+/Users/frankbogle/PycharmProjects/Eudamed/EudamedUploader/docs/work instruction/
+BQP 06-20 Annex B Issue D WI SOP EUDAMED Loader.docx
+BQP 06-20 Annex B Issue D WI SOP EUDAMED Loader.pdf
+```
+
+Both were copied byte-for-byte into the matching development-worktree paths;
+SHA-256 checks verified the copies and confirmed the originals unchanged. Future
+feature documentation edits should start from these synchronized copies. This was
+copy alignment only: no Word content editing or PDF regeneration was performed.
+The screenshot PPT was not selected or synchronized; its differing copies remain
+an open audit item. The Master Validation DOCX was already identical and unchanged.
+
+## Latest checkpoint — minimal Import Data flow (October 31)
+
+The owner-approved refactor replaces the earlier draft/batch/workbook UI. Open
+**Import Management → Import Data**. One primary action is shown at a time:
+
+1. **Review source data** — copies and progress save automatically; review results
+   are Ready to continue, Ready to continue — warnings found, or Source corrections
+   required. Corrected sources can be supplied days later without starting over.
+2. **Create Import Workbook** — creates the dated batch and associated workbook/
+   audit automatically. There is no separate Create Batch or Continue button.
+3. **Import Batch Data** — brief summary, target Dev environment and explicit
+   confirmation. Fresh checks and a verified backup run internally. Workbook
+   download is optional and never a prerequisite.
+
+There is one Import selector for new/current/older imports. The remembered import
+reopens at its saved stage. No Save draft, Resume, artifact selector, manual Assess
+or extra confirmation screen remains. Replace files is a secondary link.
+Source-data contact/name/email controls and the correction-note textarea were
+removed. Unknown dates and incomplete contact details can be saved; operator
+attribution and confirmation are required for the actual import.
+
+### Review policy
+
+At most eight grouped categories are shown. Required files/structure/identifiers,
+Template Device UDI-DI duplicates (including identical rows and duplicates across
+workbooks), conflicting identities, wrong manufacturer/environment and incomplete/
+conflicting XML page sets block. Ordinary differences and missing optional
+information warn. Basic/device accepted-state metadata must remain usable; missing
+essential accepted data cannot be invented. Category details show up to ten
+examples. If truncated, a secondary findings download gives all rows as literal
+Excel text. Required input corrections are the only operator data-review gate.
+
+Owner follow-up: unresolved catalogue collisions now **block** this Dev import.
+EC27LN7S and its two different Device UDI-DIs are one identity finding, rather than
+three warnings. All involved identifiers and selected workbook/row references are
+retained. Existing-source value differences remain warnings; no existing canonical
+or accepted values are overwritten, and no device is deleted/merged to clear the
+finding. Production defaults remain unchanged. Review policy is now
+`minimal-import-v2`; earlier warning-only approvals cannot authorize an import and
+must be reviewed again. Review results and individual categories have compact
+labelled pills: green Good data, amber Warning and red Showstopper.
+
+### Cleanup and compatibility
+
+Removed the superseded CreateSourceBatch, SourceCheckSummary,
+WorkbookImportConfirmation, DevBatchPreparationWorkspace and placeholder
+ImportManagementWorkspace components, their types, buttons, API methods and
+superseded UI tests. Replaced them with ImportFlowWorkspace and a single workflow
+API. Old receipt/inspect/prepare/resume/assess/confirm/package/correction-summary
+and standalone draft-review endpoints were removed. Internal receipt, analysis,
+preparation, audit and transaction services remain because the replacement uses
+them. The independently used read-only Playground baseline-assessment API is
+retained; it is not another Import Data control.
+
+Saved inputs, dated batches, old workbooks/audits and review histories were not
+removed. Old batches/reviews reopen via their source copies and require review
+under the new policy; earlier approval cannot bypass it. New workbooks use the
+`dev-import-v3-minimal-review` preparation contract. Drafts remain within the
+already ignored `data/dev/import-batches/source-reviews/` tree. Dated batches
+remain in `data/dev/import-batches/YYYY-MM-DD-NNN/` with review/source/workbook links.
+
+Dev confirmation retains exact-path guards, BEGIN IMMEDIATE, full database-state
+checks, verified backup, atomic additive writes, durable history and idempotency.
+No operational database import, schema change, source-file migration, Production
+file change, main-branch code change or M2M integration was performed.
+
+Current operator instructions: [Import data in Dev](source-batch-receipt.md).
+Technical safety details: [Dev workbook import](dev-workbook-confirmation.md).
+Restart the Dev backend and refresh the frontend before testing this replacement;
+older clients intentionally cannot call the retired endpoints.
+
+Validation: **387 backend tests passed** (full suite, 241.08 seconds),
+**122 frontend tests passed**, and the TypeScript/Vite build passed. Superseded
+UI tests were replaced by tests for the single current flow. Coverage includes
+one primary action, optional downloads, autosave/reopen, edits during uploads,
+identical duplicates within/across Templates, warnings that permit progression,
+limited finding categories and full literal-text findings export, old source-copy
+compatibility, retired endpoint removal, transaction/backup/idempotency guards,
+and unchanged Production defaults. Vite retains the existing bundle-size warning.
+Read-only file fingerprints confirmed both operational database files unchanged
+across the full suite. At that October 31 checkpoint no commit had been created and the document edits
+were separate work. The feature was subsequently committed as 1e5c395; current
+document remediation and master-copy selection are recorded in the November 1
+checkpoint above.
+
+Catalogue/pill follow-up validation: **56 focused backend tests passed**, including
+Production regression and rejection of prior warning-only approvals; **122 frontend
+tests passed**, covering the red/amber/green labels, and the build passed. Catalogue
+collisions are grouped by normalized family/variant/catalogue address, listing all
+involved issuer-qualified UDI-DIs and selected Template row references exactly
+once. Existing XML and database records were not corrected by assumption. Read-only
+fingerprints confirmed both operational databases unchanged. Restart Dev, refresh
+the browser and review the saved import again to apply the new classification.
+
+## Historical evidence and earlier delivery checkpoints
+
+The dated entries below retain investigation/audit context. Their older menu
+names, buttons and API examples are historical, not current operator instructions.
+Use the checkpoint above and linked current instructions for the implemented flow.
+
+## October 30 — Fresh Playground Batch Ready for Operator Testing
+
+Use **2026-10-30-001** for the next Dev Import Management test. Original downloads
+are in `data/testing/playground-extracts/30-10-2026/` in the original checkout.
+Five PullResponse files, APP-DTX-000120542 through APP-DTX-000120546, declare pages
+0–4 of 5 (50/50/50/50/41 devices), schema 3.0.32 and manufacturer UK-MF-000033261.
+They contain 241 unique devices across 11 parents, without duplicate identities.
+All 241 export identities occur in the active Dev Template scope.
+
+Created `data/dev/import-batches/2026-10-30-001/` using the existing file-only
+batch tool: six copied Dev Templates, one BasicUDIs.xlsx and five XML exports,
+with byte/hash-verified manifest. Existing Accessories exclusion is retained;
+the active five-Template scope has 8,424 distinct devices and no source findings.
+The October 25 batch and original input folders are preserved. Batch files remain
+ignored by Git. No Import Workbook has yet been created for the new batch; leave
+that action to the owner's UI test.
+
+Read-only reconciliation report `a367a25b3cfe482cb649c8e921279bd3`, under this
+batch's `reconciliation/` folder, compares 241 full local device snapshots:
+215 Matches, 26 Update proposed; 9,614 matching fields, **zero value differences**,
+and 26 Missing local evidence fields. All missing fields are the same Echelon
+parent's `parent_version`, repeated for its 26 devices; the exports record
+version 1 while the local comparison has no parent-version evidence. There are
+no version/identity warnings. This is an evidence gap, not 26 conflicting device
+values. No baseline update or review approval was applied. Whole-file fingerprints
+of both Dev and Production databases are unchanged through preparation/assessment.
+
+Owner next: in Dev Source Files select 2026-10-30-001, check sources, then Create
+Import Workbook and inspect its workbook/audit. Assess Playground baseline is
+read-only and should show the above result unless accepted evidence changes.
+Final workbook database assessment/confirmation remains disabled in the UI.
+
+## October 27 — Identify Groups and Review Bulk PATCH Devices
+
+Implemented on `feature/import-management-reporting` in the development worktree.
+Parents & Children now leads with variant names (for example Linx), with family
+and issuer-qualified Basic UDI-DI underneath. Parent pills explicitly say Parent
+registered/unregistered/unknown, independently of child registration. The table
+adds PATCH-ready counts alongside child POST readiness.
+
+Review PATCH devices opens the exact family, variant and Basic UDI-DI in Bulk
+PATCH. Shared parents offer separate review actions for their model scopes.
+Groups without registered children have the review button disabled. Handover
+starts in manual catalogue selection with no devices selected, clears the old
+preview/assessment, and preserves the requested parent while cohorts load rather
+than falling back to another parent. Environment, family, variant, parent and
+issuer checks block generation if the reviewed scope no longer matches. Clearing
+the reviewed group explicitly releases that navigation context; choosing another
+parent also clears it. No new registration or scenario eligibility rules were added.
+
+Bulk PATCH displays the active model/parent, selected count and scenario. Its
+device review table lists the registered candidates, catalogue numbers, Device
+UDI-DIs, current accepted snapshot versions, trade names and quantities, plus
+selection status. Preview supplies exact included base/derived versions and
+excluded identifiers/reasons. Registered candidates are not a promise of scenario
+eligibility; preview and download retain existing server-side eligibility,
+accepted-state, XSD, lineage and stale-state checks.
+
+Verification: **128 frontend tests**, TypeScript/Vite build and **37 backend
+tests** passed (`test_xml_preparation.py`, `test_bulk_parent_selection.py`). Tests
+cover exact group action arguments, issuer-separated parents, cross-environment
+and changed-scope rejection, accepted versions, included/excluded device display,
+and the existing backend bulk preparation/selection safeguards. Main remains
+clean; Production's database matches the previously recorded fingerprint. This
+increment changed frontend code/docs/tests only and did not open operational
+databases through application services. The existing bundle-size and FastAPI
+deprecation warnings remain. Changes are uncommitted.
+
+Owner browser review: restart Dev/refresh; open Registration State → Parents &
+Children → Review PATCH devices for a model; confirm the parent and empty manual
+selection; choose catalogue numbers and scenario values; preview and inspect
+device identifiers, versions and exclusions before downloading. Playground upload
+and subsequent success-XML review remain manual. The shared UI will reach
+Production only through a separately reviewed merge/release, using its own data.
+
+## Important — Dev Test Cleanup Changed Legacy POST-Review Entries
+
+Final verification found an unintended Dev-only database change during the earlier
+failed full test run: the existing cleanup fixture used a stale cached operational
+path and cleared `reviewed_post_baselines`. Its exact pre-run row set is unknown.
+Production's file hash/mtime/size remain unchanged. Submission-event counts and
+the 215-device identity/version comparison still match the earlier inspection.
+
+Test cleanup now uses a fixed temporary path, and a new pytest connection guard
+blocks writes to non-temporary databases regardless of stale application settings.
+No stale backup has been restored. The owner confirmed there is no newer Dev
+backup/Time Machine snapshot; the known September 3 backup is not assumed current.
+See `docs/dev-test-isolation-incident-2026-10-25.md` for evidence and safeguards.
+This supersedes any statement that both databases remained unchanged through the
+whole test exercise. File preparation itself does not call database services.
+Review markers must be re-established through a fresh owner review, not recreated
+as historical approvals. No review entries have been fabricated or restored.
+A consistent post-incident safety copy now exists at
+`data/testing/backups/testing-state-after-review-cleanup-20261025T120142Z.sqlite3`,
+with a JSON sidecar. This protects remaining state; it does not recover the lost
+entries. The earlier guarded complete Python run passed **313 tests in 241.76 seconds**
+and caused no further Dev file changes. Production and all 12 source/copy
+fingerprints were unchanged. At that check, **114 frontend tests** and the build
+passed. The newer reconciliation verification is recorded below; owner browser
+verification remains outstanding.
+
+## October 25 — Owner Clarification: Source Membership Defines Labels
+
+This supersedes the earlier rule reserving Unregistered for explicitly confirmed
+negative coverage. For both Device UDI-DIs and Basic UDI-DIs, **Registered** means
+recorded EUDAMED registration evidence; **Unregistered** means present in imported
+Template/BasicUDI workbook data but absent from that evidence; **Unknown** means
+absent from all those sources. These labels describe the active environment's
+recorded sources, not a live EUDAMED query. Identity issues remain separate XML
+blockers and do not turn a workbook identifier into Unknown.
+
+Implemented in the feature registration read model, parent/child pills, parent
+status rows and counts. Current Dev totals: **215 Registered / 8,208 Unregistered /
+0 Unknown devices**, and **10 Registered / 4 Unregistered / 0 Unknown parents**.
+Of the Unregistered devices, 8,207 are ready and one, Echelon `EC27LN7S`
+(`05050649030901`), remains blocked by its existing identity issue. No generation
+rules or accepted-state/version safeguards were relaxed. Existing source rows
+with unresolved identifiers remain reported as import exceptions.
+
+The previous device-only coverage confirmation is retained as dated provenance;
+it does not assert complete coverage of parent-only registrations. It is no
+longer required to label a known workbook identifier Unregistered. No additional
+operational database writes are needed for this clarification. Production and
+main remain untouched; browser review should use restarted Dev and a refreshed
+frontend. See `docs/registration-coverage-confirmation-2026-10-25.md`.
+
+Verification of this clarification: **344 backend tests passed in 234.94 seconds**
+(`pytest backend/tests`), **40 focused registration tests passed**, all **123
+frontend tests** and the build passed. Read-only Dev checks confirm the new
+labels/counts, retained identity blocker and four XSD-valid Echelon POST previews.
+Dev and Production database fingerprints are unchanged through this increment;
+main is clean. Changes remain uncommitted in the feature worktree.
+
+## October 25 — Confirmed Dev Device Coverage and Unregistered Pills
+
+The owner approved Unregistered labels and clarified that complete Playground
+coverage means **device extracts only**. A backed-up, attributed confirmation now
+ties Dev manufacturer `UK-MF-000033261` to the applied batch `2026-10-25-001`.
+This supersedes earlier blanket statements that all absent Dev devices remain
+Unknown. Identity conflicts remain Unknown; parent-only absence is not inferred.
+
+Current read-only totals: **215 Registered, 8,207 Unregistered, 1 Unknown device**;
+parents remain **10 Registered, 4 Unknown**. The UI explains device-only scope and
+uses Unregistered for child pills/counts previously labelled Awaiting registration.
+All 14 pre-existing Dev tables have unchanged logical checksums. Only the new
+scope-confirmation metadata was added; Production and main remain unchanged.
+Different later imported export evidence requires a fresh completeness confirmation.
+
+The full Python suite passed **347 tests in 243.07 seconds**; the subsequent
+new-export invalidation regression passed within a **35-test focused run**.
+All **123 frontend tests** and the build passed. Read-only checks confirm child
+pills, parent counts, the accepted baseline and XSD-valid Echelon POST previews.
+Backup, audit provenance and browser review instructions are recorded in
+`docs/registration-coverage-confirmation-2026-10-25.md`. Feature changes remain
+uncommitted; restart Dev and refresh before owner browser review.
+
+## October 25 — Shared Registration-driven POST/PATCH Policy
+
+The owner clarified that registered devices must be treated as PATCH and devices
+without registration as POST in BOTH environments. This supersedes the earlier
+Dev-only source-label exception and the previous claim that Production retains
+its historical source-operation restriction. The shared feature code no longer
+uses that legacy testing designation to select operational candidates.
+
+Readiness now exposes `registration_known` and `operational_operation`. Successful
+registration/imported baseline evidence from the active database establishes
+PATCH designation; absence of evidence permits POST candidacy with normal data
+and identity checks, while registration views retain Unknown when appropriate.
+The single POST download rechecks registration in both environments and rejects a
+duplicate before logging generation or review. Explicit accepted-baseline previews
+remain available for PATCH/Market Info review.
+
+Frontend candidate counts use backend readiness; a legacy success flag alone no
+longer admits a device to PATCH selection. Source-label POST/PATCH totals and
+badges were removed from current-status displays, and the mapping field is now
+labelled Historical source label (unused). Preview registration text names the
+active environment instead of unconditionally claiming acceptance. Old metadata
+is retained without schema/data changes. Policy and limits are in
+`docs/registration-driven-operation-policy.md`.
+
+Core synthetic checks cover both environments and a separate-database same-UDI
+case proving registration is not shared. Production's operational database and
+main application remain unchanged; the shared Production behavior is implemented
+on the feature branch, pending a reviewed release. No database reconciliation,
+source edits, submission or M2M work is included in this policy increment.
+
+Final verification: **342 Python tests passed in 241.27 seconds**, including
+Production synthetic workflows, cross-environment isolation and legacy-flag
+regressions. All **121 frontend tests** and the TypeScript/Vite build passed.
+Existing FastAPI deprecation and bundle-size warnings remain. Read-only runtime
+checks preserve 215 registered Dev devices / 10 parents, and all four Echelon
+variant previews pass XSD checks. Dev and Production database hashes still match
+the post-reconciliation/pre-policy fingerprints. Main remains clean; these feature
+changes are uncommitted. Restart Dev and refresh the frontend for browser review.
+
+## October 25 — Dev POST Selection No Longer Uses Legacy PATCH Labels
+
+The owner requested POST access for devices without recorded registration after
+aligning Dev's accepted state with Playground. Dev candidate selection, readiness
+and POST rendering now accept XML-ready source records regardless of their old
+POST/PATCH classification. POST intent is applied to a temporary projection;
+source workbooks, canonical operation labels and accepted snapshots are untouched.
+Both frontend selection and backend assessment/generation use the updated scope.
+
+Existing registration evidence still blocks duplicate POST in operational
+assessment/next-candidate/bulk selection. Known parents use child UDI-DI POST;
+unknown parents retain the existing DEVICE.POST flow. Devices not evidenced by
+exports remain Unknown, rather than being automatically relabelled unregistered.
+PATCH/Market Info still require registration evidence. Production keeps its source
+POST classification restriction; main application code was not changed.
+
+Targeted synthetic regressions cover PATCH-labelled Dev sources rendered as POST,
+readiness, registered-device exclusion, parent-vs-child POST, non-ready source
+exclusion, source-data preservation and unchanged Production filtering. Frontend
+policy tests cover Dev, Production and environment loading. Read-only runtime previews succeeded for Echelon `EC22L1S`, Echelon ER
+`ECER22L1S` and Echelon VT `ECVT22L11S` as DEVICE.POST, and the next Echelon VAC
+candidate `EVAC22R3SD` as UDI_DI.POST. All passed XSD validation. Both operational
+database fingerprints remain unchanged. No XML was submitted or generation
+history recorded. A direct POST download for a newly eligible PATCH-labelled
+source is also refused once registration is known, while explicit accepted-baseline
+previews remain available for PATCH/Market Info review.
+
+Verification: the initial full Python run passed 337 tests and exposed one older
+readiness test double without settings. The condition now short-circuits ordinary
+POST rows before consulting environment settings. All 172 focused registration,
+XML-generation, workbook-import and Production-import tests then passed, covering
+the corrected failure and all affected workflows. All 120 frontend tests and the
+TypeScript/Vite build passed. Existing FastAPI deprecation and bundle-size warnings
+remain. The feature changes are uncommitted; owner browser verification is next.
+Restart Dev, select Echelon (or ER/VT), and use the operational POST assessment.
+No registration status was inferred solely from export absence.
+
+## October 25 — Test-isolation Fix Applied To Main
+
+The owner explicitly requested fixing main now. The isolated patch was applied to
+the original main checkout, changing only `backend/tests/conftest.py` and adding
+`backend/tests/test_database_test_isolation.py`. No feature, application,
+configuration or Production data changes were copied from development. All 34
+focused isolation/configuration/profile checks passed on main, including the eight
+isolation regressions. Dev and Production hashes, sizes and modification times
+matched their pre-fix values after testing. The pre-existing root `.DS_Store`
+change was left untouched.
+
+The earlier restriction against running tests on unguarded main is superseded for
+this local checkout. The test-only main changes are currently UNCOMMITTED; commit
+and publish them separately before assuming other checkouts have the protection.
+Suggested message: `Protect operational databases from test setup and cleanup`.
+Development's same safeguards remain in place. The patch file is retained as
+historical transfer evidence and should not be reapplied to the already fixed
+checkout.
+
+## October 25 — Production Test-isolation Follow-up
+
+Owner stressed that the Dev cleanup incident must not recur against Production.
+Development regressions now explicitly exercise direct Production path rejection,
+read/write URI rejection, stale cached Production settings in legacy review
+cleanup, and a temporary symlink redirect. No Production connection is opened by
+these checks: the guard rejects before SQLite. Session setup additionally asserts
+its exact temporary database/backup destinations before any unlink/initialization;
+a regression proves a poisoned Production configuration fails before either.
+All 42 targeted isolation/configuration/baseline tests pass.
+
+IMPORTANT: inspection of the original `main` checkout found its old cleanup
+fixture is still present. These uncommitted development protections do not apply
+there yet. Do not run tests from `main` until the test-only fix has been promoted
+and checked. `docs/production-test-isolation.patch` contains exactly the conftest
+fix and regression file for that checkout; `git apply --check` passed against main,
+but the patch has NOT been applied. No main application/configuration/database
+files were modified. Production baseline changes remain separately unauthorised.
+
+## October 25 — Owner-approved Dev Playground Baseline Applied
+
+The owner authorised aligning Dev with the retained extracts, then testing and
+reviewing fresh Playground XMLs. The controlled Dev import has now completed:
+215 devices / 10 represented parents, with 215 distinct imported-baseline audit
+events. These are `PLAYGROUND_EXPORT.SNAPSHOT` / `IMPORTED` evidence, not upload
+successes. Current accepted reads and generation use the export-backed state;
+Production evidence remains separately labelled and Production is unchanged.
+
+Fresh assessment reports **215 Matches / 8,600 matching fields / zero differences
+and missing local fields** within the supported comparison. All 1,284 historical
+event rows and all 12 protected source/canonical/review/package/batch tables retain
+their checksums. Actual SUCCESS totals remain 10 parent POST, 205 child POST,
+137 PATCH and 65 Market Info. Review markers remain zero; none were fabricated.
+The unique Esprit identity link was recorded explicitly. Prior ambiguous generic
+versions and all before-state caches remain in audit evidence.
+
+Run `a3de0e74d85e4108aa1b8f234b18f015` has a verified pre-change SQLite backup,
+full change audit and verification ledger. Fresh report ID:
+`105c7a775963404e98079d7be4204e9c`. Full paths, hashes, recovery limits and owner test
+instructions are in `docs/dev-playground-baseline-applied-2026-10-25.md`.
+This intentional approved update supersedes earlier read-only-only status and the
+pre-alignment Dev fingerprint. The earlier test-cleanup incident remains recorded;
+the update did not recover its missing historical review approvals.
+
+Verification: full Python run **326 passed in 237.81 seconds**, followed by **57
+focused tests** after final additions/registration-reader compatibility updates.
+Existing FastAPI deprecation warnings remain. Runtime checks with all SQLite
+connections forced read-only show 215 registered/PATCH-ready/Market Info-ready
+devices and 10 registered parents. A LINX22L5SD version-5 preview retains quantity
+1 and passes XSD validation; no generation/review/submission was logged. Database
+hash was unchanged by verification. Frontend remains at its earlier 118-test/build
+verification; no frontend code changed in this baseline increment.
+
+Next: restart Dev and refresh its frontend, rerun baseline assessment, review key
+values, test one manually reviewed device, retain exact submitted XML/ZIP and ACK,
+and compare fresh exports before expanding the batch. No source folders were
+removed, no Template edits/import were applied, and no Production migration or
+M2M work was performed. All code changes remain uncommitted.
+
+## October 25 — EliteVT Bulk PATCH Association Confirmed
+
+Owner suggested the ten repeated EliteVT names came from Bulk PATCH. Read-only
+queries confirm the exact ten-device cohort shares the August 14 successful
+version-2 transaction `90bffe49-e7b6-41e8-aee4-3ce65a521b84`, independently listed
+in test report BT4. This supports a common bulk origin, but the legacy scenario
+is `equivalent_first_patch` and retains no payload/name-change delta, so the
+specific repeated name's origin/intent is not proven. Findings and limitations
+are appended to `docs/playground-baseline-assessment-2026-10-25.md`. No operational
+state or generation behavior was changed.
+
+## October 25 — LINX22L5SD Historical Quantity Investigation
+
+Owner requested tracing `GS1 / 05050649085604` (`LINX22L5SD`). Read-only queries
+found quantity 1 → 2 in the context associated with successful September 1 PATCH
+version 3 (event 385), then retained quantity 2 at successful PATCH version 4
+(event 775). Both generation/acknowledgement pairs match by correlation ID, but
+acknowledgements contain no quantity values. The retained September 3 database
+backup already contains version 4 with quantity 2, corroborating that this local
+value predates current Import Management work. The October export has the same
+device version 4 and trade name, but quantity 1.
+
+Outgoing XML/ZIP bytes were not located in the checked project or usual download
+locations; the database retains package metadata/hashes rather than outgoing
+payload bytes. The owner confirmed the ZIPs are no longer available. Historical
+generation code was inspected but is not proof of the missing submitted files.
+Cause remains unresolved; do not assert external changes or an application/portal
+defect without evidence. Preserve this exception for baseline review. Details,
+event IDs, package hashes and limits are in
+`docs/linx22l5sd-quantity-investigation-2026-10-25.md`. Both current operational
+database hashes remain unchanged. No baseline or generation changes were made.
+
+## October 25 — Assessment UI Prioritises Known Differences
+
+Owner feedback: the missing-evidence total (6,660 fields) overshadowed the 23
+known-value differences. The Dev assessment now leads with value differences,
+affected-device count and total devices, followed by an immediately visible
+before/after table containing only proven value differences. Field-type counts
+and readable field labels support review. Missing evidence, matching counts,
+snapshot completeness and scope notes are in a separate expandable explanation;
+6,660 is explicitly a field count. The full device comparison and lineage notes
+remain available, with version/identity concerns signposted separately.
+Per-device summaries distinguish differences from unknown fields. This changes
+presentation only; assessment logic, report downloads and databases are unchanged.
+Frontend verification: 118 tests pass; TypeScript/Vite build passes with the
+existing bundle-size warning. Owner browser verification remains outstanding.
+
+## October 25 — Read-only Playground Baseline Assessment Implemented
+
+The owner approved investigating alignment of Dev's accepted state with actual
+Playground exports. The agreed reconciliation contract is in
+`docs/playground-baseline-reconciliation-proposal-2026-10-25.md`. Only its first,
+read-only assessment stage is now implemented; no baseline writes are enabled.
+
+New `PlaygroundReconciliation` reads the existing Dev SQLite database using
+`mode=ro`, `query_only` and one snapshot transaction, without store constructors
+or migrations. Verified batch exports are compared by issuer-qualified device
+identity against accepted device/POST/Market Info evidence. Proposed canonical
+fields resolve identity only; they never substitute for accepted values. The
+assessment separates differences, missing evidence and lineage/version concerns.
+
+Dev Import Management → Step 3 now offers **Assess Playground baseline** and
+Excel/audit downloads. This is separate from workbook import, whose assessment
+and confirmation remain disabled. Report files are retained under each batch's
+`reconciliation/<id>/` folder, with fingerprint-verified downloads. Batch selection
+changes invalidate delayed UI responses. Production endpoints refuse this flow.
+
+The actual 215-device report found 23 known-value differences (10 base quantities,
+10 trade names, two Market Info versions, one warning comment), 1,917 matching
+projected fields and 6,660 unknown local fields. Local device snapshots are 25
+full, 100 partial and 90 missing/unusable. There are 124 update proposals and 91
+records requiring explicit lineage/version review; none are applied. The earlier
+generic-version comparison is not equivalent to qualified POST/PATCH evidence.
+
+See `docs/playground-baseline-assessment-2026-10-25.md` for the retained report ID,
+findings, limitations and owner review instructions. Both operational database
+fingerprints remained unchanged by this assessment; the earlier review-marker
+incident remains separately unresolved. Next: owner reviews the concrete report
+before implementation/application of the controlled Dev baseline update. Do not
+fabricate successful submissions or operator approvals, switch source paths,
+remove legacy folders, or migrate Production as part of this stage.
+
+Assessment verification: the full backend run passed **310 tests in 232.77
+seconds**, with two existing FastAPI startup warnings. After the final duplicate-
+identity and unreadable-database checks were added, all **16 affected backend
+tests** passed again (including all eight reconciliation tests). The **nine
+repository utility tests** passed separately. These runs cover all 321 current
+Python tests. All **116 frontend tests** and the TypeScript/Vite build passed;
+the existing bundle-size warning remains (860.09 kB). Final operational database
+hashes, sizes and modification times match the pre-assessment/post-incident
+fingerprints. All 12 original inputs and batch copies still match their manifest.
+The retained Excel has 215 device rows, 8,600 field rows and five export rows.
+No formal browser acceptance is implied, and no changes have been committed.
+
+## October 25 — Dev Batch Selection, Checks And Workbook Creation Connected
+
+The owner authorised connecting the first three file-preparation steps and will
+perform browser verification after implementation. In a backend-confirmed Dev
+environment, Import Management now selects existing manifest-backed batches,
+displays real source-file/provenance/integrity information, runs real source
+checks, and creates/downloads the review Import Workbook and linked audit.
+This supersedes earlier statements that these actions remain UI previews.
+
+`EUDAMED_DEV_INPUT_BATCH_ROOT` is a new optional Dev-only setting. The local ignored
+development profile points it to the original project's
+`data/dev/import-batches/`; existing input/database paths and all Production files
+remain unchanged. The launcher prints the batch root during Dev configuration
+checks. New `/api/dev-input-batches` endpoints refuse Production, validate batch
+identity/manufacturer and file fingerprints, bind preparation to checked inputs
+and the existing workbook exclusions, reject stale inputs, serialize preparation
+and publish complete immutable pairs under `prepared/<id>/`. No database import
+or state services are called by the file-preparation endpoints. The separately
+authorised baseline assessment below reads SQLite through a read-only connection.
+
+The shared existing workbook preparer gained optional filtering/output-label
+parameters whose defaults preserve existing Production behaviour. Dev uses the
+current Accessories/Footspares exclusion and makes no parent/market overrides.
+Dev export-absent rows are labelled **Not evidenced by supplied exports**, not
+asserted unregistered; To Register remains a preparation grouping requiring later
+assessment. Source checks do not certify canonical or XML readiness.
+
+Actual-batch verification created an Import Workbook with 8,209 To Register rows,
+215 Registered rows and zero review-required rows under the preparation checks.
+The final workbook, paired audit and ZIP were verified. Both operational database
+files retained their SHA-256, size and modification time across that file-only
+verification; the separate test-cleanup incident above was detected subsequently.
+Original source copies and configured import paths were not switched or deleted.
+Generated pairs remain local/ignored. Workbook database assessment/import, baseline
+updates and Reporting generation remain disabled/deferred. Read-only baseline
+comparison is now available as described above. New browser
+uploads are not connected; this increment uses the existing copied Dev batch.
+
+Owner test instructions are in `docs/dev-workbook-preparation-testing.md`.
+Restart the Dev backend, refresh the development frontend, select batch
+2026-10-25-001, check sources and create/download the pair. Main/Production must
+remain separate. Earlier-format smoke-test artifacts are retained as drafts but
+cannot be downloaded as current-format preparations; create a fresh pair.
+
+Verification before the isolation guard: the full backend suite passed **311 tests in 238.88 seconds**
+with two existing FastAPI startup deprecation warnings. All **114 frontend tests**
+and the TypeScript/Vite build passed, with the existing >500 kB JavaScript warning
+(849.39 kB at this check). New coverage includes Dev-only HTTP access, real paired
+downloads, stale/mutated input rejection, scope retention, failed-preparation
+cleanup, output integrity, export-absence wording, asynchronous UI selection
+guards and React StrictMode loading. The default-path test now uses an empty
+synthetic Dev profile rather than assuming the operator's local worktree paths.
+The later guarded run passed **313 tests in 241.76 seconds**, with the same two
+startup warnings and no further operational-file changes. No formal owner browser
+acceptance of this functional increment is implied.
+
+Actual final-format verification artifact: `8331d75d8e26443bbe904a8f91c69173`,
+workbook `dev-import-20261025-113116-043599.xlsx`. Its companion audit is about
+91 MB uncompressed; the paired ZIP is about 2.6 MB. User-created preparations
+receive new immutable artifact IDs/filenames; these retained files are ignored
+by Git. The separate Dev test-cleanup incident above remains unresolved; Production
+is unchanged.
+
+## October 25 — First Dev Batch Created And Inspected
+
+Phase 1 of the agreed Dev-first file arrangement is now implemented. The batch
+`data/dev/import-batches/2026-10-25-001/` in the original project folder contains
+verified copies of six Templates, the Dev BasicUDIs.xlsx and five Playground
+exports, plus a provenance manifest and source-assessment JSON. `prepared/` is
+empty. No current source files, input configuration, database paths, baseline
+state or Production files were moved or changed. The batch is excluded from Git
+locally in the shared repository; the development branch also adds its ignore rule.
+
+The new `backend/scripts/manage_dev_input_batch.py` utility creates a new batch
+without replacing an existing one and performs read-only source inspection using
+the existing preparation readers. It verifies file fingerprints before inspection
+and opens no application databases. No UI processing buttons have been enabled.
+
+Findings: all six Templates contain 8,773 row occurrences / 8,771 distinct device
+identities. The 349 missing-parent findings and two duplicate identity occurrences
+involve the already-excluded Accessories/Footspares workbook. With the explicit
+inspection filter matching the current exclusion policy, the five active files
+contain 8,424 distinct devices, no duplicate identities and no findings from these
+structural checks. All 215 XML devices match active Template identities; there are
+47 reference parent identities. This is not full XML-readiness or import assessment.
+The excluded source is preserved; its import eligibility has not been changed.
+
+See `docs/dev-input-batch-2026-10-25.md` for paths, commands, findings and the
+integration/cleanup checklist. A notable retained dependency is the legacy
+tracekey workbook in `data/basic_udi_reference/`: existing Dev reference and
+canonical services still read it. Preserve it until its handling is explicitly
+resolved; do not delete the old reference directory as incidental cleanup.
+
+Verification: **27 focused backend tests passed** (batch safety/integrity plus
+existing workbook-preparation regressions); `git diff --check` passed. No frontend
+code changed and no full backend suite was rerun for this first batch utility.
+
+Next: review these concrete findings and agree the selected-batch/preparation
+integration, including preservation of the current exclusion and legacy-reference
+behaviour. Then implement the processing/reporting steps in the agreed sequence.
+The XML version exceptions remain investigation-only; no baseline update is
+authorised yet. No obsolete folders were removed. Earlier future-tense batch
+creation instructions below are superseded by this completed checkpoint.
+
+## October 25 — Agreed Dev-First File Structure And Migration Direction
+
+**Retain all current Dev and Production XML/Excel locations for now.** Introduce
+and prove a new folder structure for Dev before retiring any superseded Dev input
+folders. Production files and configuration must remain unchanged so the existing
+application on `main` continues to work. No additional databases are planned;
+both existing databases and their paths remain unchanged throughout this work.
+
+### Phase 1 — Establish Dev Batch Inputs Without Moving Originals
+
+Create a complete Dev input batch under the original project's data area, outside
+the development worktree, for example:
+
+```text
+data/dev/import-batches/2026-10-25-001/
+├── templates/       Copies of the current Dev Device Template Excel files
+├── basic-udi/       Copy of the current Dev BasicUDIs.xlsx
+├── eudamed-xml/     Copies of the five downloaded Playground XML exports
+└── prepared/        Future Import Workbook and linked audit file
+```
+
+Preserve original filenames and verify copied bytes against their sources.
+Retain batch provenance, environment, source dates and file fingerprints so later
+preparation, assessment and reporting results can be traced to exact inputs.
+Ensure operational batch inputs/outputs are excluded from Git. Merely creating
+these folders does not change which inputs the existing importers use.
+
+The current original inputs to retain are:
+
+- Dev Templates: `data/source_excel/`.
+- Dev parent reference: `data/basic_udi_reference/BasicUDIs.xlsx`.
+- Playground exports: `data/testing/playground-extracts/25-10-2026/`.
+- All Production inputs, including `data/prod/template/`, `data/prod/eudamed_xml/`
+  and the prepared workbook/audit pair under `data/prod/import_file/`.
+
+### Phase 2 — Implement And Test Against The New Dev Structure
+
+Connect the Import Management and Reporting changes to an explicitly selected Dev
+batch and test the complete workflow: source-file selection/receipt, checks,
+Import Workbook/audit preparation, assessment, controlled database import,
+registration snapshot generation and comparison with the retained Playground
+exports. Preserve current accepted-state, identity, version and lineage controls.
+Review material integration/mapping/validation decisions with the owner before
+implementation, following `AGENTS.md`.
+
+Use the existing Dev/Playground database, with an agreed backup before real import
+testing; do not create another application database or overwrite its testing
+history. Automated regressions continue to use isolated temporary test databases
+and synthetic fixtures. Confirm repeat-import behaviour, exception handling,
+reproducible reports and preserved evidence. No Dev process or test may write to
+Production. Production operation remains on `main`, one environment at a time.
+
+### Phase 3 — Retire Superseded Dev Input Folders After Success
+
+Only after the new Dev structure and workflows pass verification and owner review,
+update remaining Dev configuration/scripts/references to use the new locations.
+Check retained audits and file references, verify preservation/backups, then
+present the exact obsolete Dev input folders for owner-approved removal. Do not
+delete originals merely because copies exist. **Never remove `data/testing/`: it
+contains the existing Playground database and retained history.** Database files,
+database backup folders and other retained evidence are outside input cleanup.
+
+### Phase 4 — Repeat For Production As A Separate Controlled Change
+
+After the Dev transition is successful, undertake the equivalent Production
+folder, configuration, workflow-testing and input-retirement tasks with the owner.
+Production adoption must be reviewed and released deliberately so `main` remains
+usable; do not apply development path changes to Production in advance. Preserve
+the existing Production database, registered devices and audit/acceptance history.
+No Production file migration or deletion is authorised by this documentation update.
+
+### Available Export Evidence And Immediate Next Work
+
+The owner reported Playground operational again on October 25 and supplied five
+exports, `APP-DTX-000119311.xml` through `APP-DTX-000119315.xml`, in the retained
+Playground export folder above. Read-only review found all five pages
+(50 + 50 + 50 + 50 + 15), 215 unique devices, 10 represented parents, schema
+3.0.32 and manufacturer `UK-MF-000033261`. All 215 successful local device
+identities match; 53 available Market Info country snapshots agree. Two EliteVT
+version discrepancies and one missing local Elite Blade device version require
+review before claiming full alignment. Details are in
+`docs/playground-export-review-2026-10-25.md`; no state was repaired/imported.
+The export folder is excluded through the shared repository-local Git exclude.
+
+Next session: review this phased direction, prepare the copied Dev batch and
+its provenance, then agree processing integration and test cases. **The batch
+folders/copies, path changes and cleanup have not been implemented yet.** This
+update changes documentation only. Production, existing Dev input files and both
+databases were not changed. `git diff --check` passed; no application tests were
+rerun for this prose-only update.
+
+## Latest Restart Position — Owner-Accepted UI Baseline
+
+Work remains in `.worktrees/development` on
+`feature/import-management-reporting`. The UI work follows local commit
+`810f52e` (navigation/banner refinement and development-isolation guidance).
+The original checkout remains on `main` for Production. Use
+`docs/development-and-production.md` for starting and switching environments;
+the owner chose one environment running at a time. Development uses the existing
+Playground database; Production has its own database containing registered devices
+and **MUST remain untouched by development and tests**.
+
+The owner has reviewed the screens and accepted the latest compact layout as the
+UI baseline: two-level navigation, 22–24 px sans-serif banner titles, concise
+single-line descriptions, active area/step labels, filled active submenu items,
+compact status displays and a teal accent identifying the working panel.
+Retain this hierarchy and theme when extending the application. Owner visual
+acceptance is not formal validation or confirmation of every browser interaction.
+
+The current Import Management UI has three separate stages:
+
+1. **Import Source Files** — multiple Template Excel files, one Basic UDI-DI Excel
+   reference and multiple EUDAMED XML extracts; local selection feedback only.
+2. **Create Import Workbook** — source-check/exception layout and preparation of
+   the proposed Excel workbook with To Register, Registered and Summary sheets,
+   plus its linked application-managed audit file.
+3. **Assess & Import Workbook** — prepared-input review, database assessment,
+   exception review, confirmation and import-result layout.
+
+Reporting now has UI previews for **Registration Snapshot** and **EUDAMED
+Comparison**: model/status and outcome filters, separate parent/device registration
+indicators, known/unknown versions, synthetic examples and local XML selection.
+Import History is still a placeholder. Selected files and filters are held only
+in browser memory; a reload clears them. No source contents are processed.
+
+**These are UI previews, not working import/report services.** Upload, source
+checks, workbook/snapshot creation, database assessment/import, comparison and
+downloads remain disabled. Example counts and devices are explicitly synthetic,
+independent of selected files and operational state. No endpoints, mappings,
+validation rules, schema or database state were changed for this UI work.
+
+Next: follow the October 25 Dev-first file-structure direction above. The owner
+has supplied Playground exports; review those alongside copied Dev Template and
+Basic UDI-DI inputs and agree integration/tests before enabling processing actions.
+Preserve the existing Playground history and agree a backup before real import
+testing. Export scope, pages, dates and environment matter; absence from an
+incomplete export does not establish non-registration. Production is outside
+this development/testing scope. Automated upload/M2M remains prohibited.
+
+Latest implementation verification: **109 frontend tests passed**, including six
+new Import Management/Reporting checks, and the TypeScript/Vite build passed.
+The existing >500 kB JavaScript bundle warning remains. The latest full backend
+run is still **293 passed in 237.31 seconds** from the earlier baseline check;
+backend tests were not rerun for these frontend-only changes. This handoff refresh
+is documentation-only and was checked with `git diff --check`. Older results and
+intermediate UI descriptions below are dated checkpoints superseded by this section.
+
+## October 24 — Workspace Focus And Compact Banner Hierarchy
+
+Following owner visual review, banner titles now use the application sans-serif
+at 22–24 px, with 15 px descriptions. Location text identifies the active area;
+the three import pages show Import Management / Step N of 3. The active submenu
+page has a subtle filled background as well as its underline. Primary working
+panels have a slim teal left accent. The Dev/Prod identity banner is retained.
+
+Large white banner status cards were replaced with compact status displays.
+Import/Reporting previews show a relevant neutral empty-state badge; their preview
+notice appears once below the banner. Operational counts, import controls and
+readiness/warning conditions remain intact. Repeated panel titles were shortened
+to Source files, Source checks and workbook, Prepared workbook and Snapshot scope.
+This supersedes the earlier serif-title/status-card styling notes below.
+
+Verification: all **109 frontend tests** and the TypeScript/Vite build passed;
+the existing bundle-size warning remains. The owner accepted the resulting visual
+layout; exhaustive interaction/accessibility verification remains separate.
+No backend, database, Production code or environment configuration changed.
+
+## October 24 — Reporting UI Previews
+
+The owner authorised UI development for Registration Snapshot and EUDAMED
+Comparison while waiting for Playground exports. Both now use the established
+compact banners, panels, controls and status styles on the development branch.
+
+Registration Snapshot provides model and device-status filters, an opt-in
+synthetic preview, separate parent/device registration indicators and parent,
+device and Market Info versions. Unknown remains independent from Unregistered;
+a registered parent can have unregistered children. The preview is illustrative,
+not the final model-specific Template worksheet layout. Excel creation is
+disabled; saved-snapshot history is an explicit empty state. The intended output
+retains one Template-style worksheet per model and snapshot provenance.
+
+EUDAMED Comparison provides saved-snapshot selection (synthetic example only),
+local multi-file XML selection, and opt-in synthetic results with outcome filters.
+Results distinguish Matches, Difference found and Unable to compare; exceptions
+show findings, required actions and an owner. Unconfirmed export coverage is
+Unable to compare, never proof of non-registration. Examples remain independent
+of selected files/snapshot. XMLs are not read or uploaded; comparison and report
+download buttons remain disabled. Selections/filters persist during application
+navigation, but are not saved across reloads. No real report is created.
+
+Verification: **109 frontend tests** and the TypeScript/Vite build passed, with
+the existing >500 kB bundle warning. Three new checks cover unknown/parent status,
+filter retention, incomplete export coverage and disabled processing with local
+file selection. Owner browser review is outstanding. No backend, schema,
+dependencies, Production code or database state was changed.
+
+## October 24 — Source Files And Assessment & Import UI Previews
+
+Owner review clarified three distinct stages, now implemented as separate
+numbered Import Management submenu pages: **1. Import Source Files**,
+**2. Create Import Workbook**, and **3. Assess & Import Workbook**. Import History
+remains separate. The redundant button-like progress labels were removed.
+Step 1 contains file selection/upload feedback; Step 2 contains source checks,
+exceptions and workbook preparation/download; Step 3 contains database assessment,
+confirmation and results. Next/back controls connect the stages while retaining
+local selections. These remain UI previews with processing disabled and synthetic
+examples explicitly labelled. All 106 frontend tests and the build passed after
+the three-stage refinement; owner browser review remains outstanding.
+
+The owner authorised these two UI pages ahead of receiving the Playground XML
+exports. This supersedes the earlier menu-only hold for **UI work only**; backend
+upload, preparation and import implementation remains deferred.
+
+Source Files now provides three local file selectors: multiple Device Template
+Excel files, one Basic UDI-DI reference Excel file, and multiple EUDAMED XML
+extracts. Filenames, sizes and local selection status are shown, with a basic
+extension warning. Selection is not upload, content validation or acceptance.
+Files remain in browser memory and are retained when navigating between the
+application areas; refreshing clears the selection. No file bytes are read or
+sent by this preview.
+
+The agreed output is an Excel **Import Workbook**, retaining the existing
+To Register, Registered and Summary structure and a linked application-managed
+audit file. Creating that pair remains separate from database import.
+
+Assessment & Import provides the prepared-input, assessment, exception-review,
+confirmation and result layout. Both pages use existing panels, colours, buttons
+and compact banners. Optional example views contain conspicuously labelled
+synthetic totals and two fictional device exceptions, independent of selected
+files or application records. Real upload/check/create/download/assess/import
+buttons remain disabled; ticking the example review checkbox cannot enable an
+import. Import History remains a placeholder; Reporting was subsequently expanded
+into the UI previews described above.
+
+Verification: **106 frontend tests** and the TypeScript/Vite build passed, with
+the existing >500 kB bundle warning. New checks cover file selection and its
+retention, extension feedback and disabled imports after example acknowledgement.
+These are component checks; owner browser/layout review remains outstanding.
+No backend, dependencies, schema, mapping rules, main application code or database
+state were changed. All new UI work is on `feature/import-management-reporting`.
+
+## October 24 — Development Navigation And Planned Workspaces
+
+Banner descriptions and status-card explanations were subsequently shortened
+across the workspaces. Documentation uses the owner's wording: “Select and view
+implementation documentation” and “Select perspective to view”. Counts and
+readiness conditions are unchanged; the summary count is explicitly described as
+successful POST/PATCH events. Environment-specific submission/testing wording is
+retained. All 103 frontend tests and the build passed after the copy update.
+
+Implemented on `feature/import-management-reporting` in `.worktrees/development`:
+the initial large grouped menu was replaced after owner visual review with a
+compact two-level menu: Import Management, Data Views, EUDAMED, Reporting and Help.
+Only the active area's pages are displayed underneath. The title block is shorter
+and the repeated tagline is removed; both navigation rows wrap on small screens.
+The selected area/page are highlighted and the last page used in each area is
+retained while the application stays open. Reloading resets to Submission Data.
+Following owner review, workspace banners were also reduced to consistent
+28–32 px serif page titles, 16 px descriptions, less padding and smaller status
+cards. Redundant introductory labels were removed from the banner titles.
+The owner subsequently requested single-line descriptions and consistent banner
+depth. Descriptions now stay unwrapped, with horizontal scrolling when needed
+and keyboard focus support so the full sentence remains accessible. The previous
+character-width caps were removed. After further owner review, the 192 px minimum
+was reduced to 112 px with 12 px vertical padding. Banner status labels and badges
+now share one row, with details underneath, removing the tall stacked card.
+On narrow screens banners
+can grow for stacked content and accessibility rather than clip controls.
+Submission Data uses the same title/description scale while retaining its import
+controls. Body, table and non-banner status-card styles were left unchanged.
+All 103 frontend tests and the build passed after this visual refinement; browser
+review remains with the owner. This refinement does not change database state.
+The Dev/Prod banner remains visible, with environment-specific wording confined
+to the EUDAMED submenu. Import Management has
+Source Files, Assessment & Import, and Import History; Reporting has Registration
+Snapshot and EUDAMED Comparison. Existing Data Views, environment-aware EUDAMED
+Workspaces and Documentation navigation remain available.
+
+Each new entry opens its own descriptive placeholder with a **Not yet available**
+status. No upload, import, report generation or comparison actions were added.
+The owner wants menu work completed now and Import Management/Reporting feature
+implementation held until Playground XML exports are available. Future import
+testing will use Template data and Playground exports, retaining the existing
+Dev/Playground state and protecting Production.
+
+Verification: all 103 frontend tests and the TypeScript/Vite build passed after
+correcting the environment-guide reference below (it is a local file, not a
+registered in-app documentation section). Five new navigation checks cover
+contextual page visibility, active area/page indicators, last-page restoration
+and Dev/Prod/unconfirmed EUDAMED labels. The existing >500 kB bundle warning
+remains. Browser layout/click verification is still for owner review in Dev.
+No backend changes, application starts, database operations or main-branch changes
+were made for this menu update.
+
+## October 24 — Development Worktree Established And Full Tests Passed
+
+The owner confirmed **one environment at a time** and use of the **existing
+Dev/Playground database** for the next development wave. This supersedes the
+earlier open isolation-design decisions below. Production remains in the original
+folder on `main`; the new worktree is `.worktrees/development`, on
+`feature/import-management-reporting`, starting from
+`018734a1f7e6d5651e5c7951ccb62b3ca0f45eb6`.
+
+Use `docs/development-and-production.md` for branch and environment switching
+instructions in the development worktree.
+The development worktree has an ignored `.env.dev` retaining the existing
+Playground actor configuration and explicit paths to the original
+`data/testing/testing-state.sqlite3`, its backup directory and Dev source/reference
+workbooks. It has independent Python/frontend dependencies, copied from the
+installed baseline, and its own normalization/report/artifact paths. No database
+was copied. The Production database remains `data/prod/application.sqlite3` in the
+original folder. No runtime was started or stopped by this setup; the existing
+Production backend was observed with that database open and was left running.
+
+Both original profiles and the new worktree's Dev profile passed read-only
+`--check-config` checks. These validate configuration/schema without opening
+SQLite; runtime/browser switching remains for the owner to verify using the guide.
+Both environments retain ports 8000/5173: stop both current processes and close
+old application browser tabs before starting the other environment. Do not switch
+the original Production checkout off `main` to develop features.
+
+The full baseline Python suite passed **293 tests in 237.31 seconds** with two
+existing FastAPI startup deprecation warnings. It ran to completion without a
+short timeout, with inherited EUDAMED settings removed, Dev selected and temporary
+database overrides; the session fixture also isolates its database. All **98
+frontend tests** and the TypeScript/Vite build passed in both the original checkout
+and the new development worktree. The existing bundle warning remains (790.59 kB
+JavaScript). These are automated checks, not new Playground submissions.
+
+Production database and associated `application.sqlite3*` files were fingerprinted
+without opening SQLite before the tests/setup and checked afterwards: file hashes,
+sizes and modification times were unchanged. Production `main` and its tracked
+working files were unchanged. The nested worktree is excluded locally through
+`.git/info/exclude`; no tracked ignore change was made on `main`. No commits,
+remote pushes, merges, migrations or application feature changes were performed.
+The new guide and this handoff update are pending changes on the development branch.
+
+Next: verify owner-controlled environment switching, then agree menu subheadings
+and the detailed Import Management/Reporting scope before feature implementation.
+Development may update Playground state; it MUST NOT touch the Production database.
 
 ## November 2 — Production bulk selection update
 
@@ -795,8 +2532,8 @@ Elan MAX / MAX Liners / MAX Sleeves. A new workbook records the inclusion in
 Summary, clears the optional-only review flags and leaves those URL fields blank.
 Original placeholder values remain in the audit; no source file was changed.
 
-- [Current workbook](../data/prod/import_file/production-import-20261009-114955-299236.xlsx).
-- [Current audit](../data/prod/import_file/production-import-20261009-114955-299236.audit.json).
+- `data/prod/import_file/production-import-20261009-114955-299236.xlsx` (original Production checkout).
+- `data/prod/import_file/production-import-20261009-114955-299236.audit.json` (original Production checkout).
 - All 940 affected rows have Review Required = No. Summary groups them as Included
   with optional URL omitted, rather than exceptions. Market choices are unchanged.
 - To Register: 9,672 No / two Yes. Registered: 356 No / four Yes.

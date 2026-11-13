@@ -268,16 +268,6 @@ class XmlGenerationService:
         excluded: list[BulkXmlExcludedRecord] = []
         eligible_posts: list[CanonicalValidationRecord] = []
         for record in variant_records:
-            if self._normalized_operation(record.submission_operation) != "POST" and not (accepted_baseline and self.selector._imported_baseline_record(record)):
-                excluded.append(
-                    BulkXmlExcludedRecord(
-                        catalogue_number=record.catalogue_number,
-                        primary_udi_di=record.primary_udi_di,
-                        reason_code="not_post_operation",
-                        reason_message="Record is not classified as a POST row.",
-                    )
-                )
-                continue
             if record.xml_readiness.status != "complete":
                 excluded.append(
                     BulkXmlExcludedRecord(
@@ -288,7 +278,7 @@ class XmlGenerationService:
                     )
                 )
                 continue
-            eligible_posts.append(record)
+            eligible_posts.append(record.model_copy(update={"submission_operation": "POST"}))
         limited_posts = eligible_posts if record_count is None else eligible_posts[:record_count]
         return limited_posts, excluded, len(eligible_posts)
 
@@ -1529,10 +1519,10 @@ class XmlGenerationService:
             base_message_type = "POST"
             base_version = "1"
             base_state_source = "accepted_post"
-            if patch_state_resolution and patch_state_resolution.source == "production_export":
+            if patch_state_resolution and patch_state_resolution.source in {"production_export", "playground_export"}:
                 if patch_state_resolution.state.version != "1":
                     raise ValueError("Imported accepted version requires the next PATCH version; refresh assessment.")
-                base_state_source = "production_export"
+                base_state_source = patch_state_resolution.source
                 base_state_label = "Imported accepted baseline version 1"
             else:
                 base_state_label = "Accepted POST version 1"
@@ -1548,7 +1538,7 @@ class XmlGenerationService:
             base_message_type = "PATCH"
             base_version = patch_state_resolution.state.version
             base_state_source = patch_state_resolution.source
-            base_state_label = (f"Imported accepted baseline version {base_version}" if patch_state_resolution.source == "production_export" else f"Latest successful PATCH version {base_version}")
+            base_state_label = (f"Imported accepted baseline version {base_version}" if patch_state_resolution.source in {"production_export", "playground_export"} else f"Latest successful PATCH version {base_version}")
 
         base_xml_bytes = self.renderer.render_message(scenario_base_record)
         base_validation = self.xml_validation_service.validate_message(base_xml_bytes)
@@ -1769,13 +1759,9 @@ class XmlGenerationService:
             product_variant=product_variant,
             catalogue_number=catalogue_number,
         )
-        if self._normalized_operation(record.submission_operation) != "POST" and not (accepted_baseline and self.selector._imported_baseline_record(record)):
-            raise ValueError(
-                f"Catalogue number {catalogue_number} is not currently classified as a POST record for "
-                f"{product_family} / {product_variant}."
-            )
-
-        post_record = self.projection_builder.build_device_record(record)
+        # This endpoint also renders explicit baseline previews for PATCH review.
+        # Actual POST eligibility/download is checked against current registration.
+        post_record = replace(self.projection_builder.build_device_record(record), submission_operation="POST")
         if accepted_baseline:
             post_record = self._accepted_post_record(post_record)
             post_record = replace(post_record, market_countries=self._patch_market_countries(post_record=post_record))
@@ -1941,7 +1927,8 @@ class XmlGenerationService:
                 ),
                 post_valid=True,
                 patch_valid=True,
-                eudamed_status="EUDAMED Accepted",
+                eudamed_status=self._registration_label(product_family=record.product_family,
+                    product_variant=record.product_variant, primary_udi_di=record.primary_udi_di),
             ),
             file_name=self.package_builder.market_info_file_name(
                 product_family=record.product_family,
@@ -2023,6 +2010,12 @@ class XmlGenerationService:
             raise ValueError("market_info_version must be a positive integer.")
         return str(parsed)
 
+    def _registration_label(self, *, product_family: str, product_variant: str, primary_udi_di: str | None) -> str:
+        registered = bool(primary_udi_di and self.testing_state_store.has_successful_primary_udi_post(
+            product_family=product_family, product_variant=product_variant, primary_udi_di=primary_udi_di))
+        environment = "Production" if self.settings.environment == "prod" else "Dev / Playground"
+        return f"Registered in {environment}" if registered else f"Registration not evidenced in {environment}"
+
     def _registered_device_anchor(
         self,
         post_record: DeviceXmlRecord,
@@ -2046,7 +2039,8 @@ class XmlGenerationService:
             ),
             post_valid=True,
             patch_valid=True,
-            eudamed_status="EUDAMED Accepted",
+            eudamed_status=self._registration_label(product_family=post_record.product_family,
+                product_variant=post_record.product_variant, primary_udi_di=post_record.primary_udi_di),
         )
 
     def _build_generated_patch_scenario(
@@ -2413,6 +2407,12 @@ class XmlGenerationService:
         product_variant: str,
         catalogue_number: str,
     ) -> tuple[str, bytes]:
+        record = self.selector.find_xml_ready_record(product_family=product_family,
+            product_variant=product_variant, catalogue_number=catalogue_number)
+        if self.testing_state_store.has_successful_primary_udi_post(
+            product_family=record.product_family, product_variant=record.product_variant,
+            primary_udi_di=record.primary_udi_di):
+            raise ValueError("This Device UDI-DI already has registration evidence in the active environment; use PATCH instead of POST.")
         preview = self.preview_post_registration(
             product_family=product_family,
             product_variant=product_variant,

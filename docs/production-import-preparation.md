@@ -4,9 +4,18 @@ Implemented and refreshed 9 October 2026. This utility prepares a workbook for r
 not create or populate the Production SQLite database, change canonical mappings,
 or submit anything to EUDAMED.
 
+Reviewed 1 November 2026. The commands below remain Production-specific; dated
+counts describe their original preparation/initial-import checkpoint.
+
 ## Run
 
-From the repository root:
+For an owner-reviewed Production source update, run from the original/main
+checkout containing its existing ignored Production inputs. Do not run this
+command simply to test the new Dev upload UI. For this installation, local paths
+below belong to `/Users/frankbogle/PycharmProjects/Eudamed/EudamedUploader/`, not
+the nested development worktree. Original inputs and the database stay in place.
+
+From that repository root:
 
 ```bash
 .venv/bin/python backend/scripts/prepare_production_import.py \
@@ -54,8 +63,10 @@ from prepared URL fields, preserving the source value in the audit. Optional URL
 do not set Review Required. Summary records Included with optional URL omitted,
 grouped by parent; independent conflicts still retain their review flags.
 
-Current [workbook](../data/prod/import_file/production-import.xlsx)
-and [audit](../data/prod/import_file/production-import.audit.json):
+The current local pair is `data/prod/import_file/production-import.xlsx` and
+`data/prod/import_file/production-import.audit.json` in the original checkout.
+These are ignored application artifacts, not portable Help downloads. The following
+counts describe the October preparation/initial-import checkpoint:
 
 - To Register: 9,672 Review Required = No; two Yes.
 - Registered: 354 No; three Yes.
@@ -68,7 +79,7 @@ identities remain absent; restored identities are removed from those notes.
 Sixteen tests passed. Saved-output checks verified all 940 inclusion flags,
 Summary entries, counts and source/output hashes. These are eligibility counts,
 not completed database imports. The importer is now implemented and separately
-verified on synthetic databases; Production has not been populated.
+verified on synthetic databases. The first owner-reviewed local Production startup/import subsequently completed on 10 October; this preparation checkpoint is not an instruction to repopulate or replace that database.
 
 Owner-approved exclusions remove two Child’s 4-Bar Knee rows and Blatchford App.
 Four Android/iOS programming-app parents have no current child rows but are also

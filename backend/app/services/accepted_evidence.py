@@ -7,8 +7,9 @@ from app.services.accepted_state import json_state
 
 def imported_event_sql(alias: str = "event") -> str:
     return (f"({alias}.status = 'IMPORTED' AND {alias}.event_kind = 'BASELINE_IMPORT' "
-            f"AND {alias}.message_type = 'PRODUCTION_EXPORT.SNAPSHOT' "
-            f"AND {alias}.accepted_state_source = 'production_export' AND {alias}.state_after_json IS NOT NULL)")
+            f"AND (({alias}.message_type = 'PRODUCTION_EXPORT.SNAPSHOT' AND {alias}.accepted_state_source = 'production_export') "
+            f"OR ({alias}.message_type = 'PLAYGROUND_EXPORT.SNAPSHOT' AND {alias}.accepted_state_source = 'playground_export')) "
+            f"AND {alias}.state_after_json IS NOT NULL)")
 
 
 def registration_event_sql(alias: str = "event", *, parent: bool = False) -> str:

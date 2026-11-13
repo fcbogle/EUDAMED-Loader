@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { api } from "../api";
 import type { RegistrationChildrenPage, RegistrationSummary } from "../types";
-import { childXmlActions, parentNextStep, registrationParents, type RegistrationParent } from "../registrationParents";
+import { childXmlActions, parentNextStep, registrationParents, type RegistrationParent, type PatchReviewScope } from "../registrationParents";
 
 function ParentChildren({ parent, importBatchId }: { parent: RegistrationParent; importBatchId: number }) {
   const [offset, setOffset] = useState(0);
@@ -34,7 +34,7 @@ function ParentChildren({ parent, importBatchId }: { parent: RegistrationParent;
           <td>{child.product_family} / {child.product_variant}</td>
           <td>{child.catalogue_number || "Unavailable"}</td>
           <td><code>{child.issuing_entity}: {child.primary_udi_di}</code></td>
-          <td><span className={`status-pill compact ${child.registration_status === "Registered" ? "ok" : "warn"}`}>{child.registration_status}</span></td>
+          <td><span className={`status-pill compact ${child.registration_status === "Registered" ? "ok" : "warn"}`}>{child.registration_status === "Awaiting registration" ? "Unregistered" : child.registration_status}</span></td>
           <td>{childXmlActions(child)}{child.registration_status === "Unknown" && child.post_ready ? <div className="panel-copy">Confirm registration status before POST.</div> : null}</td>
         </tr>)}</tbody>
       </table>
@@ -48,28 +48,30 @@ function ParentChildren({ parent, importBatchId }: { parent: RegistrationParent;
   </div>;
 }
 
-export function RegistrationParentsChildren({ summary }: { summary: RegistrationSummary }) {
+export function RegistrationParentsChildren({ summary, onReviewPatch }: { summary: RegistrationSummary; onReviewPatch?: (scope: PatchReviewScope) => void }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   // This component is remounted for each refreshed summary to discard stale drill-down state.
   const [parents] = useState(() => registrationParents(summary.groups));
   return <div>
     <p className="panel-copy">{parents.length} Basic UDI parent{parents.length === 1 ? "" : "s"} in the current filter. Open a parent to view its children.</p>
+    <p className="panel-copy">Unregistered means present in the imported Template or BasicUDI workbook but absent from recorded EUDAMED evidence. Unknown means absent from all these sources. Identity checks control XML eligibility separately.</p>
     <div className="testing-summary-table-shell">
       <table className="workbook-files-table registration-parents-table">
         <caption className="visually-hidden">Parents and children registration overview</caption>
-        <thead><tr><th>Model / Basic UDI-DI</th><th>Parent status</th><th>Children</th><th>Registered</th><th>Awaiting</th><th>Unknown</th><th>Child POST ready</th><th>Next step</th></tr></thead>
+        <thead><tr><th>Model / Basic UDI-DI</th><th>Parent status</th><th>Children</th><th>Registered</th><th>Unregistered</th><th>Unknown</th><th>Child POST ready</th><th>PATCH-ready</th><th>Next step</th></tr></thead>
         <tbody>{parents.map((parent, index) => <Fragment key={parent.key}>
           <tr>
             <td><button type="button" className="registration-parent-toggle" disabled={!parent.issuer || summary.import_batch_id == null}
               aria-expanded={expanded === parent.key} aria-controls={`registration-parent-children-${index}`}
               onClick={() => setExpanded(value => value === parent.key ? null : parent.key)}>
               <span aria-hidden="true">{expanded === parent.key ? "▾" : "▸"}</span>
-              <span><strong>{parent.models.join(" · ")}</strong><code>{parent.issuer ? `${parent.issuer}: ` : ""}{parent.basicUdiDi}</code></span>
+              <span><strong>{parent.models.join(" · ")}</strong><small className="registration-group-family">Family: {[...new Set(parent.scopes.map(scope => scope.productFamily))].join(" · ")}</small><code>{parent.issuer ? `${parent.issuer}: ` : ""}{parent.basicUdiDi}</code></span>
             </button></td>
-            <td><span className={`status-pill compact ${parent.registered ? "ok" : "warn"}`}>{parent.registered ? "Registered" : "Unknown"}</span></td>
-            <td>{parent.total}</td><td>{parent.registeredChildren}</td><td>{parent.awaiting}</td><td>{parent.unknown}</td><td>{parent.childPostReady}</td><td>{parentNextStep(parent)}</td>
+            <td><span className={`status-pill compact ${parent.registered ? "ok" : "warn"}`}>Parent {parent.registrationStatus.toLowerCase()}</span></td>
+            <td>{parent.total}</td><td>{parent.registeredChildren}</td><td>{parent.awaiting}</td><td>{parent.unknown}</td><td>{parent.childPostReady}</td><td>{parent.patchReady}</td><td>{parentNextStep(parent)}
+              {onReviewPatch ? parent.scopes.map(scope => <button key={`${scope.productFamily}|${scope.productVariant}`} type="button" className="ghost-button registration-patch-review" disabled={scope.registeredChildren < 1} onClick={() => onReviewPatch(scope)}>Review PATCH devices{parent.scopes.length > 1 ? ` · ${scope.productVariant}` : ""}</button>) : null}</td>
           </tr>
-          {expanded === parent.key && summary.import_batch_id != null ? <tr id={`registration-parent-children-${index}`}><td colSpan={8}>
+          {expanded === parent.key && summary.import_batch_id != null ? <tr id={`registration-parent-children-${index}`}><td colSpan={9}>
             <ParentChildren parent={parent} importBatchId={summary.import_batch_id} />
           </td></tr> : null}
         </Fragment>)}</tbody>

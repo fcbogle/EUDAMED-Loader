@@ -1,0 +1,169 @@
+--- a/backend/tests/conftest.py
++++ b/backend/tests/conftest.py
+@@ -4,6 +4,8 @@
+ import sys
+ from pathlib import Path
+ import sqlite3
++import tempfile
++from urllib.parse import parse_qs, unquote, urlparse
+ 
+ BACKEND_ROOT = Path(__file__).resolve().parents[1]
+ 
+@@ -17,10 +19,39 @@
+ 
+ 
+ @pytest.fixture(autouse=True)
+-def clear_reviewed_post_state() -> None:
+-    TestingStateStore.clear_reviewed_posts()
++def test_database_write_guard(monkeypatch, tmp_path_factory):
++    """Never let a stale/local profile turn a test into an operational DB write."""
++    original = sqlite3.connect
++    allowed = [tmp_path_factory.getbasetemp().resolve(), Path(tempfile.gettempdir()).resolve(), Path('/tmp').resolve()]
++    def guarded(database, *args, **kwargs):
++        raw = os.fsdecode(database)
++        readonly = False
++        if kwargs.get("uri") and raw.startswith("file:"):
++            uri = urlparse(raw)
++            query = parse_qs(uri.query)
++            if query.get("mode") == ["memory"] or uri.path == ":memory:":
++                return original(database, *args, **kwargs)
++            readonly = query.get("mode") == ["ro"]
++            raw = unquote(uri.path)
++        if raw != ":memory:" and not readonly:
++            target = Path(raw).expanduser().resolve()
++            if not any(target.is_relative_to(root) for root in allowed):
++                raise RuntimeError(f"Tests cannot open a non-temporary database for writing: {target}")
++        return original(database, *args, **kwargs)
++    monkeypatch.setattr(sqlite3, "connect", guarded)
++
++
++@pytest.fixture(autouse=True)
++def clear_reviewed_post_state(test_database_write_guard, reset_testing_state_database) -> None:
++    # Cleanup uses the session's fixed temporary path, never cached get_settings().
++    def clear():
++        with sqlite3.connect(reset_testing_state_database) as connection:
++            connection.execute("DELETE FROM reviewed_post_baselines")
++    get_settings.cache_clear()
++    clear()
+     yield
+-    TestingStateStore.clear_reviewed_posts()
++    get_settings.cache_clear()
++    clear()
+ 
+ 
+ @pytest.fixture(scope="session", autouse=True)
+@@ -30,6 +61,11 @@
+     os.environ["EUDAMED_TESTING_STATE_BACKUP_DIR"] = str(session_tmp / "backups")
+     get_settings.cache_clear()
+     settings = get_settings()
++    expected_database = (session_tmp / "testing-state.sqlite3").resolve()
++    if settings.testing_state_db_path.resolve() != expected_database:
++        raise RuntimeError("Test setup refused a database outside its fixed temporary location")
++    if settings.testing_state_backup_dir.resolve() != (session_tmp / "backups").resolve():
++        raise RuntimeError("Test setup refused a backup location outside its fixed temporary directory")
+     if settings.testing_state_db_path.exists():
+         settings.testing_state_db_path.unlink()
+     TestingStateStore()
+@@ -37,7 +73,7 @@
+         db_path=settings.testing_state_db_path,
+         seed_path=BACKEND_ROOT.parent / "data" / "testing" / "testing-state-seed.sql",
+     )
+-    yield
++    yield settings.testing_state_db_path
+     get_settings.cache_clear()
+ 
+ 
+--- /dev/null
++++ b/backend/tests/test_database_test_isolation.py
+@@ -0,0 +1,91 @@
++"""Prove local/cached operational paths cannot be written during pytest runs."""
++import sqlite3
++from pathlib import Path
++
++import pytest
++
++from app.config import get_settings
++from app.services.testing_state_store import TestingStateStore as StateStore
++
++
++def test_write_guard_blocks_cached_operational_database(monkeypatch):
++    base = get_settings()
++    operational = Path(__file__).resolve().parents[2] / "data/testing/never-open-operational.sqlite3"
++    monkeypatch.setattr('app.services.testing_state_store.get_settings', lambda: base.model_copy(update={"testing_state_db_path": operational}))
++    # Exercise the connection guard directly even if this sentinel is absent.
++    with pytest.raises(RuntimeError, match="non-temporary"):
++        sqlite3.connect(operational)
++    original_exists = Path.exists
++    monkeypatch.setattr(Path, "exists", lambda path: True if path == operational else original_exists(path))
++    with pytest.raises(RuntimeError, match="non-temporary"):
++        StateStore.clear_reviewed_posts()
++    monkeypatch.setattr(Path, "exists", original_exists)
++    assert not operational.exists()
++
++
++def test_readonly_uri_remains_readonly(tmp_path):
++    path = tmp_path / "synthetic.sqlite3"
++    with sqlite3.connect(path) as connection:
++        connection.execute("CREATE TABLE example(value TEXT)")
++    with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) as connection:
++        assert connection.execute("SELECT count(*) FROM example").fetchone()[0] == 0
++        with pytest.raises(sqlite3.OperationalError, match="readonly"):
++            connection.execute("INSERT INTO example VALUES ('no')")
++
++
++def production_database_path():
++    repository = Path(__file__).resolve().parents[2]
++    if repository.parent.name == '.worktrees':
++        repository = repository.parent.parent
++    return repository / 'data/prod/application.sqlite3'
++
++
++@pytest.mark.parametrize('mode', [None, 'rw', 'rwc'])
++def test_production_database_write_connections_are_rejected_before_open(mode):
++    production = production_database_path()
++    # The guard raises before calling SQLite. The Production file is never opened.
++    with pytest.raises(RuntimeError, match='non-temporary'):
++        if mode is None:
++            sqlite3.connect(production)
++        else:
++            sqlite3.connect(production.as_uri() + '?mode=' + mode, uri=True)
++
++
++def test_stale_production_profile_cannot_clear_review_records(monkeypatch):
++    production = production_database_path()
++    poisoned = get_settings().model_copy(update={'environment': 'prod', 'testing_state_db_path': production})
++    monkeypatch.setattr('app.services.testing_state_store.get_settings', lambda: poisoned)
++    original_exists = Path.exists
++    monkeypatch.setattr(Path, 'exists', lambda path: True if path == production else original_exists(path))
++    with pytest.raises(RuntimeError, match='non-temporary'):
++        StateStore.clear_reviewed_posts()
++
++
++def test_temporary_symlink_cannot_redirect_test_writes_to_production(tmp_path):
++    alias = tmp_path / 'apparently-temporary.sqlite3'
++    alias.symlink_to(production_database_path())
++    with pytest.raises(RuntimeError, match='non-temporary'):
++        sqlite3.connect(alias)
++
++
++def test_session_setup_refuses_production_before_delete_or_initialization(monkeypatch, tmp_path):
++    import conftest
++    from types import SimpleNamespace
++    poisoned = get_settings().model_copy(update={
++        'environment': 'prod', 'testing_state_db_path': production_database_path(),
++        'testing_state_backup_dir': production_database_path().parent / 'backups',
++    })
++    def cached_production_settings():
++        return poisoned
++    cached_production_settings.cache_clear = lambda: None
++    monkeypatch.setattr(conftest, 'get_settings', cached_production_settings)
++    # Register restoration for the environment keys the setup fixture assigns.
++    monkeypatch.setenv('EUDAMED_TESTING_STATE_DB_PATH', str(tmp_path / 'before.sqlite3'))
++    monkeypatch.setenv('EUDAMED_TESTING_STATE_BACKUP_DIR', str(tmp_path / 'before-backups'))
++    def forbidden(*args, **kwargs):
++        pytest.fail('Test setup reached a delete or database initializer')
++    monkeypatch.setattr(Path, 'unlink', forbidden)
++    monkeypatch.setattr(conftest, 'TestingStateStore', forbidden)
++    fixture = conftest.reset_testing_state_database.__wrapped__(SimpleNamespace(mktemp=lambda name: tmp_path))
++    with pytest.raises(RuntimeError, match='fixed temporary location'):
++        next(fixture)

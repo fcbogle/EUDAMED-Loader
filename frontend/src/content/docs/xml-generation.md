@@ -1,30 +1,16 @@
 # XML Generation
 
-## Purpose
+Updated 1 November 2026 against the current feature-branch workspaces. Operators
+prepare and submit XML manually in the intended environment; the application
+records evidence but has no automatic EUDAMED transport or live registration lookup.
 
-The XML workspace supports controlled EUDAMED preparation, local schema validation, Playground testing, and capture of confirmed successful outcomes.
+## Navigation and modes
 
-Two related top-level areas remain:
-
-- `EUDAMED Testing`
-- `EUDAMED Generation`
-
-`EUDAMED Testing` is the active operational workspace for assessment, preview, validation, export, and success capture.
-
-`EUDAMED Generation` remains the accepted-only generation area.
-
-## Current Mode Split
-
-Inside `EUDAMED Testing`, the active XML modes are:
-
-- `POST`
-- `Patch XML`
-- `Market Info`
-- `Bulk Basic UDI-DI POST`
-- `Bulk Device UDI-DI POST`
-- `Bulk PATCH`
-
-These modes are intentionally separate because they represent different regulatory actions and different lineage rules.
+Open the EUDAMED area and its environment-labelled Testing/Submission workspace.
+The six visible modes are POST, Patch XML, Market Info, Bulk UDI-DI POST,
+Bulk PATCH and Bulk Market Info. There is no separate accepted-only Generation
+navigation page. Parent-only Bulk Basic UDI POST remains supported through its
+separate backend/API operation, not a visible mode button.
 
 ## Current Selection Model
 
@@ -46,77 +32,39 @@ Backend assessment still determines eligibility:
 - a `PATCH` requires the selected device's tracked accepted lineage
 - Market Info and bulk operations retain their own registration, version and scope rules
 
-## Current Supported Outputs
+## Current supported outputs
 
-### `POST`
+| Workspace | Target and required context |
+| --- | --- |
+| POST | Parent seed with its first device, or child-only UDI-DI registration under an accepted parent, as assessed. |
+| Patch XML | One exact accepted device, supported scenario and base/proposed version context. |
+| Market Info | One registered device's market-information collection. |
+| Bulk UDI-DI POST | Eligible child-only registrations under the selected accepted parent. |
+| Bulk PATCH | Supported scenario over an explicit registered-device scope, preserving individual accepted baselines. |
+| Bulk Market Info | Explicit target countries over an eligible registered-device scope with individual Market Info version handling. |
 
-Single `POST` now supports both regulatory shapes through one workspace:
+Registration drives POST/PATCH designation. Historical source-operation labels do
+not control eligibility. Identity, parent, data-quality, accepted-state and version
+guards remain authoritative. Scenario availability is documented in
+[Testing Scenarios](testing-scenarios.md); Sterile and Latex PATCH are blocked,
+and the five unimplemented scenarios are not enabled by having a catalogue entry.
 
-- Basic UDI-DI parent-seeding `POST`
-- Device UDI-DI child `POST`
+## Accepted evidence and versions
 
-The workspace explains which shape is currently available for the selected family/variant and generates only the next eligible candidate.
+Accepted state can come from validated successful acknowledgements or an explicit
+imported export baseline in the active environment. Imported baseline events are
+not successful uploads. Device and Market Info versions are tracked separately.
+Review the selected operation's base and proposed versions; the version-2
+Equivalent First Patch is a special scenario, not a universal next version.
+PATCH retains the latest applicable accepted Market Info countries rather than
+reverting to an unrelated or stale POST draft.
 
-### `Patch XML`
-
-Single `PATCH` is a controlled scenario workspace:
-
-- one next eligible accepted-state device at a time
-- scenario-based edits only
-- local validation and download
-- success-XML upload to advance tracked device state
-
-Derived `PATCH` XML builds from the latest successful tracked version for that device.
-
-### `Market Info`
-
-`Market Info` remains a separate operation and should not be collapsed into the `POST` or `PATCH` workspaces.
-
-### `Bulk Basic UDI-DI POST`
-
-This mode creates parent-only registration packages.
-
-### `Bulk Device UDI-DI POST`
-
-This mode creates child-only registration packages under an already tracked Basic UDI-DI parent.
-
-### `Bulk PATCH`
-
-This mode creates PATCH packages derived from tracked accepted device state. Bulk scope is controlled through operational selection, such as:
-
-- all posted devices in scope
-- next N devices
-- selected catalogue numbers
-- imported catalogue list
-
-## Current Service Profiles
-
-Current service profiles in active use include:
-
-- parent or child registration through `POST`
-- `UDI_DI.PATCH`
-- `MARKET_INFO.PUT`
-
-The exact generated XML shape depends on the assessed operation and current tracked state, not only on the selected family/variant.
-
-## Success XML
-
-Successful Playground outcomes can now be recorded through the success-XML upload workflow.
-
-Current supported success capture includes:
-
-- successful single `POST`
-- successful bulk `POST`
-- successful single `PATCH`
-- successful bulk `PATCH`
-
-Success capture updates SQLite-backed operational state, including latest successful version and next-operation availability.
-
-## Important Note
-
-The current XML layer is tied directly to the operational state model.
-
-It is therefore no longer accurate to describe XML generation as a stateless preview utility. Candidate resolution, version lineage, remaining counts, and next available actions all depend on the tracked SQLite state.
+Preview/XSD validation, ZIP review and registration are separate. Downloading the
+exact ZIP records its review and generation context; it does not submit or accept
+that XML. After manual submission, retain returned responses and use the supported
+Upload Success XML workflow. Correlation, identity, duplicate/delayed response and
+version guards control accepted-state updates and refresh the available operations.
+See [Service Contract Findings](eudamed-service-contract-findings.md).
 
 ## Selecting Catalogue Numbers In Bulk Workspaces
 

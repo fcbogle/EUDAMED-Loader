@@ -2,7 +2,7 @@
 
 ## Historical policy status — reviewed 11 October 2026
 
-The original proposal below predates the current identity resolver. Dev import now
+The original proposal below predates the current identity resolver. The retained legacy Dev raw-template importer
 classifies matches using primary UDI-DI or fallback labels, records explicit
 identity issues/drift, and links source rows to device subjects. Source/device read
 paths and reviewed/testing device-subject links exist. The original Current Import
@@ -10,6 +10,9 @@ Behavior, limitations and next-step sections are historical, not a description o
 an unchanged simple upsert. Consult
 [workbook_import.py](../../backend/app/services/workbook_import.py) and the
 [current handoff](../session-handoff.md) before modifying identity logic.
+
+The new Dev batch workflow uses issuer-qualified device/parent identity and explicit
+source review; see [Import Data in Dev](../source-batch-receipt.md).
 
 Production preparation reconciles issuer plus UDI-DI (parent issuer plus Basic
 UDI-DI). That issuer-aware contract must not be reduced to a bare code or catalogue
