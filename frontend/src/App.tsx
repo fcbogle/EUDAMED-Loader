@@ -3218,14 +3218,19 @@ export function App() {
   });
 
   const plannedWorkspace = PLANNED_WORKSPACES.find((workspace) => workspace.id === activeTab);
-  const isImportManagement = activeTab === "sourceFiles";
+  const isImportManagement = activeTab === "sourceFiles" || activeTab === "importHistory";
   const isReporting = activeTab === "registrationSnapshot" || activeTab === "eudamedComparison";
   const locationLabel = plannedWorkspace?.group ?? (activeTab === "xml" || activeTab === "testingSummary" ? "EUDAMED" : activeTab === "documentation" ? "Help" : "Data Views");
 
 
   return (
     <main className="app-shell">
-      <EnvironmentBanner onEnvironmentChange={setActiveEnvironment} />
+      <EnvironmentBanner
+        onEnvironmentChange={setActiveEnvironment}
+        importBatch={latestImportBatch}
+        importLoading={isLoadingWorkbookImportMonitoring}
+        importUnavailable={Boolean(workbookImportSummaryError)}
+      />
       <nav className="top-nav" aria-label="Application navigation">
         <div className="brand-block">
           <strong>EUDAMED Profiling Workspace</strong>
@@ -3244,7 +3249,7 @@ export function App() {
           {plannedWorkspace ? (
             <>
               <h1>{plannedWorkspace.title}</h1>
-              <p className="hero-copy" tabIndex={0}>{plannedWorkspace.description}</p>
+              <p className="hero-copy" tabIndex={0}>{activeTab === "sourceFiles" && importFlowContext.status === "Import completed" ? "Import completed. View its receipt, open its history or start a new import." : plannedWorkspace.description}</p>
             </>
           ) : null}
           {activeTab === "workbooks" ? (
@@ -3303,7 +3308,7 @@ export function App() {
         <aside className="hero-status" aria-label="Workspace status">
           {plannedWorkspace ? (
             <span className="status-pill neutral">
-              {activeEnvironment === "dev" && isImportManagement ? importFlowContext.status : "Under development"}
+              {activeEnvironment === "dev" && isImportManagement ? activeTab === "importHistory" ? "Read-only history" : importFlowContext.status : "Under development"}
             </span>
           ) : null}
           {activeTab === "workbooks" ? (
@@ -3386,13 +3391,17 @@ export function App() {
 
       <div className="workspace-content">
       {error ? <div className="panel error-banner">{error}</div> : null}
-      <div hidden={!isImportManagement}>
+      <div hidden={activeTab !== "sourceFiles"}>
         {activeEnvironment === "dev" ? <ImportFlowWorkspace
-          enabled={isImportManagement}
+          enabled={activeTab === "sourceFiles"}
+          onViewHistory={() => setActiveTab("importHistory")}
           onContextChange={setImportFlowContext}
           onDatabaseImported={() => { void loadWorkbookImportMonitoring(); void loadCanonicalValidationBundle(true); void loadCanonicalReviewBundle(true); setRegistrationSummaryRefresh(value => value + 1); }}
         /> : <section className="panel"><p>Import Management is currently available in Dev. Continue using the existing Production import workflow.</p></section>}
       </div>
+      {activeTab === "importHistory" && <>
+        {activeEnvironment === "dev" ? <ImportFlowWorkspace enabled view="history" /> : <section className="panel"><p>Import History is currently available in Dev.</p></section>}
+      </>}
       <SubmissionActivityWorkspace enabled={activeTab === "submissionActivity"} environment={activeEnvironment} />
       <div hidden={!isReporting}>
         <ReportingWorkspace

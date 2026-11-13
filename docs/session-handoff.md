@@ -1,6 +1,296 @@
 # Session Handoff
 
-Updated November 12, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated November 13, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## November 13 — Completed imports have a receipt and read-only history
+
+Owner approved separating completed imports from active source cleanup.
+Import Data now displays only the completed receipt (number/date, importer,
+new/retained counts), plus Start new import and View import history. The progress
+steps, old source-review status/pills and downloads are hidden from that receipt.
+The hero copy also reflects completion rather than asking the user to continue.
+
+Import History is implemented for Dev using existing session/read/download APIs.
+It selects completed imports and shows the receipt, source-file inventory, saved
+review and optional workbook/full-findings downloads. Historical findings are
+explicitly labelled as the review at import; there are no editing, review or
+import controls. Current database quality/XML blockers remain in Canonical
+Validation. Browsing history uses separate selection memory and preserves the
+ongoing Import Data draft.
+
+The sessions list now derives completion from committed SQLite receipts, rather
+than relying on an older saved draft status. No import is rerun or changed.
+Read-only check: import #5 is complete, with 941 new and 8,423 retained devices,
+13 retained source files and its original review. Dev database hash unchanged.
+Validation: 52 targeted backend tests, all 149 frontend tests and the frontend
+build passed. The existing bundle-size advisory remains.
+
+## November 13 — Current import visible in the application banner
+
+At the owner's request, the banner now shows **Current data import** immediately
+to the right of Authorised representative SRN. It uses the same committed database
+import summary as Submission Data: import number and date (using the UTC import
+date), together on one line (e.g. **#5 · 12 Nov 2026**). At the owner's request,
+the batch label and time are omitted from the banner.
+Opening an uncommitted import for review does not change it.
+It refreshes after a successful import, and distinguishes loading, unavailable
+and no recorded import. No database or import workflow changes were required.
+Validation: all 144 frontend tests and the production build passed (existing
+bundle-size advisory remains).
+
+## November 12 — Questioned market countries block import and XML generation
+
+Owner direction: reject records when a country contains `?`. Implemented in Dev
+as review policy `minimal-import-v3-confirmed-countries`: Template, BasicUDI and
+extract country values containing `?` block source review and new import. Confirm
+the country before correcting the source; no automatic stripping or guessing.
+Prepared artifacts include the review policy in their input token, so older
+pending approvals/artifacts cannot authorise a new import without current review.
+
+Already imported records remain stored. Canonical readiness reads overlay a
+country blocker without changing persisted data, and device/Market Info XML
+projection independently rejects questioned countries. Committed import receipts
+remain completed when a later review policy is introduced.
+
+Read-only verification of import_batch 5: **9,364 records**, **9,244 XML-ready**
+and **120 XML-blocked** (**MAX Liners 107, MAX Sleeves 13**). All 120 are rejected
+by XML projection; two BasicUDI source rows carry the questioned values. Completed
+import remains complete. Dev/Production database hashes and protected main-checkout
+files are unchanged. Blank Elan MAX country lists (820 records) are a separate
+unresolved source issue; this narrow rule does not newly block blanks.
+
+Validation: 511 backend tests and 140 frontend tests passed; frontend build passed
+with its existing bundle-size advisory. Regression coverage includes questioned
+Template/BasicUDI/XML values, unchanged source evidence, XML projection, read-only
+readiness overlays and completed imports surviving later policy versions.
+
+This supersedes the earlier checkpoint's stored readiness flags and prior treatment
+of tentative countries as warnings. The historical audit below remains valid as
+an observation of the state before this rule.
+
+## November 12 — Owner completed fresh Dev import; read-only verification
+
+The owner completed batch **2026-11-12-001**, artifact
+bc99a4259ff14cd3843158b0402d276f, committed as SQLite import_batch **5** at
+18:40:39 UTC. The saved draft's older status string is not completion evidence;
+the committed database receipt and matching imports JSON establish completion.
+No import was repeated or modified during this verification.
+
+Confirmed **941 new devices**: Echelon 1, Elan MAX 820, MAX Liners 107,
+MAX Sleeves 13. **8,423 existing devices retained** (8,421 covered by current
+inputs plus two omitted Elan devices), giving **9,364 current device entries**.
+The omitted entries ELAN28L5S and ELAN28R6S remain present. There were no skips,
+duplicate issuer-qualified identities, catalogue collisions or broken current
+source/canonical/import links. Current snapshot/source totals balance at 9,364.
+The corrected EC24R1S and newly added EC27LN7S are separate device identities;
+extract-only EVAC22L1S remains retained.
+
+Retained source set has **7 included Templates, 1 BasicUDI reference and 5 XMLs**.
+All copied sources match their manifest hashes and the inspected originals:
+the supplied ZIP's seven in-scope workbooks, October 9 BasicUDI reference and
+five November 12 Playground extracts. Accessories was not selected in this
+batch. Workbook/audit hashes and the pre-import backup hash match their receipts.
+Dev and backup SQLite integrity checks are ok; Dev foreign-key violations are zero.
+
+Compared with the verified pre-import backup: no prior device was deleted or
+changed apart from its current source pointer/update timestamp. Existing canonical
+values, versions and fields, historical source rows/workbooks, testing subjects,
+events/batches, generated packages, reviewed POST baselines and identity issues
+are preserved. Only expected source/import lineage pointers were advanced. The
+941 new records add 60,224 canonical fields. No existing accepted-state snapshots
+were updated and no new registered snapshots were added; the 241 extracted
+devices were already retained. Production's file fingerprint is unchanged;
+no Production SQLite connection was opened.
+
+The actual Stored Device Data Comparison generator reads the new latest batch:
+**17 models, 9,364 entries, 241 exact supported-field matches, zero differences,
+zero unable, 9,123 absent from this extract, zero extract-only identities outside
+the database**. Absence from the extract is not proof of non-registration.
+Report generation left the Dev database unchanged.
+
+### Readiness issue found — do not confuse import success with XML readiness
+
+All 941 new records currently carry complete/XML-ready metadata, but in-memory
+projection/official 3.0.36.1 validation found:
+
+- **107 MAX Liners + 13 MAX Sleeves:** reference market country France? renders
+  as FRANCE? and fails XSD country enumeration validation (120 records).
+- **820 Elan MAX:** no market-country list. XML is structurally XSD-valid because
+  market information can be omitted, but records are ON_THE_MARKET and the source
+  market data still needs confirmation before using their submission XML.
+- The new Echelon record passes projection/XSD with market data present.
+
+This confirms the previously recorded BasicUDI market-data gaps and exposes an
+optimistic readiness flag. Next: agree confirmed market countries with the owner
+and tighten readiness/feedback for missing/tentative country data. Do not strip
+question marks, infer countries or present those 940 records as submission-ready.
+No source value, database status or validation rule was changed in this check.
+No submission package, live upload or M2M activity was created.
+
+Verification report (read-only results, model counts and before/after preservation
+checks) is retained under the original checkout's batch:
+
+```text
+data/dev/import-batches/2026-11-12-001/checks/post-import-verification-20261112T194046Z.json
+```
+
+This checkpoint supersedes earlier statements that the fresh import is pending.
+The new input sources and reporting are usable; source-country clarification and
+readiness correction remain separate follow-up work. No regression suite was
+rerun for this database/source audit; verification used the actual completed Dev
+import, its backup, immutable sources and pure in-memory XML/report readers.
+
+## November 12 — Explain extract-only devices and recognise applied corrections
+
+The owner requested clearer handling of the two remaining warning cases, noting
+that it is impractical to anticipate every source error. The review now uses a
+specific verified rule for each green case, while uncertain differences remain
+warnings/showstoppers. No automatic source repair or database correction is added.
+
+Registered extract-only devices have a dedicated amber **Registered devices
+missing from supplied Templates** group. The record shows model/catalogue,
+Device UDI-DI, filename and device position within the XML, and asks whether the
+device should be included in current Templates. Source membership alone does
+not establish deletion or non-registration. Existing severity remains a warning.
+
+A historical catalogue change gets a separate green **Source correction already
+applied** group only when the incoming catalogue agrees with the device, current
+source-row catalogue projection, canonical JSON/root/field and persisted catalogue
+field for the same issuer-qualified device and model. Missing/corrupt current
+field evidence, inconsistent projections or identity/catalogue ambiguity prevent
+green classification. This compares current proposed device details; it does not
+claim an EUDAMED update or rewrite accepted evidence. Full historical before/after
+values remain in the review and Excel alongside the explanatory text.
+
+Different information groups open their device examples independently. Their
+model/device counts are scoped to each reason and must not be added to infer
+unique devices across groups. The previously verified Basic UDI-DI information
+classification is retained. Generic source differences now instruct review of
+previous/incoming values rather than "Review if useful". The documented review
+vocabulary includes the two new reason groups; approval/identity/import guards
+remain unchanged.
+
+Focused backend checks passed (70 tests before the final corrupt-evidence edge
+case); all 140 frontend tests and the TypeScript/Vite build passed with the
+existing bundle-size advisory. Full backend suite: **496 passed in 241.80
+seconds**, with the two existing FastAPI deprecation warnings. Database/main
+file fingerprints remain unchanged after all checks.
+
+The refreshed current saved review now has one amber extract-only device
+(Echelon VAC EVAC22L1S), 8,420 green verified parent-link additions and one green
+applied catalogue correction (EC24R1S). There are no showstoppers; can_create
+remains true. The re-review did not change the Dev database or create a batch.
+Protected Dev/Production database and original/main file hashes are unchanged.
+Refresh/reopen the same saved import to see the explanatory groups.
+
+## November 12 — Green information for verified Template additions
+
+The owner authorised separating benign additions from warnings and using a green
+Information pill. A newly explicit Template Basic UDI-DI is informational only
+when the previous source omitted it and its value agrees with the stored device
+parent, canonical Basic UDI-DI, canonical issuer-qualified parent identifier and
+incoming proposed parent/issuer. Existing identity/lineage conflicts suppress
+this informational classification. Other fields and unverified/changed parent
+values retain their existing warning/blocking handling. No device or accepted
+state is updated by this classification.
+
+The information group shows unique issuer-qualified affected-device counts and
+model summaries. Device examples are not rendered until explicitly opened;
+full findings remain available through the existing optional Excel download.
+Excel adds family/model columns after the existing columns and preserves raw
+before/after values with info severity. The assessment retains the complete
+underlying differences for audit; review presentation splits verified fields
+from any remaining warning fields on the same device.
+
+Information-only reviews show Ready to continue — additional source information
+with green Information; real warnings keep the overall review amber, and
+showstoppers still prevent continuation. The bounded vocabulary now includes
+nine categories (the existing eight plus Information). Import confirmation,
+identity guards, accepted-state retention and current policy approval boundaries
+are unchanged. No Production code/configuration or database writes are required.
+
+Refreshed the owner's current saved review without changing SQLite or creating
+a batch. It now has **8,420 distinct devices across 14 models** in green
+Information and **two warning records**, with no showstoppers. The remaining
+warnings are the extract-only Echelon VAC device EVAC22L1S and the recorded
+old-to-new source catalogue correction EC27LN7S to EC24R1S. The latter preserves
+the historical source difference even though the current Dev projection has
+already been corrected. The information count is not a registration count.
+
+Focused backend regressions passed (43 tests), and all 138 frontend tests plus
+the TypeScript/Vite build passed with the existing bundle-size advisory.
+Full backend suite: **476 passed in 242.28 seconds**, with the two
+existing FastAPI deprecation warnings. Protected database/main-checkout
+fingerprints remain unchanged after all tests and the saved-source re-review. The previous one-off Dev correction is recorded
+separately below. Refresh/reopen the same saved import to see the new grouping.
+
+## November 12 — Clarify missing source-field wording
+
+The owner requested clearer wording for review differences such as Basic UDI-DI
+not being an explicit column value in an older Template. Missing before/after
+values now display **Not present in previous source** and **Not present in new
+source**, respectively. Actual recorded values remain displayed. This avoids
+implying that the operational database lacks an already-derived parent link.
+This is a presentation-only change; no database, review severity, comparison,
+import rule or source data changed.
+
+Verification: all six Import Flow UI tests and the TypeScript/Vite build passed
+with the existing bundle-size advisory.
+
+## November 12 — Owner-approved Dev Echelon catalogue correction
+
+The owner encountered one identity showstopper during fresh source review.
+Read-only investigation of the saved sources confirmed the fresh Echelon file
+was correct: GS1 05050649030901 is EC24R1S (row 86), while 05050649032462
+is EC27LN7S (row 242). The conflict came from the retained Dev device 81,
+which still assigned EC27LN7S to 05050649030901. The keep-existing-values
+import policy combined stored and incoming catalogue ownership in this check.
+Source review therefore reported a database conflict as if the source needed
+correction. Its wording/grouping has not been changed in this operation.
+
+The owner explicitly instructed "yes make the change to the database".
+Applied a one-off audited **Dev-only** correction from EC27LN7S to EC24R1S
+for device_subject 81 / GS1 05050649030901. Updated the current device/source-row
+catalogue projections, canonical JSON and catalogue field value consistently;
+advanced canonical version 1 to 2. Stable subject ID/key, Device UDI-DI, Basic
+UDI-DI, source/import links and original raw source values were preserved.
+No linked testing subject or reviewed POST baseline existed for this device;
+no accepted state, response evidence or generated package was changed.
+Four historical identifier-conflict findings for these exact identities were
+marked resolved with a correction reference; their original details remain.
+A resolved source_catalogue_correction journal entry retains before/after state,
+source evidence and the owner's authorisation context (not authenticated identity).
+The ordinary importer remains additive; no general correction workflow or rule
+bypass was implemented.
+
+Before writing, rehearsed the correction on isolated in-memory tables, including
+wrong-identity rejection. Created a SQLite backup and verified integrity, then
+applied the correction under BEGIN IMMEDIATE with exact preconditions and
+concurrent-change checks. Foreign-key checks did not worsen, integrity remained
+ok, and no table counts changed except one appended correction journal entry.
+The backup, audit JSON, exact corrected-source workbook copy and execution script
+are retained together under the original checkout's:
+
+```text
+data/testing/backups/catalogue-correction-20261112T172720Z-bdb4a636/
+```
+
+The backup is before.sqlite3; audit.json records hashes, before/after values,
+resolved issue IDs and source lineage. Production's file fingerprint was confirmed
+unchanged across the operation; no Production SQLite connection was opened.
+
+Reran the current saved source review (c2acdfc33cbe4c0a825c3c86968ce915,
+revision 5da0d252d5094ef7ae1065f20f967a58). Result is **Ready to continue —
+warnings found**, can_create=true, no blocking categories. The 8,421 recorded
+source/database difference findings remain warnings; this count is not a count
+of new or registered devices. The re-review itself left the corrected Dev
+database fingerprint unchanged. No dated batch was created or new device imported.
+
+Next: owner refreshes/reopens that same saved import and chooses Create Import
+Workbook, then reviews the import summary and confirmation before Import Batch
+Data. Do not start another source selection solely to clear this resolved finding.
+Legacy source files and earlier review evidence remain unchanged; future source
+work should use the corrected fresh files rather than reimporting stale workbooks.
 
 ## November 12 — Dev 3.0.36.1 integration and regression verification
 

@@ -4317,7 +4317,7 @@ a.ghost-button:visited {
 .environment-banner { flex-wrap: wrap; }
 .environment-banner .environment-details {
   display: grid;
-  grid-template-columns: repeat(3, max-content);
+  grid-template-columns: repeat(4, max-content);
   gap: 0;
   margin-left: auto;
   width: max-content;

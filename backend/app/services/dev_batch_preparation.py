@@ -11,6 +11,7 @@ import tempfile
 from uuid import uuid4
 
 from app.config import Settings
+from app.services.import_review_policy import POLICY_VERSION
 from app.services.dev_input_batches import fingerprint, inspect_dev_batch, verify_dev_batch_inputs
 from app.services.production_workbook_preparation import prepare_workbook
 from app.services.source_batch_review import review_sources, review_summary
@@ -47,7 +48,7 @@ class DevBatchPreparation:
         exclusions = tuple(name for name in self.settings.excluded_excel_workbook_names if name in filenames)
         evidence = {"manifest_sha256": fingerprint(batch / "manifest.json"), "exclusions": exclusions,
                     "manufacturer": manifest["manufacturer_srn"], "preparation_contract": PREPARATION_CONTRACT,
-                    "message_schema_version": self.settings.eudamed_message_schema_version}
+                    "message_schema_version": self.settings.eudamed_message_schema_version, "review_policy": POLICY_VERSION}
         token = hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
         return batch, manifest, exclusions, token
 

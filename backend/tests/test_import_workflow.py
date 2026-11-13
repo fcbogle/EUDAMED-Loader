@@ -44,9 +44,17 @@ def test_three_actions_complete_without_downloading_workbook_and_resume(workflow
     assert imported.status_code==200,imported.text
     result=imported.json();assert result['stage']=='complete' and result['result']['created_count']==1
     assert ImportWorkflow(fixture[-1]).get(ready['id'])['stage']=='complete'
+    # The list uses committed receipts even when the saved draft still has a
+    # pre-import status. Reading history never reruns the import.
+    before_history=fixture[-1].testing_state_db_path.read_bytes()
+    choices=client.get(prefix).json()['imports']
+    assert next(item for item in choices if item['id']==ready['id'])['status']=='complete'
+    assert fixture[-1].testing_state_db_path.read_bytes()==before_history
     repeat=client.post(prefix+'/'+ready['id']+'/import',json={'revision':ready['revision'],'confirmed_by':'Synthetic RA','confirmed':True})
     assert repeat.status_code==200 and repeat.json()['result']['created_count']==1
     download=client.get(prefix+'/'+ready['id']+'/workbook');assert download.status_code==200 and download.content.startswith(b'PK')
+    findings=client.get(prefix+'/'+ready['id']+'/findings')
+    assert findings.status_code==200 and findings.content.startswith(b'PK')
     path=service.batches._batch(result['batch_id'])
     evidence=json.loads(next((path/'prepared').glob('*/*.audit.json')).read_text())
     assert evidence['dev_input_batch']['source_review']['draft_id']==ready['id']
@@ -99,7 +107,11 @@ def test_ordinary_source_differences_and_unknown_dates_are_warnings(workflow):
     reviewed=checked(client,client.put('/api/dev-input-batches/sessions/new',json=payload))
     assert reviewed['stage']=='workbook' and reviewed['review']['message']=='Ready to continue — warnings found'
     assert all(g['severity']=='warn' for g in reviewed['review']['groups'])
-    assert {g['code'] for g in reviewed['review']['groups']}=={'differences','optional'}
+    assert {g['code'] for g in reviewed['review']['groups']}=={'extract_only','optional'}
+    missing=next(g for g in reviewed['review']['groups'] if g['code']=='extract_only')
+    assert missing['title']=='Registered devices missing from supplied Templates'
+    assert missing['records'][0]['product_variant']=='Synthetic model'
+    assert missing['records'][0]['catalogue'] and 'Registered in' in missing['records'][0]['detail']
     ready=client.post('/api/dev-input-batches/sessions/'+reviewed['id']+'/workbook',json={'revision':reviewed['revision']})
     assert ready.status_code==200,ready.text
 
@@ -122,7 +134,7 @@ def test_showstoppers_are_persisted_in_limited_vocabulary(workflow,problem):
     reviewed=checked(client,client.put('/api/dev-input-batches/sessions/new',json=payload))
     assert not reviewed['review']['can_create'] and reviewed['stage']=='review'
     assert all(g['code'] in CATEGORIES for g in reviewed['review']['groups'])
-    assert len(reviewed['review']['groups'])<=8
+    assert len(reviewed['review']['groups'])<=len(CATEGORIES)
 
 
 def test_stale_database_confirmation_and_production_are_rejected(workflow,monkeypatch):
@@ -207,3 +219,67 @@ def test_prior_warning_policy_cannot_authorize_import_after_upgrade(workflow):
     assert client.post(prefix+'/'+ready['id']+'/import',json={'revision':ready['revision'],'confirmed_by':'Synthetic RA','confirmed':True}).status_code==409
     assert client.post(prefix+'/'+ready['id']+'/workbook',json={'revision':ready['revision']}).status_code==409
     assert fixture[-1].testing_state_db_path.read_bytes()==before
+
+
+def test_verified_source_addition_is_green_information_and_exported_without_database_writes(workflow):
+    client,service,fixture=workflow;prefix='/api/dev-input-batches/sessions'
+    payload=request(fixture).model_dump(mode='json')
+    first=checked(client,client.put(prefix+'/new',json=payload))
+    ready=client.post(prefix+'/'+first['id']+'/workbook',json={'revision':first['revision']}).json()
+    response=client.post(prefix+'/'+ready['id']+'/import',json={'revision':ready['revision'],'confirmed_by':'Synthetic RA','confirmed':True})
+    assert response.status_code==200,response.text
+    # Previous source lacked the explicit column; stored canonical parent is already correct.
+    database=fixture[-1].testing_state_db_path
+    with sqlite3.connect(database) as connection:
+        row=connection.execute('SELECT id,raw_payload_json FROM source_row ORDER BY id DESC LIMIT 1').fetchone()
+        stored=json.loads(row[1]);del stored['dev_prepared_import']['proposed_values']['Proposed: Basic UDI-DI']
+        connection.execute('UPDATE source_row SET raw_payload_json=? WHERE id=?',(json.dumps(stored),row[0]))
+    before=database.read_bytes()
+    reviewed=checked(client,client.put(prefix+'/new',json=payload))
+    assert database.read_bytes()==before
+    assert reviewed['stage']=='workbook' and reviewed['review']['can_create']
+    assert reviewed['review']['message']=='Ready to continue — additional source information'
+    group=reviewed['review']['groups'][0]
+    assert len(reviewed['review']['groups'])==1 and group['severity']=='info' and group['count']==1
+    assert group['models'][0]['product_variant']=='Synthetic model' and group['models'][0]['device_count']==1
+    assert group['records'][0]['fields']==[{'field':'Proposed: Basic UDI-DI','before':None,'after':'BASICSHARED'}]
+    from io import BytesIO
+    from openpyxl import load_workbook
+    response=client.get(prefix+'/'+reviewed['id']+'/findings');assert response.status_code==200
+    book=load_workbook(BytesIO(response.content));sheet=book.active
+    assert sheet.cell(2,3).value=='info' and sheet.cell(2,8).value=='BASICSHARED'
+    assert sheet.cell(2,12).value=='Synthetic model'
+    assert all(cell.data_type=='s' for row in sheet for cell in row if cell.value is not None)
+    book.close()
+    result=client.post(prefix+'/'+reviewed['id']+'/workbook',json={'revision':reviewed['revision']})
+    assert result.status_code==200,result.text
+    assert database.read_bytes()==before
+
+
+def test_applied_catalogue_source_correction_is_information_and_full_values_survive_export(workflow):
+    client,service,fixture=workflow;prefix='/api/dev-input-batches/sessions'
+    payload=request(fixture).model_dump(mode='json')
+    first=checked(client,client.put(prefix+'/new',json=payload))
+    ready=client.post(prefix+'/'+first['id']+'/workbook',json={'revision':first['revision']}).json()
+    response=client.post(prefix+'/'+ready['id']+'/import',json={'revision':ready['revision'],'confirmed_by':'Synthetic RA','confirmed':True})
+    assert response.status_code==200,response.text
+    from app.services.canonical_validation import CATALOGUE_HEADERS
+    database=fixture[-1].testing_state_db_path
+    with sqlite3.connect(database) as connection:
+        source=connection.execute('SELECT id,raw_payload_json FROM source_row ORDER BY id DESC LIMIT 1').fetchone()
+        stored=json.loads(source[1]);key='Proposed: '+CATALOGUE_HEADERS[0]
+        stored['dev_prepared_import']['proposed_values'][key]='OLD-CATALOGUE'
+        connection.execute('UPDATE source_row SET raw_payload_json=? WHERE id=?',(json.dumps(stored),source[0]))
+    before=database.read_bytes()
+    reviewed=checked(client,client.put(prefix+'/new',json=payload));assert database.read_bytes()==before
+    assert reviewed['review']['can_create'] and len(reviewed['review']['groups'])==1
+    group=reviewed['review']['groups'][0]
+    assert group['code']=='applied_corrections' and group['severity']=='info'
+    assert group['records'][0]['fields'][0]['before']=='OLD-CATALOGUE'
+    assert group['records'][0]['fields'][0]['after']=='SYN-000000'
+    response=client.get(prefix+'/'+reviewed['id']+'/findings');assert response.status_code==200
+    from io import BytesIO
+    from openpyxl import load_workbook
+    book=load_workbook(BytesIO(response.content));detail=book.active.cell(2,9).value
+    assert 'No action required' in detail and 'OLD-CATALOGUE' in detail and 'SYN-000000' in detail
+    assert book.active.cell(2,3).value=='info';book.close()

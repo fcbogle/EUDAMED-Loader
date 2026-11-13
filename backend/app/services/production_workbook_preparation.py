@@ -20,6 +20,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from app.services.country_reference import tentative_market_fields, UNCONFIRMED_COUNTRY_REASON
+
 BASE = "https://ec.europa.eu/tools/eudamed/dtx/"
 NS = {
     "message": BASE + "servicemodel/Message/v1",
@@ -141,7 +143,7 @@ def _templates(directory: Path, models: dict, parents: dict, *, parent_reference
                         if (headers[i] is not None or values[i] is not None) and key not in columns:
                             columns.append(key)
                     identity = _identity(effective[issuer_index], effective[udi_index])
-                    reasons = []
+                    reasons = [UNCONFIRMED_COUNTRY_REASON] if tentative_market_fields(fields) else []
                     if not identity[0] or not identity[1]:
                         reasons.append("Missing device identity")
                     elif identity[0] == "GS1" and not re.fullmatch(r"\d{14}", identity[1]):
@@ -219,6 +221,10 @@ def _exports(directory: Path, overrides: dict[str, str]) -> tuple[list[dict], li
                 "page_size": _find(root, "message:pageSize"), "devices": len(devices)}
         files.append(meta)
         for index, device in enumerate(devices, 1):
+            questioned = [value for value in device.xpath('.//*[local-name()="country" or local-name()="Country"]/text()')
+                          if '?' in value]
+            if questioned:
+                raise ValueError(f"Exported market country contains '?'; confirmation required: {path.name}, device {index}: {questioned}")
             basic = device.find("device:MDRBasicUDI", NS)
             udi = device.find("device:MDRUDIDIData", NS)
             if basic is None or udi is None:
@@ -376,8 +382,10 @@ def prepare_workbook(*, template_dir: Path, xml_dir: Path, parent_reference: Pat
                 row["Proposed Parent: " + field] = None
                 optional_url_notes.append({"device_type": row["Device Type"],
                                            "parent": row.get("Proposed Basic UDI-DI"), "key": key})
-            if field.startswith("Member States where device") and refs and (not value or "?" in value):
-                reasons.append("Proposed parent market countries missing or tentative")
+            if tentative_market_fields({field: value}):
+                reasons.append(UNCONFIRMED_COUNTRY_REASON)
+            elif field.startswith("Member States where device") and refs and not value:
+                reasons.append("Proposed parent market countries missing")
         if registered:
             export = registered[0]
             row.update(export["fields"])

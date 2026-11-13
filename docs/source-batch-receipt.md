@@ -18,6 +18,18 @@ for importing. No manual assessment, save-draft, resume or continue buttons are
 needed. Returning in the same browser reopens the remembered import at its saved
 stage. The single Import selector opens another saved import or starts a new one.
 
+After success, **Import Data** shows a compact receipt: import number/date,
+importer and new/retained device totals, with **Start new import** and **View import
+history** actions. The progress steps, source-review warnings and downloads are
+removed from this completed view.
+
+**Import Management → Import History** lists completed imports and retains their
+receipt, original source-file names, source review, workbook and full findings
+downloads as read-only audit evidence. Historical findings are labelled as the
+review at import, not current cleanup tasks. Browsing history does not change
+the remembered ongoing import. Use **Canonical Validation** for current database
+data quality and XML readiness; successful import does not establish XML readiness.
+
 ## Select source files
 
 Files can come from different local folders. For the current Dev test set:
@@ -37,17 +49,18 @@ files; excluded files are retained evidence, outside the import scope.
 
 ## Review results
 
-Only three overall messages are used:
+Overall review messages are:
 
 - **Ready to continue**
+- **Ready to continue — additional source information**
 - **Ready to continue — warnings found**
 - **Source corrections required**
 
-Small labelled pills mark the review: **green — Good data**, **amber — Warning**,
+Small labelled pills mark the review: **green — Good data / Information**, **amber — Warning**,
 and **red — Showstopper**. The overall review and each finding category use the
 same classification. Colour is supplemented by text labels.
 
-Findings are consolidated into at most eight categories:
+Findings are grouped by the issue and the action needed:
 
 | Category | Outcome |
 | --- | --- |
@@ -57,6 +70,10 @@ Findings are consolidated into at most eight categories:
 | Device or catalogue identity requires clarification | Block |
 | Wrong manufacturer or environment in XMLs | Block |
 | Incomplete or conflicting XML export set | Block |
+| Unconfirmed market countries containing `?` | Block — confirm and correct the source |
+| Additional source information verified against stored parent links | Information — no action required |
+| Source correction already applied and verified against current stored projections | Information — no action required |
+| Registered devices missing from supplied Templates | Warn — confirm intended source coverage |
 | Differences between source files | Warn |
 | Missing optional information | Warn |
 
@@ -66,6 +83,34 @@ counts repeated identities; expandable details retain the workbook, sheet and
 row references. Required accepted-state metadata must be usable; it is not
 fabricated to make an export importable.
 
+A newly explicit Basic UDI-DI in a Template is **Information** when it was absent
+from the previous source and agrees with both the existing device parent link and
+its canonical issuer-qualified parent identifier. The incoming parent/reference
+must also agree. This is not a missing database relationship and requires no action.
+The green information category groups unique affected devices by model. Individual
+examples appear only when requested; the optional findings workbook retains all
+before/after values, model context and information severity. Unverified additions,
+changed values and conflicting identities keep their existing warning/blocking
+classification. Information alone does not make the overall review amber.
+
+A historical catalogue change is shown separately as **Source correction already
+applied** only when its incoming value agrees with the existing device catalogue,
+current source-row projection, canonical JSON/field and persisted catalogue field,
+for the same issuer-qualified device and model. Historical before/after values
+remain in the review and Excel; this label does not apply a correction or update
+device data. Missing, inconsistent or ambiguous current evidence stays a warning
+or showstopper rather than being shown green.
+
+**Registered devices missing from supplied Templates** is a separate warning.
+It shows the model, catalogue, Device UDI-DI and XML device position, and asks
+whether the device should be included in the current Templates. Keep the extract
+evidence; do not infer deletion or non-registration from a missing Template row.
+
+The review need not anticipate every source-data error: Information requires a
+specific verified match; warnings explain differences/coverage needing review;
+showstoppers prevent unsafe import. Unrecognised or unverified cases are never
+made green merely because another field matches.
+
 Ordinary Template/export value differences, export-only devices, unknown dates
 and missing optional fields are warnings. Warnings need no extra acknowledgement and do not block progression.
 XML generation readiness remains a separate check. An unresolved catalogue address shared by different Device UDI-DIs is a
@@ -73,6 +118,14 @@ showstopper. It is reported once with all involved identities and source-row
 references, even when detected in both selected files and the existing database.
 Correct or clarify the source identities before continuing; there is no bypass
 button for unresolved catalogue collisions.
+
+Any `?` in a market-country value blocks a new import, whether found in a Template,
+the BasicUDI reference or an EUDAMED extract. Confirm the intended country before
+correcting the source; the application does not remove the marker or guess a country.
+Already imported records remain stored, but questioned countries block XML generation
+and appear as incomplete XML readiness. Completed import receipts and original source
+evidence are preserved. Blank country lists remain a separate warning under this rule.
+Pending approvals from an older review policy require a fresh source review.
 Existing database canonical values and accepted histories are retained; differences
 are recorded rather than silently overwriting those existing values.
 

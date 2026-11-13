@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import type { WorkbookImportBatchSummary } from "../types";
 
 type EnvironmentContext = {
   environment: "dev" | "prod";
@@ -10,7 +11,14 @@ type EnvironmentContext = {
   authorised_representative_suppressed?: boolean;
 };
 
-export function EnvironmentBanner({ onEnvironmentChange }: { onEnvironmentChange?: (environment: "dev" | "prod" | null) => void } = {}) {
+type EnvironmentBannerProps = {
+  onEnvironmentChange?: (environment: "dev" | "prod" | null) => void;
+  importBatch?: WorkbookImportBatchSummary | null;
+  importLoading?: boolean;
+  importUnavailable?: boolean;
+};
+
+export function EnvironmentBanner({ onEnvironmentChange, importBatch, importLoading = true, importUnavailable = false }: EnvironmentBannerProps = {}) {
   const [context, setEnvironment] = useState<EnvironmentContext | null>(null);
   const environment = context?.environment;
   const [failed, setFailed] = useState(false);
@@ -40,7 +48,7 @@ export function EnvironmentBanner({ onEnvironmentChange }: { onEnvironmentChange
         <strong>{environment === "dev" ? "EUDAMED Playground" : environment === "prod" ? "EUDAMED Production" : "Confirming EUDAMED environment"}</strong>
         <span>{environment === "dev" ? "Dev environment · Playground testing data" : environment === "prod" ? "Production environment · Production data" : failed ? "Environment could not be verified. Check the backend connection." : "Checking the active backend profile…"}</span>
       </div>
-      {environment && <div className="environment-details" aria-label="Active schema and actor SRNs">
+      {environment && <div className="environment-details" aria-label="Active schema, actor SRNs and database import">
         <div className="environment-field" aria-label="Active message schema">
           <span>Message schema</span>
           <strong>{context?.message_schema_version || "Unconfirmed"}</strong>
@@ -55,6 +63,10 @@ export function EnvironmentBanner({ onEnvironmentChange }: { onEnvironmentChange
           <strong>{context?.authorised_representative_suppressed === true
             ? "Not included"
             : context?.authorised_representative_srn === undefined ? "Unconfirmed" : context.authorised_representative_srn || "Not configured"}</strong>
+        </div>
+        <div className="environment-field environment-import" aria-label="Current database import">
+          <span>Current data import</span>
+          <strong>{importLoading ? "Loading…" : importBatch ? `#${importBatch.import_batch_id} · ${new Date(importBatch.imported_at).toLocaleDateString("en-GB", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" })}` : importUnavailable ? "Unavailable" : "No import recorded"}</strong>
         </div>
       </div>}
       {failed && <button type="button" className="ghost-button" onClick={() => setAttempt(value => value + 1)}>Retry</button>}

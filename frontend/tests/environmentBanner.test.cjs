@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
-function harness(response, onEnvironmentChange) {
+function harness(response, onEnvironmentChange, importProps = {}) {
   const state = [null, false, 0]; let cursor = 0; let effect; let mounted = false;
   const source = fs.readFileSync(path.join(__dirname, '../src/components/EnvironmentBanner.tsx'), 'utf8');
   const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -14,7 +14,7 @@ function harness(response, onEnvironmentChange) {
     return require(name);
   }, module, module.exports, { setTimeout, clearTimeout });
   return {
-    render() { cursor=0; return JSON.stringify(module.exports.EnvironmentBanner({ onEnvironmentChange })); },
+    render() { cursor=0; return JSON.stringify(module.exports.EnvironmentBanner({ onEnvironmentChange, ...importProps })); },
     mount() { mounted=true; return effect(); },
   };
 }
@@ -83,3 +83,31 @@ test('Invalid environment cannot display supplied SRNs as confirmed',async()=>{
   const h=harness(()=>Promise.resolve({environment:'invalid',manufacturer_srn:'GB-MF-000000001'}));h.render();const cleanup=h.mount();await new Promise(setImmediate);
   assert.ok(!h.render().includes('GB-MF-000000001'));assert.ok(!h.render().includes('environment-details'));cleanup();
 });
+
+test('banner identifies the committed database import after the representative', async () => {
+  const h = harness(() => Promise.resolve({ environment: 'dev' }), undefined, {
+    importLoading: false,
+    importBatch: { import_batch_id: 5, label: 'Dev source batch 2026-11-12-001', imported_at: '2026-11-12T18:40:39+00:00' },
+  });
+  h.render(); const cleanup = h.mount(); await new Promise(setImmediate);
+  const text = h.render();
+  assert.ok(text.indexOf('Current database import') > text.indexOf('Configured authorised representative SRN'));
+  assert.match(text, /#5/);
+  assert.match(text, /12 Nov 2026/);
+  assert.ok(!text.includes('Dev source batch'));
+  assert.ok(!text.includes('18:40'));
+  cleanup();
+});
+
+for (const [props, expected] of [
+  [{ importLoading: true, importBatch: { import_batch_id: 4 } }, 'Loading…'],
+  [{ importLoading: false, importUnavailable: true }, 'Unavailable'],
+  [{ importLoading: false, importBatch: null }, 'No import recorded'],
+]) {
+  test(`banner reports import state: ${expected}`, async () => {
+    const h = harness(() => Promise.resolve({ environment: 'dev' }), undefined, props);
+    h.render(); const cleanup = h.mount(); await new Promise(setImmediate);
+    const text = h.render(); assert.ok(text.includes(expected)); assert.ok(!text.includes('#4'));
+    cleanup();
+  });
+}

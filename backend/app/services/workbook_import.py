@@ -391,6 +391,10 @@ class WorkbookImportService:
             CanonicalValidationRecord.model_validate_json(str(row["record_json"]))
             for row in record_rows
         ]
+        if self.settings.environment == "dev":
+            from app.services.country_reference import apply_market_country_readiness
+            for record in records:
+                apply_market_country_readiness(record)
         if self.settings.environment == "prod":
             from app.services.production_completeness import populate_export_market_status
             for record in records:
@@ -415,8 +419,10 @@ class WorkbookImportService:
             ready_records=ready_records,
             blocked_records=(len(records) - ready_records if self.settings.environment == "prod"
                              else int(snapshot_row["blocked_records"])),
-            xml_ready_records=int(snapshot_row["xml_ready_records"]),
-            xml_blocked_records=int(snapshot_row["xml_blocked_records"]),
+            xml_ready_records=(sum(record.xml_readiness.status == "complete" for record in records)
+                               if self.settings.environment == "dev" else int(snapshot_row["xml_ready_records"])),
+            xml_blocked_records=(sum(record.xml_readiness.status != "complete" for record in records)
+                                 if self.settings.environment == "dev" else int(snapshot_row["xml_blocked_records"])),
             family_summaries=self.validation_service._build_family_summaries(records),
             variant_summaries=self.validation_service._build_variant_summaries(records),
             blocker_summaries=self.validation_service._build_blocker_summaries(records),

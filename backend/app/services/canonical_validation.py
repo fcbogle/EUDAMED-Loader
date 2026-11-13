@@ -8,6 +8,7 @@ from threading import Lock
 from openpyxl import load_workbook
 
 from app.config import get_settings
+from app.services.country_reference import apply_market_country_readiness
 from app.services.basic_udi_reference import BasicUdiReferenceRow, BasicUdiReferenceService
 from app.services.canonical_review import CanonicalReviewService
 from app.services.normalization import NormalizationRepository
@@ -832,7 +833,7 @@ class CanonicalValidationService:
         ]
         xml_readiness = self._xml_readiness_snapshot(fields)
 
-        return CanonicalValidationRecord(
+        record = CanonicalValidationRecord(
             source_workbook=workbook_name,
             product_family=product_family,
             product_variant=reference_row.device_model,
@@ -853,6 +854,9 @@ class CanonicalValidationService:
             market_availability_items=market_availability_items,
             fields=fields,
         )
+        if self.settings.environment == 'dev':
+            apply_market_country_readiness(record)
+        return record
 
     def _load_source_rows(self, workbook_path: Path) -> list[SourceRow]:
         workbook = load_workbook(workbook_path, read_only=True, data_only=True)

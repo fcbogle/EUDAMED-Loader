@@ -18,11 +18,18 @@ class ImportWorkflow:
         return [{**entry,'excluded':entry['role']=='templates' and entry['path'].split('/')[-1] in self.batches.settings.excluded_excel_workbook_names} for entry in files]
 
     def list(self):
-        items=[];linked=set()
+        items=[];linked=set();receipts={}
         for draft in self.drafts.list()['drafts']:
             if draft.get('batch_id'):linked.add(draft['batch_id'])
+            status=draft['status']
+            if draft.get('batch_id') and draft.get('artifact_id'):
+                batch_id=draft['batch_id']
+                if batch_id not in receipts:
+                    receipts[batch_id]=self.importer.resume(batch_id)['imports']
+                if any(result['artifact_id']==draft['artifact_id'] for result in receipts[batch_id]):
+                    status='complete'
             items.append({'id':draft['draft_id'],'description':draft['metadata'].get('description') or draft['created_at'][:10],
-                'status':draft['status'],'updated_at':draft['updated_at']})
+                'status':status,'updated_at':draft['updated_at']})
         for batch in self.batches.list_batches()['batches']:
             if batch.get('error') or batch['batch_id'] in linked:continue
             items.append({'id':batch['batch_id'],'description':(batch.get('receipt') or {}).get('description') or batch['batch_id'],
@@ -36,18 +43,20 @@ class ImportWorkflow:
             return dict(id=identifier,revision=None,source_batch_id=identifier,batch_id=None,stage='review',
                 metadata=metadata,files=self._files(manifest['files']),review=None,workbook=None,result=None,summary=None)
         draft=self.drafts.describe(identifier)
-        # Earlier published reviews used a broader blocker policy. Reuse their saved files,
-        # but never silently treat old approval as approval under the new policy.
-        if draft.get('batch_id') and (draft.get('review') or {}).get('policy_version')!=POLICY_VERSION:
-            return self.get(draft['batch_id'])
-        if (draft.get('review') or {}).get('policy_version')!=POLICY_VERSION:draft['review']=None
-        stage='workbook' if draft.get('review') and draft['review'].get('can_create') else 'review'
         workbook=None;result=None;summary=None
         artifact_id=draft.get('artifact_id')
         if artifact_id and draft.get('batch_id'):
-            workbook=self.batches.artifact(draft['batch_id'],artifact_id)[0]
             resumed=self.importer.resume(draft['batch_id'])
             result=next((r for r in resumed['imports'] if r['artifact_id']==artifact_id),None)
+        # A committed import stays completed under later source policies. Older
+        # approvals may never authorise a new import without a current review.
+        if not result and draft.get('batch_id') and (draft.get('review') or {}).get('policy_version')!=POLICY_VERSION:
+            return self.get(draft['batch_id'])
+        if not result and (draft.get('review') or {}).get('policy_version')!=POLICY_VERSION:
+            draft['review']=None
+        stage='workbook' if draft.get('review') and draft['review'].get('can_create') else 'review'
+        if artifact_id and draft.get('batch_id'):
+            workbook=self.batches.artifact(draft['batch_id'],artifact_id)[0]
             stage='complete' if result else 'import'
             summary=draft.get('import_summary')
         return dict(id=identifier,revision=draft['revision'],batch_id=draft.get('batch_id'),stage=stage,

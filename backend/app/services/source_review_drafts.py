@@ -187,7 +187,7 @@ class SourceReviewDrafts:
                             for reason in row['reasons']:
                                 findings.add(category(reason),'Template / EUDAMED',[{**row,'identifier':row['udi_di'],'detail':reason}])
                         if plan['differences']:
-                            findings.add('differences','Template / existing database',plan['differences'])
+                            findings.add_source_differences(plan['differences'])
                         for issue in plan['identity_conflicts']:
                             matches=[r for r in prepared.rows if r['key'][1]==issue['identifier']]
                             origins=[o.get('source',{}) for r in matches for o in r['provenance']['templates']]

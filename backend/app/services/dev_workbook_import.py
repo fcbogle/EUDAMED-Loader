@@ -14,6 +14,7 @@ from app.services.dev_batch_preparation import DevBatchPreparation
 from app.services.dev_input_batches import fingerprint
 from app.services.production_workbook_import import ProductionWorkbookImporter, dump, semantic
 from app.services.identity import normalize_identity
+from app.services.canonical_validation import CATALOGUE_HEADERS
 from app.services.import_review_policy import reason_blocks
 
 
@@ -110,6 +111,58 @@ class DevWorkbookImporter:
             result[name]=semantic(value)
         return {k:v for k,v in result.items() if v is not None and v != ''}
 
+    @staticmethod
+    def _informational_fields(fields, previous, row):
+        """Only a newly explicit parent link verified against current stored identity is informational."""
+        stored = json.loads(previous['record_json'] or '{}')
+        values = {field['canonical_path']: field.get('value') for field in stored.get('fields', [])}
+        key = tuple(row['key'])
+        verified = []
+        for field in fields:
+            if field['field'] not in ('Basic UDI-DI', 'Proposed: Basic UDI-DI'):
+                continue
+            before = field['before']
+            if before is not None and (not isinstance(before, str) or before.strip()):
+                continue
+            incoming = str(field['after'] or '').strip()
+            if not incoming:
+                continue
+            if (incoming == str(previous['basic_udi_di'] or '').strip()
+                    == str(values.get('basic_device.basic_udi_di') or '').strip()
+                    == str(row['values'].get('Proposed Basic UDI-DI') or '').strip()
+                    and values.get('device_record.basic_udi_identifier') == f'{key[0]}:{incoming}'
+                    and row['values'].get('Proposed Parent Issuer') == key[0]):
+                verified.append(field['field'])
+        return verified
+
+    @staticmethod
+    def _applied_correction_fields(fields, previous, row):
+        """A historical catalogue change is resolved only if every current projection agrees."""
+        stored = json.loads(previous['record_json'] or '{}')
+        values = {field['canonical_path']: field.get('value') for field in stored.get('fields', [])}
+        issuer = stored.get('issuing_entity') or values.get('manufacturer.issuing_entity')
+        key = tuple(row['key'])
+        if (stored.get('primary_udi_di') != key[1] or issuer != key[0]
+                or previous['primary_udi_di'] != key[1]
+                or previous['product_family'] != row['record'].product_family
+                or previous['product_variant'] != row['record'].product_variant):
+            return []
+        try:
+            field_value = json.loads(previous['catalogue_value_json'] or 'null')
+        except (ValueError, TypeError):
+            return []  # Unusable current evidence must not become green information.
+        verified = []
+        for field in fields:
+            if field['field'].removeprefix('Proposed: ') not in CATALOGUE_HEADERS:
+                continue
+            before, incoming = (str(field[name]).strip() if field[name] is not None else '' for name in ('before', 'after'))
+            if (before and incoming and before != incoming
+                    and incoming == previous['catalogue_number'] == previous['source_catalogue_number']
+                    == stored.get('catalogue_number') == values.get('device_record.catalogue_number')
+                    == field_value == row['record'].catalogue_number):
+                verified.append(field['field'])
+        return verified
+
     def _plan(self, batch_id, artifact_id, connection=None, *, source_batches=None):
         batches = source_batches or self.batches
         batch, manifest, _, input_token = batches._inputs(batch_id)
@@ -124,9 +177,11 @@ class DevWorkbookImporter:
         if own:c.execute('BEGIN')
         try:
             marker = self._marker(c)
-            current = list(c.execute('''SELECT d.*, c.id AS canonical_id,c.source_row_id AS canonical_source_row_id,c.record_json,s.raw_payload_json
+            current = list(c.execute('''SELECT d.*, c.id AS canonical_id,c.source_row_id AS canonical_source_row_id,c.record_json,s.raw_payload_json,s.catalogue_number AS source_catalogue_number,cf.value_json AS catalogue_value_json
                 FROM device_subject d LEFT JOIN canonical_device_record c ON c.device_subject_id=d.id
-                LEFT JOIN source_row s ON s.id=d.current_source_row_id'''))
+                LEFT JOIN source_row s ON s.id=d.current_source_row_id
+                LEFT JOIN canonical_field_value cf ON cf.canonical_device_record_id=c.id
+                    AND cf.canonical_path='device_record.catalogue_number' '''))
             lookup = {}; conflicts = []; changes = []; catalogue_conflicts = []; new = []; existing_rows = []
             for device in current:
                 record = json.loads(device['record_json'] or '{}')
@@ -160,7 +215,14 @@ class DevWorkbookImporter:
                         continue
                     before=self._source_fields(old);after=self._source_fields(occurrences[0]['fields'])
                 fields=[{'field':k,'before':before.get(k),'after':after.get(k)} for k in sorted(set(before)|set(after)) if semantic(before.get(k))!=semantic(after.get(k))]
-                if fields:changes.append({'issuer':key[0],'udi_di':key[1],'catalogue':row['record'].catalogue_number,'fields':fields})
+                if fields:
+                    identity_clear = not any(issue['identifier'] == key[1] for issue in conflicts)
+                    information = self._informational_fields(fields, previous, row) if identity_clear else []
+                    corrections = self._applied_correction_fields(fields, previous, row) if identity_clear else []
+                    changes.append({'issuer':key[0], 'udi_di':key[1], 'catalogue':row['record'].catalogue_number,
+                        'product_family':row['record'].product_family, 'product_variant':row['record'].product_variant,
+                        'basic_udi_di':row['values'].get('Proposed Basic UDI-DI'),
+                        'informational_fields':information, 'applied_correction_fields':corrections, 'fields':fields})
             # One unresolved catalogue address produces one finding, even when it
             # appears in both the selected sources and the existing database.
             addresses={}
@@ -186,6 +248,10 @@ class DevWorkbookImporter:
                     'locations':group['locations'],
                     'detail':f"Catalogue {group['catalogue']} is associated with {len(identities)} different Device UDI-DIs. Confirm or correct the source identities before continuing."})
             conflict_addresses={key for key,group in addresses.items() if len(group['identities'])>1}
+            for change in changes:
+                if address(change['product_family'],change['product_variant'],change['catalogue']) in conflict_addresses:
+                    change['informational_fields'] = []
+                    change['applied_correction_fields'] = []
             for row in new:
                 record=row['record']
                 if address(record.product_family,record.product_variant,record.catalogue_number) in conflict_addresses:

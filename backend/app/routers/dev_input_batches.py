@@ -95,11 +95,12 @@ def download_findings(identifier: str):
     if not state.get('review_id'):raise HTTPException(409,'Review source data first')
     report=execute(lambda:json.loads(instance.drafts._safe(path/'reviews'/(state['review_id']+'.json')).read_text()))
     book=Workbook();sheet=book.active;sheet.title='Source findings'
-    sheet.append(['Source','Issue','Severity','File','Worksheet','Row','Device UDI-DI','Basic UDI-DI','Details','Action'])
+    sheet.append(['Source','Issue','Severity','File','Worksheet','Row','Device UDI-DI','Basic UDI-DI','Details','Action','Family','Model'])
     for group in report['groups']:
         for record in group['records']:
-            detail=record.get('detail') or json.dumps(record.get('fields',[]),ensure_ascii=False)
-            sheet.append([str(value or '')[:32767] for value in (record.get('source',group['source']),group['title'],group['severity'],record.get('file'),record.get('sheet'),record.get('row'),record.get('identifier',record.get('udi_di')),record.get('basic_udi_di'),detail,group['action'])])
+            detail=record.get('detail') or ''
+            if record.get('fields'):detail += ('\n' if detail else '') + json.dumps(record['fields'],ensure_ascii=False)
+            sheet.append([str(value or '')[:32767] for value in (record.get('source',group['source']),group['title'],group['severity'],record.get('file'),record.get('sheet'),record.get('row'),record.get('identifier',record.get('udi_di')),record.get('basic_udi_di'),detail,group['action'],record.get('product_family'),record.get('product_variant'))])
     for row in sheet:
         for cell in row:cell.data_type='s';cell.number_format='@'
     sheet.freeze_panes='A2';sheet.auto_filter.ref=sheet.dimensions

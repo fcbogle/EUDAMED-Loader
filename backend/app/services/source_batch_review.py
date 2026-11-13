@@ -7,6 +7,7 @@ from lxml import etree
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 from zipfile import BadZipFile
+from app.services.country_reference import tentative_market_fields, UNCONFIRMED_COUNTRY_REASON
 from app.services.production_workbook_preparation import _parent_reference, _templates, _exports
 
 
@@ -28,7 +29,7 @@ def review_sources(batch: Path, exclusions: tuple[str, ...]) -> dict:
         group['records'].append({'file': origin.get('file', ''), 'sheet': origin.get('sheet', ''),
             'row': origin.get('row', origin.get('device_index', '')), 'issuer': (row.get('key') or ('', ''))[0],
             'identifier': (row.get('key') or ('', ''))[1], 'basic_udi_di': (row.get('parent') or ('', ''))[1],
-            'catalogue': catalogue, 'detail': detail})
+            'catalogue': catalogue, 'product_variant': row.get('device_type', ''), 'detail': detail})
     def result():
         manifest = json.loads((batch / 'manifest.json').read_text())
         receipt = manifest.get('receipt', {})
@@ -56,7 +57,13 @@ def review_sources(batch: Path, exclusions: tuple[str, ...]) -> dict:
                     fields = dict(zip(headers, values))
                     issuer = str(fields.get('Issuing Entity') or '').strip()
                     code = str(fields.get('Basic UDI-DI code') or '').strip()
-                    row = {'key': (issuer, code), 'source': {'file': 'BasicUDIs.xlsx', 'sheet': sheet.title, 'row': number}}
+                    row = {'key': (issuer, code), 'device_type':str(fields.get('Device Model') or ''),
+                           'source': {'file': 'BasicUDIs.xlsx', 'sheet': sheet.title, 'row': number}}
+                    questioned = tentative_market_fields(fields)
+                    if questioned:
+                        add('BasicUDI', UNCONFIRMED_COUNTRY_REASON,
+                            "Confirm each questioned country value before importing linked records.", row,
+                            detail='; '.join(f'{name}: {value}' for name,value in questioned))
                     if not issuer or not code:
                         add('BasicUDI', 'Incomplete Basic UDI-DI identity', 'Supply both the issuing entity and parent identifier; do not infer identifiers.', row)
                     if not str(fields.get('Device Model') or '').strip():
@@ -85,6 +92,10 @@ def review_sources(batch: Path, exclusions: tuple[str, ...]) -> dict:
             templates.extend(rows)
             for row in rows:
                 for reason in row['reasons']:
+                    if reason == UNCONFIRMED_COUNTRY_REASON:
+                        add('Template', reason, "Confirm each questioned country value before importing this record.", row,
+                            detail='; '.join(f'{name}: {value}' for name,value in tentative_market_fields(row['fields'])))
+                        continue
                     cross = 'parent' in reason.lower() or 'BasicUDI' in reason
                     add('Template → BasicUDI' if cross else 'Template', reason,
                         'Check the Template parent link against the BasicUDI workbook; confirm which source needs correction.' if cross else 'Correct or clarify the identified Template cells; preserve identifiers and leading zeroes.', row)
@@ -106,7 +117,8 @@ def review_sources(batch: Path, exclusions: tuple[str, ...]) -> dict:
             for reason in row['reasons']:
                 add('EUDAMED extracts', reason, 'Check the extract and confirm whether the missing attribute is required or unavailable evidence; do not invent accepted values.', row, severity='Clarification required')
             if tuple(row['key']) not in identities:
-                add('Template ↔ EUDAMED', 'Exported device absent from selected Templates', 'Confirm intended coverage and which source set needs updating.', row, severity='Clarification required')
+                add('Template ↔ EUDAMED', 'Exported device absent from selected Templates', 'Confirm whether this device should be included in the current Templates.', row, severity='Clarification required',
+                    detail='Registered in the selected EUDAMED extract but missing from the supplied Templates.')
         for rows in exported.values():
             if len(rows)>1:
                 for row in rows:add('EUDAMED extracts', 'Repeated exported Device UDI-DI', 'Review overlapping pages or versions and supply one consistent current page set.',row)

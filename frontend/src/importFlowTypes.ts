@@ -41,7 +41,8 @@ export type ImportSession = {
             code: string;
             source: string;
             title: string;
-            severity: "block" | "warn";
+            severity: "block" | "warn" | "info";
+            models?: {product_family: string; product_variant: string; device_count: number}[];
             action: string;
             count: number;
             truncated?: boolean;
@@ -52,6 +53,8 @@ export type ImportSession = {
                 identifier?: string;
                 udi_di?: string;
                 detail?: string;
+                catalogue?: string;
+                product_variant?: string;
                 locations?: {file?: string; sheet?: string; row?: number; identifier: string}[];
                 fields?: {
                     field: string;
@@ -71,7 +74,10 @@ export type ImportSession = {
         omitted_retained_count: number;
     } | null;
     result: {
+        import_batch_id: number;
         created_count: number;
+        existing_retained_count: number;
+        omitted_retained_count: number;
         confirmed_at: string;
         confirmed_by: string;
         backup: {
