@@ -53,6 +53,7 @@ import { PatchScenarioCard } from "./components/PatchScenarioCard";
 import { PostPreviewPanel } from "./components/PostPreviewPanel";
 import { RegistrationStateWorkspace } from "./components/RegistrationStateWorkspace";
 import { SubmissionBatchHistory } from "./components/SubmissionBatchHistory";
+import { SnapshotRegistrationCards } from "./components/SnapshotRegistrationCards";
 import type { RegistrationSummary } from "./types";
 import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
@@ -3543,6 +3544,10 @@ export function App() {
               <strong>{latestImportBatch ? unresolvedIdentityRowCount : "N/A"}</strong>
               <p>Unresolved source identities</p>
             </div>
+            <SnapshotRegistrationCards
+              importBatchId={latestImportBatch?.import_batch_id ?? null}
+              environment={activeEnvironment}
+            />
           </section>
 
           <section className="panel device-subject-summary-panel">

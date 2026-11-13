@@ -1739,6 +1739,32 @@ Next: verify owner-controlled environment switching, then agree menu subheadings
 and the detailed Import Management/Reporting scope before feature implementation.
 Development may update Playground state; it MUST NOT touch the Production database.
 
+## November 5 — Current registration cards on main
+
+The owner reported that Submission Data still showed POST 9,672 and PATCH 354
+after Production registrations. Read-only inspection confirmed these were the
+original October 10 source-workbook classifications, not current registration
+counts. At inspection, 7,798 current device identities had recorded registration
+evidence (354 imported baselines plus 7,444 newly confirmed registrations), and
+2,228 had no recorded registration evidence. These are dated observations, not
+fixed expected totals or a live EUDAMED inventory.
+
+The owner authorised replacing those two cards on main. Data Snapshot now shows
+**Awaiting registration** and **Registered**, using the existing, unfiltered
+registration-summary API for the active environment and matching import batch.
+Unknown devices are reported separately and are not counted as awaiting.
+Counts load automatically on browser page refresh and when returning to
+Submission Data. The owner requested no separate Refresh counts button. Loading, failed and mismatched-import responses show dashes rather than
+zero or old totals. Cancelled/obsolete responses cannot replace current results.
+The original import classifications are retained as provenance in the database;
+no import, schema, acceptance, XML generation or database data was changed.
+
+Validation: 110 frontend tests passed, including nine synthetic card/request
+regressions; TypeScript/Vite build passed with its existing bundle-size advisory.
+No backend tests or application services were started for this frontend change.
+The feature branch remains separate and must include this main change during
+later integration. No commit or remote push was performed by Codex.
+
 ## November 2 — Production bulk selection update
 
 The owner explicitly authorised a small update on main for immediate Production
