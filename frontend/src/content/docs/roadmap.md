@@ -29,17 +29,14 @@ requires a verified backup and unchanged reviewed state. Old parallel UI/endpoin
 were removed. Legacy raw import remains separately available. See
 [Import Data in Dev](../../../../docs/source-batch-receipt.md).
 
-The first Dev Stored Device Data Comparison compares accepted database device
-values with the latest suitable complete extracts retained through Data Import,
-grouped by model. Reporting has no file upload or manual extract selector;
-outgoing/Success XML is not required for this comparison. See the
-[report instructions and exact comparison scope](../../../../docs/ra-report-first-iteration.md).
-The first [Submission Activity report](../../../../docs/submission-activity-report.md)
-shows model-linked ZIP/message history and recorded timing/outcomes without inventing
-portal upload times or operators. Separate registration-evidence reporting, broader
-audit attribution, persistent hosted storage, authentication
-and the Production reporting rollout remain unfinished. This implemented Dev feature does not complete formal
-Production validation or authorize new live submissions.
+Reporting now focuses on the [Model Reconciliation Summary](../../../../docs/ra-report-first-iteration.md):
+one row per model, matching/exception counts, green/amber/neutral status and summary Excel.
+No device lists or drill-downs are presented in this first iteration. The comparison
+basis is current stored canonical device values, without accepted-state fallback.
+
+The [Submission Activity design](../../../../docs/submission-activity-report.md)
+is archived and no longer offered under Reporting. Further reports are deferred
+until the model summary is agreed.
 
 ## Implemented — Production workbook importer
 

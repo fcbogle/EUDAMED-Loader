@@ -58,7 +58,6 @@ import { TestingSummaryWorkspace } from "./components/TestingSummaryWorkspace";
 import { XmlOperationAssessmentPanel } from "./components/XmlOperationAssessmentPanel";
 import { EnvironmentBanner } from "./components/EnvironmentBanner";
 import { ApplicationNavigation, type NavigationPage } from "./components/ApplicationNavigation";
-import { SubmissionActivityWorkspace } from "./components/SubmissionActivityWorkspace";
 import { ReportingWorkspace } from "./components/ReportingWorkspace";
 import { ImportFlowWorkspace } from "./components/ImportFlowWorkspace";
 import type { ImportFlowContext } from "./importFlowTypes";
@@ -146,9 +145,9 @@ type MainTab = NavigationPage;
 const PLANNED_WORKSPACES: { id: PlannedTab; group: "Import Management" | "Reporting"; title: string; description: string }[] = [
   { id: "sourceFiles", group: "Import Management", title: "Import Data", description: "Review source files, create the Import Workbook and import batch data." },
   { id: "importHistory", group: "Import Management", title: "Import History", description: "View previous imports and their result reports." },
-  { id: "submissionActivity", group: "Reporting", title: "Submission Activity", description: "Review recorded ZIP downloads and EUDAMED responses by model." },
-  { id: "registrationSnapshot", group: "Reporting", title: "Stored Device Data Comparison", description: "Compare stored accepted device attributes with EUDAMED extracts by model." },
-  { id: "eudamedComparison", group: "Reporting", title: "Stored Device Data Comparison", description: "Compare stored accepted device attributes with EUDAMED extracts by model." },
+  { id: "submissionActivity", group: "Reporting", title: "Model Reconciliation Summary", description: "Compare application device data with retained EUDAMED extracts by model." },
+  { id: "registrationSnapshot", group: "Reporting", title: "Model Reconciliation Summary", description: "Compare application device data with retained EUDAMED extracts by model." },
+  { id: "eudamedComparison", group: "Reporting", title: "Model Reconciliation Summary", description: "Compare application device data with retained EUDAMED extracts by model." },
 ];
 type SubmissionDataTab = "activity" | "snapshot";
 type EudamedStatus = "EUDAMED Candidate" | "EUDAMED Accepted";
@@ -861,16 +860,16 @@ export function App() {
       markdown: devImportSafetyDocumentation,
     },
     {
-      id: "submissionActivityGuide",
-      title: "Submission Activity Report",
-      sourcePath: "docs/submission-activity-report.md",
-      markdown: submissionActivityDocumentation,
-    },
-    {
       id: "raReport",
-      title: "Stored Device Data Comparison",
+      title: "Model Reconciliation Summary",
       sourcePath: "docs/ra-report-first-iteration.md",
       markdown: raReportDocumentation,
+    },
+    {
+      id: "submissionActivityGuide",
+      title: "Archived Submission Activity Design",
+      sourcePath: "docs/submission-activity-report.md",
+      markdown: submissionActivityDocumentation,
     },
     {
       id: "productionWorkbookContract",
@@ -1054,7 +1053,7 @@ export function App() {
     {
       id: "verification",
       title: "Verification And Decision Support",
-      sectionIds: ["schemaUpgrade", "templateSourceReview", "playgroundXmlReview", "submissionActivityGuide", "raReport", "registrationPolicy", "registrationCounts", "marketInfoParity", "testingScenarios", "softwareEngineeringPatterns"],
+      sectionIds: ["schemaUpgrade", "templateSourceReview", "playgroundXmlReview", "raReport", "registrationPolicy", "registrationCounts", "marketInfoParity", "testingScenarios", "softwareEngineeringPatterns"],
     },
     {
       id: "production",
@@ -3219,7 +3218,7 @@ export function App() {
 
   const plannedWorkspace = PLANNED_WORKSPACES.find((workspace) => workspace.id === activeTab);
   const isImportManagement = activeTab === "sourceFiles" || activeTab === "importHistory";
-  const isReporting = activeTab === "registrationSnapshot" || activeTab === "eudamedComparison";
+  const isReporting = activeTab === "registrationSnapshot" || activeTab === "eudamedComparison" || activeTab === "submissionActivity";
   const locationLabel = plannedWorkspace?.group ?? (activeTab === "xml" || activeTab === "testingSummary" ? "EUDAMED" : activeTab === "documentation" ? "Help" : "Data Views");
 
 
@@ -3308,7 +3307,7 @@ export function App() {
         <aside className="hero-status" aria-label="Workspace status">
           {plannedWorkspace ? (
             <span className="status-pill neutral">
-              {activeEnvironment === "dev" && isImportManagement ? activeTab === "importHistory" ? "Read-only history" : importFlowContext.status : "Under development"}
+              {activeEnvironment === "dev" && isImportManagement ? activeTab === "importHistory" ? "Read-only history" : importFlowContext.status : activeEnvironment === "dev" && isReporting ? "Read-only comparison" : "Under development"}
             </span>
           ) : null}
           {activeTab === "workbooks" ? (
@@ -3402,13 +3401,10 @@ export function App() {
       {activeTab === "importHistory" && <>
         {activeEnvironment === "dev" ? <ImportFlowWorkspace enabled view="history" /> : <section className="panel"><p>Import History is currently available in Dev.</p></section>}
       </>}
-      <SubmissionActivityWorkspace enabled={activeTab === "submissionActivity"} environment={activeEnvironment} />
       <div hidden={!isReporting}>
         <ReportingWorkspace
           enabled={isReporting}
-          page={activeTab === "eudamedComparison" ? "eudamedComparison" : "registrationSnapshot"}
           environment={activeEnvironment}
-          onPageChange={setActiveTab}
         />
       </div>
       {activeTab === "workbooks" ? (

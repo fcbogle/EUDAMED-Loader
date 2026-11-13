@@ -374,6 +374,11 @@ select {
   color: #a35e00;
 }
 
+.reporting-workspace .status-pill.neutral {
+  background: #e8edef;
+  color: #4c626c;
+}
+
 .status-pill.danger {
   background: rgba(181, 43, 43, 0.16);
   color: #9f1f1f;

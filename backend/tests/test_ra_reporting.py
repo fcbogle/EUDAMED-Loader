@@ -51,7 +51,7 @@ def report_case(reconciliation):
     return settings, request, extract, snapshot
 
 
-def generate(case):
+def generate(case, *, summary_only=False):
     settings, request, *_ = case
     before = settings.testing_state_db_path.read_bytes()
     # Simulate Data Import's retained immutable manifest in this temporary fixture.
@@ -64,7 +64,7 @@ def generate(case):
         (batch/'eudamed-xml'/item.name).write_bytes(data)
         manifest['files'].append({'role':'eudamed-xml','path':'eudamed-xml/'+item.name,'sha256':hashlib.sha256(data).hexdigest(),'size_bytes':len(data)})
     (batch/'manifest.json').write_text(json.dumps(manifest))
-    report = StoredDeviceComparisonReport(settings).generate(ReportRequest(include_device_details=request.include_device_details))
+    report = StoredDeviceComparisonReport(settings).generate(ReportRequest(include_device_details=request.include_device_details, summary_only=summary_only))
     assert settings.testing_state_db_path.read_bytes() == before
     return report
 
@@ -181,7 +181,7 @@ def test_absent_extract_only_duplicate_and_incomplete_pages(report_case):
     ident.text='OTHER'
     request.extracts=[file('extract.xml',extract)]
     report=generate(report_case)
-    assert report['models'][0]['absent']==1 and report['extract_only']==1
+    assert next(row for row in report['models'] if row['total'])['absent']==1 and report['extract_only']==1
     extract.find('message:payload',NS).append(deepcopy(extract.find('message:payload/device:Device',NS)))
     request.extracts=[file('extract.xml',extract)]
     with pytest.raises(ValueError,match='Duplicate exported'):generate(report_case)
@@ -307,3 +307,192 @@ def test_unsupported_multilingual_projection_is_not_a_false_trade_name_differenc
     assert report['models'][0]['unable']==1
     assert not report['details'][0]['differences']
     assert any('Multiple accepted trade names' in issue for issue in report['details'][0]['issues'])
+
+
+@pytest.fixture
+def current_case(report_case):
+    from scripts.benchmark_xml import synthetic_record
+    raw = synthetic_record(0).model_dump(mode='json')
+    raw.update(product_family='Synthetic family', product_variant='Synthetic model')
+    # An explicitly stored empty optional attribute differs from an unknown field.
+    for path in ('device_record.production_identifier', 'device_record.secondary_identifier'):
+        raw['fields'].append({'canonical_path': path, 'value': None})
+    with sqlite3.connect(report_case[0].testing_state_db_path) as connection:
+        connection.execute('UPDATE canonical_device_record SET record_json=?', (json.dumps(raw),))
+    return report_case
+
+
+def edit_current(case, values=None, **record_changes):
+    with sqlite3.connect(case[0].testing_state_db_path) as connection:
+        raw = json.loads(connection.execute('SELECT record_json FROM canonical_device_record').fetchone()[0])
+        for field in raw['fields']:
+            if field['canonical_path'] in (values or {}):
+                field['value'] = values[field['canonical_path']]
+        raw.update(record_changes)
+        connection.execute('UPDATE canonical_device_record SET record_json=?', (json.dumps(raw),))
+
+
+def test_model_summary_is_green_only_for_complete_agreement_and_contains_no_device_rows(current_case):
+    current_case[1].include_device_details = True  # Summary always overrides detail export.
+    report = generate(current_case, summary_only=True)
+    model = report['models'][0]
+    assert model['matching'] == model['total'] == 1
+    assert model['exceptions'] == model['extract_only'] == 0
+    assert model['status'] == 'match'
+    assert report['details'] == report['findings'] == []
+    assert current_case[3]['device_record']['primary_udi_di'] not in json.dumps(report)
+    book = load_workbook(BytesIO(base64.b64decode(report['excel_base64'])))
+    assert book.sheetnames == ['Context', 'Models']
+    assert book['Models'].max_row == 2
+    book.close()
+
+
+def test_model_summary_counts_affected_devices_once_for_multiple_differences(current_case):
+    edit_current(current_case, {'device_record.trade_name': 'Different name', 'device_record.catalogue_number': 'Other reference'})
+    model = generate(current_case, summary_only=True)['models'][0]
+    assert model['exceptions'] == 1 and model['matching'] == 0 and model['status'] == 'exceptions'
+
+
+def test_model_summary_missing_data_stays_amber(current_case):
+    edit_current(current_case, {'device_record.sterile': None})
+    model = generate(current_case, summary_only=True)['models'][0]
+    assert model['exceptions'] == 1 and model['matching'] == 0 and model['status'] == 'exceptions'
+
+
+def test_eudamed_only_device_makes_an_otherwise_matching_model_amber(current_case):
+    _, request, extract, _ = current_case
+    payload = extract.find('message:payload', NS)
+    extra = deepcopy(payload[0])
+    extra.find('device:MDRUDIDIData/udi:identifier/common:DICode', NS).text = 'EXTRACT_ONLY'
+    payload.append(extra)
+    request.extracts = [file('extract.xml', extract)]
+    report = generate(current_case, summary_only=True)
+    assert len(report['models']) == 1
+    model = report['models'][0]
+    assert model['matching'] == model['total'] == 1 and model['exceptions'] == 0
+    assert model['extract_only'] == 1 and model['status'] == 'exceptions'
+    assert sum(row['extract_only'] for row in report['models']) == report['extract_only']
+
+
+def test_unlinked_eudamed_models_remain_visible_in_summary(current_case):
+    _, request, extract, _ = current_case
+    extract.find('message:payload/device:Device/device:MDRUDIDIData/udi:identifier/common:DICode', NS).text = 'EXTRACT_ONLY'
+    extract.find('message:payload/device:Device/device:MDRUDIDIData/udi:basicUDIIdentifier/common:DICode', NS).text = 'OTHER_PARENT'
+    extract.find('message:payload/device:Device/device:MDRBasicUDI/basic:identifier/common:DICode', NS).text = 'OTHER_PARENT'
+    request.extracts = [file('extract.xml', extract)]
+    report = generate(current_case, summary_only=True)
+    assert len(report['models']) == 2
+    assert sum(row['total'] for row in report['models']) == 1
+    assert sum(row['exceptions'] for row in report['models']) == 0
+    assert sum(row['extract_only'] for row in report['models']) == 1
+    assert {row['status'] for row in report['models']} == {'not_compared', 'exceptions'}
+
+
+def test_current_summary_matches_without_any_submission_history(current_case):
+    with sqlite3.connect(current_case[0].testing_state_db_path) as connection:
+        connection.execute('DROP TABLE testing_events')
+        connection.execute('DROP TABLE testing_subjects')
+    report = generate(current_case, summary_only=True)
+    assert report['models'][0]['status'] == 'match'
+    assert 'current stored device data' in report['comparison_basis_label']
+    assert 'Device version' not in report['comparison_fields']
+    assert 'Market Info version' not in report['comparison_fields']
+
+
+def test_current_summary_detects_current_change_even_when_accepted_snapshot_matches(current_case):
+    assert generate(current_case, summary_only=True)['models'][0]['matching'] == 1
+    edit_current(current_case, {'device_record.trade_name': 'Current database edit'})
+    model = generate(current_case, summary_only=True)['models'][0]
+    assert model['different'] == model['exceptions'] == 1
+    assert model['matching'] == 0
+
+
+def test_old_accepted_changes_do_not_override_matching_current_values(current_case):
+    snapshot = deepcopy(current_case[3])
+    snapshot['device_record']['trade_name'] = 'Old accepted name'
+    update(current_case, latest_successful_state_json=json.dumps(snapshot), latest_successful_post_state_json=None)
+    assert generate(current_case, summary_only=True)['models'][0]['status'] == 'match'
+
+
+@pytest.mark.parametrize('path,value', [
+    ('device_record.sterile', 'uncertain'),
+    ('device_record.number_of_reuses', '1.5'),
+    ('device_record.base_quantity', '-1'),
+    ('device_record.basic_udi_identifier', 'NO_ISSUER'),
+])
+def test_invalid_current_attributes_remain_amber(current_case, path, value):
+    edit_current(current_case, {path: value})
+    model = generate(current_case, summary_only=True)['models'][0]
+    assert model['exceptions'] == 1 and model['matching'] == 0
+
+
+def test_missing_current_optional_field_is_not_filled_from_accepted_xml(current_case):
+    with sqlite3.connect(current_case[0].testing_state_db_path) as connection:
+        raw = json.loads(connection.execute('SELECT record_json FROM canonical_device_record').fetchone()[0])
+        raw['fields'] = [field for field in raw['fields'] if field['canonical_path'] != 'device_record.production_identifier']
+        connection.execute('UPDATE canonical_device_record SET record_json=?', (json.dumps(raw),))
+    model = generate(current_case, summary_only=True)['models'][0]
+    assert model['unable'] == model['exceptions'] == 1
+
+
+@pytest.mark.parametrize('countries', [
+    [{'sequence': 1, 'country': 'Germany?', 'original_placed_on_market': True}],
+    [{'sequence': 1, 'country': 'DE', 'original_placed_on_market': False}],
+    [],
+])
+def test_market_uncertainty_and_placement_differences_prevent_green(current_case, countries):
+    edit_current(current_case, market_availability_items=countries)
+    model = generate(current_case, summary_only=True)['models'][0]
+    assert model['exceptions'] == 1 and model['status'] == 'exceptions'
+
+
+def test_current_structured_items_require_codes_and_preserve_comments(current_case):
+    edit_current(current_case, storage_condition_items=[{'normalized_code': None, 'description': 'Not mapped'}])
+    assert generate(current_case, summary_only=True)['models'][0]['unable'] == 1
+    edit_current(current_case, storage_condition_items=[{'normalized_code': 'STC001', 'description': 'Stored condition'}])
+    assert generate(current_case, summary_only=True)['models'][0]['different'] == 1
+
+
+def test_current_country_and_language_aliases_use_existing_projection_conventions(current_case):
+    edit_current(current_case, {'device_record.number_of_reuses': '00'}, market_availability_items=[
+        {'sequence': 1, 'country': 'Germany', 'original_placed_on_market': True}])
+    assert generate(current_case, summary_only=True)['models'][0]['status'] == 'match'
+
+
+def test_schema_reuse_not_applicable_sentinel_is_a_known_current_value(current_case):
+    _, request, extract, _ = current_case
+    extract.find('message:payload/device:Device/device:MDRUDIDIData/udi:numberOfReuses', NS).text = '-1'
+    request.extracts = [file('extract.xml', extract)]
+    edit_current(current_case, {'device_record.number_of_reuses': '-1'})
+    assert generate(current_case, summary_only=True)['models'][0]['status'] == 'match'
+    edit_current(current_case, {'device_record.number_of_reuses': '-2'})
+    assert generate(current_case, summary_only=True)['models'][0]['unable'] == 1
+
+
+@pytest.mark.parametrize('separate_model', [False, True])
+def test_devices_awaiting_registration_are_coverage_not_data_exceptions(current_case, separate_model):
+    from scripts.benchmark_xml import synthetic_record
+    raw = synthetic_record(1, parent='PENDING_BASIC').model_dump(mode='json')
+    raw.update(product_family='Pending family' if separate_model else 'Synthetic family',
+               product_variant='Pending model' if separate_model else 'Synthetic model')
+    with sqlite3.connect(current_case[0].testing_state_db_path) as connection:
+        connection.execute('INSERT INTO device_subject VALUES(2,?,?)', (raw['primary_udi_di'], 'PENDING_BASIC'))
+        connection.execute('INSERT INTO canonical_device_record(id,device_subject_id,canonical_version,record_json) VALUES(2,2,1,?)', (json.dumps(raw),))
+    report = generate(current_case, summary_only=True)
+    assert sum(row['compared'] for row in report['models']) == 1
+    assert sum(row['matching'] for row in report['models']) == 1
+    assert sum(row['exceptions'] for row in report['models']) == 0
+    assert sum(row['absent'] for row in report['models']) == 1
+    for row in report['models']:
+        assert row['total'] == row['compared'] + row['absent'] + row['unresolved']
+        assert row['compared'] == row['matching'] + row['exceptions']
+    if separate_model:
+        pending = next(row for row in report['models'] if row['model'] == 'Pending model')
+        assert pending['status'] == 'not_compared' and pending['compared'] == 0
+    else:
+        assert report['models'][0]['status'] == 'match'
+        assert report['models'][0]['total'] == 2
+    book = load_workbook(BytesIO(base64.b64decode(report['excel_base64'])))
+    headers = [cell.value for cell in book['Models'][1]]
+    assert 'Compared' in headers and 'Data exceptions' in headers and 'Not in extract' in headers
+    book.close()

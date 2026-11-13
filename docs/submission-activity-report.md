@@ -1,8 +1,9 @@
-# Submission Activity report
+# Archived Submission Activity report design
 
-Implemented November 8, 2026 in the development worktree. Browser review is pending.
-Open **Reporting → Submission Activity**, then choose **Generate report**. This
-report reads the application database only and does not need EUDAMED extracts.
+Archived November 13, 2026. The owner has narrowed Reporting to the
+[Model Reconciliation Summary](ra-report-first-iteration.md). Submission Activity
+is no longer offered in Reporting. The earlier implementation and evidence are
+retained; the material below describes that earlier design.
 
 ## Model list and latest timing
 

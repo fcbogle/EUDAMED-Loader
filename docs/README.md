@@ -16,8 +16,8 @@ initialization, regulatory approval or M2M submission.
 | [Environment profiles](environment-profiles.md) | Profile selection, actor/schema/storage separation and read-only configuration checks. |
 | [Registration operation policy](registration-driven-operation-policy.md) | Registered/Unregistered/Unknown and registration-driven POST/PATCH selection. |
 | [Registration counts](registration-counts.md) | SQLite evidence, parent/child views, scope and readiness distinctions. |
-| [Submission Activity](submission-activity-report.md) | Model links to latest and previous ZIP/message activity, recorded response outcomes and evidence; portal upload/operator times are not inferred. |
-| [Stored Device Data Comparison](ra-report-first-iteration.md) | Dev model summaries, accepted values versus the latest suitable retained Data Import extracts, grouped differences/missing data and Excel; no reporting uploads. |
+| [Archived Submission Activity](submission-activity-report.md) | Earlier report design retained for reference; removed from active Reporting. |
+| [Model Reconciliation Summary](ra-report-first-iteration.md) | The sole active report: one row per model, matching/exception counts, green/amber/neutral status and summary Excel. |
 | [Publishing remotes](publishing-remotes.md) | Commit/publish from the intended worktree; filtered GitHub history safeguards. |
 | [Session handoff](session-handoff.md) | Current checkpoint followed by explicitly historical decisions and execution evidence. |
 

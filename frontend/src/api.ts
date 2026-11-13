@@ -142,7 +142,7 @@ export const api = {
   submissionActivityReport: (request: {include_device_details:boolean}) => sendJson<SubmissionActivityReport>("/reporting/submission-activity", "POST", request),
   submissionActivityResponse: (eventId:number) => sendDownload(`/reporting/submission-activity/responses/${eventId}`, "GET"),
   storedDeviceComparisonSource: () => getJson<RetainedExtractStatus>("/reporting/device-comparison/source"),
-  storedDeviceComparison: (request: {include_device_details: boolean}) =>
+  storedDeviceComparison: (request: {include_device_details: boolean; summary_only?: boolean}) =>
     sendJson<StoredDeviceComparison>("/reporting/device-comparison", "POST", request),
   importSessions: () => getJson<{imports: ImportChoice[]}>("/dev-input-batches/sessions"),
   importSession: (id: string) => getJson<ImportSession>(`/dev-input-batches/sessions/${encodeURIComponent(id)}`),

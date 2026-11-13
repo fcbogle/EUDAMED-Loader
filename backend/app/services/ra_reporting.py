@@ -1,7 +1,7 @@
-"""Read-only comparison of stored accepted device data with dated EUDAMED extracts.
+"""Read-only model reconciliation against dated EUDAMED extracts.
 
-Canonical/workbook data supplies identity, model grouping and provenance only.
-Comparison never substitutes proposed values for missing accepted-state values.
+The active summary compares current stored canonical values. The earlier detailed
+accepted-state comparison remains available for compatibility, outside the UI.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from fastapi.encoders import jsonable_encoder
 from openpyxl import Workbook
 from pydantic import BaseModel, ConfigDict
 
+from app.services.current_device_comparison import current_device_values
 from app.services.accepted_state import accepted_device_state, accepted_market_state, json_state
 from app.services.playground_reconciliation import normalized, positive_version, timestamp
 from app.services.production_workbook_adapter import accepted_snapshot
@@ -61,6 +62,7 @@ REQUIRED_FIELDS = {
 class ReportRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     include_device_details: bool = False
+    summary_only: bool = False
 
 
 def known_value(state, name):
@@ -112,6 +114,13 @@ class StoredDeviceComparisonReport:
             raise ValueError(selection['reason'] + ' ' + '; '.join(item['reason'] for item in selection['excluded_sets'][:3]))
         exported, export_files, evidence = (selection[key] for key in ('exported', 'export_files', 'evidence'))
         groups, details, findings = {}, [], defaultdict(set)
+        parent_models = defaultdict(set)
+        def group_for(family, model):
+            model_key = json.dumps([family, model])
+            return groups.setdefault(model_key, {'key': model_key, 'family': family, 'model': model,
+                'total': 0, 'exact': 0, 'different': 0, 'unable': 0, 'absent': 0,
+                'source_linked': 0, 'stored_available': 0, 'extract_matched': 0,
+                'source_files': set(), 'extract_only': 0})
         with closing(sqlite3.connect(self.database.as_uri() + '?mode=ro', uri=True)) as connection:
             connection.row_factory = sqlite3.Row
             connection.execute('PRAGMA query_only=ON')
@@ -135,22 +144,26 @@ class StoredDeviceComparisonReport:
                 by_key[key].append(row['device_subject_id'])
             tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             linked, legacy = defaultdict(list), defaultdict(list)
-            if 'testing_subjects' in tables:
+            if not request.summary_only and 'testing_subjects' in tables:
                 for subject in connection.execute('SELECT * FROM testing_subjects'):
                     if subject['device_subject_id']:
                         linked[subject['device_subject_id']].append(subject)
                     elif snapshot_identity(subject):
                         legacy[snapshot_identity(subject)].append(subject)
             events = defaultdict(list)
-            if 'testing_events' in tables:
+            if not request.summary_only and 'testing_events' in tables:
                 for event in connection.execute("SELECT id,subject_id,message_type,status,version,tested_at FROM testing_events WHERE status IN ('SUCCESS','IMPORTED')"):
                     events[event['subject_id']].append(dict(event))
             for row, record, key in records:
                 family, model = record.get('product_family') or 'Unmapped', record.get('product_variant') or 'Unmapped'
                 model_key = json.dumps([family, model])
-                group = groups.setdefault(model_key, {'key': model_key, 'family': family, 'model': model,
-                    'total': 0, 'exact': 0, 'different': 0, 'unable': 0, 'absent': 0,
-                    'source_linked': 0, 'stored_available': 0, 'extract_matched': 0, 'source_files': set()})
+                group = group_for(family, model)
+                fields = {f['canonical_path']: f.get('value') for f in record.get('fields', [])}
+                parent = identifier(fields.get('device_record.basic_udi_identifier'))
+                if all(parent):
+                    parent_models[parent].add(model_key)
+                if key in exported:
+                    parent_models[tuple(exported[key]['parent'])].add(model_key)
                 group['total'] += 1
                 if row['workbook_name']:
                     group['source_linked'] += 1
@@ -166,7 +179,10 @@ class StoredDeviceComparisonReport:
                 identity_valid = all(key) and len(by_key[key]) == 1
                 if not identity_valid:
                     issues.append('Database identity is incomplete or ambiguous')
-                if subject is None:
+                if request.summary_only:
+                    state, market, current_issues = current_device_values(record)
+                    issues.extend(current_issues)
+                elif subject is None:
                     issues.append('No unique stored accepted-state identity')
                 elif ((subject['primary_udi_di'] and identifier(subject['primary_udi_di'])[1] != key[1])
                       or (snapshot_identity(subject) is not None and snapshot_identity(subject) != key)):
@@ -200,7 +216,7 @@ class StoredDeviceComparisonReport:
                     issues.append('Absent from selected extract — registration status not inferred')
                 elif identity_valid and entry is not None:
                     group['extract_matched'] += 1
-                    if subject is not None:
+                    if request.summary_only or subject is not None:
                         try:
                             exported_state = jsonable_encoder(accepted_snapshot(entry, self.settings))
                         except ValueError as exc:
@@ -219,14 +235,16 @@ class StoredDeviceComparisonReport:
                                     continue  # Do not call a lossy first-translation projection a difference.
                                 known, stored = known_value(state, name)
                                 comparisons.append((name, label, known, stored, exported_state['device_record'][name]))
-                            comparisons.extend([
-                                ('device_version', 'Device version', bool(state and positive_version(state.get('version'))),
-                                 state.get('version') if state else None, exported_state['version']),
+                            comparisons.append(
                                 ('market_countries', COMPARISON_FIELDS['market_countries'], bool(market and 'market_countries' in market),
-                                 market.get('market_countries') if market else None, exported_state['market_countries']),
-                                ('market_info_version', 'Market Info version', bool(market and positive_version(market.get('version'))),
-                                 market.get('version') if market else None, exported_state['market_info_version']),
-                            ])
+                                 market.get('market_countries') if market else None, exported_state['market_countries']))
+                            if not request.summary_only:
+                                comparisons.extend([
+                                    ('device_version', 'Device version', bool(state and positive_version(state.get('version'))),
+                                     state.get('version') if state else None, exported_state['version']),
+                                    ('market_info_version', 'Market Info version', bool(market and positive_version(market.get('version'))),
+                                     market.get('version') if market else None, exported_state['market_info_version']),
+                                ])
                             for name, label, known, stored, extracted in comparisons:
                                 if name in REQUIRED_FIELDS and (stored is None
                                         or isinstance(stored, str) and not stored.strip()
@@ -238,7 +256,7 @@ class StoredDeviceComparisonReport:
                                     differences.append({'field': label, 'stored': stored, 'extracted': extracted})
                             if not state:
                                 issues.append('Latest accepted device values are unavailable or do not match the recorded version')
-                            for event in events[subject['id']]:
+                            for event in events[subject['id']] if subject is not None else []:
                                 when = timestamp(event['tested_at'])
                                 if when and when > timestamp(entry['source']['created_at']):
                                     notes.append('Database accepted activity is newer than this extract')
@@ -260,13 +278,32 @@ class StoredDeviceComparisonReport:
                     'udi_di': key[1], 'catalogue': record.get('catalogue_number'), 'outcome': outcome,
                     'issues': issues, 'missing_fields': missing, 'notes': notes, 'differences': differences,
                     'state_source': state.get('accepted_state_source') or 'Stored accepted device snapshot' if state else 'Unavailable'})
+        for key in set(exported) - set(by_key):
+            entry = exported[key]
+            candidates = parent_models.get(tuple(entry['parent']), set())
+            if len(candidates) == 1:
+                group = groups[next(iter(candidates))]
+            else:
+                group = group_for('EUDAMED only — model not uniquely linked', entry.get('device_type') or 'Unmapped model')
+            group['extract_only'] += 1
         for group in groups.values():
             group['source_files'] = sorted(group['source_files'])
-        report = {'report_type': 'stored_device_comparison', 'environment': self.settings.environment,
+            group['matching'] = group['exact']
+            group['compared'] = group['extract_matched']
+            group['exceptions'] = group['compared'] - group['matching']
+            group['unresolved'] = group['total'] - group['compared'] - group['absent']
+            group['status'] = ('exceptions' if group['exceptions'] or group['extract_only']
+                               else 'match' if group['compared'] else 'not_compared')
+        report = {'report_type': 'model_reconciliation_summary' if request.summary_only else 'stored_device_comparison', 'environment': self.settings.environment,
             'manufacturer': self.settings.eudamed_manufacturer_srn_override,
             'generated_at': datetime.now(UTC).isoformat(), 'import_batch_id': batch['id'],
+            'imported_at': batch['imported_at'] if 'imported_at' in batch.keys() else None,
+            'comparison_basis_label': ('Comparison basis: current stored device data against the retained EUDAMED extract.'
+                                       if request.summary_only else 'Comparison basis: stored accepted registration values, not proposed workbook values.'),
+            'comparison_basis': 'current_device_data' if request.summary_only else 'accepted_state',
             'extract_source': selection['selected'], 'excluded_extract_sets': selection['excluded_sets'],
-            'comparison_fields': list(COMPARISON_FIELDS.values()),
+            'comparison_fields': (list(DEVICE_FIELDS.values()) + [COMPARISON_FIELDS['market_countries']]
+                                  if request.summary_only else list(COMPARISON_FIELDS.values())),
             'models': sorted(groups.values(), key=lambda group: (group['model'], group['family'])),
             'findings': [{'model_key': model, 'category': category, 'finding': field, 'affected': len(ids)}
                          for (model, category, field), ids in sorted(findings.items())],
@@ -280,17 +317,33 @@ class StoredDeviceComparisonReport:
                 'Parent attributes and parent versions, server version dates, unsupported XML fields and raw payload proof are outside this device comparison scope.',
                 'These are values from one database snapshot compared with dated extracts. Newer accepted activity is flagged for investigation; no conclusion about current live EUDAMED state is made.',
                 'Absence from dated extracts does not prove unregistration. Finding counts overlap; model outcome columns are mutually exclusive.',
-                'Source links are provenance, not verification that original files remain available. Registration evidence belongs in a separate report. Reports are not saved server-side; download to retain this result.']}
-        report['excel_base64'] = base64.b64encode(workbook(report, request.include_device_details)).decode()
+                'Source links are provenance, not verification that original files remain available. Reports are not saved server-side; download to retain this result.']}
+        if request.summary_only:
+            report['limitations'] = [
+                'Matching means agreement across the listed supported current device attributes, not full XML equality or proof of registration.',
+                'Values come from stored canonical device fields and structured items in the displayed database import. Accepted registration snapshots, outgoing XML, drafts and workbook files are not substituted for missing current values.',
+                'Data exceptions count compared database devices with differences, missing attributes or unsupported projections, once per device. Devices absent from the extract are registration coverage, not data exceptions.',
+                'Optional nulls and empty structured lists agree only when explicitly stored. Code/country ordering is ignored while country/placement and warning/comment relationships are preserved.',
+                'Registration transaction versions and dates are not current canonical device attributes and are excluded. Parent attributes and unsupported XML fields are also outside this comparison scope.',
+                'This is a dated extract comparison, not a live portal query. Declared complete pages do not establish complete manufacturer or model coverage. Absence does not prove unregistration.',
+                'EUDAMED-only devices without a unique application model link remain visible in separate model rows. No application or accepted-state data is updated.',
+                'Green means the compared registered data matches. Models with no compared devices are neutral. EUDAMED-only registered devices remain highlighted separately because their application record is missing. Unresolved database identities are separate coverage gaps.',
+            ]
+            report['findings'] = []
+            report['details'] = []
+        report['excel_base64'] = base64.b64encode(workbook(report, request.include_device_details and not request.summary_only,
+                                                        summary_only=request.summary_only)).decode()
         return report
 
 
-def workbook(report, include_details=False):
+def workbook(report, include_details=False, *, summary_only=False):
     book = Workbook()
     sheet = book.active
     sheet.title = 'Context'
     for key in ('report_type', 'environment', 'manufacturer', 'generated_at', 'import_batch_id', 'extract_only'):
         sheet.append([key, str(report[key])])
+    sheet.append(['Comparison basis', report['comparison_basis_label']])
+    sheet.append(['Imported at', report.get('imported_at') or 'Not recorded'])
     for key, value in report['extract_source'].items():
         sheet.append(['Extract source: ' + key, _cell(value)])
     for excluded in report['excluded_extract_sets']:
@@ -305,6 +358,10 @@ def workbook(report, include_details=False):
         'Grouped findings': (['Model / family', 'Category', 'Finding', 'Affected entries'], [[f[k] for k in ('model_key', 'category', 'finding', 'affected')] for f in report['findings']]),
         'Comparison sources': (['Kind', 'File', 'SHA-256', 'Recorded time'], [[e.get(k) for k in ('kind', 'name', 'sha256', 'created_at')] for e in report['evidence']]),
     }
+    if summary_only:
+        labels = {'match': 'Registered data matches', 'exceptions': 'Data exceptions', 'not_compared': 'No devices compared'}
+        sheets = {'Models': (['Model', 'Family', 'Database devices', 'Compared', 'Matching', 'Data exceptions', 'Not in extract', 'EUDAMED only', 'Unresolved identity', 'Status'],
+            [[labels[g[k]] if k == 'status' else g[k] for k in ('model', 'family', 'total', 'compared', 'matching', 'exceptions', 'absent', 'extract_only', 'unresolved', 'status')] for g in report['models']])}
     if include_details:
         sheets['Requested device details'] = (['Model', 'Family', 'Issuer', 'UDI-DI', 'Catalogue', 'Outcome', 'Issues', 'Missing stored fields', 'Date notes', 'Differences', 'Stored state source'],
             [[d.get(k) for k in ('model', 'family', 'issuer', 'udi_di', 'catalogue', 'outcome', 'issues', 'missing_fields', 'notes', 'differences', 'state_source')] for d in report['details']])

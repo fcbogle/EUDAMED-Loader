@@ -2,6 +2,72 @@
 
 Updated November 13, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+## November 13 — Reporting narrowed to Model Reconciliation Summary
+
+Owner requested one model-level summary before any further reporting work or
+branch merge. Reporting navigation now contains only Model Reconciliation Summary.
+Submission Activity is removed from navigation/rendering; its code, API and design
+notes remain archived without deleting audit evidence. Earlier comparison aliases
+resolve to the summary.
+
+The summary separates **registration coverage** from **registered data exceptions**.
+Table columns: Model, Database devices, Compared, Matching, Data exceptions,
+Not in extract and Status. EUDAMED-only and unresolved-identity columns appear
+when populated. Matching + Data exceptions = Compared. Compared + Not in extract
++ Unresolved identity = Database devices. Devices awaiting registration/absent
+from the extract are coverage information and never turn a model amber by themselves.
+Green means Registered data matches; amber means Data exceptions; models with no
+compared devices are neutral (No devices compared). Registered EUDAMED-only records
+remain highlighted separately because their application record is missing.
+
+Exceptions count affected compared devices once. No device lists or drill-downs
+are present. Summary-only responses omit per-device details/grouped findings,
+and Excel contains Context and Models only, including the same coverage/count/status
+rules. Comparison scope/source notes are collapsed under Comparison details.
+
+Owner confirmed the comparison basis: **current stored device data versus the
+EUDAMED extract**. The active summary now reads stored canonical fields and
+structured items, without accepted-state/history or source-workbook fallback.
+A matching device needs no submission history. Registration transaction versions
+and dates are excluded because they are not current canonical device attributes.
+Missing/invalid values and unsupported projections remain amber. The frontend
+rejects a result labelled with a different comparison basis.
+
+A read-only report projection maps existing fields and structured items using the
+current country/language/code conventions, without changing canonical storage or
+XML generation. Explicit optional nulls/empty lists can match; missing fields are
+unknown. Boolean/quantity parsing preserves false/zero and the schema's `-1` reuse
+sentinel, rather than supplying defaults. The earlier detailed accepted-state API
+remains compatibility code outside the active reporting UI. No branch merge or
+database update was performed.
+
+The earlier accepted-state checkpoint (241 matching, 9,123 absent) is superseded
+by the current-data verification below.
+
+Read-only verification of import #5: **9,364 devices across 17 models**;
+**241 compared: 109 matching and 132 with data exceptions**. The **9,123 absent
+from the extract** are registration coverage, excluded from the exception count.
+There are zero unable-to-compare and zero EUDAMED-only identities. The earlier
+all-models-amber statement is superseded by the registration-coverage rule. Attribute findings overlap: trade name 109, market countries 42,
+storage conditions 27, critical warnings 18. During verification, the new adapter's
+initial nonnegative-only integer check was corrected to permit the official
+schema's `-1` reuse sentinel; regression coverage now verifies this. The initial
+109 unable count is superseded. Dev database hash is unchanged; no device rows
+are returned by the summary.
+
+After applying the coverage rule, verified model statuses are **3 green, 8 amber
+and 6 neutral**. Compared remains 241; data exceptions are 132 rather than 9,255.
+The 9,123 absent devices remain visible as Not in extract. Counts balance in the
+UI/API and summary Excel. Regression tests verify both a matching model containing
+additional devices awaiting registration and a wholly unrepresented model with
+neutral status. Validation for this adjustment: 42 reporting backend tests, all
+151 frontend tests and frontend build passed (existing bundle-size advisory).
+Validation: 78 targeted backend tests, all 150 frontend tests and the frontend
+build passed. Tests verify current edits despite matching accepted history,
+matching without submission history, no accepted fallback for missing fields,
+country/placement and structured-item exceptions, valid reuse sentinel handling,
+summary-only exports and rejection of the wrong comparison basis in the UI.
+
 ## November 13 — Completed imports have a receipt and read-only history
 
 Owner approved separating completed imports from active source cleanup.

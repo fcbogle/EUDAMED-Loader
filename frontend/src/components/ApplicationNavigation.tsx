@@ -31,12 +31,11 @@ export function ApplicationNavigation({ activePage, onSelect, xmlWorkspaceLabel,
       { id: "testingSummary", label: summaryWorkspaceLabel },
     ] },
     { id: "reporting", label: "Reporting", pages: [
-      { id: "registrationSnapshot", label: "Stored Device Data Comparison" },
-      { id: "submissionActivity", label: "Submission Activity" },
+      { id: "registrationSnapshot", label: "Model Reconciliation Summary" },
     ] },
     { id: "help", label: "Help", pages: [{ id: "documentation", label: "Documentation" }] },
   ];
-  const displayedActivePage = activePage === "eudamedComparison" ? "registrationSnapshot" : activePage;
+  const displayedActivePage = activePage === "eudamedComparison" || activePage === "submissionActivity" ? "registrationSnapshot" : activePage;
   const activeGroup = groups.find((group) => group.pages.some((page) => page.id === displayedActivePage))!;
 
   function selectArea(group: NavigationGroup) {
