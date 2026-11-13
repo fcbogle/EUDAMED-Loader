@@ -23,6 +23,7 @@ def test_database_write_guard(monkeypatch, tmp_path_factory):
     """Never let a stale/local profile turn a test into an operational DB write."""
     original = sqlite3.connect
     allowed = [tmp_path_factory.getbasetemp().resolve(), Path(tempfile.gettempdir()).resolve(), Path('/tmp').resolve()]
+    operational_data = (BACKEND_ROOT.parent / 'data').resolve()
     def guarded(database, *args, **kwargs):
         raw = os.fsdecode(database)
         readonly = False
@@ -35,7 +36,8 @@ def test_database_write_guard(monkeypatch, tmp_path_factory):
             raw = unquote(uri.path)
         if raw != ":memory:" and not readonly:
             target = Path(raw).expanduser().resolve()
-            if not any(target.is_relative_to(root) for root in allowed):
+            # Repository data stays operational even when a checkout lives under /tmp.
+            if target.is_relative_to(operational_data) or not any(target.is_relative_to(root) for root in allowed):
                 raise RuntimeError(f"Tests cannot open a non-temporary database for writing: {target}")
         return original(database, *args, **kwargs)
     monkeypatch.setattr(sqlite3, "connect", guarded)

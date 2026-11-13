@@ -1,5 +1,9 @@
 # Playground schema upgrade — November 12, 2026
 
+November 13 merge verification: the Dev package is marked `-text` in
+`.gitattributes`, preserving the archive's original bytes and recorded hashes
+through Git checkout. No Production schema attributes or bytes are changed.
+
 The owner approved comparison, Dev integration and regression verification for
 XSD 3.0.36.1. This change does not import the supplied sources or perform manual
 Playground submissions. Production remains on its existing official 3.0.30

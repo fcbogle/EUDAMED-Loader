@@ -2,6 +2,22 @@
 
 Updated November 13, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+
+## November 13 — Merge-readiness packaging and test isolation
+
+A separate temporary checkout exposed three portability issues before merging:
+Git's newline conversion changed the official Dev schema bytes; the test database
+guard allowed repository data when the repository itself was under /tmp; and one
+manufacturer-override test constructed its service before setting the override.
+
+The official Dev profile now has an explicit Git text-conversion exemption so
+fresh checkouts preserve the existing archive/manifest hashes. The test guard
+rejects repository data paths even inside temporary checkouts, and the override
+test constructs its service after applying the profile. No application database,
+Production configuration or Production schema bytes are changed by these fixes.
+The main merge remains subject to the isolated integration checks documented in
+the merge audit; no Production services were started for those checks.
+
 ## November 13 — Reporting narrowed to Model Reconciliation Summary
 
 Owner requested one model-level summary before any further reporting work or

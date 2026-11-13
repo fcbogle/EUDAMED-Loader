@@ -132,14 +132,14 @@ def test_next_post_preview_route_returns_payload() -> None:
 
 
 def test_single_record_preview_can_override_manufacturer_srn_for_playground(monkeypatch) -> None:
-    service = XmlGenerationService()
     monkeypatch.setenv("EUDAMED_MANUFACTURER_SRN_OVERRIDE", "UK-MF-000033261")
+    get_settings.cache_clear()
+    service = XmlGenerationService()
     monkeypatch.setattr(
         service.testing_state_store,
         "has_successful_basic_udi_post",
         lambda **_: False,
     )
-    get_settings.cache_clear()
     try:
         preview = service.preview_post_registration(
             product_family="Elan",
