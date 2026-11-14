@@ -1,5 +1,59 @@
 # EUDAMED Playground Test Report
 
+## November 14 — Follow-up current-data repair after confirmed acceptance
+
+After owner authorisation, shared PATCH acknowledgement synchronisation was added.
+The confirmed EVAC22L1S / 05050649062025 version-5 success (event 1666) was used to
+repair the Dev current device status and indexed field value to
+NO_LONGER_PLACED_ON_THE_MARKET. Accepted history and the original response XML
+were not changed; no resubmission or new success event was needed. Original source
+rows and all unrelated device fields were verified unchanged. The current value
+now carries provenance to APP-DTX-000123503.xml / success event 1666.
+
+A verified backup and before/after checks are retained under
+data/testing/backups/patch-current-sync-20261114-fd1bk6ou. Production files were
+hash-verified unchanged. The earlier sync gap described in the acceptance checkpoint
+below is resolved for this confirmed status change; historical unrelated differences
+remain subject to review. Older extract comparisons may still show a dated difference.
+
+## November 14, 2026 — Single-device market withdrawal accepted
+
+Owner submitted the generated single-device withdrawal PATCH to Playground and
+uploaded the returned Success XML. Read-only inspection of the Dev database
+confirmed the following evidence:
+
+- Model/family: Echelon VAC / Echelon.
+- Catalogue: EVAC22L1S; GS1 Device UDI-DI: 05050649062025.
+- Scenario: status_code_edit, labelled Device Market Status; UDI_DI.PATCH.
+- Generated event 1665: accepted base version 4, proposed version 5.
+- Success event 1666: response_code SUCCESS, entity_code 05050649062025,
+  no recorded error details; response retained as APP-DTX-000123503.xml.
+- Request/response correlation ID: dc47ef04-dda0-4d50-b932-532b9b000c58.
+- Outgoing message ID: 1b19054a-76a0-48f1-bb84-a6e52274e947;
+  response message ID: a006f879-5b20-4707-91a1-c0b08568158c.
+- Response timestamp: 2026-11-14T17:19:04.201+01:00 (16:19:04.201 UTC).
+- Accepted state: version 5, NO_LONGER_PLACED_ON_THE_MARKET;
+  registration identity remains child_registered.
+
+The response event retains the generated scenario, base and derived versions and
+accepted status, establishing the acknowledgement's lineage to this withdrawal.
+Separate transaction/submission UUID columns are empty; the APP-DTX filename is
+not presented as a transaction UUID. The response's version is established through
+its correlated generated context and the recorded acceptance, rather than claiming
+an explicit entityVersion value where none was recorded.
+
+This confirms one successful Single PATCH withdrawal in Playground. It does not
+validate Bulk PATCH withdrawal or authorise Production generation. The separate
+Elan IC trial discussed earlier remains at accepted version 4 / ON_THE_MARKET.
+
+Remaining synchronisation point: the imported canonical record for EVAC22L1S still
+contains device_record.status=ON_THE_MARKET, although accepted submission state
+now contains NO_LONGER_PLACED_ON_THE_MARKET. The current implementation does not
+write success results back into imported canonical/source values. Resolve the
+intended source/current-data synchronisation policy before describing the complete
+application as aligned or proceeding to Production use. No source/canonical value
+was changed during this inspection, and no Production database was accessed.
+
 ## Evidence status — reviewed 9 October 2026
 
 Detailed executions below are historical evidence, not current live inventory.

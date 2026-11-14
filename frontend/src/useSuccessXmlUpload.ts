@@ -2,7 +2,7 @@ import { useRef, useState, type ChangeEvent } from "react";
 
 import { api } from "./api";
 import { requestXmlAssessment, assessmentScopeKey, type AssessmentScope } from "./xmlAssessmentRequest";
-import type { OperationAssessment, TestingSubjectReadModelSummary } from "./types";
+import type { CanonicalValidationBundle, OperationAssessment, TestingSubjectReadModelSummary } from "./types";
 
 type UseSuccessXmlUploadArgs = {
   scope: AssessmentScope | null;
@@ -12,6 +12,7 @@ type UseSuccessXmlUploadArgs = {
   setXmlOperationAssessment: (assessment: OperationAssessment | null) => void;
   setXmlOperationAssessmentError: (message: string | null) => void;
   clearPreviewState: () => void;
+  setCanonicalValidation?: (bundle: CanonicalValidationBundle) => void;
 };
 
 export function useSuccessXmlUpload({
@@ -22,6 +23,7 @@ export function useSuccessXmlUpload({
   setXmlOperationAssessment,
   setXmlOperationAssessmentError,
   clearPreviewState,
+  setCanonicalValidation,
 }: UseSuccessXmlUploadArgs) {
   const [isUploadingSuccessXml, setIsUploadingSuccessXml] = useState<boolean>(false);
   const successXmlInputRef = useRef<HTMLInputElement | null>(null);
@@ -39,27 +41,35 @@ export function useSuccessXmlUpload({
     setIsUploadingSuccessXml(true);
     setError(null);
     setXmlActionMessage(`Uploading success XML for ${file.name}...`);
+    let recordedSummary: string | null = null;
 
     try {
       const xmlContent = await file.text();
       const result = await api.uploadSuccessXml(file.name, xmlContent);
+      recordedSummary = result.summary_message;
       if (!isCurrentScope()) return;
+      clearPreviewState();
+      setXmlOperationAssessment(null);
       const assessmentRequest = requestXmlAssessment(scope);
       const updatedSummariesPromise = api.testingSubjectSummaries({
         product_family: scope.productFamily,
         product_variant: scope.productVariant,
         limit: 10000,
       });
-      const [updatedSummaries, updatedAssessment] = await Promise.all([
+      const refreshedData = setCanonicalValidation && result.current_data_sync?.some(item =>
+        ["applied", "already_current", "already_processed", "conflict"].includes(String(item.status)))
+        ? api.canonicalValidation() : Promise.resolve(null);
+      const [updatedSummaries, updatedAssessment, updatedCanonical] = await Promise.all([
         updatedSummariesPromise,
         assessmentRequest,
+        refreshedData,
       ]);
 
       if (!isCurrentScope()) return;
       setTestingSubjectSummaries(updatedSummaries);
+      if (updatedCanonical) setCanonicalValidation?.(updatedCanonical);
       setXmlOperationAssessment(updatedAssessment);
       setXmlOperationAssessmentError(null);
-      clearPreviewState();
       const operationLabel =
         scope.mode === "patch"
           ? "PATCH"
@@ -85,7 +95,8 @@ export function useSuccessXmlUpload({
       );
     } catch (requestError) {
       if (!isCurrentScope()) return;
-      const message = requestError instanceof Error ? requestError.message : "Failed to upload success XML.";
+      const reason = requestError instanceof Error ? requestError.message : "Failed to upload success XML.";
+      const message = recordedSummary ? `${recordedSummary} The view could not be refreshed: ${reason}. Refresh the page to reload the recorded state.` : reason;
       setError(message);
       setXmlActionMessage(message);
     } finally {

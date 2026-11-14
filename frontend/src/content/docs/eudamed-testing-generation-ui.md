@@ -86,6 +86,28 @@ imported EUDAMED export baseline in the active environment. Imported baseline
 records do not count as successful POST/PATCH operations. Missing evidence must
 not be reconstructed from an unrelated draft or an old source label.
 
+## Current device data after a successful PATCH
+
+A correlated success response for Trade Name, Critical Warnings, Storage Conditions,
+Base Quantity or Device Market Status updates that changed current attribute and
+its accepted history together. Source workbook rows and original XML evidence are
+retained, with a link from the current value to the response event. Preview/download,
+errors and unrelated acknowledgements do not update current device values.
+
+The application checks the device identity, payload and accepted version, and the
+current value captured when generating the draft. A newer local edit is retained
+and reported for review; the EUDAMED success remains recorded. Duplicate responses
+do not repeat the update, and older responses cannot replace newer current values.
+Projection rebuilds retain qualified changes rather than restoring older source
+values. Original workbook files still require normal source maintenance.
+
+After upload, current-data views and accepted summaries are refreshed. If that
+refresh fails, the message distinguishes the recorded response from the refresh
+failure; reload the page to see the saved state. Reconciliation against an older
+extract can still show a difference until a fresh extract is imported. Off-market
+records retain country evidence, with Market Info treated as not applicable in the
+current comparison. Earlier unrelated differences are not bulk-overwritten.
+
 ## Response capture
 
 Operators submit XML manually in the intended EUDAMED environment and retain the

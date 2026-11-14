@@ -585,6 +585,7 @@ class TestingStateStore:
         correlation_id: str | None = None,
         message_id: str | None = None,
         operation_scope: str = "single",
+        current_data_before: dict[str, Any] | None = None,
     ) -> None:
         with self._connect() as connection:
             subject_id = self._ensure_testing_subject(
@@ -616,6 +617,7 @@ class TestingStateStore:
                     "message_id": message_id,
                     "state_before": state_before,
                     "latest_successful_state": latest_successful_state,
+                    "current_data_before": current_data_before,
                 }
             )
             changed_fields_json = json.dumps(changed_fields)

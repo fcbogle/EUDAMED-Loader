@@ -17,14 +17,16 @@ export function PatchDeviceSearch({ options, environment, selectedKey, onSelect,
   const { total, results } = searchPatchDevices(canSearch ? scoped : [], query);
   const searching = query.trim().length >= 2;
   const selected = scoped.find(option => option.key === selectedKey);
-  return <section className="device-model-selector" aria-label="Find device for PATCH">
+  return <section className="device-model-selector patch-device-search" aria-label="Find device for PATCH">
     <h3>Find device for PATCH</h3>
     <p className="panel-copy">{family && variant ? `Search within ${variant} · ${family}` : "Select a model first"} in {environment === "prod" ? "Production" : environment === "dev" ? "Dev / Playground" : "the current environment"}. Selecting a device checks its accepted baseline and PATCH eligibility.</p>
     <label className="field-label" htmlFor={id}>Device UDI-DI or catalogue number</label>
-    <input id={id} type="search" className="rule-input" value={query} disabled={!canSearch}
-      placeholder="Enter at least 2 characters" aria-controls={`${id}-results`} aria-describedby={`${id}-status`}
-      onChange={event => setQuery(event.target.value)} />
-    <button type="button" className="ghost-button" disabled={!query} onClick={() => setQuery("")}>Clear device search</button>
+    <div className="patch-device-search-controls">
+      <input id={id} type="search" className="rule-input" value={query} disabled={!canSearch}
+        placeholder="Enter Device UDI-DI or catalogue number" aria-controls={`${id}-results`} aria-describedby={`${id}-status`}
+        onChange={event => setQuery(event.target.value)} />
+      <button type="button" className="ghost-button" disabled={!query} onClick={() => setQuery("")}>Clear device search</button>
+    </div>
     <p id={`${id}-status`} role="status">{!canSearch ? "Select the model and PATCH scenario before searching for a device." : !searching ? "Enter at least 2 characters to find a device."
       : total ? `${total} matching devices${total > results.length ? `; showing the first ${results.length}. Keep typing to narrow the results.` : "."}`
         : "No matching device in the selected model for this environment."}</p>

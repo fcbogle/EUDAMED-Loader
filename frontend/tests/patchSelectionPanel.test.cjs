@@ -42,7 +42,8 @@ test('the operator must choose a model and scenario before finding a device', ()
   assert.match(markup({ family: null, variant: null }), /<select[^>]*disabled/);
   let chosen = null;
   const tree = PatchSelectionPanel({ ...props, onScenarioChange(value) { chosen = value; } });
-  tree.props.children.find(node => node?.type === 'select').props.onChange({ target: { value: 'status_code_edit' } });
+  const controls = tree.props.children.find(node => node?.props.className === 'patch-scenario-control');
+  controls.props.children.find(node => node?.type === 'select').props.onChange({ target: { value: 'status_code_edit' } });
   assert.equal(chosen, 'status_code_edit');
   assert.doesNotMatch(markup({ scenario: chosen }), /type="search"[^>]*disabled/);
   assert.match(markup({ scenario: chosen }), /Search within Synthetic model/);

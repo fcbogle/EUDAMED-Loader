@@ -126,3 +126,35 @@ test('PATCH preview readiness requires a loaded accepted baseline, not a prior Z
   assert.equal(advanced.currentAcceptedPatchLabel, 'Accepted device version 3');
 
 });
+
+for (const syncStatus of ["applied", "conflict"]) for (const refreshFails of [false, true]) {
+  test(`acknowledged current data is refreshed after upload; sync=${syncStatus}, refresh failure=${refreshFails}`, async () => {
+    const updates = [], messages = [];
+    const bundle = { source_import_batch_id: 42, records: [{ primary_udi_di: '000123', status: 'NO_LONGER_PLACED_ON_THE_MARKET' }] };
+    const api = {
+      uploadSuccessXml: async () => ({ summary_message: 'Recorded successful PATCH.', current_data_sync: [{ status: syncStatus }] }),
+      testingSubjectSummaries: async () => [],
+      assessSinglePatch: async () => ({ status: 'available' }),
+      canonicalValidation: async () => { if (refreshFails) throw Error('Synthetic refresh failure'); return bundle; },
+    };
+    const { useSuccessXmlUpload } = loadTypeScript('useSuccessXmlUpload.ts', {
+      react: { useState: value => [value, () => {}], useRef: value => ({ current: value }) }, './api': { api },
+      './xmlAssessmentRequest': loadTypeScript('xmlAssessmentRequest.ts', { './api': { api } }),
+    });
+    const hook = useSuccessXmlUpload({
+      scope: { mode: 'patch', productFamily: 'Family', productVariant: 'Model', catalogueNumber: 'CAT' },
+      setError: value => updates.push(['error', value]), setXmlActionMessage: value => messages.push(value),
+      setTestingSubjectSummaries() {}, setXmlOperationAssessment() {}, setXmlOperationAssessmentError() {},
+      setCanonicalValidation: value => updates.push(['canonical', value]), clearPreviewState: () => updates.push(['clear']),
+    });
+    hook.handleSuccessXmlSelected({ target: { files: [{ name: 'ack.xml', text: async () => '<ack />' }] } });
+    for (let i = 0; i < 4; i++) await new Promise(setImmediate);
+    assert.ok(updates.some(([type]) => type === 'clear'));
+    if (refreshFails) {
+      assert.match(messages.at(-1), /Recorded successful PATCH.*view could not be refreshed/);
+      assert.ok(!updates.some(([type]) => type === 'canonical'));
+    } else {
+      assert.deepEqual(updates.find(([type]) => type === 'canonical'), ['canonical', bundle]);
+    }
+  });
+}

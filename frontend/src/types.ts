@@ -935,6 +935,7 @@ export type TestingBatchHistory = {
 };
 
 export type SuccessXmlUploadResult = {
+  current_data_sync?: Array<Record<string, unknown>>;
   summary_message: string;
   message_type: "DEVICE.POST" | "UDI_DI.POST" | "UDI_DI.PATCH" | "MARKET_INFO.PUT";
   operation_label: "Basic UDI-DI POST" | "Device UDI-DI POST" | "Device UDI-DI PATCH" | "Market Info PUT";

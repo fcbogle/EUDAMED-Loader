@@ -214,6 +214,9 @@ class WorkbookImportService:
 
         bundle = self._validation_bundle()
         with self._connect() as connection:
+            from app.services.patch_current_data import projection_overrides, restore_projection_overrides
+            connection.execute('BEGIN IMMEDIATE')
+            protected_values = projection_overrides(connection)
             connection.execute("DELETE FROM canonical_projection_snapshot")
             connection.execute("DELETE FROM canonical_field_value")
             connection.execute("DELETE FROM canonical_device_record")
@@ -351,6 +354,7 @@ class WorkbookImportService:
                     ),
                 ),
             )
+            restore_projection_overrides(connection, protected_values)
         return persisted_count
 
     def canonical_validation_bundle_from_sqlite(

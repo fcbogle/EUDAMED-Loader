@@ -1618,6 +1618,7 @@ class XmlGenerationService:
             derived_patch_xml=derived_patch_xml_bytes.decode("utf-8"),
             derived_patch_validation=derived_patch_validation,
         )
+        from app.services.patch_current_data import capture_current_data
         return preview, {
             "product_family": post_record.product_family,
             "product_variant": post_record.product_variant,
@@ -1633,6 +1634,7 @@ class XmlGenerationService:
             "changed_fields": [delta.model_dump(mode="json") for delta in field_deltas],
             "state_before": self._patch_state_snapshot_payload(scenario_base_record),
             "latest_successful_state": self._patch_state_snapshot_payload(derived_patch_record),
+            "current_data_before": capture_current_data(post_source_record.model_dump(mode="json"), scenario_id),
             "correlation_id": generated_correlation_id,
             "message_id": generated_message_id,
         }

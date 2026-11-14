@@ -12,14 +12,16 @@ export function PatchSelectionPanel({ family, variant, environment, scenario, on
   selectedKey: string | null;
   onSelect: (option: PatchDeviceSearchOption) => void;
 }) {
-  return <div className="draft-card">
+  return <div className="draft-card patch-selection-panel">
     <h3>Choose the PATCH scenario</h3>
-    <label className="field-label" htmlFor="patch-scenario-selector">PATCH scenario</label>
-    <select id="patch-scenario-selector" className="rule-select" value={scenario}
-      disabled={!family || !variant || environment === null} onChange={event => onScenarioChange(event.target.value)}>
-      <option value="">Select a PATCH scenario</option>
-      {PATCH_BUSINESS_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-    </select>
+    <div className="patch-scenario-control">
+      <label className="field-label" htmlFor="patch-scenario-selector">PATCH scenario</label>
+      <select id="patch-scenario-selector" className="rule-select" value={scenario}
+        disabled={!family || !variant || environment === null} onChange={event => onScenarioChange(event.target.value)}>
+        <option value="">Select a PATCH scenario</option>
+        {PATCH_BUSINESS_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+      </select>
+    </div>
     {scenario === "status_code_edit" && <p className="panel-copy">Change On the EU market to No longer placed on the EU market. {environment === "prod"
       ? "Production generation awaits successful Playground verification."
       : "Ready for controlled Playground testing; EUDAMED acceptance has not yet been verified."}</p>}

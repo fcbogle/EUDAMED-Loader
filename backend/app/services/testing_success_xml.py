@@ -70,7 +70,10 @@ class TestingSuccessXmlService:
         error_entity_count = 0
         error_entity_codes: list[str] = []
         error_details: list[str] = []
+        current_data_sync: list[dict[str, Any]] = []
         with self.store._connect() as connection:
+            if not connection.in_transaction:
+                connection.execute('BEGIN IMMEDIATE')
             for acknowledgement in acknowledgements:
                 resolution = self._resolve_subject(connection, acknowledgement)
                 if first_resolution is None:
@@ -89,6 +92,11 @@ class TestingSuccessXmlService:
                         acknowledgement,
                         event_id=event_id,
                     )
+                    if acknowledgement.message_type == "UDI_DI.PATCH" and event_id is not None:
+                        from app.services.patch_current_data import sync_successful_patch
+                        sync = sync_successful_patch(connection, event_id)
+                        if sync['status'] != 'not_applicable':
+                            current_data_sync.append(sync)
                     successful_entity_count += 1
                 else:
                     self._reconcile_observed_market_info_version(
@@ -121,8 +129,13 @@ class TestingSuccessXmlService:
             summary_message += f" for {len(acknowledgements)} response entities."
             if duplicate_event_count:
                 summary_message += f" {duplicate_event_count} were already recorded."
+        conflicts = [item for item in current_data_sync if item['status'] in {'conflict', 'unavailable'}]
+        if conflicts:
+            summary_message += " EUDAMED success is retained; current device data needs review: " + "; ".join(
+                dict.fromkeys(str(item['reason']) for item in conflicts)) + "."
         return SuccessXmlUploadResult(
             summary_message=summary_message,
+            current_data_sync=current_data_sync,
             message_type=first_acknowledgement.message_type,
             operation_label=first_acknowledgement.operation_label,
             entity_code=first_acknowledgement.entity_code,
@@ -713,12 +726,13 @@ class TestingSuccessXmlService:
                 correlation_id=acknowledgement.correlation_id,
                 message_id=acknowledgement.message_id,
                 columns=(
-                    "version, base_message_type, base_version, derived_version, accepted_state_source, "
+                    "id, version, base_message_type, base_version, derived_version, accepted_state_source, "
                     "scenario_id, scenario_label, state_before_json, state_after_json, delta_json, "
                     "changed_fields_json, retained_fields_json, unchanged_fields_json, raw_event_json"
                 ),
             )
             if generated_row is not None:
+                raw_event_payload['generated_event_id'] = generated_row['id']
                 version = self.store._optional_string(generated_row["version"])
                 base_message_type = self.store._optional_string(generated_row["base_message_type"])
                 base_version = self.store._optional_string(generated_row["base_version"])

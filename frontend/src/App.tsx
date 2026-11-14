@@ -2774,6 +2774,7 @@ export function App() {
     setError,
     setXmlActionMessage,
     setTestingSubjectSummaries,
+    setCanonicalValidation,
     setXmlOperationAssessment,
     setXmlOperationAssessmentError,
     clearPreviewState: () => {

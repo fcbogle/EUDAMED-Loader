@@ -2,6 +2,102 @@
 
 Updated November 14, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+## November 14 — Acknowledged PATCH changes synchronise current device values
+
+Owner authorised a shared acknowledgement-to-current-data mechanism for all five
+supported PATCH scenarios, plus repair of the confirmed Echelon VAC withdrawal in
+Dev. Correlated successful PATCHes now update only their changed attribute in both
+canonical_device_record.record_json and canonical_field_value. Trade Name also
+updates the record's display trade_name; warning/handling-condition changes update
+the structured code/comment items and their indexed counts. Other current values
+and original source_row/workbook/XML evidence remain unchanged.
+
+Draft generation captures the relevant current value in generated-event JSON.
+A successful, uniquely correlated response must match the current accepted version,
+its generated payload, stable device_subject link and UDI-DI. The helper detects
+newer local edits, missing/ambiguous identity and inconsistent field indexes.
+Duplicates are idempotent; older responses cannot roll values back. Legacy drafts
+without a captured current value can update only when the current value agrees with
+their accepted Before value (or already equals After). No blanket historical
+backfill or accepted-state fallback is applied to unrelated current attributes.
+
+Acceptance, current-data updates and audit metadata share the response transaction.
+A savepoint prevents partial current-record/index updates. Local conflicts retain
+the EUDAMED success and are reported as current-data review issues, separately
+from EUDAMED response errors. Sync provenance, before/after values, generated-event
+identity and any subsequent attempts are retained under current_data_sync in the
+success event JSON. Raw response XML and source headers/rows stay unchanged.
+
+Canonical projection rebuilds preserve acknowledged field changes and newer local
+values, marking differing source values for review. Unresolvable identities prevent
+a destructive rebuild. Managed additive imports already retain existing canonical
+values. For off-market current records, reconciliation treats Market Info as not
+applicable while retaining historical country source evidence.
+
+Success upload now refreshes current canonical data as well as accepted summaries
+and operation assessment. An acknowledged submission is clearly distinguished
+from a subsequent view-refresh failure. Pending previews are cleared on receipt.
+
+Confirmed Dev repair: GS1 05050649062025 / EVAC22L1S, success event 1666,
+APP-DTX-000123503.xml, accepted version 5. Current status and indexed status changed
+ON_THE_MARKET → NO_LONGER_PLACED_ON_THE_MARKET, with provenance to the existing
+success receipt. No new acknowledgement or EUDAMED submission was created. Accepted
+subject state, all other device fields/records, original source evidence and raw
+response XML were verified unchanged. A verified SQLite backup and repair report
+are in data/testing/backups/patch-current-sync-20261114-fd1bk6ou.
+
+Validation: full backend suite 577 passed; focused sync/report/import checks 86
+passed, including subsequently added off-market/already-current/identity cases.
+Frontend suite: 189 passed; production build passed (existing bundle-size warning).
+Validation logs and the repair verification are retained alongside the Dev backup.
+All 106 protected Production database/profile/schema/source files retained their
+SHA-256 hashes. Production withdrawal generation and bulk withdrawal remain gated;
+this synchronisation change does not remove those restrictions. Restart Dev backend
+and refresh the browser to activate automatic sync for subsequent uploads.
+
+Older EUDAMED extracts can still differ from newly acknowledged current values;
+refresh them through Data Import. Older, unrelated source-versus-accepted differences
+are not silently overwritten. Current workbook files remain original evidence and
+require their normal source-maintenance process. These changes remain uncommitted.
+
+## November 14 — Single withdrawal Playground acceptance confirmed
+
+Owner completed the Echelon VAC / EVAC22L1S / GS1 05050649062025 Single PATCH
+withdrawal and uploaded APP-DTX-000123503.xml. Read-only Dev inspection verified
+generated event 1665 (base 4 → draft 5), correlated SUCCESS event 1666, scenario
+status_code_edit, response code SUCCESS and no recorded errors. The accepted
+subject and latest PATCH state are version 5 / NO_LONGER_PLACED_ON_THE_MARKET.
+Correlation: dc47ef04-dda0-4d50-b932-532b9b000c58. Timestamp:
+2026-11-14T17:19:04.201+01:00. Registration remains child_registered as intended.
+Detailed evidence is in eudamed-playground-test-report.md, November 14 checkpoint.
+Elan IC / ELANIC22L1S was not the successful test subject and remains at version 4.
+
+This is successful Single PATCH Playground evidence. Bulk withdrawal and Production
+withdrawal generation remain disabled; no gate was removed by this inspection.
+The current UI's verification-pending wording predates this newly recorded success
+and can be reviewed with the next authorised release change.
+
+Important remaining distinction: canonical device_record.status for EVAC22L1S is
+still ON_THE_MARKET, while accepted submission state is now off-market. Success
+XML handling currently does not synchronise imported canonical/source values.
+Agree and implement the intended synchronisation policy before Production use;
+do not overwrite source values or claim full application alignment silently.
+This turn changed documentation only; database access was read-only and Dev-only.
+
+## November 14 — Wider PATCH selection controls
+
+Owner requested better use of the panel width. The PATCH scenario dropdown now
+fills the available width with its label above. Device search also fills its row,
+with the Clear button alongside on desktop and beneath it on narrow screens.
+Scoped grid styles keep controls from overflowing and reduce excess heading/
+paragraph spacing. The placeholder identifies the searchable fields; the existing
+minimum-character guidance remains below. Selection behaviour, scenario eligibility
+and baseline/version guardrails are unchanged. This is a frontend layout change;
+no backend, profile, schema or database changes were made.
+
+Validation: 185 frontend tests and frontend build passed. Refresh the browser to
+view the new layout. Changes are uncommitted.
+
 ## November 14 — Single PATCH workflow and withdrawal candidate implemented
 
 Owner authorised implementing steps 1–5 and will conduct the Playground test.

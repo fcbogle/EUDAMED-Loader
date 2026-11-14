@@ -118,4 +118,9 @@ def current_device_values(record):
             market = {'market_countries': countries}
         except (ValueError, TypeError):
             issues.append('Stored market countries or original-placement flags are missing, questioned or inconsistent')
+    if values.get('status_code') == 'NO_LONGER_PLACED_ON_THE_MARKET':
+        # Retained country source evidence is historical for an off-market device;
+        # Market Info is not applicable to its current regulatory comparison.
+        market = {'market_countries': []}
+        issues = [issue for issue in issues if not issue.startswith('Stored market countries')]
     return {'device_record': values}, market, issues
