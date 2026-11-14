@@ -63,6 +63,9 @@ import { ReportingWorkspace } from "./components/ReportingWorkspace";
 import { ImportFlowWorkspace } from "./components/ImportFlowWorkspace";
 import type { ImportFlowContext } from "./importFlowTypes";
 import { DeviceModelSelector } from "./components/DeviceModelSelector";
+import { PatchSelectionPanel } from "./components/PatchSelectionPanel";
+import { PATCH_BUSINESS_OPTIONS, withdrawalBlocker } from "./patchScenarios";
+import { patchDeviceSearchOptions, patchSearchBaselineMatches, resolvePatchSearchSelection } from "./patchDeviceSearch";
 import { XmlValidationStack } from "./components/XmlValidationStack";
 import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
 import eudamedServiceContractFindingsDocumentation from "./content/docs/eudamed-service-contract-findings.md?raw";
@@ -257,7 +260,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
   },
   {
     id: "trade_name_edit",
-    label: "Trade Name Edit",
+    label: "Trade Name",
     target: "udidi:tradeNames",
     summary: "Candidate PATCH shape that updates the trade name text while keeping the baseline device identity unchanged.",
     implemented: true,
@@ -273,7 +276,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
   },
   {
     id: "storage_condition_edit",
-    label: "Storage Condition Edit",
+    label: "Storage Conditions",
     target: "udidi:storageHandlingConditions",
     summary: "Candidate PATCH shape that edits selected storage-condition comment text while preserving the baseline device identity.",
     implemented: true,
@@ -345,13 +348,13 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
   },
   {
     id: "status_code_edit",
-    label: "Status Code",
+    label: "Device Market Status",
     target: "udidi:status/commondi:code",
-    summary: "Candidate PATCH shape for changing the UDI-DI status code.",
+    summary: "Change an accepted On the EU market device to No longer placed on the EU market. The registration is retained.",
     implemented: true,
     testStatus: "failure",
     optionsSummary:
-      "One of: NOT_INTENDED_FOR_EU_MARKET, ON_THE_MARKET, NO_LONGER_PLACED_ON_THE_MARKET.",
+      "Withdrawal only: No longer placed on the EU market.",
   },
   {
     id: "mdn_codes_edit",
@@ -678,6 +681,11 @@ export function App() {
   const [patchReviewTarget, setPatchReviewTarget] = useState<(import("./registrationParents").PatchReviewScope & { environment: string }) | null>(null);
   const [selectedXmlFamily, setSelectedXmlFamily] = useState<string | null>(null);
   const [selectedXmlVariant, setSelectedXmlVariant] = useState<string | null>(null);
+  const [patchSearchSelectionKey, setPatchSearchSelectionKey] = useState<string | null>(null);
+  const [patchScenarioScope, setPatchScenarioScope] = useState<string | null>(null);
+  const [acceptedBaselineError, setAcceptedBaselineError] = useState<string | null>(null);
+  const [isLoadingAcceptedBaseline, setIsLoadingAcceptedBaseline] = useState(false);
+  const [acceptedBaselineRetry, setAcceptedBaselineRetry] = useState(0);
   const [selectedRegistrationStateFamily, setSelectedRegistrationStateFamily] = useState<string>("");
   const [selectedRegistrationStateVariant, setSelectedRegistrationStateVariant] = useState<string>("");
   const [selectedRegistrationStateStatus, setSelectedRegistrationStateStatus] = useState<string>("");
@@ -737,7 +745,7 @@ export function App() {
     setIsGeneratingXml,
     isDownloadingXml,
     setIsDownloadingXml,
-  } = useXmlWorkspaceState<PatchScenarioId>("equivalent_first_patch");
+  } = useXmlWorkspaceState<PatchScenarioId>("trade_name_edit");
   const {
     patch: {
       scopeMode: bulkPatchScopeMode,
@@ -2089,6 +2097,9 @@ export function App() {
         : `Ready to generate Bulk Market Info for ${selectedBulkMarketInfoSelectedCount} device${
             selectedBulkMarketInfoSelectedCount === 1 ? "" : "s"
           }.`;
+  const patchModelScope = JSON.stringify([activeEnvironment, selectedXmlFamily, selectedXmlVariant]);
+  const patchScenarioChosen = patchScenarioScope === patchModelScope;
+  const hasExplicitPatchSelection = xmlMode === "patch" && patchScenarioChosen && patchSearchSelectionKey !== null;
   const {
     xmlOperationAssessment,
     setXmlOperationAssessment,
@@ -2098,7 +2109,7 @@ export function App() {
   } = useXmlOperationAssessment({
     activeTab,
     xmlMode,
-    selectedProductFamily: selectedXmlFamilySummary?.product_family,
+    selectedProductFamily: xmlMode === "patch" && !hasExplicitPatchSelection ? null : selectedXmlFamilySummary?.product_family,
     selectedProductVariant: selectedXmlVariantSummary?.product_variant,
     selectedPatchCatalogueNumber: selectedXmlRecordKey,
     selectedBulkPatchBasicUdiDi,
@@ -2150,20 +2161,24 @@ export function App() {
     ),
   );
   const selectedPatchRecord = findRecordByCatalogueNumber(selectedPatchDeviceRecords, selectedXmlRecordKey);
-  const designationRecord = xmlMode === "post" ? selectedPostCandidateRecord : selectedPatchRecord ?? selectedXmlRecord;
+  const patchSearchOptions = useMemo(() => patchDeviceSearchOptions(canonicalValidation?.records ?? []), [canonicalValidation]);
+  const selectedPatchWorkspaceRecord = xmlMode === "patch"
+    ? hasExplicitPatchSelection ? resolvePatchSearchSelection(patchSearchOptions, patchSearchSelectionKey!, selectedXmlFamily, selectedXmlVariant) : null
+    : resolvePatchWorkspaceRecord(
+      selectedXmlVariantRecords,
+      selectedPatchRecord?.catalogue_number ?? assessedPatchCandidateCatalogueNumber,
+      selectedPatchRecord ?? selectedXmlPairRecord,
+    );
+  const designationRecord = xmlMode === "post" ? selectedPostCandidateRecord
+    : xmlMode === "patch" ? selectedPatchWorkspaceRecord : selectedPatchRecord ?? selectedXmlRecord;
   const activeRegistrationOperation = registrationOperation(designationRecord ? readinessForRecord(designationRecord)?.registration_known : undefined);
-  const selectedPatchWorkspaceRecord = resolvePatchWorkspaceRecord(
-    selectedXmlVariantRecords,
-    selectedPatchRecord?.catalogue_number ?? assessedPatchCandidateCatalogueNumber,
-    selectedPatchRecord ?? selectedXmlPairRecord,
-  );
   const selectedXmlMarketInfoRecord = selectedXmlRecord ?? selectedXmlPairRecord;
   const selectedMarketInfoRecord = findRecordByCatalogueNumber(selectedPatchDeviceRecords, selectedXmlRecordKey);
   const selectedMarketInfoWorkspaceRecord = selectedMarketInfoRecord ?? findRecordByCatalogueNumber(
     selectedXmlVariantRecords,
     assessedMarketInfoCandidateCatalogueNumber,
   ) ?? selectedXmlMarketInfoRecord;
-  const selectedPairRequestArgs = resolvePatchRequestArgs(selectedPatchWorkspaceRecord, {
+  const selectedPairRequestArgs = xmlMode === "patch" && !selectedPatchWorkspaceRecord ? null : resolvePatchRequestArgs(selectedPatchWorkspaceRecord, {
     assessedCatalogueNumber: assessedPatchCandidateCatalogueNumber,
     assessedPrimaryUdiDi: assessedPatchCandidatePrimaryUdiDi,
     selectedProductFamily: selectedXmlFamilySummary?.product_family,
@@ -2176,12 +2191,19 @@ export function App() {
     selectedProductVariant: selectedXmlVariantSummary?.product_variant,
   });
   const hasSelectedPatchBaselinePost = Boolean(selectedPatchWorkspaceRecord);
+  useEffect(() => {
+    setPatchSearchSelectionKey(null);
+    setPatchScenarioScope(null);
+    setXmlPatchPreview(null);
+    setXmlPairPreview(null);
+  }, [activeEnvironment, xmlMode, selectedXmlFamily, selectedXmlVariant]);
   const hasLoadedPatchBaseline = Boolean(
     selectedPairRequestArgs &&
       xmlPairPreview &&
       xmlPairPreview.product_family === selectedPairRequestArgs.product_family &&
       xmlPairPreview.product_variant === selectedPairRequestArgs.product_variant &&
-      xmlPairPreview.catalogue_number === selectedPairRequestArgs.catalogue_number,
+      xmlPairPreview.catalogue_number === selectedPairRequestArgs.catalogue_number &&
+      (!hasExplicitPatchSelection || patchSearchBaselineMatches(selectedPatchWorkspaceRecord, xmlPairPreview)),
   );
   const selectedXmlVariantChunkCount = selectedXmlVariantSummary
     ? Math.max(Math.ceil(selectedXmlVariantSummary.xml_ready_records / 300), 1)
@@ -2429,8 +2451,10 @@ export function App() {
     });
   }, [bulkUdidiPostCatalogueNumbers.join("|")]);
   const selectedPatchScenario =
-    PATCH_SCENARIOS.find((scenario) => scenario.id === selectedPatchScenarioId) ?? PATCH_SCENARIOS[0];
-  const selectedPatchScenarioStatus = patchScenarioStatuses[selectedPatchScenario.id];
+    PATCH_SCENARIOS.find(scenario => scenario.id === selectedPatchScenarioId &&
+      PATCH_BUSINESS_OPTIONS.some(option => option.id === scenario.id) &&
+      !(xmlMode === "bulkPatch" && scenario.id === "status_code_edit")) ?? PATCH_SCENARIOS[1];
+  const selectedPatchScenarioStatus = selectedPatchScenario.id === "status_code_edit" ? "Awaiting Playground verification" : patchScenarioStatuses[selectedPatchScenario.id];
   const selectedPatchScenarioImplemented = selectedPatchScenario.implemented;
   const bulkPatchBaselineSummary = buildBulkPatchBaselineSummary({
     scenarioId: selectedPatchScenario.id,
@@ -2469,11 +2493,11 @@ export function App() {
     selectedLatestPatchState?.contains_latex ??
     parseBooleanString(fieldValue(selectedPatchWorkspaceRecord, "device_record.contains_latex"));
   const selectedCurrentStatusCode =
-    selectedLatestPatchState?.status_code ?? fieldValue(selectedPatchWorkspaceRecord, "device_record.status");
+    xmlMode === "patch" ? selectedLatestPatchState?.status_code ?? null
+      : selectedLatestPatchState?.status_code ?? fieldValue(selectedPatchWorkspaceRecord, "device_record.status");
   const isSharedAnchorLoading =
     (xmlMode === "post" || xmlMode === "patch" || xmlMode === "marketInfo") &&
-    Boolean(selectedPairRequestArgs) &&
-    !xmlPairPreview;
+    isLoadingAcceptedBaseline;
   const {
     patchVersionInput,
     setPatchVersionInput,
@@ -2523,10 +2547,15 @@ export function App() {
   });
   useEffect(() => {
     if (!(xmlMode === "patch" || xmlMode === "marketInfo") || !selectedPairRequestArgs) {
+      setAcceptedBaselineError(null);
+      setIsLoadingAcceptedBaseline(false);
       return;
     }
 
     let cancelled = false;
+    setXmlPairPreview(null);
+    setAcceptedBaselineError(null);
+    setIsLoadingAcceptedBaseline(true);
 
     void (async () => {
       try {
@@ -2537,13 +2566,18 @@ export function App() {
           true,
         );
         if (!cancelled) {
+          if (hasExplicitPatchSelection && !patchSearchBaselineMatches(selectedPairRequestArgs, preview)) {
+            throw new Error("The accepted baseline does not match the selected Device UDI-DI. Review the device identity before PATCH.");
+          }
           setXmlPairPreview(preview);
         }
       } catch (error: unknown) {
         if (!cancelled) {
           setXmlPairPreview(null);
-          setError(error instanceof Error ? error.message : "Accepted baseline is unavailable.");
+          setAcceptedBaselineError(error instanceof Error ? error.message : "Accepted baseline is unavailable.");
         }
+      } finally {
+        if (!cancelled) setIsLoadingAcceptedBaseline(false);
       }
     })();
 
@@ -2556,29 +2590,10 @@ export function App() {
     selectedPairRequestArgs?.product_family,
     selectedPairRequestArgs?.product_variant,
     selectedPairRequestArgs?.catalogue_number,
-  ]);
-  useEffect(() => {
-    if (!selectedPairRequestArgs || !xmlPairPreview) {
-      return;
-    }
-    if (
-      xmlPairPreview.product_family !== selectedPairRequestArgs.product_family ||
-      xmlPairPreview.product_variant !== selectedPairRequestArgs.product_variant ||
-      xmlPairPreview.catalogue_number !== selectedPairRequestArgs.catalogue_number
-    ) {
-      return;
-    }
-    setSelectedPatchScenarioId(
-      resolveDefaultPatchScenarioId(xmlPairPreview.latest_successful_patch_scenario_id),
-    );
-  }, [
-    selectedPairRequestArgs?.product_family,
-    selectedPairRequestArgs?.product_variant,
-    selectedPairRequestArgs?.catalogue_number,
-    xmlPairPreview?.product_family,
-    xmlPairPreview?.product_variant,
-    xmlPairPreview?.catalogue_number,
-    xmlPairPreview?.latest_successful_patch_scenario_id,
+    selectedPairRequestArgs?.primary_udi_di,
+    hasExplicitPatchSelection,
+    acceptedBaselineRetry,
+    canonicalValidation,
   ]);
   useEffect(() => {
     setSelectedBulkRecordCount(1);
@@ -2776,8 +2791,10 @@ export function App() {
   const isPostWorkspaceReady = Boolean(selectedXmlFamilySummary && selectedXmlVariantSummary);
   const canRunPostFromAssessment =
     isPostWorkspaceReady && xmlOperationAssessment?.status === "available";
+  const patchWithdrawalBlocker = selectedPatchScenario.id === "status_code_edit"
+    ? withdrawalBlocker(activeEnvironment, selectedCurrentStatusCode, patchStatusCodeInput) : null;
   const canRunPatchFromAssessment =
-    isPatchScenarioReady && xmlOperationAssessment?.status === "available";
+    hasExplicitPatchSelection && isPatchScenarioReady && !patchWithdrawalBlocker && xmlOperationAssessment?.status === "available";
   const canRunBulkUdidiPostFromAssessment =
     Boolean(selectedXmlVariantSummary) && (assessedBulkChildRecordCount ?? 0) > 0;
   const canRunBulkPatchFromAssessment =
@@ -3181,15 +3198,16 @@ export function App() {
     });
   }
 
+  const xmlAcceptedStateToken = useMemo(() => ({ canonicalValidation, testingSubjectSummaries }), [canonicalValidation, testingSubjectSummaries]);
   const { generateXmlPreview, downloadXmlRecord } = useXmlPreviewGeneration({
     previewSelectionKey: JSON.stringify([
-      activeTab, selectedXmlRecordKey,
+      activeTab, selectedXmlRecordKey, patchSearchSelectionKey, patchScenarioScope, canonicalValidation?.source_import_batch_id,
       bulkPatchScopeMode, effectiveBulkPatchCatalogueNumbers, selectedBulkPatchCatalogueNumbers,
       bulkPatchImportedMatchedCatalogueNumbers,
       bulkMarketInfoScopeMode, effectiveBulkMarketInfoCatalogueNumbers, selectedBulkMarketInfoCatalogueNumbers,
       bulkMarketInfoImportedMatchedCatalogueNumbers,
     ]),
-    acceptedStateToken: testingSubjectSummaries,
+    acceptedStateToken: xmlAcceptedStateToken,
     xmlMode,
     selectedXmlFamilySummary,
     selectedXmlVariantSummary,
@@ -4335,6 +4353,12 @@ export function App() {
             selectedFamily={selectedXmlFamilySummary?.product_family ?? null}
             selectedVariant={selectedXmlVariantSummary?.product_variant ?? null}
             onSelect={(family, variant) => {
+              setPatchSearchSelectionKey(null);
+              setPatchScenarioScope(null);
+              setXmlPatchPreview(null);
+              setXmlPairPreview(null);
+              setXmlActionMessage(null);
+              setAcceptedBaselineError(null);
               setSelectedXmlFamily(family);
               setSelectedXmlVariant(variant);
             }}
@@ -4431,7 +4455,8 @@ export function App() {
                       ? xmlMode === "post"
                         ? selectedXmlFamilyLabel
                         : xmlMode === "patch" && !hasLoadedPatchBaseline
-                          ? "No accepted baseline"
+                          ? !patchScenarioChosen ? "Choose a PATCH scenario" : !hasExplicitPatchSelection ? "Find a device"
+                            : isLoadingAcceptedBaseline ? "Loading accepted baseline" : "Accepted baseline unavailable"
                           : selectedTestingAnchor?.product_family ?? "No testing anchor"
                       : selectedXmlFamilyLabel}
                   </strong>
@@ -4440,14 +4465,34 @@ export function App() {
                       ? xmlMode === "post"
                         ? selectedXmlVariantLabel
                         : xmlMode === "patch" && !hasLoadedPatchBaseline
-                          ? "Select a variant with an XML-ready POST record"
+                          ? !hasExplicitPatchSelection ? "Select a scenario, then search within the selected model."
+                            : acceptedBaselineError ?? "Load the selected device’s accepted baseline."
                           : selectedTestingAnchor?.product_variant ?? "No anchor variant"
                       : selectedXmlVariantLabel}
                   </p>
                 </div>
               </div>
             </div>
-            {xmlMode === "marketInfo" || xmlMode === "patch" ? (
+            {xmlMode === "patch" && <PatchSelectionPanel
+              family={selectedXmlFamily} variant={selectedXmlVariant} environment={activeEnvironment}
+              scenario={patchScenarioChosen ? selectedPatchScenario.id : ""}
+              onScenarioChange={id => {
+                setSelectedPatchScenarioId(id as PatchScenarioId);
+                setPatchScenarioScope(id ? patchModelScope : null);
+                if (!id) { setPatchSearchSelectionKey(null); setXmlPairPreview(null); }
+                setXmlPatchPreview(null);
+                setXmlActionMessage(null);
+              }}
+              options={patchSearchOptions} selectedKey={patchScenarioChosen ? patchSearchSelectionKey : null}
+              onSelect={option => {
+                setSelectedXmlRecordKey(option.record.catalogue_number);
+                setPatchSearchSelectionKey(option.key);
+                setXmlPairPreview(null);
+                setXmlPatchPreview(null);
+                setAcceptedBaselineError(null);
+                setXmlActionMessage(null);
+              }} />}
+            {xmlMode === "marketInfo" || (xmlMode === "patch" && selectedPatchWorkspaceRecord) ? (
               <div className="xml-anchor-panel">
                 <div className="xml-anchor-strip">
                   <div className="xml-anchor-header">
@@ -4599,7 +4644,7 @@ export function App() {
                 </div>
               )
             ) : null}
-            {(
+            {(xmlMode !== "patch" || selectedPatchWorkspaceRecord) && (
               <XmlOperationAssessmentPanel
                 xmlMode={xmlMode}
                 xmlAssessmentTitle={xmlAssessmentTitle}
@@ -4866,32 +4911,20 @@ export function App() {
                 {xmlMode === "patch" ? (
                   selectedPatchWorkspaceRecord ? (
                     <PatchScenarioCard
-                      selectedPatchScenarioLabel={selectedPatchScenario.label}
+                      selectedPatchScenarioLabel={PATCH_BUSINESS_OPTIONS.find(option => option.id === selectedPatchScenario.id)?.label ?? selectedPatchScenario.label}
                       selectedPatchScenarioStatus={selectedPatchScenarioStatus}
                       selectedPatchWorkspaceCatalogueNumber={selectedPatchWorkspaceRecord.catalogue_number}
-                      patchDeviceOptions={selectedPatchDeviceRecords
-                        .filter((record): record is typeof record & { catalogue_number: string } => Boolean(record.catalogue_number))
-                        .map((record) => ({
-                          catalogueNumber: record.catalogue_number,
-                          primaryUdiDi: record.primary_udi_di,
-                        }))}
-                      onPatchDeviceChange={(catalogueNumber) => {
-                        setSelectedXmlRecordKey(catalogueNumber);
-                        setXmlPairPreview(null);
-                        setXmlPatchPreview(null);
-                      }}
                       currentAcceptedPatchLabel={currentAcceptedPatchLabel}
                       hasLoadedPatchBaseline={hasLoadedPatchBaseline}
+                      baselineLoading={isLoadingAcceptedBaseline}
+                      baselineError={acceptedBaselineError}
+                      onRetryBaseline={() => setAcceptedBaselineRetry(value => value + 1)}
+                      withdrawalBlocker={patchWithdrawalBlocker}
                       selectedPatchScenarioSummary={selectedPatchScenario.summary}
                       patchDraftComparisonRows={patchDraftComparisonRows}
                       currentAcceptedPatchVersion={currentAcceptedPatchVersion}
                       patchVersionInput={patchVersionInput}
-                      patchScenarioOptions={PATCH_SCENARIOS.map((scenario) => ({
-                        id: scenario.id,
-                        label: patchScenarioOptionLabel(scenario),
-                      }))}
                       selectedPatchScenarioId={selectedPatchScenario.id}
-                      onScenarioChange={(scenarioId) => setSelectedPatchScenarioId(scenarioId as PatchScenarioId)}
                       onPatchVersionChange={setPatchVersionInput}
                       selectedPatchScenarioImplemented={selectedPatchScenarioImplemented}
                       selectedPatchScenarioOptionsSummary={selectedPatchScenario.optionsSummary}
@@ -4919,7 +4952,7 @@ export function App() {
                       onPatchWarningCommentChange={setPatchWarningCommentInput}
                       patchStorageConditionInputs={patchStorageConditionInputs}
                       setPatchStorageConditionInputs={setPatchStorageConditionInputs}
-                      patchScenarioReadinessMessage={patchScenarioReadinessMessage}
+                      patchScenarioReadinessMessage={patchWithdrawalBlocker ?? patchScenarioReadinessMessage}
                       xmlPatchPreview={xmlPatchPreview}
                     />
                   ) : null
@@ -4957,10 +4990,7 @@ export function App() {
                       bulkPatchImportedMatchedCatalogueNumbersCount={bulkPatchImportedMatchedCatalogueNumbers.length}
                       bulkPatchImportedNotFoundCatalogueNumbersCount={bulkPatchImportedNotFoundCatalogueNumbers.length}
                       patchScenarioStatusLabel={selectedPatchScenario.testStatus}
-                      patchScenarioOptions={PATCH_SCENARIOS.map((scenario) => ({
-                        id: scenario.id,
-                        label: patchScenarioOptionLabel(scenario),
-                      }))}
+                      patchScenarioOptions={PATCH_BUSINESS_OPTIONS.filter(option => option.id !== "status_code_edit")}
                       selectedPatchScenarioId={selectedPatchScenario.id}
                       onPatchScenarioChange={(scenarioId) => setSelectedPatchScenarioId(scenarioId as PatchScenarioId)}
                       selectedPatchScenarioSummary={selectedPatchScenario.summary}
@@ -5286,10 +5316,3 @@ export function App() {
     </main>
   );
 }
-  function resolveDefaultPatchScenarioId(latestScenarioId: string | null | undefined): PatchScenarioId {
-    if (!latestScenarioId) {
-      return "equivalent_first_patch";
-    }
-    const matchedScenario = PATCH_SCENARIOS.find((scenario) => scenario.id === latestScenarioId);
-    return matchedScenario ? matchedScenario.id : "equivalent_first_patch";
-  }

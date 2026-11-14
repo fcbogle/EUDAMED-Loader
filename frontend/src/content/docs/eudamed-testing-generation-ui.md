@@ -1,8 +1,7 @@
 # EUDAMED Workspaces And Outcome Capture
 
-Updated 1 November 2026 against the implemented feature-branch navigation.
-Production rollout is separate; use the code and configuration of the running
-checkout when checking its available controls.
+Updated 14 November 2026. Workspace labels and data follow the active Dev or
+Production profile; confirm the environment banner before generating XML.
 
 ## Navigation
 
@@ -28,6 +27,54 @@ the only single-device scenario-based PATCH workspace. Bulk UDI-DI POST is
 child-only. Bulk PATCH and Bulk Market Info apply operation-specific changes to
 explicit registered-device selections using their individual accepted states.
 
+## Single PATCH: model, scenario, device
+
+Select the model first using **Select Device Model**, then open **Single PATCH**.
+Inside the PATCH Scenario Workspace, select **PATCH scenario** before finding a
+device. The menu contains Trade Name, Critical Warnings, Storage Conditions,
+Base Quantity and Device Market Status. Retired candidates and Equivalent First
+Patch are not selectable business changes. Bulk PATCH offers the four proven
+business changes; the new market-status workflow is initially single-device only.
+
+Enter at least two characters of a Device UDI-DI or catalogue number. Search
+narrows within the selected model in the active environment, preserves leading
+zeros, puts exact matches first and shows at most ten results with a total count.
+Choose **Select for PATCH** to load that exact device's accepted baseline. Typing
+or clearing the query does not change the selected device. Missing/ambiguous
+identity and existing XML blockers prevent selection. A matching search result
+alone does not establish registration or PATCH eligibility.
+
+The Before/After controls appear after the accepted baseline loads. Failures appear
+beside the scenario card with **Reload accepted baseline**. Changing the model or
+device clears the previous draft and preview; changing the scenario resets the
+scenario draft/preview while retaining a valid selection within the same model.
+Pending requests for an old selection cannot replace the current preview.
+
+## Device Market Status: Playground verification pending
+
+This option currently supports only **On the EU market → No longer placed on the
+EU market**. Before is the recorded accepted status. Select the permitted After
+value, review the identity and next version, and generate/validate the preview.
+The outgoing withdrawal PATCH retains other accepted device attributes and the
+registration, and omits Market Info. Review linked container package statuses
+following EUDAMED acceptance. Do not use a missing accepted status as a workbook
+or default-value fallback.
+
+The option is enabled for Dev/Playground testing. Production preview/download is
+blocked until successful Playground verification is reviewed; local XSD validation
+alone does not establish EUDAMED business-rule acceptance. The same restriction
+is enforced by the backend, and the new status operation is not enabled in Bulk
+PATCH. Existing business PATCH operations retain their current availability.
+
+For the operator test, use a registered Playground device with an accepted
+On the EU market baseline and confirm that the next version is proposed. Generate
+the preview, inspect the status change and absence of Market Info, download the
+ZIP and submit manually to Playground. Import the matching success response and
+check the accepted state and history. Preview/download must not change the
+accepted status; rejected responses must not accept the draft. Keep Production
+and Playground device evidence separate. Current canonical/source data and dated
+extract comparisons remain separate from accepted submission history.
+
 ## Status and evidence
 
 Registered, Unregistered and Unknown are source-membership labels, independent
@@ -47,7 +94,6 @@ identity, version and duplicate/delayed-response guards. Reported errors remain
 error evidence; they do not accept the rejected payload. Follow the workspace
 feedback and check refreshed registration/accepted-version state afterward.
 
-The application has no M2M transport or live EUDAMED lookup. Reporting generation
-remains under development. See [XML Generation](xml-generation.md),
+The application has no M2M transport or live EUDAMED lookup. Reporting provides the Model Reconciliation Summary. See [XML Generation](xml-generation.md),
 [Testing Scenarios](testing-scenarios.md) and
 [registration policy](../../../../docs/registration-driven-operation-policy.md).

@@ -616,8 +616,17 @@ class XmlGenerationService:
         full = state.get("device_record")
         if isinstance(full, dict):
             values = {key: value for key, value in full.items() if key in record.__dataclass_fields__}
-            values["storage_conditions"] = [StorageConditionXmlItem(**item) for item in values.get("storage_conditions", [])]
-            values["critical_warnings"] = [CriticalWarningXmlItem(**item) for item in values.get("critical_warnings", [])]
+            # Older imported snapshots stringified the nested Pydantic items.
+            # Their qualified top-level lists retain the structured accepted data.
+            # Never parse repr strings or substitute current workbook values.
+            for name, model in (("storage_conditions", StorageConditionXmlItem),
+                                ("critical_warnings", CriticalWarningXmlItem)):
+                items = values.get(name, state.get(name, []))
+                if not isinstance(items, list) or any(not isinstance(item, (dict, model)) for item in items):
+                    items = state.get(name)
+                if not isinstance(items, list) or any(not isinstance(item, (dict, model)) for item in items):
+                    raise ValueError(f"Accepted baseline has no usable structured {name}; import a corrected EUDAMED extract before PATCH.")
+                values[name] = [model.model_validate(item) for item in items]
             values["market_countries"] = [tuple(item) for item in values.get("market_countries", [])]
             return replace(record, **values)
         # Preserve every field known in legacy partial accepted POST snapshots.
@@ -1018,6 +1027,8 @@ class XmlGenerationService:
         selected_catalogue_numbers: list[str] | None = None,
         chunk_sequence: int = 1,
     ) -> PreparedXmlBatch[BulkPatchPreview]:
+        if scenario_id == "status_code_edit":
+            raise ValueError("Device Market Status is currently supported only in Single PATCH for Playground testing.")
         normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
         excluded_records: list[BulkXmlExcludedRecord] = []
         candidate_records, eligible_child_records, missing_variant_records = self._bulk_patch_selected_records(
@@ -1484,6 +1495,8 @@ class XmlGenerationService:
         correlation_id: str | None = None,
         message_id: str | None = None,
     ) -> tuple[GeneratedPatchScenarioPreview, dict[str, Any]]:
+        if scenario_id == "status_code_edit" and self.settings.environment != "dev":
+            raise ValueError("Device Market Status awaits Playground verification; Production generation is not enabled.")
         baseline_reason = self.testing_state_store.patch_baseline_unavailable_reason(
             product_family=product_family, product_variant=product_variant, catalogue_number=catalogue_number,
         )
@@ -1507,6 +1520,9 @@ class XmlGenerationService:
             catalogue_number=catalogue_number,
         )
         normalized_version = self._validate_patch_version(patch_version)
+        if scenario_id == "status_code_edit" and (
+                not patch_state_resolution or patch_state_resolution.state.status_code != "ON_THE_MARKET"):
+            raise ValueError("Device Market Status requires accepted evidence that the device is On the EU market.")
         registered_device_anchor = self._registered_device_anchor(post_record)
 
         if normalized_version == "2":
@@ -2258,8 +2274,6 @@ class XmlGenerationService:
                 scenario_inputs,
                 "new_status_code",
                 {
-                    "NOT_INTENDED_FOR_EU_MARKET",
-                    "ON_THE_MARKET",
                     "NO_LONGER_PLACED_ON_THE_MARKET",
                 },
             )
@@ -2270,7 +2284,7 @@ class XmlGenerationService:
             )
             return (
                 derived_record,
-                "Status Code",
+                "Device Market Status",
                 [
                     PatchScenarioFieldDelta(
                         field_key="patch_version",
@@ -2281,7 +2295,7 @@ class XmlGenerationService:
                     ),
                     PatchScenarioFieldDelta(
                         field_key="status_code",
-                        label="Status Code",
+                        label="Device market status",
                         target_xpath_hint="udidi:status/commondi:code",
                         before_value=scenario_base_record.status_code,
                         after_value=new_status_code,
@@ -2409,9 +2423,12 @@ class XmlGenerationService:
     ) -> tuple[str, bytes]:
         record = self.selector.find_xml_ready_record(product_family=product_family,
             product_variant=product_variant, catalogue_number=catalogue_number)
+        primary_udi_di = (record.primary_udi_di or "").strip()
+        if not primary_udi_di:
+            raise ValueError("A Device UDI-DI is required before generating a POST package.")
         if self.testing_state_store.has_successful_primary_udi_post(
             product_family=record.product_family, product_variant=record.product_variant,
-            primary_udi_di=record.primary_udi_di):
+            primary_udi_di=primary_udi_di):
             raise ValueError("This Device UDI-DI already has registration evidence in the active environment; use PATCH instead of POST.")
         preview = self.preview_post_registration(
             product_family=product_family,

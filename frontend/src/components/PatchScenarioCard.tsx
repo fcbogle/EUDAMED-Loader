@@ -1,16 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
+import { marketStatusLabel } from "../patchScenarios";
 
 import type { CriticalWarningCodeOption, GeneratedPatchScenarioPreview } from "../types";
-
-type PatchScenarioOption = {
-  id: string;
-  label: string;
-};
-
-type PatchDeviceOption = {
-  catalogueNumber: string;
-  primaryUdiDi: string | null;
-};
 
 type PatchDraftComparisonRow = {
   label: string;
@@ -22,17 +13,17 @@ type PatchScenarioCardProps = {
   selectedPatchScenarioLabel: string;
   selectedPatchScenarioStatus: string | null;
   selectedPatchWorkspaceCatalogueNumber: string | null;
-  patchDeviceOptions: PatchDeviceOption[];
-  onPatchDeviceChange: (catalogueNumber: string) => void;
   currentAcceptedPatchLabel: string;
   hasLoadedPatchBaseline: boolean;
+  baselineLoading?: boolean;
+  baselineError?: string | null;
+  withdrawalBlocker?: string | null;
+  onRetryBaseline?: () => void;
   selectedPatchScenarioSummary: string;
   patchDraftComparisonRows: PatchDraftComparisonRow[];
   currentAcceptedPatchVersion: number;
   patchVersionInput: string;
-  patchScenarioOptions: PatchScenarioOption[];
   selectedPatchScenarioId: string;
-  onScenarioChange: (scenarioId: string) => void;
   onPatchVersionChange: (value: string) => void;
   selectedPatchScenarioImplemented: boolean;
   selectedPatchScenarioOptionsSummary?: string;
@@ -68,17 +59,17 @@ export function PatchScenarioCard({
   selectedPatchScenarioLabel,
   selectedPatchScenarioStatus,
   selectedPatchWorkspaceCatalogueNumber,
-  patchDeviceOptions,
-  onPatchDeviceChange,
   currentAcceptedPatchLabel,
   hasLoadedPatchBaseline,
+  baselineLoading = false,
+  baselineError = null,
+  withdrawalBlocker = null,
+  onRetryBaseline,
   selectedPatchScenarioSummary,
   patchDraftComparisonRows,
   currentAcceptedPatchVersion,
   patchVersionInput,
-  patchScenarioOptions,
   selectedPatchScenarioId,
-  onScenarioChange,
   onPatchVersionChange,
   selectedPatchScenarioImplemented,
   selectedPatchScenarioOptionsSummary,
@@ -118,12 +109,11 @@ export function PatchScenarioCard({
             {selectedPatchScenarioStatus ?? "EUDAMED Candidate"}
           </span>
         </div>
-        <p className="draft-meta">Parent POST {selectedPatchWorkspaceCatalogueNumber ?? "Not resolved"} · Current accepted base {currentAcceptedPatchLabel}</p>
+        <p className="draft-meta">Device {selectedPatchWorkspaceCatalogueNumber ?? "Not resolved"} · Current accepted base {currentAcceptedPatchLabel}</p>
         <div className="family-scope-pill-row xml-status-row">
           <span className={hasLoadedPatchBaseline ? "status-pill ok compact" : "status-pill warn compact"}>
             {hasLoadedPatchBaseline ? "Accepted baseline loaded" : "Accepted baseline required"}
           </span>
-          <span className="status-pill ok compact">Parent POST</span>
           <span className="status-pill ok compact">{selectedPatchWorkspaceCatalogueNumber ?? "Not resolved"}</span>
         </div>
         <p className="panel-copy">{selectedPatchScenarioSummary}</p>
@@ -134,7 +124,7 @@ export function PatchScenarioCard({
                 <span className="summary-label">Before</span>
                 <strong>{currentAcceptedPatchLabel}</strong>
                 <p>
-                  Parent POST {selectedPatchWorkspaceCatalogueNumber ?? "Not resolved"} · Version {String(currentAcceptedPatchVersion)}
+                  Device {selectedPatchWorkspaceCatalogueNumber ?? "Not resolved"} · Version {String(currentAcceptedPatchVersion)}
                 </p>
                 <ul className="patch-compare-list">
                   {patchDraftComparisonRows.map((row) => (
@@ -162,41 +152,6 @@ export function PatchScenarioCard({
               </div>
             </div>
             <div className="patch-form-grid">
-              <div className="patch-field patch-field-full">
-                <label className="field-label" htmlFor="patch-device-selector">
-                  Posted Device UDI-DI
-                </label>
-                <select
-                  id="patch-device-selector"
-                  className="rule-select patch-select"
-                  value={selectedPatchWorkspaceCatalogueNumber ?? ""}
-                  onChange={(event) => onPatchDeviceChange(event.target.value)}
-                >
-                  {patchDeviceOptions.map((device) => (
-                    <option key={device.catalogueNumber} value={device.catalogueNumber}>
-                      {device.catalogueNumber} {device.primaryUdiDi ? `· ${device.primaryUdiDi}` : ""}
-                    </option>
-                  ))}
-                </select>
-                <p className="field-source-note">PATCH generation uses the selected device's recorded accepted POST/PATCH lineage.</p>
-              </div>
-              <div className="patch-field">
-                <label className="field-label" htmlFor="patch-scenario-selector">
-                  Candidate PATCH scenario
-                </label>
-                <select
-                  id="patch-scenario-selector"
-                  className="rule-select patch-select"
-                  value={selectedPatchScenarioId}
-                  onChange={(event) => onScenarioChange(event.target.value)}
-                >
-                  {patchScenarioOptions.map((scenario) => (
-                    <option key={scenario.id} value={scenario.id}>
-                      {scenario.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
               <div className="patch-field">
                 <label className="field-label" htmlFor="patch-version-input">
                   Scenario PATCH version
@@ -303,7 +258,7 @@ export function PatchScenarioCard({
               {selectedPatchScenarioId === "status_code_edit" ? (
                 <div className="patch-field patch-field-full">
                   <label className="field-label" htmlFor="patch-status-code-input">
-                    Status code
+                    After: device market status
                   </label>
                   <select
                     id="patch-status-code-input"
@@ -312,11 +267,11 @@ export function PatchScenarioCard({
                     onChange={(event) => onPatchStatusCodeChange(event.target.value)}
                   >
                     <option value="">Select value</option>
-                    <option value="NOT_INTENDED_FOR_EU_MARKET">NOT_INTENDED_FOR_EU_MARKET</option>
-                    <option value="ON_THE_MARKET">ON_THE_MARKET</option>
-                    <option value="NO_LONGER_PLACED_ON_THE_MARKET">NO_LONGER_PLACED_ON_THE_MARKET</option>
+                    <option value="NO_LONGER_PLACED_ON_THE_MARKET">No longer placed on the EU market</option>
                   </select>
-                  <p className="field-source-note">Current value: {selectedCurrentStatusCode ?? "None"}</p>
+                  <p className="field-source-note">Before (accepted): {marketStatusLabel(selectedCurrentStatusCode)}</p>
+                  <p className="panel-copy">The registration is retained. Market Info is omitted from this withdrawal PATCH. EUDAMED may also update linked container packages; review their status after acceptance.</p>
+                  {withdrawalBlocker && <p role="status">{withdrawalBlocker}</p>}
                 </div>
               ) : null}
               {selectedPatchScenarioId === "warning_add" ? (
@@ -417,12 +372,15 @@ export function PatchScenarioCard({
             </div>
           </>
         ) : (
-          <div className="workflow-note patch-readiness-note">
-            <strong>Accepted baseline required</strong>
+          <div className="workflow-note patch-readiness-note" role={baselineError ? "alert" : "status"}>
+            <strong>{baselineLoading ? "Loading accepted baseline…" : baselineError ? "Accepted baseline could not be loaded" : "Accepted baseline required"}</strong>
             <span>
-              Load the accepted baseline for `{selectedPatchWorkspaceCatalogueNumber ?? "the selected device"}` first.
-              Scenario drafting requires the matching accepted baseline; downloading the ZIP confirms review.
+              {baselineError ?? (baselineLoading ? "Checking the recorded accepted device state."
+                : "Scenario controls appear after the matching accepted baseline is loaded.")}
             </span>
+            {onRetryBaseline && <button type="button" className="ghost-button" disabled={baselineLoading} onClick={onRetryBaseline}>
+              Reload accepted baseline
+            </button>}
           </div>
         )}
       </div>
@@ -437,11 +395,11 @@ export function PatchScenarioCard({
               <div className="patch-change-summary-item" key={delta.field_key}>
                 <strong>{delta.label}</strong>
                 <div className="patch-change-summary-values">
-                  <span>{delta.before_value ?? "None"}</span>
+                  <span>{delta.field_key === "status_code" ? marketStatusLabel(delta.before_value) : delta.before_value ?? "None"}</span>
                   <span className="patch-change-summary-arrow" aria-hidden="true">
                     {"->"}
                   </span>
-                  <span>{delta.after_value ?? "None"}</span>
+                  <span>{delta.field_key === "status_code" ? marketStatusLabel(delta.after_value) : delta.after_value ?? "None"}</span>
                 </div>
               </div>
             ))}

@@ -235,11 +235,13 @@ class DeviceXmlProjectionBuilder:
                 else baseline_patch_record.contains_latex
             ),
             status_code=patch_state.status_code or baseline_patch_record.status_code,
+            market_countries=([] if patch_state.status_code == "NO_LONGER_PLACED_ON_THE_MARKET"
+                              else baseline_patch_record.market_countries),
             storage_conditions=list(patch_state.storage_conditions),
             critical_warnings=list(patch_state.critical_warnings),
             source_version_marker=patch_state.version,
             patch_version_override=patch_state.version,
-            include_market_infos_in_patch=True,
+            include_market_infos_in_patch=patch_state.status_code != "NO_LONGER_PLACED_ON_THE_MARKET",
         )
 
     @staticmethod
@@ -341,11 +343,15 @@ class DeviceXmlProjectionBuilder:
         new_status_code: str,
         patch_version: str,
     ) -> DeviceXmlRecord:
+        if baseline_patch_record.status_code != "ON_THE_MARKET" or new_status_code != "NO_LONGER_PLACED_ON_THE_MARKET":
+            raise ValueError("Device Market Status supports only On the EU market to No longer placed on the EU market.")
         return replace(
             baseline_patch_record,
             status_code=new_status_code,
             source_version_marker=patch_version,
             patch_version_override=patch_version,
+            market_countries=[],
+            include_market_infos_in_patch=False,
         )
 
     def build_market_info_record(self, record: CanonicalValidationRecord) -> MarketInfoXmlRecord:

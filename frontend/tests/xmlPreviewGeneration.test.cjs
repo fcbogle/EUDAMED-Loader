@@ -146,3 +146,14 @@ test('current request errors remain visible and release loading state', async ()
     ['setError', 'Current failure'], ['setXmlActionMessage', 'Current failure'], ['setIsGeneratingXml', false],
   ]);
 });
+
+
+test('changing the PATCH scenario invalidates a pending preview for the previous scenario', async () => {
+  const h = harness('patch');
+  const pending = h.render().generateXmlPreview();
+  await Promise.resolve();
+  h.render({ selectedPatchScenarioId: 'status_code_edit' });
+  h.requests[0].resolve({ catalogue_number: 'CAT-A' });
+  await pending;
+  assert.equal(h.updates.filter(([name]) => name === 'setXmlPatchPreview').length, 0);
+});

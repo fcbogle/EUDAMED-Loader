@@ -11,6 +11,7 @@ function loadTypeScript(file, dependencies = {}) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', output)((name) => {
     if (name in dependencies) return dependencies[name];
+    if (name === "./patchScenarios") return loadTypeScript("patchScenarios.ts");
     throw new Error(`Unexpected dependency: ${name}`);
   }, module, module.exports);
   return module.exports;
@@ -118,4 +119,10 @@ test('PATCH preview readiness requires a loaded accepted baseline, not a prior Z
   const missing = usePatchScenarioState({ ...args, hasLoadedPatchBaseline: false });
   assert.equal(missing.isPatchScenarioReady, false);
   assert.match(missing.patchScenarioReadinessMessage, /Load the accepted baseline/);
+  stateIndex = 0;
+  const advanced = usePatchScenarioState({ ...args, xmlPairPreview: { latest_successful_patch_state: { version: '3' } } });
+  assert.equal(advanced.isPatchScenarioReady, false);
+  assert.match(advanced.patchScenarioReadinessMessage, /Select a business-change scenario/);
+  assert.equal(advanced.currentAcceptedPatchLabel, 'Accepted device version 3');
+
 });

@@ -1132,6 +1132,16 @@ def test_generated_status_code_patch_scenario_updates_enum() -> None:
         product_variant="Echelon VAC",
         catalogue_number="EVAC22L1S",
     )
+    # The legacy seed is partial; withdrawal requires an explicitly accepted starting status.
+    import json
+    with XmlGenerationService().testing_state_store._connect() as connection:
+        row = connection.execute("SELECT id,latest_successful_state_json,latest_successful_patch_state_json,latest_successful_post_state_json FROM testing_subjects WHERE catalogue_number='EVAC22L1S'").fetchone()
+        assert row is not None
+        for column in ('latest_successful_state_json', 'latest_successful_patch_state_json', 'latest_successful_post_state_json'):
+            if row[column]:
+                state = json.loads(row[column])
+                state['status_code'] = 'ON_THE_MARKET'
+                connection.execute(f"UPDATE testing_subjects SET {column}=? WHERE id=?", (json.dumps(state), row['id']))
     preview = XmlGenerationService().preview_generated_patch_scenario(
         product_family="Echelon",
         product_variant="Echelon VAC",

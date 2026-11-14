@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import type { GeneratedPatchScenarioPreview, PostRegistrationPreview } from "./types";
+import { marketStatusLabel } from "./patchScenarios";
 
 type PatchScenarioId =
   | "equivalent_first_patch"
@@ -122,7 +123,7 @@ export function usePatchScenarioState({
     );
     setPatchSterileInput(selectedCurrentSterile === null ? "" : selectedCurrentSterile ? "true" : "false");
     setPatchLatexInput(selectedCurrentLatex === null ? "" : selectedCurrentLatex ? "true" : "false");
-    setPatchStatusCodeInput(selectedCurrentStatusCode ?? "");
+    setPatchStatusCodeInput("");
     setPatchStorageConditionInputs({
       SHC006: "",
       SHC007: "",
@@ -169,17 +170,16 @@ export function usePatchScenarioState({
   const currentAcceptedPatchVersion = xmlPairPreview?.latest_successful_patch_state
     ? Number(xmlPairPreview.latest_successful_patch_state.version)
     : 1;
-  const currentAcceptedPatchLabel = xmlPairPreview?.latest_successful_patch_state
-    ? `Latest successful PATCH version ${xmlPairPreview.latest_successful_patch_state.version}`
-    : "Accepted POST version 1";
+  const currentAcceptedPatchLabel = !hasLoadedPatchBaseline ? "Not loaded"
+    : `Accepted device version ${currentAcceptedPatchVersion}`;
   const requiredPatchVersion = selectedPatchScenario.id === "equivalent_first_patch" ? 2 : currentAcceptedPatchVersion + 1;
   const currentPatchVersion = Number(patchVersionInput);
 
   const patchDraftComparisonRows: PatchScenarioComparisonRow[] = matchesSelectedPatchPreview && xmlPatchPreview
     ? xmlPatchPreview.field_deltas.map((delta) => ({
         label: delta.label,
-        before: delta.before_value ?? "None",
-        after: delta.after_value ?? "None",
+        before: delta.field_key === "status_code" ? marketStatusLabel(delta.before_value) : delta.before_value ?? "None",
+        after: delta.field_key === "status_code" ? marketStatusLabel(delta.after_value) : delta.after_value ?? "None",
       }))
     : selectedPatchWorkspaceCatalogueNumber
       ? selectedPatchScenario.id === "equivalent_first_patch"
@@ -259,9 +259,9 @@ export function usePatchScenarioState({
                           after: patchVersionInput.trim() || "Pending input",
                         },
                         {
-                          label: "Status Code",
-                          before: selectedCurrentStatusCode ?? "None",
-                          after: patchStatusCodeInput.trim() || "Pending input",
+                          label: "Device market status",
+                          before: marketStatusLabel(selectedCurrentStatusCode),
+                          after: patchStatusCodeInput.trim() ? marketStatusLabel(patchStatusCodeInput.trim()) : "Select the new status",
                         },
                       ]
                     : selectedPatchScenario.id === "warning_add"
@@ -304,6 +304,7 @@ export function usePatchScenarioState({
   const isPatchVersionValid = Number.isInteger(currentPatchVersion) && currentPatchVersion === requiredPatchVersion;
   const isPatchScenarioReady =
     hasLoadedPatchBaseline &&
+    (selectedPatchScenario.id !== "equivalent_first_patch" || currentAcceptedPatchVersion === 1) &&
     selectedPatchScenario.implemented &&
     isPatchVersionValid &&
     (selectedPatchScenario.id === "equivalent_first_patch"
@@ -317,7 +318,7 @@ export function usePatchScenarioState({
             : selectedPatchScenario.id === "latex_edit"
               ? patchLatexInput === "true" || patchLatexInput === "false"
               : selectedPatchScenario.id === "status_code_edit"
-                ? Boolean(patchStatusCodeInput.trim())
+                ? selectedCurrentStatusCode === "ON_THE_MARKET" && patchStatusCodeInput === "NO_LONGER_PLACED_ON_THE_MARKET"
                 : selectedPatchScenario.id === "warning_add"
                   ? Boolean(patchWarningCodeInput.trim()) && (!selectedWarningRequiresComment || Boolean(patchWarningCommentInput.trim()))
                   : Object.values(patchStorageConditionInputs).some((value) => value.trim()));
@@ -326,6 +327,8 @@ export function usePatchScenarioState({
     ? "Select an XML-ready device with a successful registration first."
     : !hasLoadedPatchBaseline
       ? "Load the accepted baseline for this exact selected record before drafting a PATCH."
+      : selectedPatchScenario.id === "equivalent_first_patch" && currentAcceptedPatchVersion > 1
+        ? "Select a business-change scenario. Equivalent First Patch applies only to accepted version 1."
       : !patchVersionInput.trim()
         ? "Enter the required PATCH version integer."
         : !selectedPatchScenario.implemented
@@ -343,8 +346,10 @@ export function usePatchScenarioState({
                   ? "Choose true or false for the sterile flag."
                   : selectedPatchScenario.id === "latex_edit" && !(patchLatexInput === "true" || patchLatexInput === "false")
                     ? "Choose true or false for the latex flag."
-                    : selectedPatchScenario.id === "status_code_edit" && !patchStatusCodeInput.trim()
-                      ? "Choose the replacement status code."
+                    : selectedPatchScenario.id === "status_code_edit" && selectedCurrentStatusCode !== "ON_THE_MARKET"
+                      ? "This withdrawal requires an accepted status of On the EU market."
+                    : selectedPatchScenario.id === "status_code_edit" && patchStatusCodeInput !== "NO_LONGER_PLACED_ON_THE_MARKET"
+                      ? "Select No longer placed on the EU market as the new status."
                       : selectedPatchScenario.id === "equivalent_first_patch"
                         ? "Ready to generate the explicit version 2 PATCH that mirrors the accepted POST."
                         : selectedPatchScenario.id === "warning_add" && !patchWarningCodeInput.trim()

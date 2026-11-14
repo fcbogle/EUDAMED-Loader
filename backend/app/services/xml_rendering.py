@@ -309,7 +309,9 @@ class EudamedMessageRenderer:
         if record.critical_warnings:
             udidi.append(self._critical_warnings_element(record.critical_warnings))
         self._append_text(udidi, UDIDI_NS, "numberOfReuses", str(record.number_of_reuses))
-        if record.market_countries and (profile != "udidi_patch" or record.include_market_infos_in_patch):
+        if (record.market_countries and (profile != "udidi_patch" or record.include_market_infos_in_patch)
+                and not (self._normalized_operation(record.submission_operation) == "PATCH"
+                         and record.status_code == "NO_LONGER_PLACED_ON_THE_MARKET")):
             udidi.append(self._market_infos_element(record.market_countries))
         if record.base_quantity is not None:
             self._append_text(udidi, UDIDI_NS, "baseQuantity", str(record.base_quantity))

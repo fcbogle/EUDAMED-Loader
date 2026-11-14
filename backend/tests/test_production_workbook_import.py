@@ -516,3 +516,54 @@ def test_startup_completes_partial_production_database_before_health_checks(prod
     assert counts(settings)==(0,0,0,0,0)
     assessment=ProductionWorkbookImporter().assess()
     assert assessment['new_count']==2 and counts(settings)==(0,0,0,0,0)
+
+
+def legacy_structured_baseline(settings, *, missing_field=None):
+    """Reproduce older imported snapshots; all values and storage are synthetic."""
+    with sqlite3.connect(settings.testing_state_db_path) as connection:
+        row = connection.execute("SELECT id,subject_id,state_after_json FROM testing_events WHERE message_type='PRODUCTION_EXPORT.SNAPSHOT' LIMIT 1").fetchone()
+        state = json.loads(row[2])
+        state['storage_conditions'] = [{'code': 'SHC006', 'comment': "Manufacturer's accepted minimum"}]
+        state['critical_warnings'] = [{'code': 'CW010', 'comment': None}]
+        for name in ('storage_conditions', 'critical_warnings'):
+            state['device_record'][name] = ["Historical string representation; do not parse or evaluate"]
+        if missing_field:
+            state.pop(missing_field)
+        connection.execute('UPDATE testing_events SET state_after_json=? WHERE id=?', (json.dumps(state), row[0]))
+        connection.execute('UPDATE testing_subjects SET latest_successful_state_json=? WHERE id=?', (json.dumps(state), row[1]))
+
+
+def test_legacy_imported_structured_items_load_baseline_and_generate_next_patch_without_writes(production):
+    settings, _, _ = production
+    importer = ProductionWorkbookImporter()
+    importer.run_import(assessment_token=importer.assess()['assessment_token'])
+    legacy_structured_baseline(settings)
+    service = XmlGenerationService(require_import=True)
+    identity = dict(product_family='Synthetic model', product_variant='Synthetic model', catalogue_number='SYN-00000')
+    before = settings.testing_state_db_path.read_bytes()
+    baseline = service.preview_post_registration(**identity, accepted_baseline=True)
+    assert baseline.post_validation.valid
+    assert baseline.latest_successful_patch_state.version == '2'
+    assert "Manufacturer's accepted minimum" in baseline.post_xml
+    assert '<commondi:warningValue>CW010</commondi:warningValue>' in baseline.post_xml
+    patch = service.preview_generated_patch_scenario(**identity, scenario_id='trade_name_edit', patch_version='3',
+        scenario_inputs={'new_trade_name': 'Synthetic updated name'})
+    assert patch.derived_patch_validation.valid
+    assert patch.context.base_version == '2'
+    assert "Manufacturer's accepted minimum" in patch.derived_patch_xml
+    assert 'Historical string representation' not in patch.derived_patch_xml
+    assert settings.testing_state_db_path.read_bytes() == before
+
+
+@pytest.mark.parametrize('missing_field', ['storage_conditions', 'critical_warnings'])
+def test_unusable_imported_structured_items_block_with_actionable_error(production, missing_field):
+    settings, _, _ = production
+    importer = ProductionWorkbookImporter()
+    importer.run_import(assessment_token=importer.assess()['assessment_token'])
+    legacy_structured_baseline(settings, missing_field=missing_field)
+    service = XmlGenerationService(require_import=True)
+    before = settings.testing_state_db_path.read_bytes()
+    with pytest.raises(ValueError, match='import a corrected EUDAMED extract before PATCH'):
+        service.preview_post_registration(product_family='Synthetic model', product_variant='Synthetic model',
+            catalogue_number='SYN-00000', accepted_baseline=True)
+    assert settings.testing_state_db_path.read_bytes() == before

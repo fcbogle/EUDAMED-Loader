@@ -1,6 +1,198 @@
 # Session Handoff
 
-Updated November 13, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated November 14, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## November 14 — Single PATCH workflow and withdrawal candidate implemented
+
+Owner authorised implementing steps 1–5 and will conduct the Playground test.
+The flow is now model → scenario → device search within that model → accepted
+Before/After → generate/validate. The separate all-model search panel was removed.
+The scenario selector and bounded type-ahead device search sit inside Single PATCH.
+Search is disabled until a scenario is chosen, preserves leading zeros, ranks exact
+matches first, displays at most ten rows and cannot switch the selected model.
+A device must be explicitly selected; there is no implicit fallback device/baseline.
+
+The business dropdown has five plain labels: Trade Name, Critical Warnings,
+Storage Conditions, Base Quantity and Device Market Status. Untested/rejected
+candidates and Equivalent First Patch are removed from selection; historical
+implementation metadata and audit history remain. Bulk PATCH exposes the four
+proven business changes; the withdrawal candidate is single-device only initially.
+
+Device Market Status retains internal scenario id status_code_edit for lineage.
+It supports only an explicitly accepted On the EU market baseline transitioning
+to No longer placed on the EU market. Before is read-only accepted data; After
+has only the withdrawal choice. Derived XML uses the next accepted version,
+preserves other device attributes, clears country links from the draft and omits
+marketInfos. Rendering and reconstruction of later accepted off-market PATCH
+states also prevent stale country links being reintroduced. Unsupported/reverse
+transitions and missing accepted starting status are blocked.
+
+Dev/Playground generation is enabled for the owner's manual test. Production
+preview/download is blocked in the UI and backend until successful Playground
+acceptance is reviewed. This is not a claim of EUDAMED acceptance. Katie's actual
+Production device must not be used as the Playground test subject. No Production
+upload, import, acceptance or registration data change was performed.
+
+Changing model/device clears the previous draft and preview; scenario changes
+reset draft inputs and invalidate prior preview requests while retaining a valid
+device within the same model. Baseline loading does not override the operator's
+chosen scenario. Import/acceptance changes invalidate pending generated previews.
+Exact identity, accepted-baseline loading/retry and version guardrails remain.
+
+Operator test instructions are in Help → EUDAMED Workspaces And Outcome Capture,
+section Device Market Status: Playground verification pending. Use a registered
+Playground device with accepted On the EU market state, review the next version,
+generate/validate, download/submit manually and import the matching success XML.
+Verify retained evidence and accepted status/version. Current canonical/source
+values and their reconciliation remain separate from accepted submission history.
+No new canonical write-back behaviour is introduced by these steps.
+
+All code changes from this session remain uncommitted on main. Validation: full
+backend suite 563 passed; focused backend checks 35 passed, including an added
+follow-up off-market PATCH regression; frontend 185 passed and frontend build
+passed. Local XML validates against both installed official schema profiles; no
+Playground acceptance is claimed. All 106 protected Production database/profile/
+schema/source files retain their original SHA-256 hashes.
+
+The ignored local .env.dev was still configured for schema 3.0.32. Only its schema
+version/directory settings were aligned to installed official Playground 3.0.36.1;
+read-only --check-config passed, selecting data/testing/testing-state.sqlite3.
+.env.prod and Production schemas remain unchanged. Services were not started or
+restarted. Stop the currently running backend before starting Dev on the same port,
+then refresh the browser and confirm Dev / Playground before testing.
+Evidence: data/testing/backups/patch-workflow-20261114-2zvx70nh.
+
+## November 14 — Prior planning checkpoint (superseded by implementation above)
+
+Owner deferred further implementation and Playground testing until later today.
+Resume with the following agreed design. This direction supersedes the current
+search placement and scenario menu described in the implementation checkpoints below.
+
+The operator flow must be:
+
+1. Select the model using the existing model selector.
+2. Select the PATCH scenario inside the PATCH Scenario Workspace.
+3. Search for and select the specific device within that model, using Device UDI-DI
+   or catalogue number. Results narrow while typing, retain leading zeros, put
+   exact matches first and remain bounded; do not display hundreds of devices.
+4. Load that exact device's latest accepted baseline and review Before/After.
+5. Generate and validate the PATCH using the next accepted version.
+
+Move the device search into the PATCH Scenario Workspace, after the scenario
+selector. Remove the separate search panel above the model selector. Search must
+respect the selected model and active environment; it must not switch models
+automatically. Changing the model or device must invalidate the previous draft,
+preview and pending requests. A scenario change must invalidate the previous
+scenario draft/preview. Preserve the exact-identity, accepted-baseline and version
+guardrails; never silently fall back to another device.
+
+The business-change dropdown must offer only these five plain labels:
+
+- Trade Name
+- Critical Warnings
+- Storage Conditions
+- Base Quantity
+- Device Market Status
+
+The first four have recorded successful Playground tests. Remove untested and
+rejected candidate options from selection, including Production Identifier,
+Sterile, Sterilization, Latex, Reprocessed, Number Of Reuses and MDN Codes.
+Replace the existing Status Code candidate with Device Market Status rather than
+adding a duplicate. Omit all testing suffixes such as (success), (tested),
+(untested) and (rejected) from the menu. Equivalent First Patch must remain outside
+this business-change dropdown. Preserve historical test evidence and submission
+lineage; removing menu entries does not mean deleting their records.
+
+Device Market Status is the fifth planned option, not an accepted/tested operation
+yet. Initially support only On the EU market → No longer placed on the EU market.
+Before is read-only accepted data; After is the permitted withdrawal selection.
+Keep the registration rather than implying deletion. Explain the Market Info
+handling and possible effects on linked container packages alongside the review.
+
+Urgent use case: Katie requested withdrawal of Production UDI-DI 05050649091186,
+catalogue P189410, model Socket Adaptors, Basic UDI-DI 5050649SKTADAPTSLS, to unblock
+CN closure. A previous status PATCH was rejected because it included Market Info
+links during withdrawal; see the existing Playground test report section C7.
+Correct that payload handling and obtain successful Playground acceptance before
+making the new withdrawal option available for Production generation. XSD validity
+alone does not prove EUDAMED business-rule acceptance. Verify the Production
+device's current accepted version before preparing its eventual PATCH.
+
+Generation/download is a proposed change, not registration acceptance. Retain
+request/response XML, transaction IDs, timestamps and CN/operator attribution where
+available. Import and correlate the success response before recording acceptance.
+Current canonical device status and accepted submission history are separate:
+complete and verify their synchronisation for this workflow, without inventing
+operator identity (the application currently has no authentication). Katie/Ray
+access and hosting remain separate work; no access date has been committed.
+
+At this planning checkpoint the uncommitted work on main comprised the all-model search above
+the model selector, baseline loading/recovery fixes, and the POST-download nullable
+UDI-DI guard. The search relocation, restricted five-option menu, withdrawal payload
+correction and new Playground test have not been implemented. Avior's Production
+UDI-DI 05050649136146 / catalogue AVIOR is a known baseline-loading/search example
+(recorded accepted version 3), not a device authorised for an actual Production
+change during testing. Use a suitable registered Playground device for the test.
+
+Latest completed checks: baseline fix 549 backend tests, 179 frontend tests and
+frontend build passed; subsequent POST identifier guard passed five targeted tests.
+Production database/profile/schema/source files were hash-verified unchanged in
+the earlier checkpoints. No Production registration change, upload or withdrawal
+has been performed. This handoff update changes documentation only; do not restart
+services, import data or submit XML as part of the pause.
+
+## November 14 — PATCH baseline loading and visible recovery
+
+Owner reported that the Avior PATCH assessment was Available at accepted version 3,
+but no scenario controls appeared. Read-only reproduction found that older imported
+baseline device_record arrays contained stringified StorageConditionXmlItem and
+CriticalWarningXmlItem representations. The loader attempted to unpack those
+strings as mappings and failed. The same accepted snapshot retains proper
+structured top-level lists; the loader now uses those when nested lists are
+unusable. No repr parsing, current-workbook substitution or database rewrite is
+performed. Missing usable structured accepted data remains an explicit blocker.
+
+Avior's Production baseline now loads at version 3, and an in-memory trade-name
+PATCH preview at version 4 validates against schema 3.0.30. Verification used
+read-only SQLite connections with query_only; no ZIP was saved or submitted.
+The UI shows local baseline loading/error messages and Reload accepted baseline.
+Loaded imported baselines are labelled Accepted device version, without inventing
+historical POST/PATCH actions. Imported versions above 1 default to a business
+change; Equivalent First Patch is unavailable for those versions. The existing
+accepted-state and backend generation guardrails remain in force.
+
+Backend restart and browser refresh are required to activate the loader fix.
+Withdrawal status payload corrections and Playground acceptance remain pending.
+Validation: 549 backend tests, 179 frontend tests and frontend build passed.
+All 106 protected Production database/profile/schema/source files retain their
+SHA-256 hashes. Evidence is retained in
+`data/testing/backups/patch-baseline-loading-20261114`.
+
+## November 14 — Device search in Patch XML
+
+Owner requested a search that narrows the available devices while typing, following
+discussion of Katie's requested withdrawal of UDI-DI 05050649091186. Patch XML now
+offers Find device for PATCH above the model selector, searching Device UDI-DI and
+catalogue number across the already loaded imported canonical records. Search is
+local to the active environment, starts at two characters, preserves leading zeros,
+ranks exact matches first and displays at most ten results with a total count.
+
+Selection loads the model and catalogue and uses the existing accepted-baseline
+request and PATCH assessment. Explicit selections cannot fall back to another
+device. The returned baseline must match the selected model, catalogue and UDI-DI.
+Missing/ambiguous identity and existing XML readiness blockers prevent selection.
+Typing/clearing the search leaves the device selection unchanged. Changing models,
+the device dropdown, operation or environment clears the explicit search selection.
+
+This change is confined to frontend search and selection; no database import,
+schema/profile change, PATCH payload change or submission was performed. The
+withdrawal payload correction and Playground acceptance test remain separate work.
+Parents & Children retains its model/family/Basic UDI-DI search for now.
+
+Validation: 176 frontend tests, including a 10,001-record search case and identity/
+baseline guard checks, and frontend production build passed. All 106 protected
+Production database/profile/schema/source files retain their SHA-256 hashes.
+Evidence is retained in `data/testing/backups/patch-device-search-20261114-oxp_mar_`.
 
 
 
