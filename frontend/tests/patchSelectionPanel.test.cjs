@@ -22,18 +22,18 @@ function load(relative) {
   cache.set(filename, module.exports); return module.exports;
 }
 const { PatchSelectionPanel } = load('components/PatchSelectionPanel.tsx');
-const { PATCH_BUSINESS_OPTIONS, withdrawalBlocker } = load('patchScenarios.ts');
+const { PATCH_BUSINESS_OPTIONS, bulkPatchScenarioOptions, withdrawalBlocker } = load('patchScenarios.ts');
 const props = { family: 'Synthetic family', variant: 'Synthetic model', environment: 'dev',
   scenario: '', options: [], selectedKey: null, onScenarioChange() {}, onSelect() {} };
 const markup = changes => renderToStaticMarkup(React.createElement(PatchSelectionPanel, { ...props, ...changes }));
 
-test('only the five agreed business changes appear with plain menu labels', () => {
+test('only the four available business changes appear with plain menu labels', () => {
   assert.deepEqual(PATCH_BUSINESS_OPTIONS.map(option => option.label), [
-    'Trade Name', 'Critical Warnings', 'Storage Conditions', 'Base Quantity', 'Device Market Status',
+    'Trade Name', 'Critical Warnings', 'Storage Conditions', 'Device Market Status',
   ]);
   const html = markup();
-  assert.equal((html.match(/<option /g) || []).length, 6); // Five choices plus the prompt.
-  assert.doesNotMatch(html, /Production Identifier|Sterile|Latex|Equivalent First Patch|\(success\)|\(rejected\)|\(untested\)/);
+  assert.equal((html.match(/<option /g) || []).length, 5); // Four choices plus the prompt.
+  assert.doesNotMatch(html, /Base Quantity|Production Identifier|Sterile|Latex|Equivalent First Patch|\(success\)|\(rejected\)|\(untested\)/);
   assert.ok(html.indexOf('id="patch-scenario-selector"') < html.indexOf('Device UDI-DI or catalogue number'));
 });
 
@@ -49,11 +49,21 @@ test('the operator must choose a model and scenario before finding a device', ()
   assert.match(markup({ scenario: chosen }), /Search within Synthetic model/);
 });
 
-test('withdrawal is available for Dev testing, while Production generation remains gated', () => {
+test('withdrawal is available in both environments with the same transition safeguards', () => {
   assert.equal(withdrawalBlocker('dev', 'ON_THE_MARKET', 'NO_LONGER_PLACED_ON_THE_MARKET'), null);
-  assert.match(withdrawalBlocker('prod', 'ON_THE_MARKET', 'NO_LONGER_PLACED_ON_THE_MARKET'), /Playground verification/);
+  assert.equal(withdrawalBlocker('prod', 'ON_THE_MARKET', 'NO_LONGER_PLACED_ON_THE_MARKET'), null);
+  assert.match(withdrawalBlocker(null, 'ON_THE_MARKET', 'NO_LONGER_PLACED_ON_THE_MARKET'), /confirmed application environment/);
   assert.match(withdrawalBlocker('dev', 'NOT_INTENDED_FOR_EU_MARKET', 'NO_LONGER_PLACED_ON_THE_MARKET'), /accepted status/);
   assert.match(withdrawalBlocker('dev', null, 'NO_LONGER_PLACED_ON_THE_MARKET'), /accepted status/);
   assert.match(withdrawalBlocker('dev', 'ON_THE_MARKET', ''), /Select No longer/);
-  assert.match(markup({ environment: 'prod', scenario: 'status_code_edit' }), /Production generation awaits/);
+  assert.match(markup({ environment: 'prod', scenario: 'status_code_edit' }), /matching Success XML/);
+  assert.match(withdrawalBlocker('prod', 'NO_LONGER_PLACED_ON_THE_MARKET', 'NO_LONGER_PLACED_ON_THE_MARKET'), /accepted status/);
+});
+
+
+test('bulk withdrawal is offered in both confirmed environments', () => {
+  for (const environment of ['dev', 'prod']) {
+    assert.deepEqual(bulkPatchScenarioOptions(environment), [...PATCH_BUSINESS_OPTIONS]);
+  }
+  assert.equal(bulkPatchScenarioOptions(null).some(option => option.id === 'status_code_edit'), false);
 });

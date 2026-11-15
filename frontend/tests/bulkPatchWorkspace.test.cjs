@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const ts = require('typescript');
 const output = ts.transpileModule(fs.readFileSync(require('node:path').join(__dirname, '../src/components/BulkPatchWorkspace.tsx'), 'utf8'), {compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
 const loaded = {exports:{}};
-new Function('require','module','exports',output)(name => name.startsWith('./') ? {} : require(name),loaded,loaded.exports);
+new Function('require','module','exports',output)(name => name === '../patchScenarios' ? {marketStatusLabel: code => code === 'ON_THE_MARKET' ? 'On the EU market' : code || 'Not recorded'} : name.startsWith('./') ? {} : require(name),loaded,loaded.exports);
 function render(extra={}) {
  const nodes=[];
  function visit(n) {if(Array.isArray(n)) return n.forEach(visit);if(!n || typeof n!=='object') return;nodes.push(n);visit(n.props?.children);}
@@ -29,4 +29,14 @@ test('changed review scope is announced and can be explicitly cleared',()=>{
  assert.ok(nodes.some(n=>n.props?.role==='alert'));
  assert.match(text,/differs from the reviewed group/);
  nodes.find(n=>n.type==='button' && n.props.children==='Clear reviewed group').props.onClick();assert.equal(cleared,true);
+});
+
+test('bulk withdrawal offers only the supported target and shows accepted status per device',()=>{
+ const {nodes,text}=render({selectedPatchScenarioId:'status_code_edit',patchStatusCodeInput:'NO_LONGER_PLACED_ON_THE_MARKET',selectedEntries:[],bulkPatchPostedEntries:[{catalogue_number:'LINX22',primary_udi_di:'D1',current_state:{version:'4',status_code:'ON_THE_MARKET'}}]});
+ const select=nodes.find(n=>n.type==='select' && n.props.id==='bulk-patch-status-code-input');
+ assert.ok(select);
+ const options=select.props.children.filter(Boolean);
+ assert.deepEqual(options.map(n=>n.props.value),['','NO_LONGER_PLACED_ON_THE_MARKET']);
+ assert.match(text,/On the EU market/);
+ assert.match(text,/matching Success XML/);
 });

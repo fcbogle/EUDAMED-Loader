@@ -31,10 +31,13 @@ explicit registered-device selections using their individual accepted states.
 
 Select the model first using **Select Device Model**, then open **Single PATCH**.
 Inside the PATCH Scenario Workspace, select **PATCH scenario** before finding a
-device. The menu contains Trade Name, Critical Warnings, Storage Conditions,
-Base Quantity and Device Market Status. Retired candidates and Equivalent First
-Patch are not selectable business changes. Bulk PATCH offers the four proven
-business changes; the new market-status workflow is initially single-device only.
+device. Single and Bulk PATCH offer Trade Name, Critical Warnings, Storage
+Conditions and Device Market Status in both Dev and Production. Retired candidates
+and Equivalent First Patch are not selectable business changes. Base Quantity is
+not selectable: Playground rejected quantity changes with
+ERR-DTX-UDI-031-033.02, Quantity of Device is not updatable. The backend also blocks
+new Base Quantity previews and downloads. Existing history and response evidence
+remain available; new registrations still include the required quantity.
 
 Enter at least two characters of a Device UDI-DI or catalogue number. Search
 narrows within the selected model in the active environment, preserves leading
@@ -50,7 +53,7 @@ device clears the previous draft and preview; changing the scenario resets the
 scenario draft/preview while retaining a valid selection within the same model.
 Pending requests for an old selection cannot replace the current preview.
 
-## Device Market Status: Playground verification pending
+## Device Market Status: Single and Bulk PATCH
 
 This option currently supports only **On the EU market → No longer placed on the
 EU market**. Before is the recorded accepted status. Select the permitted After
@@ -60,20 +63,18 @@ registration, and omits Market Info. Review linked container package statuses
 following EUDAMED acceptance. Do not use a missing accepted status as a workbook
 or default-value fallback.
 
-The option is enabled for Dev/Playground testing. Production preview/download is
-blocked until successful Playground verification is reviewed; local XSD validation
-alone does not establish EUDAMED business-rule acceptance. The same restriction
-is enforced by the backend, and the new status operation is not enabled in Bulk
-PATCH. Existing business PATCH operations retain their current availability.
+The option is available in both Dev/Playground and Production for Single and Bulk
+PATCH following successful Playground tests. The active environment determines
+the database, accepted evidence and schema profile; keep Production and Playground
+evidence separate. Each device must have a usable accepted baseline with an
+On the EU market status. Missing or already withdrawn statuses are not eligible.
 
-For the operator test, use a registered Playground device with an accepted
-On the EU market baseline and confirm that the next version is proposed. Generate
-the preview, inspect the status change and absence of Market Info, download the
-ZIP and submit manually to Playground. Import the matching success response and
-check the accepted state and history. Preview/download must not change the
-accepted status; rejected responses must not accept the draft. Keep Production
-and Playground device evidence separate. Current canonical/source data and dated
-extract comparisons remain separate from accepted submission history.
+Review the identity, proposed status and next version before downloading the ZIP.
+Preview and download do not accept the draft or change current device attributes.
+Upload the matching response XML after manual submission. A successful correlated
+acknowledgement updates the accepted state and the changed current device
+attribute; failures retain existing values. Newer conflicting local edits require
+review. Original source/workbook evidence is preserved.
 
 ## Status and evidence
 
@@ -88,8 +89,8 @@ not be reconstructed from an unrelated draft or an old source label.
 
 ## Current device data after a successful PATCH
 
-A correlated success response for Trade Name, Critical Warnings, Storage Conditions,
-Base Quantity or Device Market Status updates that changed current attribute and
+A correlated success response for Trade Name, Critical Warnings, Storage Conditions
+or Device Market Status updates that changed current attribute and
 its accepted history together. Source workbook rows and original XML evidence are
 retained, with a link from the current value to the response event. Preview/download,
 errors and unrelated acknowledgements do not update current device values.
@@ -119,3 +120,18 @@ feedback and check refreshed registration/accepted-version state afterward.
 The application has no M2M transport or live EUDAMED lookup. Reporting provides the Model Reconciliation Summary. See [XML Generation](xml-generation.md),
 [Testing Scenarios](testing-scenarios.md) and
 [registration policy](../../../../docs/registration-driven-operation-policy.md).
+
+
+### Bulk Device Market Status
+
+Choose the model and Basic UDI-DI group in Bulk PATCH, then Device Market Status.
+Select the devices and choose No longer placed on the EU market. Review the
+accepted status of each candidate and preview the exact included devices, next
+versions and exclusions before downloading the ZIP. Only devices whose accepted
+status is On the EU market qualify. Each included device uses its own accepted
+version plus one; Market Info is omitted from withdrawal PATCH messages.
+
+Upload the response from the active EUDAMED environment through the response XML control. Successful
+acknowledgements update the corresponding current device status and accepted
+version. Failed devices retain their values and versions. Single and bulk
+withdrawal have been verified in Playground and are available in Production.

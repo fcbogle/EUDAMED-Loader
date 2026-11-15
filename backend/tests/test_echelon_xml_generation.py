@@ -1052,36 +1052,12 @@ def test_generated_storage_condition_patch_scenario_updates_comments() -> None:
     assert preview.derived_patch_validation.valid is True
 
 
-def test_generated_base_quantity_patch_scenario_updates_quantity(monkeypatch: pytest.MonkeyPatch) -> None:
-    service = XmlGenerationService()
-    service.preview_post_registration(
-        product_family="Echelon",
-        product_variant="Echelon VAC",
-        catalogue_number="EVAC22L1S",
-    )
-    monkeypatch.setattr(
-        service.testing_state_store,
-        "latest_successful_market_info_state",
-        lambda **_: {
-            "version": "2",
-            "market_countries": [{"country": "IE", "original_placed_on_market": True}],
-        },
-    )
-    preview = service.preview_generated_patch_scenario(
-        product_family="Echelon",
-        product_variant="Echelon VAC",
-        catalogue_number="EVAC22L1S",
-        scenario_id="base_quantity_edit",
-        patch_version="5",
-        scenario_inputs={"new_base_quantity": 7},
-    )
-
-    assert "<e:version>5</e:version>" in preview.derived_patch_xml
-    assert "<udidi:baseQuantity>7</udidi:baseQuantity>" in preview.derived_patch_xml
-    assert "<udidi:marketInfos>" in preview.derived_patch_xml
-    assert "<marketinfo:country>IE</marketinfo:country>" in preview.derived_patch_xml
-    assert any(delta.field_key == "base_quantity" and delta.after_value == "7" for delta in preview.field_deltas)
-    assert preview.derived_patch_validation.valid is True
+def test_generated_base_quantity_patch_is_rejected_before_baseline_access() -> None:
+    service = object.__new__(XmlGenerationService)
+    with pytest.raises(ValueError, match="ERR-DTX-UDI-031-033.02"):
+        service._build_generated_patch_preview(
+            product_family="Echelon", product_variant="Echelon VAC", catalogue_number="EVAC22L1S",
+            scenario_id="base_quantity_edit", patch_version="5", scenario_inputs={"new_base_quantity":7})
 
 
 def test_generated_sterile_patch_scenario_updates_boolean() -> None:

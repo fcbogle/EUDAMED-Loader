@@ -22,9 +22,7 @@ export function PatchSelectionPanel({ family, variant, environment, scenario, on
         {PATCH_BUSINESS_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
       </select>
     </div>
-    {scenario === "status_code_edit" && <p className="panel-copy">Change On the EU market to No longer placed on the EU market. {environment === "prod"
-      ? "Production generation awaits successful Playground verification."
-      : "Ready for controlled Playground testing; EUDAMED acceptance has not yet been verified."}</p>}
+    {scenario === "status_code_edit" && <p className="panel-copy">Change On the EU market to No longer placed on the EU market. The registration is retained. Current device data updates after uploading the matching Success XML.</p>}
     <PatchDeviceSearch key={JSON.stringify([environment, family, variant])} options={options} environment={environment}
       family={family} variant={variant} enabled={Boolean(scenario)} selectedKey={selectedKey} onSelect={onSelect} />
   </div>;

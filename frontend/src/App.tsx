@@ -64,7 +64,7 @@ import { ImportFlowWorkspace } from "./components/ImportFlowWorkspace";
 import type { ImportFlowContext } from "./importFlowTypes";
 import { DeviceModelSelector } from "./components/DeviceModelSelector";
 import { PatchSelectionPanel } from "./components/PatchSelectionPanel";
-import { PATCH_BUSINESS_OPTIONS, withdrawalBlocker } from "./patchScenarios";
+import { PATCH_BUSINESS_OPTIONS, bulkPatchScenarioOptions, withdrawalBlocker } from "./patchScenarios";
 import { patchDeviceSearchOptions, patchSearchBaselineMatches, resolvePatchSearchSelection } from "./patchDeviceSearch";
 import { XmlValidationStack } from "./components/XmlValidationStack";
 import dataInterpretationDocumentation from "./content/docs/data-interpretation.md?raw";
@@ -352,7 +352,7 @@ const PATCH_SCENARIOS: PatchScenarioDefinition[] = [
     target: "udidi:status/commondi:code",
     summary: "Change an accepted On the EU market device to No longer placed on the EU market. The registration is retained.",
     implemented: true,
-    testStatus: "failure",
+    testStatus: "success",
     optionsSummary:
       "Withdrawal only: No longer placed on the EU market.",
   },
@@ -2453,8 +2453,8 @@ export function App() {
   const selectedPatchScenario =
     PATCH_SCENARIOS.find(scenario => scenario.id === selectedPatchScenarioId &&
       PATCH_BUSINESS_OPTIONS.some(option => option.id === scenario.id) &&
-      !(xmlMode === "bulkPatch" && scenario.id === "status_code_edit")) ?? PATCH_SCENARIOS[1];
-  const selectedPatchScenarioStatus = selectedPatchScenario.id === "status_code_edit" ? "Awaiting Playground verification" : patchScenarioStatuses[selectedPatchScenario.id];
+      (xmlMode !== "bulkPatch" || bulkPatchScenarioOptions(activeEnvironment).some(option => option.id === scenario.id))) ?? PATCH_SCENARIOS[1];
+  const selectedPatchScenarioStatus = selectedPatchScenario.id === "status_code_edit" ? "Playground verified" : patchScenarioStatuses[selectedPatchScenario.id];
   const selectedPatchScenarioImplemented = selectedPatchScenario.implemented;
   const bulkPatchBaselineSummary = buildBulkPatchBaselineSummary({
     scenarioId: selectedPatchScenario.id,
@@ -4990,8 +4990,8 @@ export function App() {
                       bulkPatchImportedCatalogueNumbersCount={bulkPatchImportedCatalogueNumbers.length}
                       bulkPatchImportedMatchedCatalogueNumbersCount={bulkPatchImportedMatchedCatalogueNumbers.length}
                       bulkPatchImportedNotFoundCatalogueNumbersCount={bulkPatchImportedNotFoundCatalogueNumbers.length}
-                      patchScenarioStatusLabel={selectedPatchScenario.testStatus}
-                      patchScenarioOptions={PATCH_BUSINESS_OPTIONS.filter(option => option.id !== "status_code_edit")}
+                      patchScenarioStatusLabel={selectedPatchScenario.id === "status_code_edit" ? "Playground verified" : selectedPatchScenario.testStatus}
+                      patchScenarioOptions={bulkPatchScenarioOptions(activeEnvironment)}
                       selectedPatchScenarioId={selectedPatchScenario.id}
                       onPatchScenarioChange={(scenarioId) => setSelectedPatchScenarioId(scenarioId as PatchScenarioId)}
                       selectedPatchScenarioSummary={selectedPatchScenario.summary}

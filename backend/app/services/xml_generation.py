@@ -48,6 +48,11 @@ from app.xml_models import (
 
 
 class XmlGenerationService:
+    BASE_QUANTITY_PATCH_REJECTION = (
+        "Base Quantity PATCH is unavailable: EUDAMED rejected this change with "
+        "ERR-DTX-UDI-031-033.02: Quantity of Device is not updatable."
+    )
+
     def __init__(self, *, require_import: bool = False) -> None:
         self.settings = get_settings()
         self.require_import = require_import
@@ -1027,8 +1032,10 @@ class XmlGenerationService:
         selected_catalogue_numbers: list[str] | None = None,
         chunk_sequence: int = 1,
     ) -> PreparedXmlBatch[BulkPatchPreview]:
-        if scenario_id == "status_code_edit":
-            raise ValueError("Device Market Status is currently supported only in Single PATCH for Playground testing.")
+        if scenario_id == "base_quantity_edit":
+            raise ValueError(self.BASE_QUANTITY_PATCH_REJECTION)
+        if scenario_id == "status_code_edit" and self.settings.environment not in {"dev", "prod"}:
+            raise ValueError("Device Market Status requires a confirmed Dev or Production environment.")
         normalized_count = self._normalize_record_count(record_count, self.settings.eudamed_max_batch_records)
         excluded_records: list[BulkXmlExcludedRecord] = []
         candidate_records, eligible_child_records, missing_variant_records = self._bulk_patch_selected_records(
@@ -1049,7 +1056,7 @@ class XmlGenerationService:
                 "warning_add": "Critical Warnings",
                 "storage_condition_edit": "Storage Condition Edit",
                 "base_quantity_edit": "Base Quantity",
-                "status_code_edit": "Status Code",
+                "status_code_edit": "Device Market Status",
             }.items() if sid == scenario_id),
             scenario_id,
         )
@@ -1495,8 +1502,10 @@ class XmlGenerationService:
         correlation_id: str | None = None,
         message_id: str | None = None,
     ) -> tuple[GeneratedPatchScenarioPreview, dict[str, Any]]:
-        if scenario_id == "status_code_edit" and self.settings.environment != "dev":
-            raise ValueError("Device Market Status awaits Playground verification; Production generation is not enabled.")
+        if scenario_id == "base_quantity_edit":
+            raise ValueError(self.BASE_QUANTITY_PATCH_REJECTION)
+        if scenario_id == "status_code_edit" and self.settings.environment not in {"dev", "prod"}:
+            raise ValueError("Device Market Status requires a confirmed Dev or Production environment.")
         baseline_reason = self.testing_state_store.patch_baseline_unavailable_reason(
             product_family=product_family, product_variant=product_variant, catalogue_number=catalogue_number,
         )

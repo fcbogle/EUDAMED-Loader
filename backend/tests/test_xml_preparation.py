@@ -164,7 +164,9 @@ def test_bulk_patch_keeps_individual_versions_countries_and_exclusions(factory):
                 WHERE catalogue_number=?''', (version, version, state, market, records[index].catalogue_number))
         # The third child's newer acceptance has no matching snapshot and must stay excluded.
         connection.execute("UPDATE testing_subjects SET latest_successful_version='8', latest_successful_patch_version='8' WHERE catalogue_number=?", (records[2].catalogue_number,))
-    _, archive = operation(service, 'patch', 'zip', len(records))
+    _, archive = service.download_bulk_patch(product_family='Synthetic', product_variant='Synthetic',
+        basic_udi_di='BASICSHARED', record_count=len(records), scenario_id='warning_add',
+        scenario_inputs={'new_warning_code':'CW011'})
     with ZipFile(BytesIO(archive)) as package:
         manifest = json.loads(package.read('manifest.json'))
         assert [row['derived_version'] for row in manifest['records']] == ['3', '5']
@@ -217,7 +219,7 @@ def test_http_preview_and_download_keep_existing_response_contract(factory, monk
         payload.pop('record_count')
         payload['catalogue_number'] = records[0].catalogue_number
     if flow == 'patch':
-        payload.update(basic_udi_di='BASICSHARED', scenario_id='base_quantity_edit', scenario_inputs={'new_base_quantity': 2})
+        payload.update(basic_udi_di='BASICSHARED', scenario_id='trade_name_edit', scenario_inputs={'new_trade_name': 'Updated synthetic device'})
     with TestClient(app) as client:
         response = client.post(f'/api/xml/{preview_path}', json=payload)
         assert response.status_code == 200, response.text
@@ -280,3 +282,25 @@ def test_bulk_candidates_still_require_successful_device_registration(factory, m
     assert service.testing_state_store.posted_parent_groups(
         product_family='Synthetic', product_variant='Synthetic') == []
     assert TestingReadModelService().bulk_patch_posted_entries(**scope) == []
+
+
+@pytest.mark.parametrize('endpoint', ['preview-generated-patch-scenario',
+    'download-generated-patch-scenario', 'preview-bulk-patch', 'download-bulk-patch'])
+def test_base_quantity_http_requests_fail_without_generation_history(factory, monkeypatch, endpoint):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.routers import xml_generation as router_module
+    service, records = factory('patch', 2)
+    monkeypatch.setattr(router_module, '_xml_service', lambda: service)
+    app = FastAPI()
+    app.include_router(router_module.router, prefix='/api')
+    payload = dict(product_family='Synthetic', product_variant='Synthetic',
+        catalogue_number=records[0].catalogue_number, patch_version='2',
+        basic_udi_di='BASICSHARED', record_count=2, scenario_id='base_quantity_edit',
+        scenario_inputs={'new_base_quantity':2})
+    before = audit_counts(service)
+    with TestClient(app) as client:
+        result = client.post('/api/xml/' + endpoint, json=payload)
+    assert result.status_code == (404 if 'generated-patch-scenario' in endpoint else 400), result.text
+    assert 'ERR-DTX-UDI-031-033.02' in result.text
+    assert audit_counts(service) == before

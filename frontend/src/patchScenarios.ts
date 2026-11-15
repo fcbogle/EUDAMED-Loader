@@ -2,7 +2,6 @@ export const PATCH_BUSINESS_OPTIONS = [
   { id: "trade_name_edit", label: "Trade Name" },
   { id: "warning_add", label: "Critical Warnings" },
   { id: "storage_condition_edit", label: "Storage Conditions" },
-  { id: "base_quantity_edit", label: "Base Quantity" },
   { id: "status_code_edit", label: "Device Market Status" },
 ] as const;
 
@@ -14,8 +13,12 @@ export function marketStatusLabel(code: string | null): string {
 }
 
 export function withdrawalBlocker(environment: "dev" | "prod" | null, before: string | null, after: string): string | null {
-  if (environment !== "dev") return "Device Market Status awaits Playground verification. Production generation is not enabled.";
+  if (environment === null) return "Select a confirmed application environment before generating a withdrawal PATCH.";
   if (before !== "ON_THE_MARKET") return "This withdrawal requires an accepted status of On the EU market.";
   if (after !== "NO_LONGER_PLACED_ON_THE_MARKET") return "Select No longer placed on the EU market as the new status.";
   return null;
+}
+
+export function bulkPatchScenarioOptions(environment: "dev" | "prod" | null) {
+  return PATCH_BUSINESS_OPTIONS.filter(option => environment !== null || option.id !== "status_code_edit");
 }

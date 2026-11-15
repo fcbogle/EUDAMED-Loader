@@ -1,6 +1,132 @@
 # Session Handoff
 
-Updated November 14, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated November 15, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+
+## November 15 — Base Quantity removed from new PATCH generation
+
+Owner authorised item 2 following the Playground rejection of all ten Navigator
+quantity changes (APP-DTX-000123513.xml): ERR-DTX-UDI-031-033.02, Quantity of Device
+is not updatable. Base Quantity is removed from the shared Single/Bulk PATCH menu
+in Dev and Production. Both backend generation entry points reject this scenario
+before baseline/storage access, so older clients cannot generate new previews or
+ZIPs using the retired option. The response explains the observed EUDAMED rule.
+
+Available menu choices are Trade Name, Critical Warnings, Storage Conditions and
+Device Market Status. Original POST quantity generation, historical submission
+records, accepted snapshots and processing of existing response evidence remain
+unchanged. Internal projection/synchronisation helpers retain compatibility with
+historical records; they do not make the scenario selectable or generatable through
+the application. Benchmark and HTTP generation-contract checks use available
+scenarios, with the accepted-name-preservation check using Critical Warnings.
+
+Regression checks cover both environments, Single/Bulk preview and download
+rejection without generation history, shared response processing, supported XML
+preparation and the four-choice menu. Validation: 98 focused backend tests plus
+one existing generation regression passed; 191 frontend tests and build passed
+(existing bundle-size warning). All 106 protected Production files retain their
+previous hashes, including database, profile and schemas.
+No running service was restarted, no submission was made and no operational
+device data was changed. Changes are uncommitted. Restart the backend and refresh
+the frontend to activate. Historical reconciliation remains separate pending work.
+
+## November 15 — Production Single and Bulk withdrawal enabled in code
+
+Owner explicitly authorised item 1: enable Device Market Status for Single and
+Bulk PATCH in Production following verified Playground acceptance. Backend gates
+now accept confirmed Dev and Production environments. The Production bulk menu
+includes Device Market Status; both workspaces show the verified workflow rather
+than pending-verification messaging. Unknown environments remain blocked.
+
+The supported transition is still only ON_THE_MARKET →
+NO_LONGER_PLACED_ON_THE_MARKET. Accepted-baseline/identity checks, individual next
+versions, preview exclusions, omitted Market Info, matching-success-only current
+attribute synchronisation, conflict handling and duplicate protection remain in
+place. No upload/M2M logic, canonical mapping, profile, schema or database changes
+were introduced. Enabling generation does not itself submit or change device data.
+Base Quantity policy and historical reconciliation remain separate pending work.
+
+Validation: 60 focused backend tests passed, including temporary Production-profile
+single preview, bulk XSD validation with mixed accepted versions, full/partial
+acceptance and database synchronisation. Frontend suite: 191 passed; build passed
+with the existing bundle-size warning. All 106 protected Production files,
+including its database/profile/schema/source files, retained their hashes.
+Only synthetic temporary databases were used for generation/response tests.
+
+Changes are uncommitted. Restart the backend with the existing Production profile
+and refresh/restart the frontend to activate. No running service was restarted,
+no real Production ZIP was generated, no EUDAMED submission was made and no
+Production device value was updated. Katie's actual withdrawal remains a separate
+operator action after reviewing her device's accepted Production baseline.
+Earlier checkpoint statements about Production gating describe their dated state
+and are superseded by this authorised enablement checkpoint.
+
+## November 15 — Bulk withdrawal Playground acceptance verified
+
+Owner registered a second Epirus device and successfully tested bulk withdrawal of
+both devices. Read-only Dev verification confirmed the new POST for
+EP22/24-2KIT / 05050649112720 (success event 1700,
+APP-DTX-000123528.xml). Both withdrawal PATCHes were accepted in
+APP-DTX-000123529.xml, correlation 5043db1a-2149-4e06-bed3-abbbdaddb585:
+
+- EP22/24-1KIT / 05050649112713: generated event 1701, success event 1704.
+- EP22/24-2KIT / 05050649112720: generated event 1702, success event 1703.
+
+Both advanced from accepted version 1 to 2. Each current canonical status, indexed
+status and accepted snapshot is NO_LONGER_PLACED_ON_THE_MARKET. Both success-event
+audits report current_data_sync.status=applied with response provenance. Generated
+Before/After snapshots differ only in version and status_code. Registration remains
+child_registered; withdrawal retains the registration. No manual repair was needed.
+This confirms owner-backed bulk withdrawal acceptance and automatic current-data
+synchronisation for these two devices. The inspection made no database writes;
+Production enablement, Base Quantity policy and historical reconciliation remain
+separate pending work. Existing Production generation gates were not changed.
+
+## November 15 — Bulk Device Market Status ready for owner Playground testing
+
+Owner authorised extending the successful Single PATCH withdrawal scenario to
+Bulk PATCH in Dev. Device Market Status now appears in the Dev bulk scenario menu;
+its only target is No longer placed on the EU market. The review table displays
+each candidate's accepted device status. Existing model/Basic UDI-DI scope,
+selection, preview, per-device version and download checks remain in place.
+
+Bulk generation reuses the single-device withdrawal builder. Each included device
+must have an accepted ON_THE_MARKET status and a usable accepted baseline; its
+PATCH uses its own accepted version plus one. Already withdrawn or unsupported
+status records are excluded and listed in preview. Withdrawal messages omit
+Market Info. Preview does not update accepted state or current device attributes.
+Matching successful responses use the shared acknowledgement synchronisation;
+failed devices retain their accepted versions and current values. Duplicate
+responses do not apply changes twice. Production withdrawal is still blocked
+before bulk database access and omitted from its bulk menu.
+
+Synthetic temporary-database validation: 56 backend tests passed across withdrawal,
+acknowledgement synchronisation and imported-baseline workflows. Coverage includes
+mixed versions, already-off-market exclusions, XSD validation, unsupported targets,
+full/partial bulk acceptance, duplicate receipts and the Production gate. Frontend
+suite: 191 passed. Build passed with the existing bundle-size warning. All 106
+protected Production files retain their previous SHA-256 hashes. No
+operational database, environment profile or schema files were changed. No service
+was started and no submission was made. Changes are uncommitted.
+
+Owner test: restart Dev backend, refresh frontend, select Bulk PATCH and a model /
+Basic UDI-DI group, choose Device Market Status, select two registered on-market
+Playground devices, choose No longer placed on the EU market, and inspect preview
+inclusions/exclusions and individual next versions before downloading the ZIP.
+Upload the returned Success XML and verify each current device status/version.
+Production enablement remains a later step after the owner's Playground test.
+
+November 14 evidence: single withdrawal for EVAC22L8SD / 05050649062179 was
+accepted at version 2 (APP-DTX-000123512.xml) and automatically synchronised. Bulk
+Trade Name for 10 Navigator devices was accepted (APP-DTX-000123514.xml): all ten
+current fields, display names, indexes and accepted values matched; nine reached
+version 5 and one version 2. All ten received the submitted common name
+NAVIGATOR EXT. FOOT PROSTHESIS 22L B B UPDATED. No manual repair was needed.
+The previous bulk quantity 1 → 2 attempt failed for all ten devices with
+ERR-DTX-UDI-031-033.02, Quantity of Device is not updatable
+(APP-DTX-000123513.xml). Base Quantity scenario policy and historical accepted
+PATCH/current-data discrepancies remain follow-up work, outside this extension.
+Latest retained extracts remain November 12; fresh exports are needed to verify
+live Playground alignment after the later accepted tests.
 
 ## November 14 — Acknowledged PATCH changes synchronise current device values
 

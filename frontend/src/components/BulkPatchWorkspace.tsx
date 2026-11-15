@@ -1,3 +1,4 @@
+import { marketStatusLabel } from "../patchScenarios";
 import { CatalogueSelection } from "./CatalogueSelection";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -259,6 +260,7 @@ export function BulkPatchWorkspace({
                   ))}
                 </select>
                 <p className="panel-copy">{selectedPatchScenarioSummary}</p>
+                {selectedPatchScenarioId === "status_code_edit" ? <p className="panel-copy">Only devices with an accepted status of On the EU market can be withdrawn. Preview shows included devices, each next version and any exclusions. Accepted changes are applied after uploading the matching Success XML.</p> : null}
                 {selectedPatchScenarioOptionsSummary ? <p className="panel-copy">Options: {selectedPatchScenarioOptionsSummary}</p> : null}
                 {bulkPatchBaselineSummary.length > 0 ? (
                   <div className="workflow-note patch-readiness-note">
@@ -310,7 +312,7 @@ export function BulkPatchWorkspace({
                 {selectedPatchScenarioId === "status_code_edit" ? (
                   <div className="patch-field patch-field-full">
                     <label className="field-label" htmlFor="bulk-patch-status-code-input">
-                      Status code
+                      New device market status
                     </label>
                     <select
                       id="bulk-patch-status-code-input"
@@ -319,9 +321,7 @@ export function BulkPatchWorkspace({
                       onChange={(event) => onPatchStatusCodeChange(event.target.value)}
                     >
                       <option value="">Select value</option>
-                      <option value="NOT_INTENDED_FOR_EU_MARKET">NOT_INTENDED_FOR_EU_MARKET</option>
-                      <option value="ON_THE_MARKET">ON_THE_MARKET</option>
-                      <option value="NO_LONGER_PLACED_ON_THE_MARKET">NO_LONGER_PLACED_ON_THE_MARKET</option>
+                      <option value="NO_LONGER_PLACED_ON_THE_MARKET">No longer placed on the EU market</option>
                     </select>
                   </div>
                 ) : null}
@@ -445,7 +445,7 @@ export function BulkPatchWorkspace({
             <div className="testing-summary-table-shell bulk-patch-device-review">
               <table className="workbook-files-table">
                 <caption className="visually-hidden">Bulk PATCH device identities and accepted versions</caption>
-                <thead><tr><th>Catalogue number</th><th>Device UDI-DI</th><th>Accepted version</th><th>Current trade name / quantity</th><th>Review result</th></tr></thead>
+                <thead><tr><th>Catalogue number</th><th>Device UDI-DI</th><th>Accepted version</th><th>{selectedPatchScenarioId === "status_code_edit" ? "Current device market status" : "Current trade name / quantity"}</th><th>Review result</th></tr></thead>
                 <tbody>{bulkPatchPostedEntries.map((entry, index) => {
                   const selected = selectedEntries.some(item => item.catalogue_number === entry.catalogue_number && item.primary_udi_di === entry.primary_udi_di);
                   const included = preview?.included_records.find(item => item.catalogue_number === entry.catalogue_number && item.primary_udi_di === entry.primary_udi_di);
@@ -453,7 +453,7 @@ export function BulkPatchWorkspace({
                   return <tr key={`${entry.catalogue_number}|${entry.primary_udi_di}|${index}`}>
                     <td>{entry.catalogue_number ?? "Unavailable"}</td><td><code>{entry.primary_udi_di ?? "Unavailable"}</code></td>
                     <td>{entry.current_state?.version ?? entry.latest_version ?? "Unconfirmed"}</td>
-                    <td>{entry.current_state?.trade_name ?? "Unavailable"} / {entry.current_state?.base_quantity ?? "Unavailable"}</td>
+                    <td>{selectedPatchScenarioId === "status_code_edit" ? marketStatusLabel(entry.current_state?.status_code ?? null) : `${entry.current_state?.trade_name ?? "Unavailable"} / ${entry.current_state?.base_quantity ?? "Unavailable"}`}</td>
                     <td>{excluded ? excluded.reason_message : included ? `Included · version ${included.base_version ?? "?"} → ${included.derived_version ?? "?"}` : selected ? "Selected · preview required" : "Not selected"}</td>
                   </tr>;
                 })}</tbody>

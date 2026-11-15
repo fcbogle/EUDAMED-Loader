@@ -100,7 +100,7 @@ def operation(service, flow, action, count):
     method = getattr(service, f"{'preview' if action == 'preview' else 'download'}_bulk_{ {'basic_post':'post','udidi_post':'udidi_post','patch':'patch'}[flow]}")
     args['record_count'] = count
     if flow == 'patch':
-        args.update(basic_udi_di='BASICSHARED', scenario_id='base_quantity_edit', scenario_inputs={'new_base_quantity': 2})
+        args.update(basic_udi_di='BASICSHARED', scenario_id='trade_name_edit', scenario_inputs={'new_trade_name': 'Updated synthetic device'})
     return method(**args)
 
 
