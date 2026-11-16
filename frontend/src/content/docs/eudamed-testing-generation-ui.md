@@ -55,6 +55,13 @@ Pending requests for an old selection cannot replace the current preview.
 
 ## Device Market Status: Single and Bulk PATCH
 
+**Withdrawal Market Information rule:** Single and Bulk withdrawal PATCHes omit
+Market Information in both environments. Playground explicitly rejected the Dev
+retained-country experiment (APP-DTX-000123540.xml): Market Info is not allowed
+when changing from On the EU market to No longer placed on the EU market. The
+experiment has been reverted. Katie's earlier Production rejection of the omitted
+shape remains unresolved; the revert is not a verified fix for that rejection.
+
 This option currently supports only **On the EU market → No longer placed on the
 EU market**. Before is the recorded accepted status. Select the permitted After
 value, review the identity and next version, and generate/validate the preview.

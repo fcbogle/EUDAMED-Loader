@@ -34,7 +34,7 @@ def test_withdrawal_preserves_device_attributes_and_omits_market_info(baseline, 
         'source_version_marker': '3', 'patch_version_override': '3',
         'market_countries': [], 'include_market_infos_in_patch': False}
     assert asdict(changed) == expected
-    settings = get_settings().model_copy(update={'eudamed_message_schema_version': schema_version,
+    settings = get_settings().model_copy(update={'environment': 'prod' if schema_version == '3.0.30' else 'dev', 'eudamed_message_schema_version': schema_version,
         'schema_dir': Path(__file__).resolve().parents[2] / 'data/schema_profiles' / package})
     xml = EudamedMessageRenderer(settings).render_message(changed)
     root = etree.fromstring(xml)
@@ -43,7 +43,7 @@ def test_withdrawal_preserves_device_attributes_and_omits_market_info(baseline, 
     validator = XmlValidationService()
     validator.schema_path = settings.schema_dir / 'service/Message.xsd'
     assert validator.validate_message(xml).valid
-    # Even a later caller carrying old country links must not put them in this PATCH.
+    # A later caller cannot reintroduce country links into a withdrawal PATCH.
     stale = replace(changed, market_countries=baseline.market_countries, include_market_infos_in_patch=True)
     assert not etree.fromstring(EudamedMessageRenderer(settings).render_message(stale)).xpath('//*[local-name()="marketInfos"]')
 
@@ -268,3 +268,70 @@ def test_base_quantity_patch_is_blocked_before_storage_access(environment, bulk)
             service._prepare_bulk_patch(**args, basic_udi_di='BASIC', record_count=2)
         else:
             service._build_generated_patch_preview(**args, catalogue_number='SYN', patch_version='3')
+
+
+# Synthetic accepted country configuration matching the 25-country shape under test.
+RETRY_COUNTRIES = [(code, code == 'DE') for code in
+    'AT BE BG CZ DE DK EE EL ES FI FR HR HU IE IT LT LU LV NL NO PL PT SE SI SK'.split()]
+
+
+def market_pairs(xml):
+    root = etree.fromstring(xml.encode() if isinstance(xml, str) else xml)
+    return [(node.xpath('./*[local-name()="country"]/text()')[0],
+             node.xpath('./*[local-name()="originalPlacedOnTheMarket"]/text()')[0] == 'true')
+            for node in root.xpath('//*[local-name()="marketInfo"]')]
+
+
+def test_dev_withdrawal_omits_all_25_accepted_country_links(playground_device, monkeypatch):
+    settings, identity = playground_device
+    service = XmlGenerationService(require_import=True)
+    monkeypatch.setattr(service.testing_state_store, 'latest_successful_market_info_state', lambda **_: {
+        'version':'7', 'market_countries':[{'country':code,'original_placed_on_market':original} for code,original in RETRY_COUNTRIES]})
+    before = settings.testing_state_db_path.read_bytes()
+    result = service.preview_generated_patch_scenario(**identity, scenario_id='status_code_edit', patch_version='3',
+        scenario_inputs={'new_status_code':'NO_LONGER_PLACED_ON_THE_MARKET'})
+    assert result.derived_patch_validation.valid, result.derived_patch_validation.errors
+    assert market_pairs(result.derived_patch_xml) == []
+    assert not etree.fromstring(result.derived_patch_xml.encode()).xpath('//*[local-name()="marketInfos"]')
+    assert {delta.field_key for delta in result.field_deltas} == {'patch_version', 'status_code'}
+    assert settings.testing_state_db_path.read_bytes() == before
+
+
+def test_bulk_dev_withdrawal_omits_different_accepted_country_lists(bulk_playground_devices, monkeypatch):
+    settings, args = bulk_playground_devices
+    service = XmlGenerationService(require_import=True)
+    def accepted(**identity):
+        countries = RETRY_COUNTRIES if identity['catalogue_number']=='SYN-00000' else [('IE',True),('FR',False)]
+        return {'version':'7','market_countries':[{'country':code,'original_placed_on_market':original} for code,original in countries]}
+    monkeypatch.setattr(service.testing_state_store, 'latest_successful_market_info_state', accepted)
+    result = service.preview_bulk_patch(**args)
+    assert result.selected_chunk_validation.valid
+    nodes = etree.fromstring(result.selected_chunk_xml.encode()).xpath('//*[local-name()="UDIDIData"]')
+    by_catalogue = {n.xpath('./*[local-name()="referenceNumber"]/text()')[0]:market_pairs(etree.tostring(n)) for n in nodes}
+    assert by_catalogue == {'SYN-00000':[], 'SYN-00010':[]}
+    assert not etree.fromstring(result.selected_chunk_xml.encode()).xpath('//*[local-name()="marketInfos"]')
+
+
+@pytest.mark.parametrize('accepted', [None, {}, {'market_countries':[]},
+    {'market_countries':[{'country':'DE','original_placed_on_market':'false'}]}])
+def test_withdrawal_does_not_require_market_snapshot_for_omitted_links(playground_device, monkeypatch, accepted):
+    settings, identity = playground_device
+    service = XmlGenerationService(require_import=True)
+    monkeypatch.setattr(service.testing_state_store, 'latest_successful_market_info_state', lambda **_:accepted)
+    before = settings.testing_state_db_path.read_bytes()
+    result = service.preview_generated_patch_scenario(**identity, scenario_id='status_code_edit', patch_version='3',
+        scenario_inputs={'new_status_code':'NO_LONGER_PLACED_ON_THE_MARKET'})
+    assert result.derived_patch_validation.valid
+    assert not etree.fromstring(result.derived_patch_xml.encode()).xpath('//*[local-name()="marketInfos"]')
+    assert settings.testing_state_db_path.read_bytes() == before
+
+
+def test_omitting_country_links_does_not_change_other_projected_values(baseline):
+    original = asdict(baseline)
+    changed = DeviceXmlProjectionBuilder.build_status_code_edit_patch(baseline,
+        new_status_code='NO_LONGER_PLACED_ON_THE_MARKET',patch_version='3')
+    expected = {**original,'status_code':'NO_LONGER_PLACED_ON_THE_MARKET',
+        'source_version_marker':'3','patch_version_override':'3','include_market_infos_in_patch':False, 'market_countries':[]}
+    assert asdict(changed) == expected
+    assert asdict(baseline) == original
+    assert changed.market_countries is not baseline.market_countries

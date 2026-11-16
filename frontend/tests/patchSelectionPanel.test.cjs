@@ -67,3 +67,29 @@ test('bulk withdrawal is offered in both confirmed environments', () => {
   }
   assert.equal(bulkPatchScenarioOptions(null).some(option => option.id === 'status_code_edit'), false);
 });
+
+test('baseline progress and failures are visible beside the selected device', () => {
+  assert.match(markup({selectedKey:'chosen',baselineLoading:true}), /Loading the selected device/);
+  assert.match(markup({selectedKey:'chosen',baselineLoaded:true}), /Accepted baseline loaded/);
+  assert.match(markup({selectedKey:'chosen',baselineError:'Identity mismatch'}), /role="alert"[^>]*>Accepted baseline could not be loaded: Identity mismatch/);
+  assert.doesNotMatch(markup({selectedKey:null,baselineLoaded:true}), /Accepted baseline loaded/);
+});
+
+test('selecting the same device again requests a fresh accepted baseline', () => {
+  const source=fs.readFileSync(path.join(__dirname,'../src/App.tsx'),'utf8');
+  const ast=ts.createSourceFile('App.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+  let handler;
+  function visit(node) {
+    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast)==='PatchSelectionPanel') {
+      handler=node.attributes.properties.find(p=>p.name?.getText(ast)==='onSelect').initializer.expression.getText(ast);
+    }
+    ts.forEachChild(node,visit);
+  }
+  visit(ast);assert.ok(handler);
+  let retry=0,selectedKey=null,baseline='loaded';
+  const select=new Function('setSelectedXmlRecordKey','setPatchSearchSelectionKey','setAcceptedBaselineRetry','setXmlPairPreview','setXmlPatchPreview','setAcceptedBaselineError','setXmlActionMessage',`return (${handler});`)(
+    ()=>{},key=>{selectedKey=key;},update=>{retry=update(retry);},value=>{baseline=value;},()=>{},()=>{},()=>{});
+  const option={key:'same-device',record:{catalogue_number:'SYN-TEST'}};
+  select(option);select(option);
+  assert.equal(selectedKey,'same-device');assert.equal(baseline,null);assert.equal(retry,2);
+});

@@ -2,6 +2,106 @@
 
 Updated November 15, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
+
+
+
+## November 15 — Dev retained-country experiment reverted after rejection
+
+Owner authorised reverting Dev withdrawal to exclude Market Information after
+APP-DTX-000123540.xml explicitly rejected including it. Response correlation
+dff10e44-d679-4748-969f-462f10716d40, device 05050649062032 / EVAC22L1SD:
+PROCESSED_WITH_ERRORS, marketInfoLink: Market information is not applicable for
+No longer placed on the EU market, and Market info is not allowed when changing
+On the Market → No Longer Placed on the EU Market. The response is failure
+evidence, not acceptance. Read-only inspection still showed accepted version 1 /
+ON_THE_MARKET and current ON_THE_MARKET, with generated event 1705; the failed
+response was not recorded in the database at inspection time.
+
+Removed the Dev-only preservation option, strict experimental accepted-market
+requirement and renderer exception. Single and Bulk withdrawal again omit
+marketInfos in both Dev and Production, even if a caller carries country links.
+The original accepted country evidence remains stored; preview/download do not
+update accepted state or current attributes. Earlier omission tests succeeded in
+Playground. The preservation hypothesis was disproven by this retry; Katie's
+Production omission rejection remains unresolved and must not be treated as fixed.
+
+Regression coverage now checks omission with 25 accepted countries, different
+per-device bulk country lists, absent market snapshots and unchanged other
+projected attributes. Prior frontend selection/reload changes are preserved.
+Validation: 105 focused backend tests and the frontend build passed (existing
+bundle-size warning). No operational database,
+profile or schema files were modified and no submission or service restart was
+performed. Restart Dev backend and refresh; generate fresh previews/ZIPs rather
+than reusing the rejected experimental package. Changes remain uncommitted.
+Earlier Dev-preservation checkpoints are historical and superseded by this revert.
+
+## November 15 — Dev withdrawal retry preserves accepted Market Information
+
+Katie's Production withdrawal failed: APP-DTX-000157154.xml, correlation
+f2f6b44a-7bdd-4e2b-a288-ccc145c715b8, device 05050649091186. Errors were
+marketInfoLink (use Update of Market Information) and placedOnTheMarket /
+ERR-BR-DTX-UDID-103.1 (provided country absent from last Market Information version).
+The submitted Downloads ZIP matches recorded package 69 by SHA-256 and omits
+Market Information. Fresh extract APP-DTX-000157155.xml confirms device version 1,
+ON_THE_MARKET and Market Info version 1, with 25 countries, Germany original.
+All 25 country/flag pairs exactly match the stored accepted POST baseline. This
+rules out a country-list discrepancy between that stored baseline and the extract;
+it does not prove the server's rejection was caused by omission.
+
+Owner authorised a Dev-only alternative for controlled retry. Dev Single and Bulk
+withdrawal now preserve country/placement pairs from the latest usable accepted
+Market Information snapshot, including qualified accepted POST/export evidence.
+They do not fall back to workbook/current country values if accepted evidence is
+missing or malformed. The status builder has an explicit preservation option;
+the renderer permits that content for Dev withdrawal only. No Market Info version
+is incremented and no MARKET_INFO.PUT request is generated. Actual business-field
+deltas remain status and device version only. Preview/download still do not accept
+the draft or update device attributes. Acknowledgement synchronisation is unchanged.
+
+Production retains the prior omission behaviour; this experimental variant is not
+enabled there. Earlier Playground withdrawal without Market Information did pass;
+the 25-country preservation variant is a separate unverified test, not a proven
+fix or evidence that Market Information itself should be changed. Do not retry
+Katie's Production operation until this new shape is reviewed against test results.
+
+Validation: 105 focused backend tests passed using synthetic temporary databases.
+Coverage includes exact 25-country/flag preservation, individual bulk accepted
+country lists/versions, missing/malformed accepted evidence, unchanged unrelated
+attributes, XSD checks, full/partial acknowledgement sync and Production omission.
+Frontend suite: 193 passed; build passed with the existing bundle-size warning. No operational
+database, environment profile or schema files were edited; no service was restarted
+and no submission was made. Changes are uncommitted.
+
+Owner retry: restart Dev backend and refresh the UI. Select an on-market registered
+Playground device (preferably with the same 25-country configuration), generate a
+fresh Device Market Status preview and confirm accepted country/placement links
+are retained exactly before downloading/submitting the new ZIP. Keep the response
+XML, whether success or failure, for comparison with the earlier omission test.
+
+## November 15 — Repeat PATCH selection reloads the accepted baseline
+
+Owner reported Select for PATCH appearing ineffective for Katie's Production
+device, then clarified that the UI requested Reload accepted baseline. Read-only
+inspection confirmed Socket Adaptors / P189410 / 05050649091186 is XML-ready,
+with a recoverable accepted POST/device version 1 and ON_THE_MARKET status.
+The initial Aqualimb TF search was outside its model scope.
+
+Found and fixed a reproducible UI issue: selecting the same device again cleared
+xmlPairPreview while leaving all accepted-baseline effect dependencies unchanged,
+so no replacement request was triggered. Each explicit device selection now
+increments the existing accepted-baseline retry counter. Existing cancellation and
+identity checks remain intact. The selection panel also shows loading, success or
+error feedback beside the search results; detailed baseline controls remain below.
+This is a frontend fix, not a baseline or Production database repair. The owner's
+specific interrupted baseline load is not proven to have the same cause.
+
+Validation: 193 frontend tests passed, including repeated invocation of the actual
+App selection handler and adjacent loading/error feedback. Build passed with the
+existing bundle-size warning. No backend, database, profile, schema or EUDAMED
+submission changes. Refresh the frontend, reselect Socket Adaptors and Katie's UDI,
+and retry the accepted baseline; report any resulting error text if loading fails.
+Changes are uncommitted.
+
 ## November 15 — Base Quantity removed from new PATCH generation
 
 Owner authorised item 2 following the Playground rejection of all ten Navigator

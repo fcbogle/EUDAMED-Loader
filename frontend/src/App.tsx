@@ -4485,9 +4485,12 @@ export function App() {
                 setXmlActionMessage(null);
               }}
               options={patchSearchOptions} selectedKey={patchScenarioChosen ? patchSearchSelectionKey : null}
+              baselineLoading={isLoadingAcceptedBaseline} baselineError={acceptedBaselineError}
+              baselineLoaded={hasLoadedPatchBaseline}
               onSelect={option => {
                 setSelectedXmlRecordKey(option.record.catalogue_number);
                 setPatchSearchSelectionKey(option.key);
+                setAcceptedBaselineRetry(value => value + 1);
                 setXmlPairPreview(null);
                 setXmlPatchPreview(null);
                 setAcceptedBaselineError(null);
