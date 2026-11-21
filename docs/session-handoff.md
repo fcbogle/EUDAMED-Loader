@@ -1,9 +1,32 @@
 # Session Handoff
 
-Updated November 15, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
+Updated November 19, 2026. This document distinguishes implemented behavior, dated audit findings and proposed work. Historical Playground evidence and export counts must not be read as a live database inventory.
 
 
 
+
+
+## November 19 — First DEVICE.GET 300-result trial prepared for Playground
+
+Owner authorised trying the official SAMPLE_DTX_UDI_004.01.xml download request.
+An unchanged original and provenance are in docs/xml_samples/official. Prepared a
+separate manual-upload trial at data/dev/artifacts/device-get-trial-2026-11-19/
+playground-device-get-page-000-size-300.xml, with README and validation.json.
+It uses Dev schema 3.0.36.1, manufacturer UK-MF-000033261, DEVICE.GET, REGISTERED
+criteria, pageNumber 0 and pageSize 300. Sender REPLY_SERVICE.GET follows the sample.
+The template's undeclared s: prefix and version placeholder were corrected; fresh
+envelope IDs/time replace its historical examples. Optional serviceAccessToken and
+nodeID fields were removed for manual Bulk Upload; the local service schema states
+the token is not required for Bulk Upload. No M2M transport was implemented.
+
+The exact request passed official local Message.xsd validation. This does not yet
+prove portal acceptance. Owner should submit it to Playground via Data transfer >
+Bulk Upload > Download of Legacy/ Regulation Device/SPP, then retain and inspect
+the result from Download, including pagination and actual DEVICE/UDI-DI coverage.
+No request was submitted by Codex, database opened, or Production profile/schema/
+application behaviour changed. This is only page 0; do not treat it as a complete
+manufacturer extract until all response pages are obtained and checked. The 300
+limit applies to service results; individual UDI-DI counts must be inspected.
 
 ## November 15 — Dev retained-country experiment reverted after rejection
 
